@@ -106,7 +106,25 @@ agentic-memorizer init --force
 
 ### Configure Claude Code Hook
 
-Add to `~/.claude/settings.json`:
+#### Automatic Setup (Recommended)
+
+The easiest way to set up hooks is to use the `--setup-hooks` flag during initialization:
+
+```bash
+agentic-memorizer init --setup-hooks
+```
+
+This will:
+- Auto-detect the binary location
+- Configure all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`)
+- Preserve any existing hooks you have configured
+- Add the `--format json` flag for proper Claude Code integration
+
+You can also run the init command without flags and it will prompt you to set up hooks interactively.
+
+#### Manual Setup
+
+Alternatively, add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -117,7 +135,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
           }
         ]
       },
@@ -126,7 +144,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
           }
         ]
       },
@@ -135,7 +153,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
           }
         ]
       },
@@ -144,7 +162,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
           }
         ]
       }
@@ -155,7 +173,7 @@ Add to `~/.claude/settings.json`:
 
 Replace `YOUR_USERNAME` with your actual username.
 
-**Note**: The configuration includes all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`) to ensure the memory index stays current throughout your session lifecycle.
+**Note**: The configuration includes all four SessionStart matchers to ensure the memory index stays current throughout your session lifecycle.
 
 ### Using with Claude Agents
 
@@ -367,8 +385,12 @@ output:
 ```
 agentic-memorizer/
 ├── main.go           # Main entry point
+├── cmd/
+│   ├── root.go               # Root command
+│   └── init/                 # Init subcommand
 ├── internal/
 │   ├── config/               # Configuration loading
+│   ├── hooks/                # Claude Code hook management
 │   ├── walker/               # File system traversal
 │   ├── metadata/             # File metadata extraction
 │   ├── semantic/             # Claude API integration

@@ -49,7 +49,6 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	// Only initialize program config if not running init subcommand (which itself initializes user config)
 	if cmd.Name() == "init" {
 		return nil
 	}
@@ -65,7 +64,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 func runMemorizer(cmd *cobra.Command, args []string) error {
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
 	forceAnalyze := viper.GetBool("force_analyze")
@@ -78,7 +77,7 @@ func runMemorizer(cmd *cobra.Command, args []string) error {
 
 	cacheManager, err := cache.NewManager(cfg.CacheDir)
 	if err != nil {
-		return fmt.Errorf("failed to create cache manager: %w", err)
+		return fmt.Errorf("failed to create cache manager; %w", err)
 	}
 
 	if forceAnalyze {
@@ -87,10 +86,8 @@ func runMemorizer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create metadata extractor
 	metadataExtractor := metadata.NewExtractor()
 
-	// Create semantic analyzer if enabled
 	var semanticAnalyzer *semantic.Analyzer
 	if cfg.Analysis.Enable {
 		client := semantic.NewClient(
@@ -106,29 +103,24 @@ func runMemorizer(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	// If analyzing a specific file
 	if analyzeFile != "" {
 		return analyzeSpecificFile(analyzeFile, cfg, metadataExtractor, semanticAnalyzer, cacheManager)
 	}
 
-	// Build index
 	index, err := buildIndex(cfg, metadataExtractor, semanticAnalyzer, cacheManager)
 	if err != nil {
-		return fmt.Errorf("failed to build index: %w", err)
+		return fmt.Errorf("failed to build index; %w", err)
 	}
 
-	// Format output
 	formatter := output.NewFormatter(cfg.Output.Verbose, cfg.Output.ShowRecentDays)
 
 	if cfg.Output.Format == "json" {
-		// JSON output for Claude Code hooks
 		jsonOutput, err := formatter.FormatJSON(index)
 		if err != nil {
-			return fmt.Errorf("failed to format JSON: %w", err)
+			return fmt.Errorf("failed to format JSON; %w", err)
 		}
 		fmt.Println(jsonOutput)
 	} else {
-		// Markdown output
 		markdown := formatter.FormatMarkdown(index)
 		fmt.Print(markdown)
 	}
@@ -136,7 +128,6 @@ func runMemorizer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// buildIndex builds the memory index
 func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, semanticAnalyzer *semantic.Analyzer, cacheManager *cache.Manager) (*types.Index, error) {
 	index := &types.Index{
 		Generated: time.Now(),
@@ -145,24 +136,19 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 		Stats:     types.IndexStats{},
 	}
 
-	// Skip directories
 	skipDirs := []string{".cache", ".git"}
 
-	// Skip files (use config or default)
 	skipFiles := cfg.Analysis.SkipFiles
 	if len(skipFiles) == 0 {
 		skipFiles = []string{"agentic-memorizer"}
 	}
 
-	// Walk the file tree
 	entries := []types.IndexEntry{}
 	var mu sync.Mutex
 
 	err := walker.Walk(cfg.MemoryRoot, skipDirs, skipFiles, func(path string, info os.FileInfo) error {
-		// Get relative path
 		relPath, _ := walker.GetRelPath(cfg.MemoryRoot, path)
 
-		// Extract metadata
 		fileMetadata, err := metadataExtractor.Extract(path, info)
 		if err != nil {
 			errStr := err.Error()
@@ -177,7 +163,6 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 
 		fileMetadata.RelPath = relPath
 
-		// Compute file hash
 		fileHash, err := cache.HashFile(path)
 		if err != nil {
 			if cfg.Output.Verbose {
@@ -187,16 +172,13 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 		}
 		fileMetadata.Hash = fileHash
 
-		// Check cache
 		var semanticAnalysis *types.SemanticAnalysis
 		if semanticAnalyzer != nil && fileHash != "" {
 			cached, err := cacheManager.Get(fileHash)
 			if err == nil && cached != nil && !cacheManager.IsStale(cached, fileHash) {
-				// Use cached analysis
 				semanticAnalysis = cached.Semantic
 				index.Stats.CachedFiles++
 			} else {
-				// Perform semantic analysis
 				if cfg.Output.Verbose {
 					fmt.Fprintf(os.Stderr, "Analyzing: %s\n", relPath)
 				}
@@ -209,7 +191,6 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 				} else {
 					semanticAnalysis = analysis
 
-					// Cache the analysis
 					cachedAnalysis := &types.CachedAnalysis{
 						FilePath:   path,
 						FileHash:   fileHash,
@@ -227,7 +208,6 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 			}
 		}
 
-		// Create index entry
 		entry := types.IndexEntry{
 			Metadata: *fileMetadata,
 			Semantic: semanticAnalysis,
@@ -244,10 +224,8 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 		return nil, err
 	}
 
-	// Update index
 	index.Entries = entries
 
-	// Calculate stats
 	index.Stats.TotalFiles = len(entries)
 	for _, entry := range entries {
 		index.Stats.TotalSize += entry.Metadata.Size
@@ -259,7 +237,6 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 	return index, nil
 }
 
-// analyzeSpecificFile analyzes a specific file and prints the result
 func analyzeSpecificFile(
 	filePath string,
 	cfg *config.Config,
@@ -267,32 +244,27 @@ func analyzeSpecificFile(
 	semanticAnalyzer *semantic.Analyzer,
 	cacheManager *cache.Manager,
 ) error {
-	// Get file info
 	info, err := os.Stat(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to stat file: %w", err)
+		return fmt.Errorf("failed to stat file; %w", err)
 	}
 
-	// Extract metadata
 	fileMetadata, err := metadataExtractor.Extract(filePath, info)
 	if err != nil {
-		return fmt.Errorf("failed to extract metadata: %w", err)
+		return fmt.Errorf("failed to extract metadata; %w", err)
 	}
 
-	// Compute hash
 	fileHash, _ := cache.HashFile(filePath)
 	fileMetadata.Hash = fileHash
 
-	// Perform semantic analysis
 	if semanticAnalyzer != nil {
 		fmt.Fprintf(os.Stderr, "Analyzing %s...\n\n", filepath.Base(filePath))
 
 		analysis, err := semanticAnalyzer.Analyze(fileMetadata)
 		if err != nil {
-			return fmt.Errorf("analysis failed: %w", err)
+			return fmt.Errorf("analysis failed; %w", err)
 		}
 
-		// Print results
 		fmt.Printf("Summary: %s\n\n", analysis.Summary)
 		fmt.Printf("Document Type: %s\n\n", analysis.DocumentType)
 		fmt.Printf("Key Topics:\n")
@@ -301,7 +273,6 @@ func analyzeSpecificFile(
 		}
 		fmt.Printf("\nTags: %s\n", analysis.Tags)
 
-		// Cache the result
 		cached := &types.CachedAnalysis{
 			FilePath:   filePath,
 			FileHash:   fileHash,

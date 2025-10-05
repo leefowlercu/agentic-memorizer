@@ -1,22 +1,30 @@
 package cmdinit
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/hooks"
 	"github.com/spf13/cobra"
 )
 
 var InitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize configuration and memory directory",
+	Short: "Initialize configuration, memory directory, and optionally Claude Code hooks",
 	Long: "\nCreates default configuration file and memory directory.\n\n" +
 		"The init command sets up the Agentic Memorizer by creating a default configuration " +
-		"file and the memory directory where you'll store files for analysis and indexing.",
+		"file and the memory directory where you'll store files for analysis and indexing. " +
+		"Optionally configures Claude Code SessionStart hooks for automatic file indexing " +
+		"(use --setup-hooks flag or respond to the interactive prompt).",
 	Example: `  # Default initialization
   agentic-memorizer init
+
+  # Initialize with automatic hook setup
+  agentic-memorizer init --setup-hooks
 
   # Custom memory directory
   agentic-memorizer init --memory-root ~/my-memory
@@ -33,6 +41,8 @@ func init() {
 	InitCmd.Flags().String("memory-root", config.DefaultConfig.MemoryRoot, "Memory directory")
 	InitCmd.Flags().String("cache-dir", config.DefaultConfig.CacheDir, "Cache directory")
 	InitCmd.Flags().Bool("force", false, "Overwrite existing config")
+	InitCmd.Flags().Bool("setup-hooks", false, "Configure Claude Code SessionStart hooks")
+	InitCmd.Flags().Bool("skip-hooks", false, "Skip Claude Code hook setup prompt")
 
 	InitCmd.Flags().SortFlags = false
 }
@@ -41,10 +51,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	memoryRoot, _ := cmd.Flags().GetString("memory-root")
 	cacheDir, _ := cmd.Flags().GetString("cache-dir")
 	force, _ := cmd.Flags().GetBool("force")
+	setupHooks, _ := cmd.Flags().GetBool("setup-hooks")
+	skipHooks, _ := cmd.Flags().GetBool("skip-hooks")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("failed to get home directory; %w", err)
 	}
 	configPath := filepath.Join(home, ".agentic-memorizer", "config.yaml")
 
@@ -87,10 +99,63 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Configuration:\n")
 	fmt.Printf("  Memory Root: %s\n", memoryRoot)
 	fmt.Printf("  Cache Dir: %s\n\n", cacheDir)
+
+	if err := handleHookSetup(setupHooks, skipHooks); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
+	}
+
 	fmt.Printf("Next steps:\n")
 	fmt.Printf("1. Set your Claude API key: export ANTHROPIC_API_KEY=\"your-key-here\"\n")
 	fmt.Printf("2. Add files to %s\n", memoryRoot)
 	fmt.Printf("3. Run: agentic-memorizer\n")
+
+	return nil
+}
+
+func handleHookSetup(setupHooks, skipHooks bool) error {
+	if skipHooks {
+		return nil
+	}
+
+	if !setupHooks {
+		fmt.Printf("Configure Claude Code SessionStart hooks? [y/N]: ")
+		reader := bufio.NewReader(os.Stdin)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input; %w", err)
+		}
+
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response != "y" && response != "yes" {
+			settingsPath, _ := hooks.GetClaudeSettingsPath()
+			fmt.Printf("\nTo set up hooks manually, add SessionStart hooks to: %s\n", settingsPath)
+			fmt.Printf("See README.md for configuration details.\n\n")
+			return nil
+		}
+		setupHooks = true
+	}
+
+	if setupHooks {
+		binaryPath, err := hooks.FindBinaryPath()
+		if err != nil {
+			settingsPath, _ := hooks.GetClaudeSettingsPath()
+			return fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure hooks in: %s", err, settingsPath)
+		}
+
+		_, updated, err := hooks.SetupSessionStartHooks(binaryPath)
+		if err != nil {
+			return fmt.Errorf("failed to set up hooks; %w", err)
+		}
+
+		settingsPath, _ := hooks.GetClaudeSettingsPath()
+		if len(updated) > 0 {
+			fmt.Printf("✓ Configured Claude Code SessionStart hooks: %s\n", settingsPath)
+			fmt.Printf("  Updated matchers: %s\n", strings.Join(updated, ", "))
+			fmt.Printf("  Binary path: %s\n\n", binaryPath)
+		} else {
+			fmt.Printf("✓ Claude Code SessionStart hooks already configured\n\n")
+		}
+	}
 
 	return nil
 }

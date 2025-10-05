@@ -55,7 +55,7 @@ func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAna
 	// Read file content
 	content, err := os.ReadFile(metadata.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, fmt.Errorf("failed to read file; %w", err)
 	}
 
 	// For binary files, provide limited analysis
@@ -75,7 +75,7 @@ func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAna
 	// Call Claude API
 	response, err := a.client.SendMessage(prompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze with Claude: %w", err)
+		return nil, fmt.Errorf("failed to analyze with Claude; %w", err)
 	}
 
 	// Parse response as JSON
@@ -87,7 +87,7 @@ func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAna
 				return &analysis, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to parse analysis response: %w", err)
+		return nil, fmt.Errorf("failed to parse analysis response; %w", err)
 	}
 
 	return &analysis, nil
@@ -98,7 +98,7 @@ func (a *Analyzer) analyzeImage(metadata *types.FileMetadata) (*types.SemanticAn
 	// Read image file
 	imageData, err := os.ReadFile(metadata.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read image: %w", err)
+		return nil, fmt.Errorf("failed to read image; %w", err)
 	}
 
 	// Encode as base64
@@ -130,7 +130,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	// Call Claude API with image
 	response, err := a.client.SendMessageWithImage(prompt, imageBase64, mediaType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze image with Claude: %w", err)
+		return nil, fmt.Errorf("failed to analyze image with Claude; %w", err)
 	}
 
 	// Parse response
@@ -141,7 +141,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 				return &analysis, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to parse analysis response: %w", err)
+		return nil, fmt.Errorf("failed to parse analysis response; %w", err)
 	}
 
 	return &analysis, nil
@@ -164,7 +164,7 @@ func (a *Analyzer) analyzeDocument(metadata *types.FileMetadata) (*types.Semanti
 	if metadata.Type == "pdf" {
 		documentData, err := os.ReadFile(metadata.Path)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read document: %w", err)
+			return nil, fmt.Errorf("failed to read document; %w", err)
 		}
 
 		documentBase64 := base64.StdEncoding.EncodeToString(documentData)
@@ -194,7 +194,7 @@ Be concise but informative. Respond with ONLY valid JSON.`
 
 		response, err := a.client.SendMessageWithDocument(prompt, documentBase64, "application/pdf")
 		if err != nil {
-			return nil, fmt.Errorf("failed to analyze document with Claude: %w", err)
+			return nil, fmt.Errorf("failed to analyze document with Claude; %w", err)
 		}
 
 		var analysis types.SemanticAnalysis
@@ -204,7 +204,7 @@ Be concise but informative. Respond with ONLY valid JSON.`
 					return &analysis, nil
 				}
 			}
-			return nil, fmt.Errorf("failed to parse analysis response: %w", err)
+			return nil, fmt.Errorf("failed to parse analysis response; %w", err)
 		}
 
 		return &analysis, nil
@@ -220,26 +220,26 @@ func (a *Analyzer) analyzePptx(metadata *types.FileMetadata) (*types.SemanticAna
 	// We'll extract text directly here to avoid circular dependencies
 	zipReader, err := os.Open(metadata.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open PPTX: %w", err)
+		return nil, fmt.Errorf("failed to open PPTX; %w", err)
 	}
 	defer zipReader.Close()
 
 	stat, err := zipReader.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat PPTX: %w", err)
+		return nil, fmt.Errorf("failed to stat PPTX; %w", err)
 	}
 
 	// Use the archive/zip package to read PPTX
 	var allText strings.Builder
 	zipFile, err := os.Open(metadata.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read PPTX: %w", err)
+		return nil, fmt.Errorf("failed to read PPTX; %w", err)
 	}
 	defer zipFile.Close()
 
 	reader, err := zip.NewReader(zipFile, stat.Size())
 	if err != nil {
-		return nil, fmt.Errorf("failed to open PPTX zip: %w", err)
+		return nil, fmt.Errorf("failed to open PPTX zip; %w", err)
 	}
 
 	// Extract text from each slide
@@ -323,7 +323,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	// Call Claude API
 	response, err := a.client.SendMessage(prompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze with Claude: %w", err)
+		return nil, fmt.Errorf("failed to analyze with Claude; %w", err)
 	}
 
 	// Parse response
@@ -334,7 +334,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 				return &analysis, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to parse analysis response: %w", err)
+		return nil, fmt.Errorf("failed to parse analysis response; %w", err)
 	}
 
 	return &analysis, nil
@@ -345,26 +345,26 @@ func (a *Analyzer) analyzeDocx(metadata *types.FileMetadata) (*types.SemanticAna
 	// Open DOCX as ZIP
 	zipReader, err := os.Open(metadata.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open DOCX: %w", err)
+		return nil, fmt.Errorf("failed to open DOCX; %w", err)
 	}
 	defer zipReader.Close()
 
 	stat, err := zipReader.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat DOCX: %w", err)
+		return nil, fmt.Errorf("failed to stat DOCX; %w", err)
 	}
 
 	// Use the archive/zip package to read DOCX
 	var allText strings.Builder
 	zipFile, err := os.Open(metadata.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read DOCX: %w", err)
+		return nil, fmt.Errorf("failed to read DOCX; %w", err)
 	}
 	defer zipFile.Close()
 
 	reader, err := zip.NewReader(zipFile, stat.Size())
 	if err != nil {
-		return nil, fmt.Errorf("failed to open DOCX zip: %w", err)
+		return nil, fmt.Errorf("failed to open DOCX zip; %w", err)
 	}
 
 	// Extract text from word/document.xml
@@ -447,7 +447,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	// Call Claude API
 	response, err := a.client.SendMessage(prompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze with Claude: %w", err)
+		return nil, fmt.Errorf("failed to analyze with Claude; %w", err)
 	}
 
 	// Parse response
@@ -458,7 +458,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 				return &analysis, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to parse analysis response: %w", err)
+		return nil, fmt.Errorf("failed to parse analysis response; %w", err)
 	}
 
 	return &analysis, nil

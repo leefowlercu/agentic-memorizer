@@ -116,13 +116,13 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 	// Marshal request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request; %w", err)
 	}
 
 	// Create HTTP request
 	httpReq, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request; %w", err)
 	}
 
 	// Set headers
@@ -133,14 +133,14 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 	// Send request
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request; %w", err)
 	}
 	defer httpResp.Body.Close()
 
 	// Read response
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", fmt.Errorf("failed to read response; %w", err)
 	}
 
 	// Check status code
@@ -151,7 +151,7 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 	// Parse response
 	var resp Response
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return "", fmt.Errorf("failed to unmarshal response; %w", err)
 	}
 
 	// Extract text from response
@@ -192,13 +192,13 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 	// Marshal request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request; %w", err)
 	}
 
 	// Create HTTP request
 	httpReq, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request; %w", err)
 	}
 
 	// Set headers
@@ -209,14 +209,14 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 	// Send request
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request; %w", err)
 	}
 	defer httpResp.Body.Close()
 
 	// Read response
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", fmt.Errorf("failed to read response; %w", err)
 	}
 
 	// Check status code
@@ -227,7 +227,7 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 	// Parse response
 	var resp Response
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return "", fmt.Errorf("failed to unmarshal response; %w", err)
 	}
 
 	// Extract text from response
@@ -268,13 +268,13 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 	// Marshal request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request; %w", err)
 	}
 
 	// Create HTTP request
 	httpReq, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request; %w", err)
 	}
 
 	// Set headers
@@ -285,14 +285,14 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 	// Send request
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request; %w", err)
 	}
 	defer httpResp.Body.Close()
 
 	// Read response
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", fmt.Errorf("failed to read response; %w", err)
 	}
 
 	// Check status code
@@ -303,7 +303,7 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 	// Parse response
 	var resp Response
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return "", fmt.Errorf("failed to unmarshal response; %w", err)
 	}
 
 	// Extract text from response
@@ -313,4 +313,3 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 
 	return resp.Content[0].Text, nil
 }
-

@@ -11,13 +11,11 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
-// Formatter generates output in various formats
 type Formatter struct {
 	verbose        bool
 	showRecentDays int
 }
 
-// HookOutput represents the JSON output structure for Claude Code hooks
 type HookOutput struct {
 	Continue           bool                `json:"continue"`
 	StopReason         *string             `json:"stopReason,omitempty"`
@@ -26,13 +24,11 @@ type HookOutput struct {
 	HookSpecificOutput *HookSpecificOutput `json:"hookSpecificOutput,omitempty"`
 }
 
-// HookSpecificOutput contains SessionStart hook-specific fields
 type HookSpecificOutput struct {
 	HookEventName     string `json:"hookEventName"`
 	AdditionalContext string `json:"additionalContext,omitempty"`
 }
 
-// NewFormatter creates a new output formatter
 func NewFormatter(verbose bool, showRecentDays int) *Formatter {
 	return &Formatter{
 		verbose:        verbose,
@@ -40,13 +36,10 @@ func NewFormatter(verbose bool, showRecentDays int) *Formatter {
 	}
 }
 
-// generateSystemMessage creates a concise summary of the memory index
 func (f *Formatter) generateSystemMessage(index *types.Index) string {
-	// Group by category to count categories with files
 	categories := f.groupByCategory(index.Entries)
 	categoryCount := len(categories)
 
-	// Build category breakdown
 	categoryParts := []string{}
 	categoryOrder := []string{"documents", "presentations", "images", "transcripts", "data", "code", "videos", "audio", "archives", "other"}
 	for _, category := range categoryOrder {
@@ -55,7 +48,6 @@ func (f *Formatter) generateSystemMessage(index *types.Index) string {
 		}
 	}
 
-	// Format message
 	msg := fmt.Sprintf("Memory index updated: %d files", index.Stats.TotalFiles)
 
 	if categoryCount > 0 {
@@ -64,7 +56,6 @@ func (f *Formatter) generateSystemMessage(index *types.Index) string {
 
 	msg += fmt.Sprintf(", %s total", formatSize(index.Stats.TotalSize))
 
-	// Add cache stats if semantic analysis was performed
 	if index.Stats.CachedFiles > 0 || index.Stats.AnalyzedFiles > 0 {
 		msg += fmt.Sprintf(" — %d cached, %d analyzed", index.Stats.CachedFiles, index.Stats.AnalyzedFiles)
 	}
@@ -72,17 +63,14 @@ func (f *Formatter) generateSystemMessage(index *types.Index) string {
 	return msg
 }
 
-// FormatMarkdown formats the index as markdown
 func (f *Formatter) FormatMarkdown(index *types.Index) string {
 	var sb strings.Builder
 
-	// Header
 	sb.WriteString("# Claude Code Agentic Memory Index\n")
 	sb.WriteString(fmt.Sprintf("📅 Generated: %s\n", index.Generated.Format("2006-01-02 15:04:05")))
 	sb.WriteString(fmt.Sprintf("📁 Files: %d | 💾 Total Size: %s\n", index.Stats.TotalFiles, formatSize(index.Stats.TotalSize)))
 	sb.WriteString(fmt.Sprintf("📂 Root: %s\n\n", index.Root))
 
-	// Recent activity
 	if f.showRecentDays > 0 {
 		recentEntries := f.getRecentEntries(index.Entries, f.showRecentDays)
 		if len(recentEntries) > 0 {
@@ -97,10 +85,8 @@ func (f *Formatter) FormatMarkdown(index *types.Index) string {
 		}
 	}
 
-	// Group by category
 	categories := f.groupByCategory(index.Entries)
 
-	// Sort categories
 	categoryOrder := []string{"documents", "presentations", "images", "transcripts", "data", "code", "videos", "audio", "archives", "other"}
 	for _, category := range categoryOrder {
 		if entries, ok := categories[category]; ok && len(entries) > 0 {
@@ -108,21 +94,16 @@ func (f *Formatter) FormatMarkdown(index *types.Index) string {
 		}
 	}
 
-	// Usage guide
 	sb.WriteString(f.formatUsageGuide())
 
 	return sb.String()
 }
 
-// FormatJSON formats the index as JSON for Claude Code hook output
 func (f *Formatter) FormatJSON(index *types.Index) (string, error) {
-	// Generate system message
 	systemMsg := f.generateSystemMessage(index)
 
-	// Generate markdown for additional context
 	markdown := f.FormatMarkdown(index)
 
-	// Build hook output
 	output := HookOutput{
 		Continue:       true,
 		SuppressOutput: true,
@@ -136,17 +117,15 @@ func (f *Formatter) FormatJSON(index *types.Index) (string, error) {
 	// Marshal to JSON with indentation for readability
 	jsonBytes, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal JSON: %w", err)
+		return "", fmt.Errorf("failed to marshal JSON; %w", err)
 	}
 
 	return string(jsonBytes), nil
 }
 
-// formatCategory formats a category section
 func (f *Formatter) formatCategory(category string, entries []types.IndexEntry, root string) string {
 	var sb strings.Builder
 
-	// Category header with emoji
 	emoji := getCategoryEmoji(category)
 	totalSize := int64(0)
 	for _, entry := range entries {
@@ -159,12 +138,10 @@ func (f *Formatter) formatCategory(category string, entries []types.IndexEntry, 
 		len(entries),
 		formatSize(totalSize)))
 
-	// Sort entries by name
 	sort.Slice(entries, func(i, j int) bool {
 		return filepath.Base(entries[i].Metadata.Path) < filepath.Base(entries[j].Metadata.Path)
 	})
 
-	// Format each entry
 	for i, entry := range entries {
 		if i > 0 {
 			sb.WriteString("---\n\n")
@@ -175,22 +152,18 @@ func (f *Formatter) formatCategory(category string, entries []types.IndexEntry, 
 	return sb.String()
 }
 
-// formatEntry formats a single file entry
 func (f *Formatter) formatEntry(entry *types.IndexEntry, root string) string {
 	var sb strings.Builder
 
 	filename := filepath.Base(entry.Metadata.Path)
 
-	// Filename header
 	sb.WriteString(fmt.Sprintf("### %s\n", filename))
 	sb.WriteString(fmt.Sprintf("**Path**: `%s`  \n", entry.Metadata.Path))
 
-	// Metadata line
 	sb.WriteString(fmt.Sprintf("**Modified**: %s | **Size**: %s",
 		entry.Metadata.Modified.Format("2006-01-02"),
 		formatSize(entry.Metadata.Size)))
 
-	// Type-specific metadata
 	if entry.Metadata.PageCount != nil {
 		sb.WriteString(fmt.Sprintf(" | **Pages**: %d", *entry.Metadata.PageCount))
 	}
@@ -213,20 +186,17 @@ func (f *Formatter) formatEntry(entry *types.IndexEntry, root string) string {
 	}
 	sb.WriteString("  \n")
 
-	// Type
 	typeDesc := strings.Title(entry.Metadata.Type)
 	if entry.Metadata.Language != nil {
 		typeDesc += fmt.Sprintf(" • %s", *entry.Metadata.Language)
 	}
 	sb.WriteString(fmt.Sprintf("**Type**: %s", typeDesc))
 
-	// Document type from semantic analysis
 	if entry.Semantic != nil && entry.Semantic.DocumentType != "" {
 		sb.WriteString(fmt.Sprintf(" • %s", strings.Title(entry.Semantic.DocumentType)))
 	}
 	sb.WriteString("\n\n")
 
-	// Semantic analysis
 	if entry.Semantic != nil {
 		sb.WriteString(fmt.Sprintf("**Summary**: %s\n\n", entry.Semantic.Summary))
 
@@ -250,12 +220,10 @@ func (f *Formatter) formatEntry(entry *types.IndexEntry, root string) string {
 		sb.WriteString("\n")
 	}
 
-	// Error if present
 	if entry.Error != nil {
 		sb.WriteString(fmt.Sprintf("⚠️ **Error**: %s\n\n", *entry.Error))
 	}
 
-	// Readability indicator
 	if entry.Metadata.IsReadable {
 		sb.WriteString("✅ Directly readable with Read tool\n\n")
 	} else {
@@ -265,7 +233,6 @@ func (f *Formatter) formatEntry(entry *types.IndexEntry, root string) string {
 	return sb.String()
 }
 
-// formatUsageGuide formats the usage guide
 func (f *Formatter) formatUsageGuide() string {
 	return `## Usage Guide
 
@@ -279,7 +246,6 @@ func (f *Formatter) formatUsageGuide() string {
 `
 }
 
-// getRecentEntries returns entries modified within the last N days
 func (f *Formatter) getRecentEntries(entries []types.IndexEntry, days int) []types.IndexEntry {
 	cutoff := time.Now().AddDate(0, 0, -days)
 	recent := []types.IndexEntry{}
@@ -290,12 +256,10 @@ func (f *Formatter) getRecentEntries(entries []types.IndexEntry, days int) []typ
 		}
 	}
 
-	// Sort by modified date (newest first)
 	sort.Slice(recent, func(i, j int) bool {
 		return recent[i].Metadata.Modified.After(recent[j].Metadata.Modified)
 	})
 
-	// Limit to 10
 	if len(recent) > 10 {
 		recent = recent[:10]
 	}
@@ -303,7 +267,6 @@ func (f *Formatter) getRecentEntries(entries []types.IndexEntry, days int) []typ
 	return recent
 }
 
-// groupByCategory groups entries by category
 func (f *Formatter) groupByCategory(entries []types.IndexEntry) map[string][]types.IndexEntry {
 	categories := make(map[string][]types.IndexEntry)
 
@@ -315,7 +278,6 @@ func (f *Formatter) groupByCategory(entries []types.IndexEntry) map[string][]typ
 	return categories
 }
 
-// getCategoryEmoji returns an emoji for a category
 func getCategoryEmoji(category string) string {
 	emojis := map[string]string{
 		"documents":     "📄",
@@ -336,7 +298,6 @@ func getCategoryEmoji(category string) string {
 	return "📎"
 }
 
-// formatSize formats a size in bytes to human-readable format
 func formatSize(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -352,14 +313,12 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// formatNumber formats a number with commas
 func formatNumber(n int) string {
 	s := fmt.Sprintf("%d", n)
 	if len(s) <= 3 {
 		return s
 	}
 
-	// Add commas
 	var result string
 	for i, c := range s {
 		if i > 0 && (len(s)-i)%3 == 0 {

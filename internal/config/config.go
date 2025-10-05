@@ -46,7 +46,6 @@ func InitConfig() error {
 	return nil
 }
 
-// GetConfig unmarshals viper configuration to Config struct
 func GetConfig() (*Config, error) {
 	var cfg Config
 

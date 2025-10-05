@@ -75,7 +75,7 @@ func Walk(root string, skipDirs []string, skipFiles []string, visitor FileVisito
 func GetRelPath(root, path string) (string, error) {
 	relPath, err := filepath.Rel(root, path)
 	if err != nil {
-		return "", fmt.Errorf("failed to get relative path: %w", err)
+		return "", fmt.Errorf("failed to get relative path; %w", err)
 	}
 	return relPath, nil
 }

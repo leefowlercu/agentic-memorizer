@@ -1,0 +1,14 @@
+{
+  "name": "test-data",
+  "version": "1.0.0",
+  "description": "Sample JSON file for testing metadata extraction",
+  "metadata": {
+    "author": "Test Author",
+    "created": "2025-10-05"
+  },
+  "items": [
+    {"id": 1, "value": "first"},
+    {"id": 2, "value": "second"},
+    {"id": 3, "value": "third"}
+  ]
+}

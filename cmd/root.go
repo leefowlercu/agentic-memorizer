@@ -20,12 +20,14 @@ import (
 )
 
 var memorizerCmd = &cobra.Command{
-	Use:   "memorizer",
-	Short: "Agentic memory indexer for Claude Code or Claude Agents",
-	Long: "\nSemantic file indexer that provides Claude Code with automatic awareness " +
-		"and understanding of files stored in your memory directory.\n\n" +
-		"The memorizer creates a structured index with semantic summaries, allowing " +
-		"Claude Code or Claude Agents to intelligently decide which files to access based on user queries.",
+	Use:   "agentic-memorizer",
+	Short: "Agentic Memorizer for Claude Code or Claude Agents",
+	Long: "\nA local file 'memorizer' for Claude Code and Claude Agents that provides automatic " +
+		"awareness and understanding of files in your memory directory through AI-powered semantic analysis.\n\n" +
+		"Agentic Memorizer integrates with Claude Code or Claude Agents via SessionStart hooks to automatically " +
+		"index and semantically analyze files in a configured memory directory (default `~/.agentic-memorizer/memory/`). " +
+		"Instead of manually adding files to context, Claude Code or Claude Agents automatically receive a " +
+		"structured index in their context window showing what files exist, what they contain, and how to access them.",
 	PersistentPreRunE: runInit,
 	RunE:              runMemorizer,
 }
@@ -55,31 +57,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	err := config.InitConfig()
 	if err != nil {
 		return fmt.Errorf("failed to initialize configuration; %w", err)
-	}
-
-	return nil
-}
-
-func Execute() error {
-	memorizerCmd.SilenceErrors = true
-	memorizerCmd.SilenceUsage = true
-
-	err := memorizerCmd.Execute()
-
-	if err != nil {
-		cmd, _, _ := memorizerCmd.Find(os.Args[1:])
-		if cmd == nil {
-			cmd = memorizerCmd
-		}
-
-		fmt.Printf("Error: %v\n", err)
-		if !cmd.SilenceUsage {
-			fmt.Printf("\n")
-			cmd.SetOut(os.Stdout)
-			cmd.Usage()
-		}
-
-		return err
 	}
 
 	return nil
@@ -174,7 +151,7 @@ func buildIndex(cfg *config.Config, metadataExtractor *metadata.Extractor, seman
 	// Skip files (use config or default)
 	skipFiles := cfg.Analysis.SkipFiles
 	if len(skipFiles) == 0 {
-		skipFiles = []string{"memorizer", "memorizer-config.yaml"}
+		skipFiles = []string{"agentic-memorizer"}
 	}
 
 	// Walk the file tree
@@ -337,6 +314,31 @@ func analyzeSpecificFile(
 		}
 	} else {
 		fmt.Println("Semantic analysis disabled")
+	}
+
+	return nil
+}
+
+func Execute() error {
+	memorizerCmd.SilenceErrors = true
+	memorizerCmd.SilenceUsage = true
+
+	err := memorizerCmd.Execute()
+
+	if err != nil {
+		cmd, _, _ := memorizerCmd.Find(os.Args[1:])
+		if cmd == nil {
+			cmd = memorizerCmd
+		}
+
+		fmt.Printf("Error: %v\n", err)
+		if !cmd.SilenceUsage {
+			fmt.Printf("\n")
+			cmd.SetOut(os.Stdout)
+			cmd.Usage()
+		}
+
+		return err
 	}
 
 	return nil

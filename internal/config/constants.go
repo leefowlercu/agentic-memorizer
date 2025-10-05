@@ -1,11 +1,11 @@
 package config
 
 var DefaultSkipExtensions = []string{".zip", ".tar", ".gz", ".exe", ".bin", ".dmg", ".iso"}
-var DefaultSkipFiles = []string{"memorizer", "memorizer-config.yaml"}
+var DefaultSkipFiles = []string{"agentic-memorizer"}
 
 var DefaultConfig = Config{
-	MemoryRoot: "~/.claude/memory",
-	CacheDir:   "~/.claude/memory/.cache",
+	MemoryRoot: "~/.agentic-memorizer/memory",
+	CacheDir:   "~/.agentic-memorizer/memory/.cache",
 	Claude: ClaudeConfig{
 		APIKeyEnv:      "ANTHROPIC_API_KEY",
 		Model:          "claude-sonnet-4-5-20250929",

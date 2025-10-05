@@ -1,10 +1,10 @@
 # Agentic Memory Configuration
 
 # Root directory for memory files
-memory_root: ~/.claude/memory
+memory_root: ~/.agentic-memorizer/memory
 
 # Cache directory for analysis results
-cache_dir: ~/.claude/memory/.cache
+cache_dir: ~/.agentic-memorizer/memory/.cache
 
 # Claude API Configuration
 claude:
@@ -60,7 +60,7 @@ analysis:
     - .iso
 
   # Specific files to skip by name (system files)
-  # The binary itself and its configuration file are always skipped to avoid self-indexing
+  # The binary itself is skipped to avoid self-indexing
+  # Config file is in separate directory (~/.agentic-memorizer/) so doesn't need to be skipped
   skip_files:
-    - memorizer
-    - memorizer-config.yaml
+    - agentic-memorizer

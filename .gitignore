@@ -1,5 +1,5 @@
 # Binaries
-/memorizer
+/agentic-memorizer
 *.exe
 *.dll
 *.so
@@ -29,7 +29,7 @@ go.work
 Thumbs.db
 
 # Config files with secrets
-memorizer-config.yaml
+config.yaml
 *.local.yaml
 
 # Cache

@@ -1,10 +1,25 @@
 # Agentic Memorizer
 
-A semantic file indexer for Claude Code that provides automatic awareness and understanding of files in your memory directory through AI-powered analysis.
+A local file 'memorizer' for Claude Code and Claude Agents that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis.
 
 ## Overview
 
-Agentic Memorizer integrates with Claude Code via SessionStart hooks to automatically index and semantically analyze files in `~/.claude/memory/`. Instead of manually adding files to context, Claude Code automatically receives a structured index showing what files exist, what they contain, and how to access them.
+Agentic Memorizer integrates with Claude Code or Claude Agents via SessionStart hooks to automatically index and semantically analyze files in `~/.agentic-memorizer/memory/`. Instead of manually adding files to context, Claude Code or Claude Agents automatically receive a structured index in their context window showing what files exist, what they contain, and how to access them.
+
+## Why Use This?
+
+**Instead of:**
+- ✗ Manually copying file contents into prompts
+- ✗ Pre-loading all files into context (wasting tokens)
+- ✗ Repeatedly explaining what files exist to Claude
+- ✗ Managing which files to include/exclude manually
+
+**You get:**
+- ✓ Automatic file awareness on every session
+- ✓ Smart, on-demand file access (Claude decides what to read)
+- ✓ Semantic understanding of content before reading
+- ✓ Efficient token usage (only index, not full content)
+- ✓ Works across sessions with persistent cache
 
 ### Key Features
 
@@ -18,7 +33,7 @@ Agentic Memorizer integrates with Claude Code via SessionStart hooks to automati
 ## How It Works
 
 1. **SessionStart Hook** triggers the indexer when Claude Code starts
-2. **File System Walk** discovers all files in `~/.claude/memory/`
+2. **File System Walk** discovers all files in `~/.agentic-memorizer/memory/`
 3. **Metadata Extraction** pulls file-specific metadata (pages, dimensions, word count, etc.)
 4. **Semantic Analysis** uses Claude API to understand content and generate summaries
 5. **Smart Caching** stores analyses keyed by file hash (only re-analyze if file changes)
@@ -43,12 +58,12 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 Then run the init command to set up configuration:
 
 ```bash
-memorizer init
+agentic-memorizer init
 ```
 
 This creates:
-- Config file at `~/.local/bin/memorizer-config.yaml`
-- Memory directory at `~/.claude/memory/`
+- Config file at `~/.agentic-memorizer/config.yaml`
+- Memory directory at `~/.agentic-memorizer/memory/`
 
 #### Option 2: Using Makefile
 
@@ -57,9 +72,9 @@ make install
 ```
 
 This will:
-- Build the `memorizer` binary
-- Install it to `~/.local/bin/memorizer`
-- Create default config at `~/.local/bin/memorizer-config.yaml`
+- Build the `agentic-memorizer` binary
+- Install it to `~/.local/bin/agentic-memorizer`
+- Create default config at `~/.agentic-memorizer/config.yaml`
 
 ### Configuration
 
@@ -69,7 +84,7 @@ Set your API key via environment variable (recommended):
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-Or edit `~/.local/bin/memorizer-config.yaml`:
+Or edit `~/.agentic-memorizer/config.yaml`:
 
 ```yaml
 claude:
@@ -80,13 +95,13 @@ claude:
 
 ```bash
 # Custom memory directory
-memorizer init --memory-root ~/my-memory
+agentic-memorizer init --memory-root ~/my-memory
 
-# Custom config location
-memorizer init --config-path ~/.memorizer-config.yaml
+# Custom cache directory
+agentic-memorizer init --cache-dir ~/my-memory/.cache
 
 # Force overwrite existing config
-memorizer init --force
+agentic-memorizer init --force
 ```
 
 ### Configure Claude Code Hook
@@ -102,7 +117,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
           }
         ]
       },
@@ -111,7 +126,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
           }
         ]
       },
@@ -120,7 +135,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
           }
         ]
       },
@@ -129,7 +144,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/memorizer"
+            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer"
           }
         ]
       }
@@ -140,33 +155,31 @@ Add to `~/.claude/settings.json`:
 
 Replace `YOUR_USERNAME` with your actual username.
 
-**Note**: The configuration includes all four SessionStart matchers to ensure the memory index stays current:
-- `"startup"`: Runs when starting a new session with `claude`
-- `"resume"`: Runs when resuming with `claude --resume`, `claude --continue`, or `/resume`
-- `"clear"`: Runs after the `/clear` command clears the context
-- `"compact"`: Runs when Claude Code compacts the context (automatically or via `/compact`)
+**Note**: The configuration includes all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`) to ensure the memory index stays current throughout your session lifecycle.
+
+### Using with Claude Agents
+
+For Claude Agents or other systems that can execute commands:
+
+1. Configure your agent to run: `agentic-memorizer --format json`
+2. Parse the JSON response to extract the index
+3. Add the `additionalContext` to your agent's context
+
+The memorizer works with any system that can execute shell commands and capture output.
 
 ## Usage
 
 ### Normal Operation
 
-Once installed and configured, the indexer runs automatically throughout your Claude Code session lifecycle. No manual action needed!
-
-The indexer will run:
-- When starting a new session with `claude`
-- When resuming a session with `claude --resume`, `claude --continue`, or `/resume`
-- After clearing context with `/clear`
-- When context is compacted (automatically or via `/compact`)
-
-This ensures your memory index stays current as the context changes throughout your session.
+Once installed and configured, the indexer runs automatically. No manual action needed!
 
 ### Adding Files to Memory
 
-Simply add files to `~/.claude/memory/` (or the directory you've configured as the `memory_root` in `memorizer-config.yaml`):
+Simply add files to `~/.agentic-memorizer/memory/` (or the directory you've configured as the `memory_root` in `config.yaml`):
 
 ```bash
 # Organize however you like
-~/.claude/memory/
+~/.agentic-memorizer/memory/
 ├── documents/
 │   └── project-plan.md
 ├── presentations/
@@ -182,7 +195,7 @@ On your next Claude Code session, these files will be automatically analyzed and
 Test the indexer manually:
 
 ```bash
-memorizer
+agentic-memorizer
 ```
 
 This outputs the markdown index that Claude Code receives.
@@ -193,14 +206,14 @@ This outputs the markdown index that Claude Code receives.
 
 ```bash
 # Initialize config and memory directory
-memorizer init [flags]
+agentic-memorizer init [flags]
 
 # Run indexing (default command)
-memorizer [flags]
+agentic-memorizer [flags]
 
 # Get help
-memorizer --help
-memorizer init --help
+agentic-memorizer --help
+agentic-memorizer init --help
 ```
 
 **Common Flags:**
@@ -225,25 +238,25 @@ memorizer init --help
 
 ```bash
 # Standard indexing
-memorizer
+agentic-memorizer
 
 # JSON output for hooks
-memorizer --format json
+agentic-memorizer --format json
 
 # Verbose mode
-memorizer --verbose
+agentic-memorizer --verbose
 
 # Force re-analysis
-memorizer --force-analyze
+agentic-memorizer --force-analyze
 
 # Analyze specific file
-memorizer --analyze-file ~/document.pdf
+agentic-memorizer --analyze-file ~/document.pdf
 ```
 
 ### Force Re-analysis
 
 ```bash
-memorizer --force-analyze
+agentic-memorizer --force-analyze
 ```
 
 Clears cache and re-analyzes all files.
@@ -251,7 +264,7 @@ Clears cache and re-analyzes all files.
 ### Skip Semantic Analysis (Fast Mode)
 
 ```bash
-memorizer --no-semantic
+agentic-memorizer --no-semantic
 ```
 
 Only extracts metadata, skips Claude API calls.
@@ -275,7 +288,7 @@ The index tells Claude Code which method to use for each file.
 
 ## Configuration Options
 
-See `memorizer-config.example.yaml` for all options:
+See `config.yaml.example` for all options:
 
 - **API Settings**: Model, tokens, timeout
 - **Analysis**: Enable/disable, file size limits, parallel processing, file exclusions
@@ -287,15 +300,14 @@ See `memorizer-config.example.yaml` for all options:
 The indexer automatically excludes:
 - Hidden files and directories (starting with `.`)
 - The `.cache/` directory (where analyses are cached)
-- The `memorizer` binary itself (if located in the memory directory)
-- The `memorizer-config.yaml` file (if located in the memory directory)
+- The `agentic-memorizer` binary itself (if located in the memory directory)
 
-You can exclude additional files by name in `memorizer-config.yaml`:
+You can exclude additional files by name in `config.yaml`:
 
 ```yaml
 analysis:
   skip_files:
-    - memorizer  # Default
+    - agentic-memorizer  # Default
     - my-private-notes.md
     - temp-file.txt
 ```
@@ -311,7 +323,7 @@ The memorizer supports two output formats:
 Standard markdown output that can be displayed directly or piped to files:
 
 ```bash
-memorizer
+agentic-memorizer
 ```
 
 #### JSON (Claude Code Hooks)
@@ -319,10 +331,10 @@ memorizer
 Structured JSON output conforming to Claude Code's hook specification. Use this format when the memorizer is called from Claude Code hooks:
 
 ```bash
-memorizer --format json
+agentic-memorizer --format json
 ```
 
-Or configure in `memorizer-config.yaml`:
+Or configure in `config.yaml`:
 
 ```yaml
 output:
@@ -354,7 +366,7 @@ output:
 
 ```
 agentic-memorizer/
-├── cmd/memorizer/    # Main entry point
+├── main.go           # Main entry point
 ├── internal/
 │   ├── config/               # Configuration loading
 │   ├── walker/               # File system traversal
@@ -397,6 +409,32 @@ See existing handlers for examples.
 - **Cache hit rate**: Typically >95% after first run
 - **API usage**: Only for new/modified files
 
+## Limitations & Known Issues
+
+### Current Limitations
+
+- **API Costs**: Semantic analysis uses Claude API calls (costs apply)
+  - Mitigated by caching (only analyzes new/modified files)
+  - Can disable with `--no-semantic` for metadata-only mode
+
+- **File Size Limit**: Default 10MB max for semantic analysis
+  - Configurable via `analysis.max_file_size` in config
+  - Larger files are indexed with metadata only
+
+- **Internet Required**: Needs connection for Claude API calls
+  - Cached analyses work offline
+  - Metadata extraction works offline
+
+- **File Format Support**: Limited to formats with extractors
+  - Common formats covered (docs, images, code, etc.)
+  - Binary files without extractors get basic metadata only
+
+### Known Issues
+
+- Some PPTX files with complex formatting may have incomplete extraction
+- PDF page count detection is basic (stub implementation)
+- Very large directories (1000+ files) may take time on first run
+
 ## Troubleshooting
 
 ### "API key is required" error
@@ -410,8 +448,8 @@ export ANTHROPIC_API_KEY="your-key-here"
 ### Index not appearing in Claude Code
 
 1. Check hook is configured in `~/.claude/settings.json`
-2. Verify binary path is correct (`~/.local/bin/memorizer`)
-3. Test manually: `memorizer`
+2. Verify binary path is correct (`~/.local/bin/agentic-memorizer`)
+3. Test manually: `agentic-memorizer`
 4. Check Claude Code terminal output for errors
 
 ### Slow performance
@@ -425,5 +463,24 @@ export ANTHROPIC_API_KEY="your-key-here"
 Clear cache to force re-analysis:
 
 ```bash
-rm -rf <memory_root>/.cache
+# Default location
+rm -rf ~/.agentic-memorizer/memory/.cache
+
+# Or use --force-analyze flag
+agentic-memorizer --force-analyze
 ```
+
+## Contributing
+
+Contributions are welcome! To contribute:
+
+1. **Report Issues**: Open an issue on GitHub describing the problem
+2. **Suggest Features**: Propose new features via GitHub issues
+3. **Submit Pull Requests**: Fork the repo, make changes, and submit a PR
+4. **Follow Standards**: Use Go conventions, add tests, update docs
+
+See existing code for examples and patterns.
+
+## License
+
+[Add license information here]

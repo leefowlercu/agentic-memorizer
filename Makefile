@@ -1,10 +1,11 @@
 .PHONY: build install test clean uninstall help
 
-BINARY_NAME=memorizer
+BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
 INSTALL_PATH=$(INSTALL_DIR)/$(BINARY_NAME)
-CONFIG_NAME=memorizer-config.yaml
-CONFIG_PATH=$(INSTALL_DIR)/$(CONFIG_NAME)
+CONFIG_NAME=config.yaml
+CONFIG_DIR=$(HOME)/.agentic-memorizer
+CONFIG_PATH=$(CONFIG_DIR)/$(CONFIG_NAME)
 
 help: ## Show this help message
 	@echo "Agentic Memorizer - Build and Installation"
@@ -26,7 +27,8 @@ install: build ## Build and install to ~/.local/bin/
 	@echo ""
 	@if [ ! -f $(CONFIG_PATH) ]; then \
 		echo "📝 Creating default config..."; \
-		cp memorizer-config.example.yaml $(CONFIG_PATH); \
+		mkdir -p $(CONFIG_DIR); \
+		cp config.yaml.example $(CONFIG_PATH); \
 		echo "✅ Config created at $(CONFIG_PATH)"; \
 		echo ""; \
 		echo "⚠️  IMPORTANT: Edit $(CONFIG_PATH) and add your Claude API key"; \

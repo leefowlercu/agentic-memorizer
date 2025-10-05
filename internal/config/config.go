@@ -11,8 +11,9 @@ import (
 )
 
 func InitConfig() error {
-	viper.SetConfigName("memorizer-config")
+	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
+	viper.AddConfigPath("$HOME/.agentic-memorizer")
 	viper.AddConfigPath(".")
 
 	viper.SetDefault("memory_root", DefaultConfig.MemoryRoot)

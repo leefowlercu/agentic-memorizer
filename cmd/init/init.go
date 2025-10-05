@@ -13,19 +13,19 @@ var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize configuration and memory directory",
 	Long: "\nCreates default configuration file and memory directory.\n\n" +
-		"The init command sets up the memorizer by creating a default configuration " +
-		"file and the memory directory where you'll store files for indexing.",
+		"The init command sets up the Agentic Memorizer by creating a default configuration " +
+		"file and the memory directory where you'll store files for analysis and indexing.",
 	Example: `  # Default initialization
-  memorizer init
+  agentic-memorizer init
 
   # Custom memory directory
-  memorizer init --memory-root ~/my-memory
+  agentic-memorizer init --memory-root ~/my-memory
 
-  # Custom config location
-  memorizer init --config-path ~/.memorizer-config.yaml
+  # Custom cache directory
+  agentic-memorizer init --cache-dir ~/my-memory/.cache
 
   # Force overwrite existing config
-  memorizer init --force`,
+  agentic-memorizer init --force`,
 	RunE: runInit,
 }
 
@@ -42,12 +42,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	cacheDir, _ := cmd.Flags().GetString("cache-dir")
 	force, _ := cmd.Flags().GetBool("force")
 
-	execPath, err := os.Executable()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+		return fmt.Errorf("failed to get home directory: %w", err)
 	}
-	execDir := filepath.Dir(execPath)
-	configPath := filepath.Join(execDir, "memorizer-config.yaml")
+	configPath := filepath.Join(home, ".agentic-memorizer", "config.yaml")
 
 	if memoryRoot == "" {
 		memoryRoot = config.DefaultConfig.MemoryRoot
@@ -70,6 +69,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create memory directory; %w", err)
 	}
 
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory; %w", err)
+	}
+
 	cfg := config.DefaultConfig
 	cfg.MemoryRoot = memoryRoot
 	cfg.CacheDir = cacheDir
@@ -86,7 +90,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Next steps:\n")
 	fmt.Printf("1. Set your Claude API key: export ANTHROPIC_API_KEY=\"your-key-here\"\n")
 	fmt.Printf("2. Add files to %s\n", memoryRoot)
-	fmt.Printf("3. Run: memorizer\n")
+	fmt.Printf("3. Run: agentic-memorizer\n")
 
 	return nil
 }

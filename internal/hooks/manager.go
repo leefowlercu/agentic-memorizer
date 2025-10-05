@@ -48,37 +48,53 @@ func FindBinaryPath() (string, error) {
 	return "", fmt.Errorf("could not locate agentic-memorizer binary")
 }
 
-func ReadSettings(path string) (*Settings, error) {
+func ReadSettings(path string) (*Settings, map[string]any, error) {
+	fullSettings := make(map[string]any)
+
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return &Settings{
 			Hooks: make(map[string][]HookEvent),
-		}, nil
+		}, fullSettings, nil
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read settings file; %w", err)
+		return nil, nil, fmt.Errorf("failed to read settings file; %w", err)
+	}
+
+	if err := json.Unmarshal(data, &fullSettings); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse settings JSON; %w", err)
 	}
 
 	var settings Settings
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return nil, fmt.Errorf("failed to parse settings JSON; %w", err)
+	if hooksData, ok := fullSettings["hooks"]; ok {
+		hooksJSON, err := json.Marshal(hooksData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to marshal hooks; %w", err)
+		}
+		var hooksMap map[string][]HookEvent
+		if err := json.Unmarshal(hooksJSON, &hooksMap); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse hooks; %w", err)
+		}
+		settings.Hooks = hooksMap
 	}
 
 	if settings.Hooks == nil {
 		settings.Hooks = make(map[string][]HookEvent)
 	}
 
-	return &settings, nil
+	return &settings, fullSettings, nil
 }
 
-func WriteSettings(path string, settings *Settings) error {
+func WriteSettings(path string, settings *Settings, fullSettings map[string]any) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create settings directory; %w", err)
 	}
 
-	data, err := json.MarshalIndent(settings, "", "  ")
+	fullSettings["hooks"] = settings.Hooks
+
+	data, err := json.MarshalIndent(fullSettings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal settings; %w", err)
 	}
@@ -96,12 +112,12 @@ func SetupSessionStartHooks(binaryPath string) (*Settings, []string, error) {
 		return nil, nil, err
 	}
 
-	settings, err := ReadSettings(settingsPath)
+	settings, fullSettings, err := ReadSettings(settingsPath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	command := fmt.Sprintf("%s --format json", binaryPath)
+	command := fmt.Sprintf("%s --format markdown --wrap-json", binaryPath)
 
 	var updated []string
 
@@ -121,11 +137,11 @@ func SetupSessionStartHooks(binaryPath string) (*Settings, []string, error) {
 
 		hookExists := false
 		if matcherIdx >= 0 {
-			for _, hook := range sessionStartEvents[matcherIdx].Hooks {
-				if strings.Contains(hook.Command, "agentic-memorizer") {
+			for i := range sessionStartEvents[matcherIdx].Hooks {
+				if strings.Contains(sessionStartEvents[matcherIdx].Hooks[i].Command, "agentic-memorizer") {
 					hookExists = true
-					if hook.Command != command {
-						hook.Command = command
+					if sessionStartEvents[matcherIdx].Hooks[i].Command != command {
+						sessionStartEvents[matcherIdx].Hooks[i].Command = command
 						updated = append(updated, matcher)
 					}
 					break
@@ -153,7 +169,7 @@ func SetupSessionStartHooks(binaryPath string) (*Settings, []string, error) {
 
 	settings.Hooks[sessionStartEvent] = sessionStartEvents
 
-	if err := WriteSettings(settingsPath, settings); err != nil {
+	if err := WriteSettings(settingsPath, settings, fullSettings); err != nil {
 		return nil, nil, err
 	}
 

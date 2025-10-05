@@ -19,6 +19,7 @@ type ClaudeConfig struct {
 
 type OutputConfig struct {
 	Format         string `mapstructure:"format"`
+	WrapJSON       bool   `mapstructure:"wrap_json"`
 	Verbose        bool   `mapstructure:"verbose"`
 	ShowRecentDays int    `mapstructure:"show_recent_days"`
 }

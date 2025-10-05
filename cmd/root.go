@@ -33,13 +33,15 @@ var memorizerCmd = &cobra.Command{
 }
 
 func init() {
-	memorizerCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (markdown/json)")
+	memorizerCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (markdown/xml)")
+	memorizerCmd.Flags().Bool("wrap-json", config.DefaultConfig.Output.WrapJSON, "Wrap output in SessionStart hook JSON")
 	memorizerCmd.Flags().Bool("verbose", config.DefaultConfig.Output.Verbose, "Verbose output")
 	memorizerCmd.Flags().Bool("force-analyze", false, "Force re-analysis of all files")
 	memorizerCmd.Flags().Bool("no-semantic", false, "Skip semantic analysis")
 	memorizerCmd.Flags().String("analyze-file", "", "Analyze specific file")
 
 	viper.BindPFlag("output.format", memorizerCmd.Flags().Lookup("format"))
+	viper.BindPFlag("output.wrap_json", memorizerCmd.Flags().Lookup("wrap-json"))
 	viper.BindPFlag("output.verbose", memorizerCmd.Flags().Lookup("verbose"))
 	viper.BindPFlag("force_analyze", memorizerCmd.Flags().Lookup("force-analyze"))
 	viper.BindPFlag("no_semantic", memorizerCmd.Flags().Lookup("no-semantic"))
@@ -114,15 +116,22 @@ func runMemorizer(cmd *cobra.Command, args []string) error {
 
 	formatter := output.NewFormatter(cfg.Output.Verbose, cfg.Output.ShowRecentDays)
 
-	if cfg.Output.Format == "json" {
-		jsonOutput, err := formatter.FormatJSON(index)
+	var content string
+	switch cfg.Output.Format {
+	case "xml":
+		content = formatter.FormatXML(index)
+	default: // "markdown"
+		content = formatter.FormatMarkdown(index)
+	}
+
+	if cfg.Output.WrapJSON {
+		jsonOutput, err := formatter.WrapJSON(content, index)
 		if err != nil {
-			return fmt.Errorf("failed to format JSON; %w", err)
+			return fmt.Errorf("failed to wrap in JSON; %w", err)
 		}
 		fmt.Println(jsonOutput)
 	} else {
-		markdown := formatter.FormatMarkdown(index)
-		fmt.Print(markdown)
+		fmt.Print(content)
 	}
 
 	return nil

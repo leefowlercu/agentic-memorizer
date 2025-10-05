@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,7 @@ func TestReadWriteSettings(t *testing.T) {
 	settingsPath := filepath.Join(tmpDir, "settings.json")
 
 	// Test reading non-existent file
-	settings, err := ReadSettings(settingsPath)
+	settings, fullSettings, err := ReadSettings(settingsPath)
 	if err != nil {
 		t.Fatalf("Failed to read non-existent settings: %v", err)
 	}
@@ -52,7 +53,7 @@ func TestReadWriteSettings(t *testing.T) {
 		},
 	}
 
-	err = WriteSettings(settingsPath, settings)
+	err = WriteSettings(settingsPath, settings, fullSettings)
 	if err != nil {
 		t.Fatalf("Failed to write settings: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestReadWriteSettings(t *testing.T) {
 	}
 
 	// Read back and verify
-	readSettings, err := ReadSettings(settingsPath)
+	readSettings, _, err := ReadSettings(settingsPath)
 	if err != nil {
 		t.Fatalf("Failed to read written settings: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestSetupSessionStartHooks(t *testing.T) {
 				found = true
 				// Verify our command is in the hooks
 				commandFound := false
-				expectedCommand := binaryPath + " --format json"
+				expectedCommand := binaryPath + " --format markdown --wrap-json"
 				for _, hook := range event.Hooks {
 					if hook.Command == expectedCommand {
 						commandFound = true
@@ -167,7 +168,7 @@ func TestPreserveExistingHooks(t *testing.T) {
 		},
 	}
 
-	err := WriteSettings(settingsPath, existingSettings)
+	err := WriteSettings(settingsPath, existingSettings, make(map[string]any))
 	if err != nil {
 		t.Fatalf("Failed to write existing settings: %v", err)
 	}
@@ -219,5 +220,364 @@ func TestPreserveExistingHooks(t *testing.T) {
 
 	if !existingFound {
 		t.Error("Existing hook was not preserved")
+	}
+}
+
+func TestSetupSessionStartHooksPreservesSettings(t *testing.T) {
+	binaryPath := "/test/path/agentic-memorizer"
+	expectedCommand := binaryPath + " --format markdown --wrap-json"
+
+	tests := []struct {
+		name                string
+		initialSettings     string
+		expectUpdatedCount  int
+		verifyFn            func(t *testing.T, settingsPath string)
+	}{
+		{
+			name: "no hooks section",
+			initialSettings: `{
+  "awsCredentialExport": "doormat aws json",
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": ["WebSearch"],
+    "deny": [],
+    "ask": []
+  },
+  "alwaysThinkingEnabled": true
+}`,
+			expectUpdatedCount: 4,
+			verifyFn: func(t *testing.T, settingsPath string) {
+				// Read back settings
+				data, err := os.ReadFile(settingsPath)
+				if err != nil {
+					t.Fatalf("Failed to read settings: %v", err)
+				}
+
+				var fullSettings map[string]any
+				if err := json.Unmarshal(data, &fullSettings); err != nil {
+					t.Fatalf("Failed to parse settings: %v", err)
+				}
+
+				// Verify all original fields preserved
+				if fullSettings["awsCredentialExport"] != "doormat aws json" {
+					t.Error("awsCredentialExport not preserved")
+				}
+				if fullSettings["includeCoAuthoredBy"] != false {
+					t.Error("includeCoAuthoredBy not preserved")
+				}
+				if fullSettings["alwaysThinkingEnabled"] != true {
+					t.Error("alwaysThinkingEnabled not preserved")
+				}
+				if fullSettings["permissions"] == nil {
+					t.Error("permissions not preserved")
+				}
+
+				// Verify hooks were added
+				hooks, ok := fullSettings["hooks"].(map[string]any)
+				if !ok || hooks == nil {
+					t.Fatal("hooks section not created")
+				}
+			},
+		},
+		{
+			name: "empty hooks section",
+			initialSettings: `{
+  "awsCredentialExport": "doormat aws json",
+  "permissions": {
+    "allow": ["WebSearch"]
+  },
+  "hooks": {}
+}`,
+			expectUpdatedCount: 4,
+			verifyFn: func(t *testing.T, settingsPath string) {
+				data, err := os.ReadFile(settingsPath)
+				if err != nil {
+					t.Fatalf("Failed to read settings: %v", err)
+				}
+
+				var fullSettings map[string]any
+				if err := json.Unmarshal(data, &fullSettings); err != nil {
+					t.Fatalf("Failed to parse settings: %v", err)
+				}
+
+				// Verify original fields preserved
+				if fullSettings["awsCredentialExport"] != "doormat aws json" {
+					t.Error("awsCredentialExport not preserved")
+				}
+
+				// Verify SessionStart hooks added
+				hooks := fullSettings["hooks"].(map[string]any)
+				if hooks["SessionStart"] == nil {
+					t.Error("SessionStart hooks not added")
+				}
+			},
+		},
+		{
+			name: "pre-existing unrelated hooks",
+			initialSettings: `{
+  "awsCredentialExport": "doormat aws json",
+  "permissions": {
+    "allow": ["WebSearch"],
+    "defaultMode": "plan"
+  },
+  "hooks": {
+    "PromptSubmit": [
+      {
+        "matcher": "commit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git status"
+          }
+        ]
+      }
+    ],
+    "OtherEvent": [
+      {
+        "matcher": "test",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo test"
+          }
+        ]
+      }
+    ]
+  }
+}`,
+			expectUpdatedCount: 4,
+			verifyFn: func(t *testing.T, settingsPath string) {
+				data, err := os.ReadFile(settingsPath)
+				if err != nil {
+					t.Fatalf("Failed to read settings: %v", err)
+				}
+
+				var fullSettings map[string]any
+				if err := json.Unmarshal(data, &fullSettings); err != nil {
+					t.Fatalf("Failed to parse settings: %v", err)
+				}
+
+				// Verify original fields preserved
+				if fullSettings["awsCredentialExport"] != "doormat aws json" {
+					t.Error("awsCredentialExport not preserved")
+				}
+
+				// Verify other hooks preserved
+				hooks := fullSettings["hooks"].(map[string]any)
+				if hooks["PromptSubmit"] == nil {
+					t.Error("PromptSubmit hooks not preserved")
+				}
+				if hooks["OtherEvent"] == nil {
+					t.Error("OtherEvent hooks not preserved")
+				}
+
+				// Verify SessionStart hooks added
+				if hooks["SessionStart"] == nil {
+					t.Error("SessionStart hooks not added")
+				}
+			},
+		},
+		{
+			name: "hooks already setup",
+			initialSettings: `{
+  "awsCredentialExport": "doormat aws json",
+  "permissions": {
+    "allow": ["WebSearch"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+          }
+        ]
+      },
+      {
+        "matcher": "resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+          }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+          }
+        ]
+      }
+    ]
+  }
+}`,
+			expectUpdatedCount: 0,
+			verifyFn: func(t *testing.T, settingsPath string) {
+				data, err := os.ReadFile(settingsPath)
+				if err != nil {
+					t.Fatalf("Failed to read settings: %v", err)
+				}
+
+				var fullSettings map[string]any
+				if err := json.Unmarshal(data, &fullSettings); err != nil {
+					t.Fatalf("Failed to parse settings: %v", err)
+				}
+
+				// Verify original fields preserved
+				if fullSettings["awsCredentialExport"] != "doormat aws json" {
+					t.Error("awsCredentialExport not preserved")
+				}
+
+				// Verify hooks unchanged
+				hooks := fullSettings["hooks"].(map[string]any)
+				sessionStart := hooks["SessionStart"].([]any)
+				if len(sessionStart) != 4 {
+					t.Errorf("Expected 4 SessionStart matchers, got %d", len(sessionStart))
+				}
+			},
+		},
+		{
+			name: "hook command differs - needs update",
+			initialSettings: `{
+  "awsCredentialExport": "doormat aws json",
+  "permissions": {
+    "allow": ["WebSearch"]
+  },
+  "alwaysThinkingEnabled": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format json"
+          }
+        ]
+      },
+      {
+        "matcher": "resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format json"
+          }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format json"
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/test/path/agentic-memorizer --format json"
+          }
+        ]
+      }
+    ]
+  }
+}`,
+			expectUpdatedCount: 4,
+			verifyFn: func(t *testing.T, settingsPath string) {
+				data, err := os.ReadFile(settingsPath)
+				if err != nil {
+					t.Fatalf("Failed to read settings: %v", err)
+				}
+
+				var fullSettings map[string]any
+				if err := json.Unmarshal(data, &fullSettings); err != nil {
+					t.Fatalf("Failed to parse settings: %v", err)
+				}
+
+				// Verify original fields preserved
+				if fullSettings["awsCredentialExport"] != "doormat aws json" {
+					t.Error("awsCredentialExport not preserved")
+				}
+				if fullSettings["alwaysThinkingEnabled"] != true {
+					t.Error("alwaysThinkingEnabled not preserved")
+				}
+
+				// Verify hooks were updated
+				settings, _, err := ReadSettings(settingsPath)
+				if err != nil {
+					t.Fatalf("Failed to read settings: %v", err)
+				}
+
+				for _, matcher := range []string{"startup", "resume", "clear", "compact"} {
+					found := false
+					for _, event := range settings.Hooks["SessionStart"] {
+						if event.Matcher == matcher {
+							for _, hook := range event.Hooks {
+								if hook.Command == expectedCommand {
+									found = true
+									break
+								}
+							}
+						}
+					}
+					if !found {
+						t.Errorf("Hook command for matcher %s was not updated to: %s", matcher, expectedCommand)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory for test
+			tmpDir := t.TempDir()
+			settingsPath := filepath.Join(tmpDir, "settings.json")
+
+			// Write initial settings
+			if err := os.WriteFile(settingsPath, []byte(tt.initialSettings), 0644); err != nil {
+				t.Fatalf("Failed to write initial settings: %v", err)
+			}
+
+			// Override the settings path for this test
+			originalGetPath := GetClaudeSettingsPath
+			GetClaudeSettingsPath = func() (string, error) {
+				return settingsPath, nil
+			}
+			defer func() {
+				GetClaudeSettingsPath = originalGetPath
+			}()
+
+			// Run setup
+			_, updated, err := SetupSessionStartHooks(binaryPath)
+			if err != nil {
+				t.Fatalf("Failed to setup hooks: %v", err)
+			}
+
+			// Verify expected update count
+			if len(updated) != tt.expectUpdatedCount {
+				t.Errorf("Expected %d matchers to be updated, got %d", tt.expectUpdatedCount, len(updated))
+			}
+
+			// Run test-specific verification
+			tt.verifyFn(t, settingsPath)
+		})
 	}
 }

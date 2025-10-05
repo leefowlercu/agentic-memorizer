@@ -15,6 +15,7 @@ var DefaultConfig = Config{
 	},
 	Output: OutputConfig{
 		Format:         "markdown",
+		WrapJSON:       false,
 		Verbose:        false,
 		ShowRecentDays: 7,
 	},

@@ -118,7 +118,7 @@ This will:
 - Auto-detect the binary location
 - Configure all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`)
 - Preserve any existing hooks you have configured
-- Add the `--format json` flag for proper Claude Code integration
+- Add the `--format markdown --wrap-json` flags for proper Claude Code integration
 
 You can also run the init command without flags and it will prompt you to set up hooks interactively.
 
@@ -135,7 +135,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format markdown --wrap-json"
           }
         ]
       },
@@ -144,7 +144,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format markdown --wrap-json"
           }
         ]
       },
@@ -153,7 +153,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format markdown --wrap-json"
           }
         ]
       },
@@ -162,7 +162,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format markdown --wrap-json"
           }
         ]
       }
@@ -177,7 +177,7 @@ Alternatively, add to `~/.claude/settings.json`:
 
 For Claude Agents or other systems that can execute commands:
 
-1. Configure your agent to run: `agentic-memorizer --format json`
+1. Configure your agent to run: `agentic-memorizer --format markdown --wrap-json`
 2. Parse the JSON response to extract the index
 3. Add the `additionalContext` to your agent's context
 
@@ -237,7 +237,8 @@ agentic-memorizer init --help
 ```bash
 # Indexing flags
 --config <path>              # Custom config file path
---format <markdown|json>     # Output format
+--format <markdown|xml>      # Output format
+--wrap-json                  # Wrap output in SessionStart JSON structure
 --verbose                    # Verbose output
 --force-analyze              # Force re-analysis (clear cache)
 --no-semantic                # Skip semantic analysis
@@ -256,8 +257,11 @@ agentic-memorizer init --help
 # Standard indexing
 agentic-memorizer
 
-# JSON output for hooks
-agentic-memorizer --format json
+# XML output format
+agentic-memorizer --format xml
+
+# JSON wrapped output for hooks
+agentic-memorizer --format markdown --wrap-json
 
 # Verbose mode
 agentic-memorizer --verbose
@@ -342,19 +346,26 @@ Standard markdown output that can be displayed directly or piped to files:
 agentic-memorizer
 ```
 
-#### JSON (Claude Code Hooks)
+#### JSON Wrapped (Claude Code Hooks)
 
-Structured JSON output conforming to Claude Code's hook specification. Use this format when the memorizer is called from Claude Code hooks:
+Wraps the output in structured JSON conforming to Claude Code's hook specification. Use this when the memorizer is called from Claude Code hooks:
 
 ```bash
-agentic-memorizer --format json
+agentic-memorizer --format markdown --wrap-json
+```
+
+You can also wrap XML output:
+
+```bash
+agentic-memorizer --format xml --wrap-json
 ```
 
 Or configure in `config.yaml`:
 
 ```yaml
 output:
-  format: json
+  format: markdown
+  wrap_json: true
 ```
 
 **JSON Output Structure:**

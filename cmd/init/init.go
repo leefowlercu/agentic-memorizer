@@ -81,6 +81,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create memory directory; %w", err)
 	}
 
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory; %w", err)
+	}
+
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory; %w", err)
@@ -94,11 +98,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
 
-	fmt.Printf("✓ Created configuration file: %s\n\n", configPath)
-	fmt.Printf("✓ Created memory directory: %s\n", memoryRoot)
 	fmt.Printf("Configuration:\n")
-	fmt.Printf("  Memory Root: %s\n", memoryRoot)
-	fmt.Printf("  Cache Dir: %s\n\n", cacheDir)
+	fmt.Printf("✓ Created configuration file: %s\n", configPath)
+	fmt.Printf("✓ Created memory directory: %s\n", memoryRoot)
+	fmt.Printf("✓ Created cache directory: %s\n", cacheDir)
 
 	if err := handleHookSetup(setupHooks, skipHooks); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
@@ -118,7 +121,7 @@ func handleHookSetup(setupHooks, skipHooks bool) error {
 	}
 
 	if !setupHooks {
-		fmt.Printf("Configure Claude Code SessionStart hooks? [y/N]: ")
+		fmt.Printf("\nConfigure Claude Code SessionStart hooks? [y/N]: ")
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {

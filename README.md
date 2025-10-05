@@ -43,9 +43,9 @@ Agentic Memorizer integrates with Claude Code or Claude Agents via SessionStart 
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.25.1 or later
 - Claude API key ([get one here](https://console.anthropic.com/))
-- Claude Code installed
+- Claude Code (or a Claude Agent that loads settings from ~/.claude/settings.json) installed
 
 ### Build and Install
 
@@ -135,7 +135,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format json"
           }
         ]
       },
@@ -144,7 +144,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format json"
           }
         ]
       },
@@ -153,7 +153,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format json"
           }
         ]
       },
@@ -162,7 +162,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/YOUR_USERNAME/.local/bin/agentic-memorizer --format json"
+            "command": "/path/to/agentic-memorizer --format json"
           }
         ]
       }
@@ -170,8 +170,6 @@ Alternatively, add to `~/.claude/settings.json`:
   }
 }
 ```
-
-Replace `YOUR_USERNAME` with your actual username.
 
 **Note**: The configuration includes all four SessionStart matchers to ensure the memory index stays current throughout your session lifecycle.
 

@@ -214,7 +214,7 @@ func TestWrapJSON(t *testing.T) {
 		},
 		{
 			name:    "xml content",
-			content: "<?xml version=\"1.0\"?>\n<test>content</test>",
+			content: "<test>content</test>",
 		},
 	}
 

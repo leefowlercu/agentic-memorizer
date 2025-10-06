@@ -29,8 +29,8 @@ claude:
 
 # Output Configuration
 output:
-  # Output format: "markdown" or "xml"
-  format: markdown
+  # Output format: "xml" or "markdown" (default: xml)
+  format: xml
 
   # Wrap output in SessionStart hook JSON structure
   wrap_json: false

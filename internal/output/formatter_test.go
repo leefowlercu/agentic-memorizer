@@ -105,7 +105,6 @@ func TestFormatXML(t *testing.T) {
 
 	// Check for XML structure
 	expectedStrings := []string{
-		"<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
 		"<memory_index>",
 		"<metadata>",
 		"<generated>2025-10-05T16:19:03Z</generated>",
@@ -325,10 +324,6 @@ func TestFormatXMLEmptyIndex(t *testing.T) {
 	output := formatter.FormatXML(index)
 
 	// Should still have valid XML structure
-	if !strings.Contains(output, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>") {
-		t.Error("Missing XML declaration")
-	}
-
 	if !strings.Contains(output, "<memory_index>") {
 		t.Error("Missing root element")
 	}

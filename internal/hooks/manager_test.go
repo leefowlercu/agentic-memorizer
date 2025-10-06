@@ -116,7 +116,7 @@ func TestSetupSessionStartHooks(t *testing.T) {
 				found = true
 				// Verify our command is in the hooks
 				commandFound := false
-				expectedCommand := binaryPath + " --format markdown --wrap-json"
+				expectedCommand := binaryPath + " --format xml --wrap-json"
 				for _, hook := range event.Hooks {
 					if hook.Command == expectedCommand {
 						commandFound = true
@@ -225,7 +225,7 @@ func TestPreserveExistingHooks(t *testing.T) {
 
 func TestSetupSessionStartHooksPreservesSettings(t *testing.T) {
 	binaryPath := "/test/path/agentic-memorizer"
-	expectedCommand := binaryPath + " --format markdown --wrap-json"
+	expectedCommand := binaryPath + " --format xml --wrap-json"
 
 	tests := []struct {
 		name                string
@@ -391,7 +391,7 @@ func TestSetupSessionStartHooksPreservesSettings(t *testing.T) {
         "hooks": [
           {
             "type": "command",
-            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+            "command": "/test/path/agentic-memorizer --format xml --wrap-json"
           }
         ]
       },
@@ -400,7 +400,7 @@ func TestSetupSessionStartHooksPreservesSettings(t *testing.T) {
         "hooks": [
           {
             "type": "command",
-            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+            "command": "/test/path/agentic-memorizer --format xml --wrap-json"
           }
         ]
       },
@@ -409,7 +409,7 @@ func TestSetupSessionStartHooksPreservesSettings(t *testing.T) {
         "hooks": [
           {
             "type": "command",
-            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+            "command": "/test/path/agentic-memorizer --format xml --wrap-json"
           }
         ]
       },
@@ -418,7 +418,7 @@ func TestSetupSessionStartHooksPreservesSettings(t *testing.T) {
         "hooks": [
           {
             "type": "command",
-            "command": "/test/path/agentic-memorizer --format markdown --wrap-json"
+            "command": "/test/path/agentic-memorizer --format xml --wrap-json"
           }
         ]
       }

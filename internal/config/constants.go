@@ -14,7 +14,7 @@ var DefaultConfig = Config{
 		TimeoutSeconds: 30,
 	},
 	Output: OutputConfig{
-		Format:         "markdown",
+		Format:         "xml",
 		WrapJSON:       false,
 		Verbose:        false,
 		ShowRecentDays: 7,

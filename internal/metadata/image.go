@@ -6,6 +6,8 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"path/filepath"
+	"strings"
 
 	_ "golang.org/x/image/webp"
 
@@ -22,12 +24,15 @@ func (h *ImageHandler) CanHandle(ext string) bool {
 
 // Extract extracts metadata from an image file
 func (h *ImageHandler) Extract(path string, info os.FileInfo) (*types.FileMetadata, error) {
+	// Get the file extension without the dot (e.g., "png", "jpg")
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
+
 	metadata := &types.FileMetadata{
 		FileInfo: types.FileInfo{
 			Path:       path,
 			Size:       info.Size(),
 			Modified:   info.ModTime(),
-			Type:       "image",
+			Type:       ext,
 			Category:   "images",
 			IsReadable: true, // Claude Code can read images
 		},

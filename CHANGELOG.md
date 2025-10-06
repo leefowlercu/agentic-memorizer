@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2025-10-06
+
+### Added
+- CHANGELOG.md following Keep a Changelog specification
+
 ## [0.4.1] - 2025-10-05
 
 ### Added
@@ -71,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.1...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.2.0...v0.3.0

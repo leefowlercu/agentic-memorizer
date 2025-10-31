@@ -14,10 +14,9 @@ import (
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the daemon in foreground",
-	Long: `Start the background indexing daemon in foreground mode.
-
-The daemon will continuously monitor the memory directory and rebuild
-the index as needed. Press Ctrl+C to stop the daemon.`,
+	Long: "\nStart the background indexing daemon in foreground mode.\n\n" +
+		"The daemon will continuously monitor the memory directory and rebuild " +
+		"the index as needed. Press Ctrl+C to stop the daemon.",
 	RunE: runStart,
 }
 

@@ -13,7 +13,7 @@ import (
 var restartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart the daemon",
-	Long:  `Restart the background indexing daemon by stopping and starting it.`,
+	Long:  "\nRestart the background indexing daemon by stopping and starting it.",
 	RunE:  runRestart,
 }
 

@@ -13,11 +13,10 @@ import (
 
 var ReadCmd = &cobra.Command{
 	Use:   "read",
-	Short: "Read the precomputed index",
-	Long: `Read and display the precomputed index maintained by the daemon.
-
-This command loads the precomputed index file and formats it for output.
-If no index exists, it will show a warning with instructions to start the daemon.`,
+	Short: "Read the memory index",
+	Long: "\nRead and display the memory index maintained by the daemon.\n\n" +
+		"This command loads the memory index file and formats it for output. " +
+		"It's designed to be used in Claude Code SessionStart hooks for fast index delivery.",
 	RunE: runRead,
 }
 

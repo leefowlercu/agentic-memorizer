@@ -12,7 +12,7 @@ import (
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the running daemon",
-	Long:  `Stop the running background indexing daemon by sending a SIGTERM signal.`,
+	Long:  "\nStop the running background indexing daemon by sending a SIGTERM signal.",
 	RunE:  runStop,
 }
 

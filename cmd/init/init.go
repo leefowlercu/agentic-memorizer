@@ -14,15 +14,16 @@ import (
 
 var InitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize configuration, memory directory, and optionally Claude Code hooks",
+	Short: "Initialize configuration and memory directory",
 	Long: "\nCreates default configuration file and memory directory.\n\n" +
 		"The init command sets up the Agentic Memorizer by creating a default configuration " +
 		"file and the memory directory where you'll store files for analysis and indexing. " +
-		"Optionally configures Claude Code SessionStart hooks for automatic file indexing " +
+		"Optionally configures Claude Code SessionStart hooks for automatic integration " +
 		"(use --setup-hooks flag or respond to the interactive prompt).\n\n" +
-		"For optimal performance, the background daemon mode is recommended. The daemon " +
-		"maintains a precomputed index for <50ms startup times (use --with-daemon flag or " +
-		"respond to the interactive prompt).",
+		"The background daemon is required for Agentic Memorizer to function. The daemon " +
+		"maintains a precomputed index for <50ms startup times. Use --with-daemon to start " +
+		"the daemon immediately after initialization, or start it manually later with " +
+		"'agentic-memorizer daemon start'.",
 	Example: `  # Default initialization (prompts for hooks and daemon)
   agentic-memorizer init
 

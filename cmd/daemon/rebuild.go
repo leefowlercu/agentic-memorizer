@@ -12,10 +12,9 @@ import (
 var rebuildCmd = &cobra.Command{
 	Use:   "rebuild",
 	Short: "Force immediate index rebuild",
-	Long: `Force the daemon to perform an immediate full index rebuild.
-
-This sends a SIGUSR1 signal to the running daemon. If the daemon is not running,
-this command will fail.`,
+	Long: "\nForce the daemon to perform an immediate full index rebuild.\n\n" +
+		"This sends a SIGUSR1 signal to the running daemon. If the daemon is not running, " +
+		"this command will return an error.",
 	RunE: runRebuild,
 }
 

@@ -17,7 +17,7 @@ var (
 var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show daemon logs",
-	Long:  `Show logs from the background indexing daemon.`,
+	Long:  "\nShow logs from the background indexing daemon.",
 	RunE:  runLogs,
 }
 

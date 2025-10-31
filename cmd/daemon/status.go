@@ -15,7 +15,7 @@ import (
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show daemon status",
-	Long:  `Show the current status of the background indexing daemon.`,
+	Long:  "\nShow the current status of the background indexing daemon.",
 	RunE:  runStatus,
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"time"
 )
@@ -29,6 +30,57 @@ func NewClient(apiKey, model string, maxTokens, timeoutSeconds int) *Client {
 			Timeout: time.Duration(timeoutSeconds) * time.Second,
 		},
 	}
+}
+
+// doWithRetry performs an HTTP request with exponential backoff retry logic
+func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+	const maxRetries = 3
+	const baseDelay = 1 * time.Second
+
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s
+			delay := time.Duration(math.Pow(2, float64(attempt-1))) * baseDelay
+			time.Sleep(delay)
+		}
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			// Network error - retry
+			lastErr = err
+			continue
+		}
+
+		// Success cases
+		if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		}
+
+		// Read body for error message
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		// Determine if we should retry based on status code
+		shouldRetry := false
+		switch resp.StatusCode {
+		case http.StatusTooManyRequests, // 429 rate limit
+			http.StatusInternalServerError,     // 500
+			http.StatusBadGateway,               // 502
+			http.StatusServiceUnavailable,       // 503
+			http.StatusGatewayTimeout:           // 504
+			shouldRetry = true
+		}
+
+		if !shouldRetry || attempt == maxRetries {
+			// Return error with status and body
+			return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		lastErr = fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
 type Message struct {
@@ -115,19 +167,15 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	httpResp, err := c.httpClient.Do(httpReq)
+	httpResp, err := c.doWithRetry(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request; %w", err)
+		return "", err
 	}
 	defer httpResp.Body.Close()
 
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response; %w", err)
-	}
-
-	if httpResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	var resp Response
@@ -181,19 +229,15 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	httpResp, err := c.httpClient.Do(httpReq)
+	httpResp, err := c.doWithRetry(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request; %w", err)
+		return "", err
 	}
 	defer httpResp.Body.Close()
 
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response; %w", err)
-	}
-
-	if httpResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	var resp Response
@@ -247,19 +291,15 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	httpResp, err := c.httpClient.Do(httpReq)
+	httpResp, err := c.doWithRetry(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request; %w", err)
+		return "", err
 	}
 	defer httpResp.Body.Close()
 
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response; %w", err)
-	}
-
-	if httpResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	var resp Response

@@ -117,7 +117,7 @@ func SetupSessionStartHooks(binaryPath string) (*Settings, []string, error) {
 		return nil, nil, err
 	}
 
-	command := fmt.Sprintf("%s --format xml --wrap-json", binaryPath)
+	command := fmt.Sprintf("%s read --format xml --wrap-json", binaryPath)
 
 	var updated []string
 

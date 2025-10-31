@@ -1,11 +1,20 @@
 package config
 
+const (
+	AppDirName    = ".agentic-memorizer"
+	MemoryDirName = "memory"
+	CacheDirName  = ".cache"
+	ConfigFile    = "config.yaml"
+	IndexFile     = "index.json"
+	DaemonLogFile = "daemon.log"
+	DaemonPIDFile = "daemon.pid"
+)
+
 var DefaultSkipExtensions = []string{".zip", ".tar", ".gz", ".exe", ".bin", ".dmg", ".iso"}
 var DefaultSkipFiles = []string{"agentic-memorizer"}
 
 var DefaultConfig = Config{
-	MemoryRoot: "~/.agentic-memorizer/memory",
-	CacheDir:   "~/.agentic-memorizer/memory/.cache",
+	MemoryRoot: "~/" + AppDirName + "/" + MemoryDirName,
 	Claude: ClaudeConfig{
 		APIKeyEnv:      "ANTHROPIC_API_KEY",
 		Model:          "claude-sonnet-4-5-20250929",
@@ -25,5 +34,16 @@ var DefaultConfig = Config{
 		Parallel:       3,
 		SkipExtensions: DefaultSkipExtensions,
 		SkipFiles:      DefaultSkipFiles,
+		CacheDir:       "~/" + AppDirName + "/" + CacheDirName,
+	},
+	Daemon: DaemonConfig{
+		Enabled:                    false,
+		DebounceMs:                 500,
+		Workers:                    3,
+		RateLimitPerMin:            20,
+		FullRebuildIntervalMinutes: 60,
+		HealthCheckPort:            0, // Disabled by default
+		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,
+		LogLevel:                   "info",
 	},
 }

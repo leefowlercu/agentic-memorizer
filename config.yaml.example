@@ -3,9 +3,6 @@
 # Root directory for memory files
 memory_root: ~/.agentic-memorizer/memory
 
-# Cache directory for analysis results
-cache_dir: ~/.agentic-memorizer/memory/.cache
-
 # Claude API Configuration
 claude:
   # API key (set directly or via environment variable)
@@ -67,3 +64,36 @@ analysis:
   # Config file is in separate directory (~/.agentic-memorizer/) so doesn't need to be skipped
   skip_files:
     - agentic-memorizer
+
+  # Cache directory for semantic analysis results
+  cache_dir: ~/.agentic-memorizer/.cache
+
+# Background Daemon Configuration
+daemon:
+  # Enable daemon mode (background indexing)
+  enabled: false
+
+  # Debounce period for file changes (milliseconds)
+  # Batches rapid file changes together to avoid excessive rebuilds
+  debounce_ms: 500
+
+  # Number of worker threads for processing files
+  workers: 3
+
+  # Rate limit for Claude API calls (per minute)
+  # Prevents hitting API rate limits
+  rate_limit_per_min: 20
+
+  # Full rebuild interval (minutes)
+  # Periodic full scan even if no changes detected
+  full_rebuild_interval_minutes: 60
+
+  # Health check HTTP server port (0 to disable)
+  # Useful for monitoring daemon status
+  health_check_port: 0
+
+  # Log file location
+  log_file: ~/.agentic-memorizer/daemon.log
+
+  # Log level: debug, info, warn, error
+  log_level: info

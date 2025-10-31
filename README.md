@@ -4,7 +4,47 @@ A local file 'memorizer' for Claude Code and Claude Agents that provides automat
 
 ## Overview
 
-Agentic Memorizer integrates with Claude Code or Claude Agents via SessionStart hooks to automatically index and semantically analyze files in `~/.agentic-memorizer/memory/`. Instead of manually adding files to context, Claude Code or Claude Agents automatically receive a structured index in their context window showing what files exist, what they contain, and how to access them.
+Agentic Memorizer provides Claude Code and Claude Agents with persistent, semantic awareness of your local files. Instead of manually managing which files to include in context or repeatedly explaining what files exist, Claude automatically receives a comprehensive, AI-powered index showing what files you have, what they contain, their purpose, and how to access them.
+
+### How It Works
+
+A background daemon continuously watches your designated memory directory (`~/.agentic-memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads instantly (<50ms) when Claude Code starts.
+
+When you launch Claude Code, a SessionStart hook loads the precomputed index into Claude's context. Claude can then:
+- **Discover** what files exist without you listing them
+- **Understand** file content and purpose before reading them
+- **Decide** which files to access based on semantic relevance
+- **Access** files efficiently using the appropriate method (Read tool for text/code/images, extraction for PDFs/docs)
+
+### Key Capabilities
+
+**Automatic File Management:**
+- Discovers files as you add them to the memory directory
+- Updates the index automatically when files are modified or deleted
+- Maintains a complete catalog without manual intervention
+
+**Semantic Understanding:**
+- AI-powered summaries of file content and purpose
+- Semantic tags and key topics for each file
+- Document type classification (e.g., "technical-guide", "architecture-diagram")
+- Vision analysis for images using Claude's multimodal capabilities
+
+**Performance & Efficiency:**
+- Background daemon handles all processing asynchronously
+- Smart caching only re-analyzes changed files (95%+ cache hit rate)
+- Precomputed index loads in 10-50ms for instant Claude Code startup
+- Minimal API usage—only new/modified files are analyzed
+
+**Wide Format Support:**
+- **Direct reading**: Markdown, text, JSON/YAML, code files, images, VTT transcripts
+- **Extraction supported**: Word documents (DOCX), PowerPoint (PPTX), PDFs
+- Automatic metadata extraction for all file types
+
+**Integration:**
+- Seamless Claude Code integration via SessionStart hooks
+- Compatible with Claude Agents and other AI systems
+- Configurable output formats (XML, Markdown)
+- Optional health monitoring and logging
 
 ## Why Use This?
 
@@ -21,23 +61,18 @@ Agentic Memorizer integrates with Claude Code or Claude Agents via SessionStart 
 - ✓ Efficient token usage (only index, not full content)
 - ✓ Works across sessions with persistent cache
 
-### Key Features
+## Architecture
 
-- **Automatic Indexing**: Runs on every Claude Code session start
-- **Semantic Understanding**: Uses Claude API to understand file content and purpose
-- **Smart Caching**: Only analyzes new or modified files
-- **Multi-Format Support**: Handles documents, presentations, images, code, and more
-- **Vision Analysis**: Understands image content using Claude's vision capabilities
-- **Fast Performance**: <200ms startup with cached analyses
+**Background Daemon Architecture:**
 
-## How It Works
+1. **Background Daemon** continuously watches `~/.agentic-memorizer/memory/` for file changes
+2. **File Processing** automatically extracts metadata and performs semantic analysis via Claude API
+3. **Smart Caching** stores analyses keyed by file hash (only re-analyzes when files change)
+4. **Precomputed Index** maintains `~/.agentic-memorizer/index.json` with all file information
+5. **SessionStart Hook** triggers `read` command when Claude Code starts
+6. **Fast Read** loads and formats the precomputed index (~10-50ms) for Claude's context
 
-1. **SessionStart Hook** triggers the indexer when Claude Code starts
-2. **File System Walk** discovers all files in `~/.agentic-memorizer/memory/`
-3. **Metadata Extraction** pulls file-specific metadata (pages, dimensions, word count, etc.)
-4. **Semantic Analysis** uses Claude API to understand content and generate summaries
-5. **Smart Caching** stores analyses keyed by file hash (only re-analyze if file changes)
-6. **Structured Index** outputs XML or Markdown index that Claude Code receives in context
+The daemon handles all the heavy lifting in the background, so Claude Code startup remains fast regardless of how many files you have.
 
 ## Quick Start
 
@@ -55,16 +90,17 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-### 3. Initialize with Hook Setup
+### 3. Initialize with Daemon and Hooks
 
 ```bash
-agentic-memorizer init --setup-hooks
+agentic-memorizer init --setup-hooks --with-daemon
 ```
 
 This will:
 - Create config at `~/.agentic-memorizer/config.yaml`
 - Create memory directory at `~/.agentic-memorizer/memory/`
 - Configure Claude Code SessionStart hooks automatically
+- Start the background daemon for automatic indexing
 
 ### 4. Add Files to Memory
 
@@ -73,6 +109,8 @@ This will:
 cp ~/important-notes.md ~/.agentic-memorizer/memory/
 cp ~/project-docs/*.pdf ~/.agentic-memorizer/memory/documents/
 ```
+
+The daemon will automatically detect and index these files within seconds.
 
 ### 5. Start Claude Code
 
@@ -105,13 +143,23 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 Then run the init command to set up configuration:
 
 ```bash
+# Interactive setup (prompts for hooks and daemon)
 agentic-memorizer init
+
+# Or with flags for automated setup
+agentic-memorizer init --setup-hooks --with-daemon
 ```
 
 This creates:
 - Config file at `~/.agentic-memorizer/config.yaml`
 - Memory directory at `~/.agentic-memorizer/memory/`
-- Cache directory at `~/.agentic-memorizer/memory/.cache/`
+- Cache directory at `~/.agentic-memorizer/.cache/` (for semantic analysis cache)
+- Index file at `~/.agentic-memorizer/index.json` (created by daemon on first run)
+
+The init command can optionally:
+- Configure Claude Code SessionStart hooks automatically (`--setup-hooks`)
+- Start the background daemon immediately (`--with-daemon`)
+- Both are recommended for the best experience
 
 #### Option 2: Using Makefile
 
@@ -166,7 +214,7 @@ This will:
 - Auto-detect the binary location
 - Configure all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`)
 - Preserve any existing hooks you have configured
-- Add the `--format xml --wrap-json` flags for proper Claude Code integration
+- Add the `read --format xml --wrap-json` command for proper Claude Code integration
 
 You can also run the init command without flags and it will prompt you to set up hooks interactively.
 
@@ -183,66 +231,173 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer --format xml --wrap-json"
-          }
-        ]
-      },
-      {
-        "matcher": "resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/agentic-memorizer --format xml --wrap-json"
-          }
-        ]
-      },
-      {
-        "matcher": "clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/agentic-memorizer --format xml --wrap-json"
-          }
-        ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/agentic-memorizer --format xml --wrap-json"
+            "command": "/path/to/agentic-memorizer read --format xml --wrap-json"
           }
         ]
       }
+      // Repeat for "resume", "clear", and "compact" matchers
     ]
   }
 }
 ```
 
-**Note**: The configuration includes all four SessionStart matchers to ensure the memory index stays current throughout your session lifecycle.
+**Note**: Include all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`) to ensure the memory index loads throughout your session lifecycle. Each matcher should use the same command: `agentic-memorizer read --format xml --wrap-json`.
 
 ### Using with Claude Agents
 
 For [Claude Agents](https://docs.claude.com/en/api/agent-sdk/overview):
 
 1. Ensure the `agentic-memorizer` program is installed and configured on the same machine running the agent
-2. Configure your agent to run: `agentic-memorizer --format xml --wrap-json` or `agentic-memorizer --format markdown --wrap-json` on SessionStart Hook
+2. Ensure the background daemon is running: `agentic-memorizer daemon start`
+3. Configure your agent to run: `agentic-memorizer read --format xml --wrap-json` or `agentic-memorizer read --format markdown --wrap-json` on SessionStart Hook
 
 ### Using with Other AI Agents
 
-The Agentic Memorizer works with any system that can execute shell commands and capture output. Make sure the program is installed and configured properly, then set up your agent to run:
+The Agentic Memorizer works with any system that can execute shell commands and capture output. Make sure:
+
+1. The program is installed and configured
+2. The background daemon is running: `agentic-memorizer daemon start`
+3. Your agent runs this command and adds output to context:
 
 ```bash
-agentic-memorizer --format <xml|markdown>
+agentic-memorizer read --format <xml|markdown>
 ```
-
-And add the output to the agent's context window.
 
 ## Usage
 
-### Normal Operation
+### Background Daemon (Required)
 
-Once installed and configured, the indexer runs automatically. No manual action needed!
+The background daemon is the core of Agentic Memorizer. It maintains a precomputed index for fast (<50ms) startup times, watching your memory directory and automatically updating the index as files change.
+
+#### Quick Start
+
+```bash
+# Start the daemon (run in foreground - use Ctrl+C to stop, or run in background with systemd/launchd)
+agentic-memorizer daemon start
+```
+
+**Note**: If you used `init --setup-hooks --with-daemon`, the daemon and hooks are already configured. Otherwise, make sure your hooks call `agentic-memorizer read --format xml --wrap-json`.
+
+#### Daemon Commands
+
+```bash
+# Start daemon (runs in foreground - press Ctrl+C to stop)
+agentic-memorizer daemon start
+
+# Check daemon status
+agentic-memorizer daemon status
+
+# Stop daemon
+agentic-memorizer daemon stop
+
+# Restart daemon
+agentic-memorizer daemon restart
+
+# Force immediate rebuild
+agentic-memorizer daemon rebuild
+
+# View daemon logs
+agentic-memorizer daemon logs              # Last 50 lines
+agentic-memorizer daemon logs -f           # Follow logs
+agentic-memorizer daemon logs -n 100       # Last 100 lines
+```
+
+#### How It Works
+
+The daemon:
+1. **Watches** your memory directory for file changes using fsnotify
+2. **Processes** files in parallel using a worker pool (3 workers by default)
+3. **Rate limits** API calls to respect Claude API limits (20/min default)
+4. **Maintains** a precomputed `index.json` file with all metadata and semantic analysis
+5. **Updates** the index automatically when files are added/modified/deleted
+
+When you run `agentic-memorizer read`, it simply loads the precomputed index from disk (~10-50ms) instead of analyzing all files (~120ms-15s).
+
+#### Daemon Configuration
+
+In `~/.agentic-memorizer/config.yaml`:
+
+```yaml
+daemon:
+  enabled: true                          # Enable daemon mode
+  debounce_ms: 500                       # Debounce file events (milliseconds)
+  workers: 3                             # Parallel worker count
+  rate_limit_per_min: 20                 # API rate limit
+  full_rebuild_interval_minutes: 60      # Periodic full rebuild interval
+  health_check_port: 0                   # HTTP health check (0 = disabled)
+  log_file: ~/.agentic-memorizer/daemon.log
+  log_level: info                        # debug, info, warn, error
+```
+
+#### Running as a Service
+
+**macOS (launchd):**
+See `examples/com.agentic-memorizer.daemon.plist` for a complete launchd configuration.
+
+**Linux (systemd):**
+See `examples/agentic-memorizer.service` for a complete systemd unit file.
+
+#### Health Monitoring
+
+Enable health checks for monitoring:
+
+```yaml
+daemon:
+  health_check_port: 8080
+```
+
+Then check health at: `http://localhost:8080`
+
+Response includes uptime, files processed, API calls, errors, and build status.
+
+#### Troubleshooting
+
+**Check daemon status:**
+```bash
+./agentic-memorizer daemon status
+```
+
+**Common issues:**
+
+1. **Daemon won't start - "daemon already running"**
+   - Check if daemon is actually running: `./agentic-memorizer daemon status`
+   - If not running but PID file exists: `rm ~/.agentic-memorizer/daemon.pid`
+   - Try starting again
+
+2. **Daemon crashes or exits immediately**
+   - Check logs: `tail -f ~/.agentic-memorizer/daemon.log`
+   - Verify config file: `cat ~/.agentic-memorizer/config.yaml`
+   - Ensure Claude API key is set (in config or `ANTHROPIC_API_KEY` env var)
+   - Check file permissions on cache directory
+
+3. **Index not updating after file changes**
+   - Verify daemon is running: `./agentic-memorizer daemon status`
+   - Check watcher is active in status output
+   - Review daemon logs for file watcher errors
+   - Ensure files aren't in skipped directories (`.cache`, `.git`)
+
+4. **High API usage**
+   - Reduce workers: `daemon.workers: 1` in config
+   - Lower rate limit: `daemon.rate_limit_per_min: 10`
+   - Increase rebuild interval: `daemon.full_rebuild_interval_minutes: 120`
+   - Add files to skip list: `analysis.skip_files` in config
+
+5. **Index corruption after crash**
+   - Daemon automatically loads last good index on startup
+   - Force rebuild: `./agentic-memorizer daemon stop && ./agentic-memorizer daemon start`
+   - If still corrupted: `rm ~/.agentic-memorizer/index.json` and restart
+
+6. **Service won't start (macOS/Linux)**
+   - **macOS**: Check Console.app for launchd errors
+   - **Linux**: Check systemd logs: `journalctl -u agentic-memorizer.service -n 50`
+   - Verify binary path in service config matches installation location
+   - Check user permissions on config and cache directories
+
+**Debug logging:**
+```yaml
+daemon:
+  log_level: debug
+```
 
 ### Adding Files to Memory
 
@@ -263,13 +418,17 @@ On your next Claude Code session, these files will be automatically analyzed and
 
 ### Manual Testing
 
-Test the indexer manually:
+View the precomputed index:
 
 ```bash
-agentic-memorizer
+# Start daemon if not already running
+agentic-memorizer daemon start
+
+# In another terminal, read the index
+agentic-memorizer read
 ```
 
-This outputs the index (XML by default) that Claude Code receives.
+This outputs the index (XML by default) that Claude Code receives from SessionStart hooks. The daemon must be running (or have completed at least one indexing cycle) for the index file to exist.
 
 ### CLI Usage
 
@@ -279,69 +438,75 @@ This outputs the index (XML by default) that Claude Code receives.
 # Initialize config and memory directory
 agentic-memorizer init [flags]
 
-# Run indexing (default command)
-agentic-memorizer [flags]
+# Manage background daemon
+agentic-memorizer daemon start
+agentic-memorizer daemon stop
+agentic-memorizer daemon status
+
+# Read precomputed index (for SessionStart hooks)
+agentic-memorizer read [flags]
 
 # Get help
 agentic-memorizer --help
 agentic-memorizer init --help
+agentic-memorizer daemon --help
+agentic-memorizer read --help
 ```
 
 **Common Flags:**
 
 ```bash
-# Indexing flags
+# Read command flags
 --format <xml|markdown>      # Output format
 --wrap-json                  # Wrap output in SessionStart JSON structure
 --verbose                    # Verbose output
---force-analyze              # Force re-analysis (clear cache)
---no-semantic                # Skip semantic analysis
---analyze-file <path>        # Analyze a specific file
 
-# Init flags
+# Init command flags
 --memory-root <dir>          # Custom memory directory
---config-path <path>         # Custom config file location
 --cache-dir <dir>            # Custom cache directory
 --force                      # Overwrite existing config
+--setup-hooks                # Configure Claude Code hooks
+--with-daemon                # Start daemon after init
 ```
 
 **Examples:**
 
 ```bash
-# Standard indexing
-agentic-memorizer
+# Initialize with daemon
+agentic-memorizer init --with-daemon
 
-# XML output format
-agentic-memorizer --format xml
+# Read index (XML format)
+agentic-memorizer read
 
-# JSON wrapped output for hooks
-agentic-memorizer --format markdown --wrap-json
+# Read index (Markdown format)
+agentic-memorizer read --format markdown
 
-# Verbose mode
-agentic-memorizer --verbose
+# Read with JSON wrapper (for SessionStart hooks)
+agentic-memorizer read --format xml --wrap-json
 
-# Force re-analysis
-agentic-memorizer --force-analyze
+# Verbose output
+agentic-memorizer read --verbose
 
-# Analyze specific file
-agentic-memorizer --analyze-file ~/document.pdf
+# Start daemon
+agentic-memorizer daemon start
+
+# Check daemon status
+agentic-memorizer daemon status
+
+# Force rebuild index
+agentic-memorizer daemon rebuild
 ```
 
-### Force Re-analysis
+### Controlling Semantic Analysis
 
-```bash
-agentic-memorizer --force-analyze
+Semantic analysis can be enabled or disabled in `config.yaml`:
+
+```yaml
+analysis:
+  enable: true  # Set to false to skip Claude API calls
 ```
 
-Clears cache and re-analyzes all files.
-
-### Skip Semantic Analysis (Fast Mode)
-
-```bash
-agentic-memorizer --no-semantic
-```
-
-Only extracts metadata, skips Claude API calls.
+When disabled, the daemon will only extract file metadata without semantic analysis.
 
 ## Supported File Types
 
@@ -397,9 +562,9 @@ The memorizer supports two output formats:
 Highly structured XML following Anthropic's recommendations for Claude [prompt engineering](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags):
 
 ```bash
-agentic-memorizer
+agentic-memorizer read
 # or explicitly:
-agentic-memorizer --format xml
+agentic-memorizer read --format xml
 ```
 
 #### Markdown
@@ -407,7 +572,7 @@ agentic-memorizer --format xml
 Human-readable markdown, formatted for direct viewing:
 
 ```bash
-agentic-memorizer --format markdown
+agentic-memorizer read --format markdown
 ```
 
 #### JSON Wrapping for Hooks
@@ -416,10 +581,10 @@ Use the `--wrap-json` flag to wrap the output (markdown or XML) in structured JS
 
 ```bash
 # XML wrapped in JSON (recommended for hooks)
-agentic-memorizer --format xml --wrap-json
+agentic-memorizer read --format xml --wrap-json
 
 # Markdown wrapped in JSON
-agentic-memorizer --format markdown --wrap-json
+agentic-memorizer read --format markdown --wrap-json
 ```
 
 Or configure in `config.yaml`:
@@ -462,12 +627,13 @@ Here are examples of what the memory index looks like in each format:
 
 ### XML Output Example
 
+Abbreviated example showing structure (actual output includes all files):
+
 ```xml
 <memory_index>
   <metadata>
     <generated>2025-10-05T14:30:22-04:00</generated>
     <file_count>3</file_count>
-    <total_size_bytes>2145728</total_size_bytes>
     <total_size_human>2.0 MB</total_size_human>
     <root_path>/Users/username/.agentic-memorizer/memory</root_path>
     <cache_stats>
@@ -477,14 +643,7 @@ Here are examples of what the memory index looks like in each format:
   </metadata>
 
   <recent_activity days="7">
-    <file>
-      <path>documents/api-design-guide.md</path>
-      <modified>2025-10-04</modified>
-    </file>
-    <file>
-      <path>code/database-migration.sql</path>
-      <modified>2025-10-03</modified>
-    </file>
+    <file><path>documents/api-design-guide.md</path><modified>2025-10-04</modified></file>
   </recent_activity>
 
   <categories>
@@ -493,92 +652,31 @@ Here are examples of what the memory index looks like in each format:
         <name>api-design-guide.md</name>
         <path>/Users/username/.agentic-memorizer/memory/documents/api-design-guide.md</path>
         <modified>2025-10-04</modified>
-        <size_bytes>46285</size_bytes>
         <size_human>45.2 KB</size_human>
         <file_type>markdown</file_type>
-        <category>documents</category>
         <readable>true</readable>
         <metadata>
           <word_count>4520</word_count>
           <section_count>8</section_count>
         </metadata>
         <semantic>
-          <summary>Comprehensive API design guidelines covering RESTful principles, versioning strategies, authentication patterns, and best practices for building scalable microservices. Includes examples of endpoint design, error handling, and rate limiting approaches.</summary>
+          <summary>Comprehensive API design guidelines covering RESTful principles, versioning strategies, authentication patterns, and best practices for building scalable microservices.</summary>
           <document_type>technical-guide</document_type>
           <topics>
             <topic>RESTful API design principles and conventions</topic>
             <topic>API versioning and backward compatibility</topic>
-            <topic>Authentication and authorization patterns</topic>
-            <topic>Rate limiting and performance optimization</topic>
+            <!-- Additional topics -->
           </topics>
           <tags>
             <tag>api-design</tag>
             <tag>rest</tag>
             <tag>microservices</tag>
-            <tag>best-practices</tag>
           </tags>
         </semantic>
       </file>
+      <!-- Additional files in this category -->
     </category>
-    <category name="code" count="1" total_size="12.8 KB">
-      <file>
-        <name>database-migration.sql</name>
-        <path>/Users/username/.agentic-memorizer/memory/code/database-migration.sql</path>
-        <modified>2025-10-03</modified>
-        <size_bytes>13107</size_bytes>
-        <size_human>12.8 KB</size_human>
-        <file_type>sql</file_type>
-        <category>code</category>
-        <readable>true</readable>
-        <metadata>
-          <line_count>342</line_count>
-        </metadata>
-        <semantic>
-          <summary>Database migration script for transitioning from PostgreSQL 13 to 14, including schema updates for user authentication tables, adding new indexes for performance, and data type migrations for timestamp fields.</summary>
-          <document_type>database-migration</document_type>
-          <topics>
-            <topic>PostgreSQL version upgrade procedures</topic>
-            <topic>Schema modifications for authentication system</topic>
-            <topic>Index optimization for query performance</topic>
-          </topics>
-          <tags>
-            <tag>database</tag>
-            <tag>migration</tag>
-            <tag>postgresql</tag>
-            <tag>sql</tag>
-          </tags>
-        </semantic>
-      </file>
-    </category>
-    <category name="images" count="1" total_size="1.4 MB">
-      <file>
-        <name>system-architecture.png</name>
-        <path>/Users/username/.agentic-memorizer/memory/images/system-architecture.png</path>
-        <modified>2025-09-28</modified>
-        <size_bytes>1468006</size_bytes>
-        <size_human>1.4 MB</size_human>
-        <file_type>png</file_type>
-        <category>images</category>
-        <readable>true</readable>
-        <metadata>
-          <dimensions>2560x1440</dimensions>
-        </metadata>
-        <semantic>
-          <summary>High-level system architecture diagram showing the microservices ecosystem with API gateway, service mesh, message queues, and database clusters. Illustrates data flow between frontend applications, backend services, and external integrations.</summary>
-          <document_type>architecture-diagram</document_type>
-          <topics>
-            <topic>Microservices architecture and service boundaries</topic>
-            <topic>API gateway and service mesh patterns</topic>
-            <topic>Message queue integration for async processing</topic>
-          </topics>
-          <tags>
-            <tag>architecture</tag>
-            <tag>microservices</tag>
-            <tag>system-design</tag>
-          </tags>
-        </semantic>
-      </file>
-    </category>
+    <!-- Additional categories: code, images, presentations, etc. -->
   </categories>
 
   <usage_guide>
@@ -592,6 +690,8 @@ Here are examples of what the memory index looks like in each format:
 
 ### Markdown Output Example
 
+Abbreviated example showing structure (actual output includes all files):
+
 ```markdown
 # Claude Code Agentic Memory Index
 📅 Generated: 2025-10-05 14:30:24
@@ -600,7 +700,6 @@ Here are examples of what the memory index looks like in each format:
 
 ## 🕐 Recent Activity (Last 7 Days)
 - 2025-10-04: `documents/api-design-guide.md`
-- 2025-10-03: `code/database-migration.sql`
 
 ---
 
@@ -611,50 +710,23 @@ Here are examples of what the memory index looks like in each format:
 **Modified**: 2025-10-04 | **Size**: 45.2 KB | **Words**: 4,520 | **Sections**: 8
 **Type**: Markdown • Technical-Guide
 
-**Summary**: Comprehensive API design guidelines covering RESTful principles, versioning strategies, authentication patterns, and best practices for building scalable microservices. Includes examples of endpoint design, error handling, and rate limiting approaches.
+**Summary**: Comprehensive API design guidelines covering RESTful principles, versioning strategies, authentication patterns, and best practices for building scalable microservices.
 
-**Topics**: RESTful API design principles and conventions, API versioning and backward compatibility, Authentication and authorization patterns, Rate limiting and performance optimization
+**Topics**: RESTful API design principles, API versioning, Authentication patterns, Rate limiting
 **Tags**: `api-design` `rest` `microservices` `best-practices`
 
 ✓ Use Read tool directly
 
 ## 💻 Code (1 files, 12.8 KB)
-
-### database-migration.sql
-**Path**: `/Users/username/.agentic-memorizer/memory/code/database-migration.sql`
-**Modified**: 2025-10-03 | **Size**: 12.8 KB | **Lines**: 342
-**Type**: Sql • Database-Migration
-
-**Summary**: Database migration script for transitioning from PostgreSQL 13 to 14, including schema updates for user authentication tables, adding new indexes for performance, and data type migrations for timestamp fields.
-
-**Topics**: PostgreSQL version upgrade procedures, Schema modifications for authentication system, Index optimization for query performance
-**Tags**: `database` `migration` `postgresql` `sql`
-
-✓ Use Read tool directly
+[... similar structure for code files ...]
 
 ## 🖼️ Images (1 files, 1.4 MB)
-
-### system-architecture.png
-**Path**: `/Users/username/.agentic-memorizer/memory/images/system-architecture.png`
-**Modified**: 2025-09-28 | **Size**: 1.4 MB | **Dimensions**: 2560x1440
-**Type**: Png • Architecture-Diagram
-
-**Summary**: High-level system architecture diagram showing the microservices ecosystem with API gateway, service mesh, message queues, and database clusters. Illustrates data flow between frontend applications, backend services, and external integrations.
-
-**Topics**: Microservices architecture and service boundaries, API gateway and service mesh patterns, Message queue integration for async processing
-**Tags**: `architecture` `microservices` `system-design`
-
-✓ Use Read tool directly
+[... similar structure for images ...]
 
 ## Usage Guide
-
 **Reading Files**:
-- ✅ **Direct**: Markdown, text, VTT, JSON, YAML, images → Use Read tool
+- ✅ **Direct**: Markdown, text, VTT, JSON, YAML, images, code → Use Read tool
 - ⚠️ **Extraction needed**: DOCX, PPTX, PDF → Use Bash + conversion tools
-
-**When to access**: Ask me to read any file when relevant to your query. I'll use the appropriate method based on file type.
-
-**Re-indexing**: Index auto-updates on session start. Manual re-index: run memorizer
 ```
 
 ## Development
@@ -665,17 +737,24 @@ Here are examples of what the memory index looks like in each format:
 agentic-memorizer/
 ├── main.go           # Main entry point
 ├── cmd/
-│   ├── root.go               # Root command
-│   └── init/                 # Init subcommand
+│   ├── root.go               # Root command (orchestrates subcommands)
+│   ├── init/                 # Initialization subcommand
+│   ├── daemon/               # Daemon management (start/stop/status/restart/rebuild/logs)
+│   └── read/                 # Read precomputed index (fast path for hooks)
 ├── internal/
-│   ├── config/               # Configuration loading
+│   ├── config/               # Configuration loading and path management
+│   ├── daemon/               # Background daemon implementation
+│   ├── index/                # Index management and atomic writes
+│   ├── watcher/              # File system watching (fsnotify)
 │   ├── hooks/                # Claude Code hook management
 │   ├── walker/               # File system traversal
 │   ├── metadata/             # File metadata extraction
 │   ├── semantic/             # Claude API integration
 │   ├── cache/                # Analysis caching
-│   └── output/               # Output formatting
-├── pkg/types/                # Shared types
+│   ├── output/               # Output formatting (XML/Markdown)
+│   └── version/              # Version information
+├── pkg/types/                # Shared types and data structures
+├── examples/                 # Service configuration examples (systemd, launchd)
 └── testdata/                 # Test files
 ```
 
@@ -705,10 +784,13 @@ See existing handlers for examples.
 
 ## Performance
 
-- **Cold start** (no cache, 10 files): ~10-15 seconds
-- **Warm start** (with cache): <200ms
-- **Cache hit rate**: Typically >95% after first run
-- **API usage**: Only for new/modified files
+With the daemon-based architecture:
+
+- **Read command** (SessionStart hooks): ~10-50ms (loads precomputed index)
+- **Daemon initial indexing** (10 files): ~10-15 seconds (happens in background)
+- **Daemon incremental updates**: ~1-2 seconds per file (happens automatically)
+- **Cache hit rate**: Typically >95% after first daemon run
+- **API usage**: Only for new/modified files (daemon handles this in background)
 
 ## Limitations & Known Issues
 
@@ -716,7 +798,7 @@ See existing handlers for examples.
 
 - **API Costs**: Semantic analysis uses Claude API calls (costs apply)
   - Mitigated by caching (only analyzes new/modified files)
-  - Can disable with `--no-semantic` for metadata-only mode
+  - Can disable semantic analysis in config: `analysis.enable: false` for metadata-only mode
 
 - **File Size Limit**: Default 10MB max for semantic analysis
   - Configurable via `analysis.max_file_size` in config
@@ -748,27 +830,26 @@ export ANTHROPIC_API_KEY="your-key-here"
 
 ### Index not appearing in Claude Code
 
-1. Check hook is configured in `~/.claude/settings.json`
-2. Verify binary path is correct (`~/.local/bin/agentic-memorizer`)
-3. Test manually: `agentic-memorizer`
-4. Check Claude Code terminal output for errors
+1. Verify daemon is running: `agentic-memorizer daemon status`
+2. Check hooks are configured in `~/.claude/settings.json` with `read` command
+3. Verify binary path is correct (`~/.local/bin/agentic-memorizer` or `~/go/bin/agentic-memorizer`)
+4. Test manually: `agentic-memorizer read`
+5. Check Claude Code terminal output for errors
 
 ### Slow performance
 
-- Reduce `analysis.parallel` in config
-- Decrease `analysis.max_file_size` to skip large files
-- Use `--no-semantic` for quick metadata-only indexing
+First-time indexing of many files:
+- Reduce daemon workers: `daemon.workers: 1` in config
+- Lower rate limit: `daemon.rate_limit_per_min: 10` in config
+- Disable semantic analysis temporarily: `analysis.enable: false` in config
 
 ### Cache issues
 
-Clear cache to force re-analysis:
+Clear cache to force re-analysis of all files:
 
 ```bash
-# Default location
-rm -rf ~/.agentic-memorizer/memory/.cache
-
-# Or use --force-analyze flag
-agentic-memorizer --force-analyze
+rm -rf ~/.agentic-memorizer/.cache
+agentic-memorizer daemon restart
 ```
 
 ## Contributing

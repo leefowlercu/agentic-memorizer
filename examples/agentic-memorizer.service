@@ -1,0 +1,51 @@
+[Unit]
+Description=Agentic Memorizer Background Daemon
+Documentation=https://github.com/leefowlercu/agentic-memorizer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+
+# Path to the agentic-memorizer binary
+ExecStart=/usr/local/bin/agentic-memorizer daemon start
+
+# Working directory (where config is read from)
+WorkingDirectory=/home/%i
+
+# Environment variables
+Environment="HOME=/home/%i"
+
+# Optional: Set Claude API key if not in config file
+# Environment="ANTHROPIC_API_KEY=your-api-key-here"
+
+# Restart policy
+Restart=on-failure
+RestartSec=30s
+
+# Resource limits
+# Limit memory usage to 1GB
+MemoryMax=1G
+
+# Nice level (lower priority)
+Nice=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agentic-memorizer
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/.agentic-memorizer
+
+# Allow the daemon to write to its cache directory
+ReadWritePaths=/home/%i/.cache/agentic-memorizer
+
+[Install]
+WantedBy=multi-user.target

@@ -2,10 +2,10 @@ package config
 
 type Config struct {
 	MemoryRoot string         `mapstructure:"memory_root" yaml:"memory_root"`
-	CacheDir   string         `mapstructure:"cache_dir" yaml:"cache_dir"`
 	Claude     ClaudeConfig   `mapstructure:"claude" yaml:"claude"`
 	Output     OutputConfig   `mapstructure:"output" yaml:"output"`
 	Analysis   AnalysisConfig `mapstructure:"analysis" yaml:"analysis"`
+	Daemon     DaemonConfig   `mapstructure:"daemon" yaml:"daemon"`
 }
 
 type ClaudeConfig struct {
@@ -30,4 +30,16 @@ type AnalysisConfig struct {
 	Parallel       int      `mapstructure:"parallel" yaml:"parallel"`
 	SkipExtensions []string `mapstructure:"skip_extensions" yaml:"skip_extensions"`
 	SkipFiles      []string `mapstructure:"skip_files" yaml:"skip_files"`
+	CacheDir       string   `mapstructure:"cache_dir" yaml:"cache_dir"`
+}
+
+type DaemonConfig struct {
+	Enabled                    bool   `mapstructure:"enabled" yaml:"enabled"`
+	DebounceMs                 int    `mapstructure:"debounce_ms" yaml:"debounce_ms"`
+	Workers                    int    `mapstructure:"workers" yaml:"workers"`
+	RateLimitPerMin            int    `mapstructure:"rate_limit_per_min" yaml:"rate_limit_per_min"`
+	FullRebuildIntervalMinutes int    `mapstructure:"full_rebuild_interval_minutes" yaml:"full_rebuild_interval_minutes"`
+	HealthCheckPort            int    `mapstructure:"health_check_port" yaml:"health_check_port"`
+	LogFile                    string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel                   string `mapstructure:"log_level" yaml:"log_level"`
 }

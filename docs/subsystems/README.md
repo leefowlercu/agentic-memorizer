@@ -190,8 +190,8 @@ Loads, validates, and manages application configuration.
 
 ### Integration Framework
 
-#### Integration Registry
-**Status:** 🚧 Planned
+#### [Integration Registry](./integration-registry/)
+**Status:** ✅ Documented
 
 Framework-agnostic integration system for connecting with AI agent platforms.
 
@@ -217,14 +217,14 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 - `internal/integrations/adapters/generic/` - Generic adapter
 - `internal/integrations/output/` - Output processors
 
-**Documentation:** Coming soon
+**See:** [integration-registry/README.md](./integration-registry/README.md)
 
 ---
 
 ### Utilities
 
-#### Walker
-**Status:** 🚧 Planned
+#### [Walker](./walker/)
+**Status:** ✅ Documented
 
 Directory tree traversal with filtering and relative path computation.
 
@@ -237,12 +237,12 @@ Directory tree traversal with filtering and relative path computation.
 **Primary Components:**
 - `internal/walker/walker.go` - Directory traversal
 
-**Documentation:** Coming soon
+**See:** [walker/README.md](./walker/README.md)
 
 ---
 
-#### Version
-**Status:** 🚧 Planned
+#### [Version](./version/)
+**Status:** ✅ Documented
 
 Version information management for build-time metadata.
 
@@ -255,7 +255,7 @@ Version information management for build-time metadata.
 **Primary Components:**
 - `internal/version/version.go` - Version information
 
-**Documentation:** Coming soon
+**See:** [version/README.md](./version/README.md)
 
 ---
 

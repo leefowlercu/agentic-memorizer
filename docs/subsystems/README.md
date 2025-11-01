@@ -67,8 +67,8 @@ Manages the precomputed index file with thread-safe operations and atomic writes
 
 ---
 
-#### File Watcher
-**Status:** 🚧 Planned
+#### [File Watcher](./file-watcher/)
+**Status:** ✅ Documented
 
 Monitors the file system for changes using fsnotify with intelligent event debouncing.
 
@@ -83,14 +83,14 @@ Monitors the file system for changes using fsnotify with intelligent event debou
 - `internal/watcher/watcher.go` - File system watcher
 - `internal/watcher/watcher_test.go` - Test suite
 
-**Documentation:** Coming soon
+**See:** [file-watcher/README.md](./file-watcher/README.md)
 
 ---
 
 ### File Processing
 
-#### Metadata Extractor
-**Status:** 🚧 Planned
+#### [Metadata Extractor](./metadata-extractor/)
+**Status:** ✅ Documented
 
 Extracts file-specific metadata from various file types without AI analysis.
 
@@ -118,7 +118,7 @@ Extracts file-specific metadata from various file types without AI analysis.
 - `internal/metadata/json.go` - JSON/YAML handler
 - `internal/metadata/vtt.go` - VTT transcript handler
 
-**Documentation:** Coming soon
+**See:** [metadata-extractor/README.md](./metadata-extractor/README.md)
 
 ---
 

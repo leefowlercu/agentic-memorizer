@@ -85,6 +85,10 @@ func WriteConfig(path string, cfg *Config) error {
 	return nil
 }
 
+func GetConfigPath() string {
+	return viper.ConfigFileUsed()
+}
+
 func ExpandHome(path string) string {
 	if len(path) == 0 || path[0] != '~' {
 		return path

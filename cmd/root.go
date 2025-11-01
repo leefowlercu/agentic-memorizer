@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	cmdconfig "github.com/leefowlercu/agentic-memorizer/cmd/config"
 	cmddaemon "github.com/leefowlercu/agentic-memorizer/cmd/daemon"
 	cmdinit "github.com/leefowlercu/agentic-memorizer/cmd/init"
+	cmdintegrations "github.com/leefowlercu/agentic-memorizer/cmd/integrations"
 	cmdread "github.com/leefowlercu/agentic-memorizer/cmd/read"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
@@ -26,6 +28,8 @@ func init() {
 	memorizerCmd.AddCommand(cmdinit.InitCmd)
 	memorizerCmd.AddCommand(cmddaemon.DaemonCmd)
 	memorizerCmd.AddCommand(cmdread.ReadCmd)
+	memorizerCmd.AddCommand(cmdintegrations.IntegrationsCmd)
+	memorizerCmd.AddCommand(cmdconfig.ConfigCmd)
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

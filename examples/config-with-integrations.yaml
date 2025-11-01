@@ -1,4 +1,5 @@
-# Agentic Memory Configuration
+# Agentic Memory Configuration with Integrations
+# This example shows configuration with daemon enabled and integration settings
 
 # Root directory for memory files
 memory_root: ~/.agentic-memorizer/memory
@@ -57,8 +58,6 @@ analysis:
     - .iso
 
   # Specific files to skip by name (system files)
-  # The binary itself is skipped to avoid self-indexing
-  # Config file is in separate directory (~/.agentic-memorizer/) so doesn't need to be skipped
   skip_files:
     - agentic-memorizer
 
@@ -68,7 +67,8 @@ analysis:
 # Background Daemon Configuration
 daemon:
   # Enable daemon mode (background indexing)
-  enabled: false
+  # RECOMMENDED: Enable for optimal performance
+  enabled: true
 
   # Debounce period for file changes (milliseconds)
   # Batches rapid file changes together to avoid excessive rebuilds
@@ -94,3 +94,23 @@ daemon:
 
   # Log level: debug, info, warn, error
   log_level: info
+
+# Integration Configuration
+# Note: Integrations are typically configured via the CLI commands:
+#   agentic-memorizer integrations setup <name>
+#
+# This section is for future use when integration settings are
+# stored in the config file.
+integrations:
+  # List of enabled integration names
+  enabled: []
+
+  # Per-integration configuration
+  # Example (not yet used):
+  # configs:
+  #   claude-code:
+  #     enabled: true
+  #     output_format: xml
+  #     settings:
+  #       timeout: 5.0
+  configs: {}

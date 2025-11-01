@@ -5,7 +5,7 @@ import "fmt"
 var (
 	// Version is the application version
 	// Can be set at build time with: go build -ldflags "-X github.com/leefowlercu/agentic-memorizer/internal/version.Version=1.0.0"
-	Version = "dev"
+	Version = "0.6.0"
 
 	// GitCommit is the git commit hash
 	// Can be set at build time with: go build -ldflags "-X github.com/leefowlercu/agentic-memorizer/internal/version.GitCommit=$(git rev-parse HEAD)"

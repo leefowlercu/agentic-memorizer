@@ -42,8 +42,10 @@ When you launch Claude Code, a SessionStart hook loads the precomputed index int
 
 **Integration:**
 - Seamless Claude Code integration via SessionStart hooks
-- Compatible with Claude Agents and other AI systems
-- Configurable output formats (XML, Markdown)
+- Support for multiple agent frameworks (Claude Code, Continue.dev, Cline, Aider, Cursor)
+- Automatic setup for Claude Code, manual instructions for others
+- Configurable output formats (XML, Markdown, JSON)
+- Integration management commands for easy setup and configuration
 - Optional health monitoring and logging
 
 ## Why Use This?
@@ -93,7 +95,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 ### 3. Initialize with Daemon and Hooks
 
 ```bash
-agentic-memorizer init --setup-hooks --with-daemon
+agentic-memorizer init --setup-integrations --with-daemon
 ```
 
 This will:
@@ -147,7 +149,7 @@ Then run the init command to set up configuration:
 agentic-memorizer init
 
 # Or with flags for automated setup
-agentic-memorizer init --setup-hooks --with-daemon
+agentic-memorizer init --setup-integrations --with-daemon
 ```
 
 This creates:
@@ -157,7 +159,7 @@ This creates:
 - Index file at `~/.agentic-memorizer/index.json` (created by daemon on first run)
 
 The init command can optionally:
-- Configure Claude Code SessionStart hooks automatically (`--setup-hooks`)
+- Configure Claude Code SessionStart hooks automatically (`--setup-integrations`)
 - Start the background daemon immediately (`--with-daemon`)
 - Both are recommended for the best experience
 
@@ -204,17 +206,17 @@ agentic-memorizer init --force
 
 #### Automatic Setup (Recommended)
 
-The easiest way to set up hooks is to use the `--setup-hooks` flag during initialization:
+The easiest way to set up hooks is to use the `--setup-integrations` flag during initialization:
 
 ```bash
-agentic-memorizer init --setup-hooks
+agentic-memorizer init --setup-integrations
 ```
 
 This will:
 - Auto-detect the binary location
 - Configure all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`)
 - Preserve any existing hooks you have configured
-- Add the `read --format xml --wrap-json` command for proper Claude Code integration
+- Add the `read --format xml --integration claude-code` command for proper Claude Code integration
 
 You can also run the init command without flags and it will prompt you to set up hooks interactively.
 
@@ -231,7 +233,7 @@ Alternatively, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer read --format xml --wrap-json"
+            "command": "/path/to/agentic-memorizer read --format xml --integration claude-code"
           }
         ]
       }
@@ -241,7 +243,7 @@ Alternatively, add to `~/.claude/settings.json`:
 }
 ```
 
-**Note**: Include all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`) to ensure the memory index loads throughout your session lifecycle. Each matcher should use the same command: `agentic-memorizer read --format xml --wrap-json`.
+**Note**: Include all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`) to ensure the memory index loads throughout your session lifecycle. Each matcher should use the same command: `agentic-memorizer read --format xml --integration claude-code`.
 
 ### Using with Claude Agents
 
@@ -249,7 +251,7 @@ For [Claude Agents](https://docs.claude.com/en/api/agent-sdk/overview):
 
 1. Ensure the `agentic-memorizer` program is installed and configured on the same machine running the agent
 2. Ensure the background daemon is running: `agentic-memorizer daemon start`
-3. Configure your agent to run: `agentic-memorizer read --format xml --wrap-json` or `agentic-memorizer read --format markdown --wrap-json` on SessionStart Hook
+3. Configure your agent to run: `agentic-memorizer read --format xml --integration claude-code` on SessionStart Hook
 
 ### Using with Other AI Agents
 
@@ -276,7 +278,7 @@ The background daemon is the core of Agentic Memorizer. It maintains a precomput
 agentic-memorizer daemon start
 ```
 
-**Note**: If you used `init --setup-hooks --with-daemon`, the daemon and hooks are already configured. Otherwise, make sure your hooks call `agentic-memorizer read --format xml --wrap-json`.
+**Note**: If you used `init --setup-integrations --with-daemon`, the daemon and hooks are already configured. Otherwise, make sure your hooks call `agentic-memorizer read --format xml --integration claude-code`.
 
 #### Daemon Commands
 
@@ -446,27 +448,35 @@ agentic-memorizer daemon status
 # Read precomputed index (for SessionStart hooks)
 agentic-memorizer read [flags]
 
+# Manage agent framework integrations
+agentic-memorizer integrations list
+agentic-memorizer integrations detect
+agentic-memorizer integrations setup <integration-name>
+agentic-memorizer integrations remove <integration-name>
+agentic-memorizer integrations validate
+
 # Get help
 agentic-memorizer --help
 agentic-memorizer init --help
 agentic-memorizer daemon --help
 agentic-memorizer read --help
+agentic-memorizer integrations --help
 ```
 
 **Common Flags:**
 
 ```bash
 # Read command flags
---format <xml|markdown>      # Output format
---wrap-json                  # Wrap output in SessionStart JSON structure
---verbose                    # Verbose output
+--format <xml|markdown|json>        # Output format
+--integration <name>                # Format for specific integration (claude-code, etc)
+--verbose                           # Verbose output
 
 # Init command flags
---memory-root <dir>          # Custom memory directory
---cache-dir <dir>            # Custom cache directory
---force                      # Overwrite existing config
---setup-hooks                # Configure Claude Code hooks
---with-daemon                # Start daemon after init
+--memory-root <dir>                 # Custom memory directory
+--cache-dir <dir>                   # Custom cache directory
+--force                             # Overwrite existing config
+--setup-integrations                # Configure agent framework integrations
+--with-daemon                       # Start daemon after init
 ```
 
 **Examples:**
@@ -481,8 +491,11 @@ agentic-memorizer read
 # Read index (Markdown format)
 agentic-memorizer read --format markdown
 
-# Read with JSON wrapper (for SessionStart hooks)
-agentic-memorizer read --format xml --wrap-json
+# Read index (JSON format)
+agentic-memorizer read --format json
+
+# Read with Claude Code integration wrapper (for SessionStart hooks)
+agentic-memorizer read --format xml --integration claude-code
 
 # Verbose output
 agentic-memorizer read --verbose
@@ -495,7 +508,81 @@ agentic-memorizer daemon status
 
 # Force rebuild index
 agentic-memorizer daemon rebuild
+
+# List available integrations
+agentic-memorizer integrations list
+
+# Detect installed agent frameworks
+agentic-memorizer integrations detect
+
+# Setup Claude Code integration
+agentic-memorizer integrations setup claude-code
+
+# Remove an integration
+agentic-memorizer integrations remove claude-code
+
+# Validate integration configurations
+agentic-memorizer integrations validate
 ```
+
+### Managing Integrations
+
+The `integrations` command group provides tools for managing integrations with various AI agent frameworks.
+
+**List Available Integrations:**
+
+```bash
+agentic-memorizer integrations list
+```
+
+Shows all registered integrations, including:
+- Claude Code (automatic setup)
+- Continue.dev (manual setup)
+- Cline (manual setup)
+- Aider (manual setup)
+- Cursor AI (manual setup)
+- Custom integrations
+
+**Detect Installed Frameworks:**
+
+```bash
+agentic-memorizer integrations detect
+```
+
+Automatically detects which agent frameworks are installed on your system by checking for their configuration files.
+
+**Setup an Integration:**
+
+```bash
+# Setup Claude Code (automatic)
+agentic-memorizer integrations setup claude-code
+
+# Setup with custom binary path
+agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer
+```
+
+For Claude Code, this automatically:
+- Detects the Claude settings file (`~/.claude/settings.json`)
+- Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
+- Configures the correct command with `--integration claude-code` flag
+
+For generic integrations (Continue, Cline, Aider, Cursor), this provides manual setup instructions with the exact command to add to your framework's configuration.
+
+**Remove an Integration:**
+
+```bash
+agentic-memorizer integrations remove claude-code
+```
+
+Removes the integration configuration from the framework's settings.
+
+**Validate Configurations:**
+
+```bash
+agentic-memorizer integrations validate
+```
+
+Checks that all configured integrations are properly set up and their configuration files are valid.
 
 ### Controlling Semantic Analysis
 
@@ -575,27 +662,29 @@ Human-readable markdown, formatted for direct viewing:
 agentic-memorizer read --format markdown
 ```
 
-#### JSON Wrapping for Hooks
+#### JSON Format
 
-Use the `--wrap-json` flag to wrap the output (markdown or XML) in structured JSON conforming to Claude Code's hook specification. This is used when the memorizer is called from Claude Code or Claude Agent hooks:
+Pretty-printed JSON representation of the index:
 
 ```bash
-# XML wrapped in JSON (recommended for hooks)
-agentic-memorizer read --format xml --wrap-json
-
-# Markdown wrapped in JSON
-agentic-memorizer read --format markdown --wrap-json
+agentic-memorizer read --format json
 ```
 
-Or configure in `config.yaml`:
+#### Integration-Specific Output
 
-```yaml
-output:
-  format: xml
-  wrap_json: true
+Use the `--integration` flag to format output for specific agent frameworks. This wraps the index in the appropriate structure for that framework:
+
+```bash
+# Claude Code integration (wraps in SessionStart JSON)
+agentic-memorizer read --format xml --integration claude-code
+
+# Can also use markdown or json formats
+agentic-memorizer read --format markdown --integration claude-code
 ```
 
-**JSON Output Structure:**
+**Claude Code Integration Output Structure:**
+
+The Claude Code integration wraps the formatted index in a SessionStart hook JSON envelope:
 
 ```json
 {
@@ -612,8 +701,7 @@ output:
 - **continue**: Always `true` - allows session to proceed
 - **suppressOutput**: Always `true` - keeps verbose index out of transcript
 - **systemMessage**: Concise summary visible to user in UI
-- **hookSpecificOutput**: Contains the full index (XML or Markdown) in `additionalContext`, which Claude Code adds to the context window
-
+- **hookSpecificOutput**: Contains the full index (XML, Markdown, or JSON) in `additionalContext`, which Claude Code adds to the context window
 
 **More Info**
 

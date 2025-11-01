@@ -5,7 +5,9 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/index"
-	"github.com/leefowlercu/agentic-memorizer/internal/output"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -14,19 +16,38 @@ import (
 var ReadCmd = &cobra.Command{
 	Use:   "read",
 	Short: "Read the memory index",
-	Long: "\nRead and display the memory index maintained by the daemon.\n\n" +
-		"This command loads the memory index file and formats it for output. " +
-		"It's designed to be used in Claude Code SessionStart hooks for fast index delivery.",
+	Long: `Read and display the memory index maintained by the daemon.
+
+This command loads the precomputed index file and formats it for output. The index
+contains metadata and semantic analysis for all files in your memory directory.
+
+The read command is typically called by agent framework hooks (like Claude Code's
+SessionStart hooks) to load the memory index into the agent's context.
+
+Performance: ~10-50ms when daemon is running (loads precomputed index)`,
+	Example: `  # Plain XML output (structured format)
+  agentic-memorizer read
+
+  # Plain markdown output (human-readable)
+  agentic-memorizer read --format markdown
+
+  # Plain JSON output (programmatic access)
+  agentic-memorizer read --format json
+
+  # Integration-wrapped output for Claude Code
+  agentic-memorizer read --format xml --integration claude-code
+
+  # Verbose output with additional details
+  agentic-memorizer read --verbose`,
 	RunE: runRead,
 }
 
 func init() {
-	ReadCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (markdown/xml)")
-	ReadCmd.Flags().Bool("wrap-json", config.DefaultConfig.Output.WrapJSON, "Wrap output in SessionStart hook JSON")
+	ReadCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (xml/markdown/json)")
+	ReadCmd.Flags().String("integration", "", "Format output for specific integration (claude-code, etc)")
 	ReadCmd.Flags().Bool("verbose", config.DefaultConfig.Output.Verbose, "Verbose output")
 
 	viper.BindPFlag("output.format", ReadCmd.Flags().Lookup("format"))
-	viper.BindPFlag("output.wrap_json", ReadCmd.Flags().Lookup("wrap-json"))
 	viper.BindPFlag("output.verbose", ReadCmd.Flags().Lookup("verbose"))
 }
 
@@ -49,16 +70,43 @@ func runRead(cmd *cobra.Command, args []string) error {
 	// Try to load the computed index
 	computed, err := indexManager.LoadComputed()
 	if err != nil {
-		// No index exists, create empty index with warning
-		emptyIndex := &types.Index{
-			Root:    cfg.MemoryRoot,
-			Entries: []types.IndexEntry{},
-			Stats:   types.IndexStats{},
-		}
+		// No index exists, show warning with empty index
+		return handleEmptyIndex(cmd, cfg)
+	}
 
-		formatter := output.NewFormatter(cfg.Output.Verbose, cfg.Output.ShowRecentDays)
+	// Get format and integration from flags
+	formatStr, _ := cmd.Flags().GetString("format")
+	if formatStr == "" {
+		formatStr = cfg.Output.Format
+	}
 
-		warningMessage := fmt.Sprintf(`Warning: No precomputed index found.
+	integrationName, _ := cmd.Flags().GetString("integration")
+
+	// If integration flag is provided, use integration-specific formatting
+	if integrationName != "" {
+		return outputForIntegration(integrationName, computed.Index, formatStr)
+	}
+
+	// Default: plain output using new output processors
+	return outputPlain(computed.Index, formatStr)
+}
+
+func handleEmptyIndex(cmd *cobra.Command, cfg *config.Config) error {
+	emptyIndex := &types.Index{
+		Root:    cfg.MemoryRoot,
+		Entries: []types.IndexEntry{},
+		Stats:   types.IndexStats{},
+	}
+
+	formatStr, _ := cmd.Flags().GetString("format")
+	if formatStr == "" {
+		formatStr = cfg.Output.Format
+	}
+
+	integrationName, _ := cmd.Flags().GetString("integration")
+
+	// Warning message for empty index
+	warningMessage := `Warning: No precomputed index found.
 
 The background daemon has not created an index yet. To enable fast startup times:
 
@@ -70,52 +118,70 @@ The background daemon has not created an index yet. To enable fast startup times
    daemon:
      enabled: true
 
-For now, showing empty index.`)
+For now, showing empty index.
 
-		var content string
-		switch cfg.Output.Format {
-		case "xml":
-			content = formatter.FormatXML(emptyIndex)
-		default:
-			content = formatter.FormatMarkdown(emptyIndex)
-		}
+`
 
-		// Prepend warning
-		content = warningMessage + "\n\n" + content
-
-		if cfg.Output.WrapJSON {
-			jsonOutput, err := formatter.WrapJSON(content, emptyIndex)
-			if err != nil {
-				return fmt.Errorf("failed to wrap in JSON: %w", err)
-			}
-			fmt.Println(jsonOutput)
-		} else {
-			fmt.Print(content)
-		}
-
-		return nil
+	// If integration-specific output requested
+	if integrationName != "" {
+		// Note: Integration formatters don't include warnings - that's the shell's job
+		return outputForIntegration(integrationName, emptyIndex, formatStr)
 	}
 
-	// Index exists, format and output
-	formatter := output.NewFormatter(cfg.Output.Verbose, cfg.Output.ShowRecentDays)
+	// Plain output with warning
+	fmt.Print(warningMessage)
+	return outputPlain(emptyIndex, formatStr)
+}
 
-	var content string
-	switch cfg.Output.Format {
-	case "xml":
-		content = formatter.FormatXML(computed.Index)
+func outputForIntegration(name string, idx *types.Index, formatStr string) error {
+	registry := integrations.GlobalRegistry()
+	integration, err := registry.Get(name)
+	if err != nil {
+		return fmt.Errorf("integration %q not found: %w", name, err)
+	}
+
+	// Parse output format
+	format, err := integrations.ParseOutputFormat(formatStr)
+	if err != nil {
+		return fmt.Errorf("invalid format: %w", err)
+	}
+
+	// Format output using integration
+	output, err := integration.FormatOutput(idx, format)
+	if err != nil {
+		return fmt.Errorf("failed to format output: %w", err)
+	}
+
+	fmt.Print(output)
+	return nil
+}
+
+func outputPlain(idx *types.Index, formatStr string) error {
+	// Parse output format
+	format, err := integrations.ParseOutputFormat(formatStr)
+	if err != nil {
+		return fmt.Errorf("invalid format: %w", err)
+	}
+
+	// Create appropriate processor
+	var processor output.OutputProcessor
+	switch format {
+	case integrations.FormatXML:
+		processor = output.NewXMLProcessor()
+	case integrations.FormatMarkdown:
+		processor = output.NewMarkdownProcessor()
+	case integrations.FormatJSON:
+		processor = output.NewJSONProcessor()
 	default:
-		content = formatter.FormatMarkdown(computed.Index)
+		return fmt.Errorf("unsupported format: %s", format)
 	}
 
-	if cfg.Output.WrapJSON {
-		jsonOutput, err := formatter.WrapJSON(content, computed.Index)
-		if err != nil {
-			return fmt.Errorf("failed to wrap in JSON: %w", err)
-		}
-		fmt.Println(jsonOutput)
-	} else {
-		fmt.Print(content)
+	// Format and output
+	content, err := processor.Format(idx)
+	if err != nil {
+		return fmt.Errorf("failed to format output: %w", err)
 	}
 
+	fmt.Print(content)
 	return nil
 }

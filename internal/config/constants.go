@@ -24,7 +24,6 @@ var DefaultConfig = Config{
 	},
 	Output: OutputConfig{
 		Format:         "xml",
-		WrapJSON:       false,
 		Verbose:        false,
 		ShowRecentDays: 7,
 	},
@@ -45,5 +44,9 @@ var DefaultConfig = Config{
 		HealthCheckPort:            0, // Disabled by default
 		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,
 		LogLevel:                   "info",
+	},
+	Integrations: IntegrationsConfig{
+		Enabled: []string{}, // Empty by default - user chooses during init
+		Configs: make(map[string]IntegrationConfig),
 	},
 }

@@ -4,31 +4,36 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/hooks"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
 	"github.com/spf13/cobra"
 )
 
 var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize configuration and memory directory",
-	Long: "\nCreates default configuration file and memory directory.\n\n" +
-		"The init command sets up the Agentic Memorizer by creating a default configuration " +
-		"file and the memory directory where you'll store files for analysis and indexing. " +
-		"Optionally configures Claude Code SessionStart hooks for automatic integration " +
-		"(use --setup-hooks flag or respond to the interactive prompt).\n\n" +
-		"The background daemon is required for Agentic Memorizer to function. The daemon " +
-		"maintains a precomputed index for <50ms startup times. Use --with-daemon to start " +
-		"the daemon immediately after initialization, or start it manually later with " +
-		"'agentic-memorizer daemon start'.",
-	Example: `  # Default initialization (prompts for hooks and daemon)
+	Long: `Creates default configuration file and memory directory.
+
+The init command sets up the Agentic Memorizer by creating a default configuration
+file and the memory directory where you'll store files for analysis and indexing.
+
+Optionally configures integrations with agent frameworks like Claude Code for
+automatic memory indexing.
+
+The background daemon is required for Agentic Memorizer to function. The daemon
+maintains a precomputed index for <50ms startup times. Use --with-daemon to start
+the daemon immediately after initialization, or start it manually later with
+'agentic-memorizer daemon start'.`,
+	Example: `  # Default initialization (prompts for integrations and daemon)
   agentic-memorizer init
 
-  # Initialize with hooks and daemon
-  agentic-memorizer init --setup-hooks --with-daemon
+  # Initialize with integrations and daemon
+  agentic-memorizer init --setup-integrations --with-daemon
 
   # Custom memory directory
   agentic-memorizer init --memory-root ~/my-memory
@@ -45,8 +50,8 @@ func init() {
 	InitCmd.Flags().String("memory-root", config.DefaultConfig.MemoryRoot, "Memory directory")
 	InitCmd.Flags().String("cache-dir", config.DefaultConfig.Analysis.CacheDir, "Cache directory")
 	InitCmd.Flags().Bool("force", false, "Overwrite existing config")
-	InitCmd.Flags().Bool("setup-hooks", false, "Configure Claude Code SessionStart hooks")
-	InitCmd.Flags().Bool("skip-hooks", false, "Skip Claude Code hook setup prompt")
+	InitCmd.Flags().Bool("setup-integrations", false, "Configure agent framework integrations")
+	InitCmd.Flags().Bool("skip-integrations", false, "Skip integration setup prompt")
 	InitCmd.Flags().Bool("with-daemon", false, "Start background daemon after initialization")
 	InitCmd.Flags().Bool("skip-daemon", false, "Skip daemon start prompt")
 
@@ -57,8 +62,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	memoryRoot, _ := cmd.Flags().GetString("memory-root")
 	cacheDir, _ := cmd.Flags().GetString("cache-dir")
 	force, _ := cmd.Flags().GetBool("force")
-	setupHooks, _ := cmd.Flags().GetBool("setup-hooks")
-	skipHooks, _ := cmd.Flags().GetBool("skip-hooks")
+	setupIntegrations, _ := cmd.Flags().GetBool("setup-integrations")
+	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
 	withDaemon, _ := cmd.Flags().GetBool("with-daemon")
 	skipDaemon, _ := cmd.Flags().GetBool("skip-daemon")
 
@@ -111,7 +116,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Created memory directory: %s\n", memoryRoot)
 	fmt.Printf("✓ Created cache directory: %s\n", cacheDir)
 
-	if err := handleHookSetup(setupHooks, skipHooks); err != nil {
+	if err := handleIntegrationSetup(setupIntegrations, skipIntegrations); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
 	}
 
@@ -125,7 +130,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("2. Add files to %s\n", memoryRoot)
 	if daemonStarted {
 		fmt.Printf("3. Daemon is running in background (check status: agentic-memorizer daemon status)\n")
-		fmt.Printf("4. Start using Claude Code with <50ms startup times!\n")
+		fmt.Printf("4. Start using your agent framework with <50ms startup times!\n")
 	} else {
 		fmt.Printf("3. Recommended: Start the background daemon for optimal performance:\n")
 		fmt.Printf("   agentic-memorizer daemon start\n")
@@ -135,16 +140,28 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func handleHookSetup(setupHooks, skipHooks bool) error {
-	if skipHooks {
+func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
+	if skipIntegrations {
 		return nil
 	}
 
-	if !setupHooks {
-		fmt.Printf("\nConfigure Claude Code SessionStart hooks?\n")
-		fmt.Printf("(Hooks enable automatic indexing when Claude Code starts)\n")
-		fmt.Printf("Note: For best performance, use daemon mode instead of hooks.\n")
-		fmt.Printf("Configure hooks? [y/N]: ")
+	// Detect available integrations
+	registry := integrations.GlobalRegistry()
+	available := registry.DetectAvailable()
+
+	if len(available) == 0 {
+		fmt.Printf("\nNo agent frameworks detected on this system.\n")
+		fmt.Printf("Supported integrations: Claude Code, Continue.dev, Cline\n")
+		fmt.Printf("Install an agent framework and run 'agentic-memorizer integrations setup <name>' to configure.\n\n")
+		return nil
+	}
+
+	if !setupIntegrations {
+		fmt.Printf("\nDetected agent frameworks:\n")
+		for _, integration := range available {
+			fmt.Printf("  - %s: %s\n", integration.GetName(), integration.GetDescription())
+		}
+		fmt.Printf("\nConfigure integrations with detected frameworks? [y/N]: ")
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
@@ -153,33 +170,38 @@ func handleHookSetup(setupHooks, skipHooks bool) error {
 
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			settingsPath, _ := hooks.GetClaudeSettingsPath()
-			fmt.Printf("\nTo set up hooks manually, add SessionStart hooks to: %s\n", settingsPath)
-			fmt.Printf("See README.md for configuration details.\n\n")
+			fmt.Printf("\nTo set up integrations manually, run:\n")
+			fmt.Printf("  agentic-memorizer integrations setup <integration-name>\n\n")
 			return nil
 		}
-		setupHooks = true
+		setupIntegrations = true
 	}
 
-	if setupHooks {
-		binaryPath, err := hooks.FindBinaryPath()
+	if setupIntegrations {
+		binaryPath, err := findBinaryPath()
 		if err != nil {
-			settingsPath, _ := hooks.GetClaudeSettingsPath()
-			return fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure hooks in: %s", err, settingsPath)
+			return fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure integrations", err)
 		}
 
-		_, updated, err := hooks.SetupSessionStartHooks(binaryPath)
-		if err != nil {
-			return fmt.Errorf("failed to set up hooks; %w", err)
+		fmt.Printf("\nConfiguring integrations...\n")
+		setupCount := 0
+
+		for _, integration := range available {
+			fmt.Printf("Setting up %s...\n", integration.GetName())
+			err := integration.Setup(binaryPath)
+			if err != nil {
+				fmt.Printf("  Warning: Failed to setup %s: %v\n", integration.GetName(), err)
+				continue
+			}
+			fmt.Printf("  ✓ %s configured\n", integration.GetName())
+			setupCount++
 		}
 
-		settingsPath, _ := hooks.GetClaudeSettingsPath()
-		if len(updated) > 0 {
-			fmt.Printf("✓ Configured Claude Code SessionStart hooks: %s\n", settingsPath)
-			fmt.Printf("  Updated matchers: %s\n", strings.Join(updated, ", "))
+		if setupCount > 0 {
+			fmt.Printf("\n✓ Configured %d integration(s)\n", setupCount)
 			fmt.Printf("  Binary path: %s\n\n", binaryPath)
 		} else {
-			fmt.Printf("✓ Claude Code SessionStart hooks already configured\n\n")
+			fmt.Printf("\nNo integrations were configured successfully.\n\n")
 		}
 	}
 
@@ -212,7 +234,7 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, daemonStarted *bool) error {
 	if withDaemon {
 		fmt.Printf("\nStarting background daemon...\n")
 
-		binaryPath, err := hooks.FindBinaryPath()
+		binaryPath, err := findBinaryPath()
 		if err != nil {
 			return fmt.Errorf("could not find agentic-memorizer binary; %w\nStart daemon manually: agentic-memorizer daemon start", err)
 		}
@@ -262,4 +284,32 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, daemonStarted *bool) error {
 	}
 
 	return nil
+}
+
+// findBinaryPath attempts to locate the agentic-memorizer binary
+func findBinaryPath() (string, error) {
+	// Try to get the current executable path
+	execPath, err := os.Executable()
+	if err == nil {
+		if filepath.Base(execPath) == "agentic-memorizer" {
+			return execPath, nil
+		}
+	}
+
+	// Try common installation paths
+	home, err := os.UserHomeDir()
+	if err == nil {
+		commonPath := filepath.Join(home, ".local", "bin", "agentic-memorizer")
+		if _, err := os.Stat(commonPath); err == nil {
+			return commonPath, nil
+		}
+	}
+
+	// Try PATH
+	pathBinary, err := exec.LookPath("agentic-memorizer")
+	if err == nil {
+		return pathBinary, nil
+	}
+
+	return "", fmt.Errorf("could not locate agentic-memorizer binary")
 }

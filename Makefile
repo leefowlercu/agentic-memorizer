@@ -1,8 +1,16 @@
-.PHONY: build install test clean uninstall help coverage coverage-html
+.PHONY: build install test clean uninstall help coverage coverage-html build-release install-release lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config
 
 BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
 INSTALL_PATH=$(INSTALL_DIR)/$(BINARY_NAME)
+
+# Version information for release builds
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -X github.com/leefowlercu/agentic-memorizer/internal/version.Version=$(VERSION) \
+           -X github.com/leefowlercu/agentic-memorizer/internal/version.GitCommit=$(GIT_COMMIT) \
+           -X github.com/leefowlercu/agentic-memorizer/internal/version.BuildDate=$(BUILD_DATE)
 
 help: ## Show this help message
 	@echo "Agentic Memorizer - Build and Installation"
@@ -10,27 +18,52 @@ help: ## Show this help message
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-build: ## Build the binary
+build: ## Build the binary (development)
 	@echo "Building $(BINARY_NAME)..."
 	@go build -o $(BINARY_NAME) .
 	@echo "✅ Build complete: ./$(BINARY_NAME)"
 
-install: build ## Install the binary
+build-release: ## Build with version information
+	@echo "Building $(BINARY_NAME) $(VERSION)..."
+	@go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) .
+	@echo "✅ Release build complete: ./$(BINARY_NAME) $(VERSION)"
+
+install: build ## Install the binary (development)
 	@echo "Installing to $(INSTALL_PATH)..."
 	@mkdir -p $(INSTALL_DIR)
 	@cp $(BINARY_NAME) $(INSTALL_PATH)
 	@chmod +x $(INSTALL_PATH)
 	@echo "✅ Installed successfully to $(INSTALL_PATH)"
 
+install-release: build-release ## Install release build with version info
+	@echo "Installing $(VERSION) to $(INSTALL_PATH)..."
+	@mkdir -p $(INSTALL_DIR)
+	@cp $(BINARY_NAME) $(INSTALL_PATH)
+	@chmod +x $(INSTALL_PATH)
+	@echo "✅ Installed $(VERSION) to $(INSTALL_PATH)"
+	@echo ""
+	@echo "Verify installation:"
+	@$(INSTALL_PATH) --version 2>/dev/null || echo "  Run 'agentic-memorizer daemon status' to see version"
+
 test: ## Run tests
 	@echo "Running tests..."
 	@go test -v ./...
+
+test-race: ## Run tests with race detector
+	@echo "Running tests with race detector..."
+	@go test -race -v ./...
+	@echo "✅ Race detection complete"
 
 clean: ## Remove build artifacts
 	@echo "Cleaning..."
 	@rm -f $(BINARY_NAME)
 	@rm -f coverage.out coverage.html
 	@echo "✅ Clean complete"
+
+clean-cache: ## Remove cache files only
+	@echo "Removing cache files..."
+	@rm -rf $(HOME)/.agentic-memorizer/.cache/*
+	@echo "✅ Cache cleaned"
 
 uninstall: ## Remove installed binary
 	@echo "Uninstalling from $(INSTALL_PATH)..."
@@ -62,3 +95,49 @@ coverage-html: coverage ## Generate and open HTML coverage report
 	else \
 		echo "Open coverage.html in your browser to view the report"; \
 	fi
+
+lint: ## Run golangci-lint
+	@echo "Running linter..."
+	@if command -v golangci-lint > /dev/null 2>&1; then \
+		golangci-lint run ./...; \
+		echo "✅ Lint complete"; \
+	else \
+		echo "⚠️  golangci-lint not installed. Install from: https://golangci-lint.run/usage/install/"; \
+		exit 1; \
+	fi
+
+fmt: ## Format code with gofmt
+	@echo "Formatting code..."
+	@gofmt -s -w .
+	@echo "✅ Code formatted"
+
+vet: ## Run go vet
+	@echo "Running go vet..."
+	@go vet ./...
+	@echo "✅ Vet complete"
+
+check: fmt vet test ## Run all code quality checks
+	@echo ""
+	@echo "✅ All checks passed"
+
+daemon-start: build ## Build and start daemon
+	@echo "Starting daemon..."
+	@./$(BINARY_NAME) daemon start
+	@echo "✅ Daemon started"
+
+daemon-stop: ## Stop running daemon
+	@echo "Stopping daemon..."
+	@./$(BINARY_NAME) daemon stop
+	@echo "✅ Daemon stopped"
+
+daemon-status: ## Check daemon status
+	@./$(BINARY_NAME) daemon status
+
+daemon-logs: ## Tail daemon logs
+	@echo "Tailing daemon logs (Ctrl+C to exit)..."
+	@tail -f $(HOME)/.agentic-memorizer/daemon.log
+
+validate-config: build ## Validate configuration file
+	@echo "Validating configuration..."
+	@./$(BINARY_NAME) config validate
+	@echo "✅ Configuration valid"

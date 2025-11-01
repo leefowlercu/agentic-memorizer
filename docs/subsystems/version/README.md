@@ -133,28 +133,39 @@ Both functions are simple accessors that format package variables. They contain 
 
 ### Build System Integration
 
-The Version subsystem integrates with the build system through linker flags that inject metadata during compilation.
+The Version subsystem integrates with the build system through linker flags that inject metadata during compilation. The project's Makefile provides both development and release build targets.
+
+**Makefile Integration:**
+The Makefile defines version variables and ldflags automatically:
+```makefile
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -X github.com/leefowlercu/agentic-memorizer/internal/version.Version=$(VERSION) \
+           -X github.com/leefowlercu/agentic-memorizer/internal/version.GitCommit=$(GIT_COMMIT) \
+           -X github.com/leefowlercu/agentic-memorizer/internal/version.BuildDate=$(BUILD_DATE)
+```
+
+**Build Targets:**
+- `make build` - Development build with default values (version: "dev")
+- `make build-release` - Production build with injected version information
+- `make install` - Install development build
+- `make install-release` - Install release build with version info
 
 **Injection Commands:**
-Build systems construct ldflags strings containing `-X` flags for each variable:
-- Version: `-X github.com/leefowlercu/agentic-memorizer/internal/version.Version=$(git describe --tags --always)`
+The ldflags contain `-X` flags for each variable:
+- Version: `-X github.com/leefowlercu/agentic-memorizer/internal/version.Version=$(git describe --tags --always --dirty)`
 - GitCommit: `-X github.com/leefowlercu/agentic-memorizer/internal/version.GitCommit=$(git rev-parse HEAD)`
 - BuildDate: `-X github.com/leefowlercu/agentic-memorizer/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)`
 
-**Build Command Structure:**
-A complete versioned build command looks like:
-```
-go build -ldflags "-X github.com/leefowlercu/agentic-memorizer/internal/version.Version=v0.6.0 -X github.com/leefowlercu/agentic-memorizer/internal/version.GitCommit=a942b5c -X github.com/leefowlercu/agentic-memorizer/internal/version.BuildDate=2025-11-01T17:39:22Z" -o agentic-memorizer .
-```
-
 **Git Integration:**
 Version information derives from git commands executed during build:
-- `git describe --tags --always` produces version string with tag and commit info
+- `git describe --tags --always --dirty` produces version string with tag, commit info, and dirty flag
 - `git rev-parse HEAD` produces full commit SHA
 - `date -u +%Y-%m-%dT%H:%M:%SZ` produces UTC timestamp in ISO 8601 format
 
 **Build Automation:**
-Build systems (Makefiles, CI/CD pipelines) can automate ldflags construction, extracting git information and constructing injection commands. This automation ensures version information is always current and accurate without manual intervention.
+The Makefile automates ldflags construction, extracting git information and constructing injection commands. This automation ensures version information is always current and accurate without manual intervention. The fallback values ("dev", "unknown") ensure builds succeed even in non-git environments.
 
 ## Integration Points
 

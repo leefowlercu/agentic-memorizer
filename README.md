@@ -166,13 +166,18 @@ The init command can optionally:
 #### Option 2: Using Makefile
 
 ```bash
+# Development build (version shows as "dev")
 make install
+
+# Production build with version information
+make install-release
 ```
 
 This will:
-- Build the `agentic-memorizer` binary
+- Build the `agentic-memorizer` binary (with version info for release builds)
 - Install it to `~/.local/bin/agentic-memorizer`
-- Create default config at `~/.agentic-memorizer/config.yaml`
+
+The `install-release` target injects version information from git tags and commits, providing accurate version tracking in logs and index files.
 
 ### Configuration
 

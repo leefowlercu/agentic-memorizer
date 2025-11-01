@@ -3,9 +3,6 @@
 BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
 INSTALL_PATH=$(INSTALL_DIR)/$(BINARY_NAME)
-CONFIG_NAME=config.yaml
-CONFIG_DIR=$(HOME)/.agentic-memorizer
-CONFIG_PATH=$(CONFIG_DIR)/$(CONFIG_NAME)
 
 help: ## Show this help message
 	@echo "Agentic Memorizer - Build and Installation"
@@ -18,30 +15,12 @@ build: ## Build the binary
 	@go build -o $(BINARY_NAME) .
 	@echo "✅ Build complete: ./$(BINARY_NAME)"
 
-install: build ## Build and install to ~/.local/bin/
+install: build ## Install the binary
 	@echo "Installing to $(INSTALL_PATH)..."
 	@mkdir -p $(INSTALL_DIR)
 	@cp $(BINARY_NAME) $(INSTALL_PATH)
 	@chmod +x $(INSTALL_PATH)
 	@echo "✅ Installed successfully to $(INSTALL_PATH)"
-	@echo ""
-	@if [ ! -f $(CONFIG_PATH) ]; then \
-		echo "📝 Creating default config..."; \
-		mkdir -p $(CONFIG_DIR); \
-		cp config.yaml.example $(CONFIG_PATH); \
-		echo "✅ Config created at $(CONFIG_PATH)"; \
-		echo ""; \
-		echo "⚠️  IMPORTANT: Edit $(CONFIG_PATH) and add your Claude API key"; \
-		echo ""; \
-	else \
-		echo "ℹ️  Config already exists at $(CONFIG_PATH)"; \
-		echo ""; \
-	fi
-	@echo "Next steps:"
-	@echo "  1. Edit config: $(CONFIG_PATH)"
-	@echo "  2. Set your ANTHROPIC_API_KEY or add api_key to config"
-	@echo "  3. Configure SessionStart hook in ~/.claude/settings.json"
-	@echo "  4. Test: $(INSTALL_PATH)"
 
 test: ## Run tests
 	@echo "Running tests..."
@@ -56,10 +35,7 @@ clean: ## Remove build artifacts
 uninstall: ## Remove installed binary
 	@echo "Uninstalling from $(INSTALL_PATH)..."
 	@rm -f $(INSTALL_PATH)
-	@echo "✅ Uninstalled (config and cache preserved)"
-	@echo ""
-	@echo "To remove config: rm $(CONFIG_PATH)"
-	@echo "To remove cache: check cache_dir in your config"
+	@echo "✅ Uninstalled (config, cache, and logs preserved)"
 
 deps: ## Download dependencies
 	@echo "Downloading dependencies..."

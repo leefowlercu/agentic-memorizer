@@ -22,9 +22,7 @@ This command loads the precomputed index file and formats it for output. The ind
 contains metadata and semantic analysis for all files in your memory directory.
 
 The read command is typically called by agent framework hooks (like Claude Code's
-SessionStart hooks) to load the memory index into the agent's context.
-
-Performance: ~10-50ms when daemon is running (loads precomputed index)`,
+SessionStart hooks) to load the memory index into the agent's context.`,
 	Example: `  # Plain XML output (structured format)
   agentic-memorizer read
 
@@ -108,7 +106,7 @@ func handleEmptyIndex(cmd *cobra.Command, cfg *config.Config) error {
 	// Warning message for empty index
 	warningMessage := `Warning: No precomputed index found.
 
-The background daemon has not created an index yet. To enable fast startup times:
+The background daemon has not created an index yet. To enable quick startup:
 
 1. Start the daemon:
    agentic-memorizer daemon start

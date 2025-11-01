@@ -8,7 +8,7 @@ Agentic Memorizer provides Claude Code and Claude Agents with persistent, semant
 
 ### How It Works
 
-A background daemon continuously watches your designated memory directory (`~/.agentic-memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads instantly (<50ms) when Claude Code starts.
+A background daemon continuously watches your designated memory directory (`~/.agentic-memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when Claude Code starts.
 
 When you launch Claude Code, a SessionStart hook loads the precomputed index into Claude's context. Claude can then:
 - **Discover** what files exist without you listing them
@@ -29,10 +29,10 @@ When you launch Claude Code, a SessionStart hook loads the precomputed index int
 - Document type classification (e.g., "technical-guide", "architecture-diagram")
 - Vision analysis for images using Claude's multimodal capabilities
 
-**Performance & Efficiency:**
+**Efficiency:**
 - Background daemon handles all processing asynchronously
-- Smart caching only re-analyzes changed files (95%+ cache hit rate)
-- Precomputed index loads in 10-50ms for instant Claude Code startup
+- Smart caching only re-analyzes changed files
+- Precomputed index enables quick Claude Code startup
 - Minimal API usage—only new/modified files are analyzed
 
 **Wide Format Support:**
@@ -72,13 +72,13 @@ When you launch Claude Code, a SessionStart hook loads the precomputed index int
 3. **Smart Caching** stores analyses keyed by file hash (only re-analyzes when files change)
 4. **Precomputed Index** maintains `~/.agentic-memorizer/index.json` with all file information
 5. **SessionStart Hook** triggers `read` command when Claude Code starts
-6. **Fast Read** loads and formats the precomputed index (~10-50ms) for Claude's context
+6. **Index Read** loads and formats the precomputed index for Claude's context
 
-The daemon handles all the heavy lifting in the background, so Claude Code startup remains fast regardless of how many files you have.
+The daemon handles all the heavy lifting in the background, so Claude Code startup remains quick regardless of how many files you have.
 
 ## Quick Start
 
-Get up and running in 3 minutes:
+Get up and running quickly:
 
 ### 1. Install
 
@@ -112,7 +112,7 @@ cp ~/important-notes.md ~/.agentic-memorizer/memory/
 cp ~/project-docs/*.pdf ~/.agentic-memorizer/memory/documents/
 ```
 
-The daemon will automatically detect and index these files within seconds.
+The daemon will automatically detect and index these files.
 
 ### 5. Start Claude Code
 
@@ -269,7 +269,7 @@ agentic-memorizer read --format <xml|markdown>
 
 ### Background Daemon (Required)
 
-The background daemon is the core of Agentic Memorizer. It maintains a precomputed index for fast (<50ms) startup times, watching your memory directory and automatically updating the index as files change.
+The background daemon is the core of Agentic Memorizer. It maintains a precomputed index for quick startup, watching your memory directory and automatically updating the index as files change.
 
 #### Quick Start
 
@@ -313,7 +313,7 @@ The daemon:
 4. **Maintains** a precomputed `index.json` file with all metadata and semantic analysis
 5. **Updates** the index automatically when files are added/modified/deleted
 
-When you run `agentic-memorizer read`, it simply loads the precomputed index from disk (~10-50ms) instead of analyzing all files (~120ms-15s).
+When you run `agentic-memorizer read`, it simply loads the precomputed index from disk instead of analyzing all files.
 
 #### Daemon Configuration
 
@@ -828,7 +828,7 @@ agentic-memorizer/
 │   ├── root.go               # Root command (orchestrates subcommands)
 │   ├── init/                 # Initialization subcommand
 │   ├── daemon/               # Daemon management (start/stop/status/restart/rebuild/logs)
-│   └── read/                 # Read precomputed index (fast path for hooks)
+│   └── read/                 # Read precomputed index
 ├── internal/
 │   ├── config/               # Configuration loading and path management
 │   ├── daemon/               # Background daemon implementation
@@ -869,16 +869,6 @@ make deps       # Update dependencies
 3. Register in `internal/metadata/extractor.go`
 
 See existing handlers for examples.
-
-## Performance
-
-With the daemon-based architecture:
-
-- **Read command** (SessionStart hooks): ~10-50ms (loads precomputed index)
-- **Daemon initial indexing** (10 files): ~10-15 seconds (happens in background)
-- **Daemon incremental updates**: ~1-2 seconds per file (happens automatically)
-- **Cache hit rate**: Typically >95% after first daemon run
-- **API usage**: Only for new/modified files (daemon handles this in background)
 
 ## Limitations & Known Issues
 
@@ -924,9 +914,9 @@ export ANTHROPIC_API_KEY="your-key-here"
 4. Test manually: `agentic-memorizer read`
 5. Check Claude Code terminal output for errors
 
-### Slow performance
+### Reducing resource usage
 
-First-time indexing of many files:
+When indexing many files:
 - Reduce daemon workers: `daemon.workers: 1` in config
 - Lower rate limit: `daemon.rate_limit_per_min: 10` in config
 - Disable semantic analysis temporarily: `analysis.enable: false` in config

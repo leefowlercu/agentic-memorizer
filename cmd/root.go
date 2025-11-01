@@ -19,7 +19,7 @@ var memorizerCmd = &cobra.Command{
 	Long: "\nA local file 'memorizer' for Claude Code and Claude Agents that provides automatic " +
 		"awareness and understanding of files in your memory directory through AI-powered semantic analysis.\n\n" +
 		"The background daemon continuously maintains a precomputed index of your memory directory, enabling " +
-		"<50ms startup times for Claude Code sessions. Files are automatically indexed and semantically analyzed " +
+		"quick startup for Claude Code sessions. Files are automatically indexed and semantically analyzed " +
 		"in the background, with the index available via the 'read' command for SessionStart hooks.",
 	PersistentPreRunE: runInit,
 }

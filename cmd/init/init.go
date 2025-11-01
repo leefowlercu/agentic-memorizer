@@ -26,7 +26,7 @@ Optionally configures integrations with agent frameworks like Claude Code for
 automatic memory indexing.
 
 The background daemon is required for Agentic Memorizer to function. The daemon
-maintains a precomputed index for <50ms startup times. Use --with-daemon to start
+maintains a precomputed index for quick startup. Use --with-daemon to start
 the daemon immediately after initialization, or start it manually later with
 'agentic-memorizer daemon start'.`,
 	Example: `  # Default initialization (prompts for integrations and daemon)
@@ -130,9 +130,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("2. Add files to %s\n", memoryRoot)
 	if daemonStarted {
 		fmt.Printf("3. Daemon is running in background (check status: agentic-memorizer daemon status)\n")
-		fmt.Printf("4. Start using your agent framework with <50ms startup times!\n")
+		fmt.Printf("4. Start using your agent framework!\n")
 	} else {
-		fmt.Printf("3. Recommended: Start the background daemon for optimal performance:\n")
+		fmt.Printf("3. Recommended: Start the background daemon:\n")
 		fmt.Printf("   agentic-memorizer daemon start\n")
 		fmt.Printf("4. Or use on-demand indexing: agentic-memorizer\n")
 	}
@@ -216,7 +216,7 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, daemonStarted *bool) error {
 	}
 
 	if !withDaemon {
-		fmt.Printf("\nStart background daemon for optimal performance (<50ms startup)? [y/N]: ")
+		fmt.Printf("\nStart background daemon? [y/N]: ")
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {

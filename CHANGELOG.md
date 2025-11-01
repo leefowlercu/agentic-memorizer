@@ -53,13 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - File/directory existence checks
   - Binary path validation with permission verification
   - Output format parsing and validation
-- **Comprehensive documentation**
-  - `docs/architecture.md` (506 lines) - Complete system design and component architecture
-  - `docs/integrations/claude-code.md` (406 lines) - Claude Code automatic setup guide
-  - `docs/integrations/generic.md` (441 lines) - Manual setup for Continue, Cline, Aider, Cursor
-  - `docs/integrations/custom.md` (643 lines) - Developer guide for creating new integrations
+- **Comprehensive documentation and examples**
   - `examples/config-with-integrations.yaml` - Production configuration example
-  - `examples/README.md` (242 lines) - Guide to all configuration examples
+  - `examples/README.md` - Guide to all configuration examples
 
 ### Changed
 - **Init command** now uses integration registry

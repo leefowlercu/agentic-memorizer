@@ -46,8 +46,8 @@ The background indexing daemon that maintains a precomputed memory index through
 
 ### Index Management
 
-#### Index Manager
-**Status:** 🚧 Planned
+#### [Index Manager](./index-manager/)
+**Status:** ✅ Documented
 
 Manages the precomputed index file with thread-safe operations and atomic writes.
 
@@ -63,7 +63,7 @@ Manages the precomputed index file with thread-safe operations and atomic writes
 - `internal/index/computed.go` - Index structure
 - `pkg/types/types.go` - Type definitions
 
-**Documentation:** Coming soon
+**See:** [index-manager/README.md](./index-manager/README.md)
 
 ---
 
@@ -357,14 +357,8 @@ Before marking subsystem documentation as complete, verify:
 ## Related Documentation
 
 ### Project Documentation
-- [Architecture Overview](../architecture.md) - System-wide architecture
 - [README](../../README.md) - User-facing documentation
 - [CHANGELOG](../../CHANGELOG.md) - Version history
-
-### Integration Guides
-- [Claude Code Integration](../integrations/claude-code.md)
-- [Generic Integration](../integrations/generic.md)
-- [Custom Integration](../integrations/custom.md)
 
 ### Configuration Examples
 - [Examples Directory](../../examples/) - Configuration templates

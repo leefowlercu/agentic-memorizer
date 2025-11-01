@@ -238,5 +238,5 @@ claude:
 ## References
 
 - [Main README](../README.md)
-- [Architecture Documentation](../docs/architecture.md)
-- [Integration Guides](../docs/integrations/)
+- [Subsystem Documentation](../docs/subsystems/)
+- [CHANGELOG](../CHANGELOG.md)

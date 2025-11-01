@@ -13,8 +13,10 @@ import (
 var restartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart the daemon",
-	Long:  "\nRestart the background indexing daemon by stopping and starting it.",
-	RunE:  runRestart,
+	Long: "\nRestart the background indexing daemon by stopping and starting it.\n\n" +
+		"Performs a graceful shutdown by sending SIGTERM to the running daemon, " +
+		"then waits up to 3 seconds for the daemon to stop before starting a new instance.",
+	RunE: runRestart,
 }
 
 func runRestart(cmd *cobra.Command, args []string) error {

@@ -10,23 +10,21 @@ import (
 var ConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration",
-	Long: `Manage and validate Agentic Memorizer configuration.
-
-The config command group provides tools for validating and managing the
-configuration file.`,
+	Long: "\nManage and validate Agentic Memorizer configuration.\n\n" +
+		"The config command group provides tools for validating and managing the " +
+		"configuration file.",
 }
 
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate configuration file",
-	Long: `Validate the configuration file for errors.
-
-Performs comprehensive validation including:
-- Required fields are present
-- Values are within valid ranges
-- Paths are safe and accessible
-- Enums have valid values
-- Cross-field dependencies are satisfied`,
+	Long: "\nValidate the configuration file for errors.\n\n" +
+		"Performs comprehensive validation including:\n" +
+		"- Required fields are present\n" +
+		"- Values are within valid ranges\n" +
+		"- Paths are safe and accessible\n" +
+		"- Enums have valid values\n" +
+		"- Cross-field dependencies are satisfied",
 	Example: `  # Validate current configuration
   agentic-memorizer config validate
 

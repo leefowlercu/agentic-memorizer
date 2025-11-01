@@ -15,8 +15,9 @@ import (
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show daemon status",
-	Long:  "\nShow the current status of the background indexing daemon.",
-	RunE:  runStatus,
+	Long: "\nShow the current status of the background indexing daemon.\n\n" +
+		"Displays whether the daemon is running, index statistics, and configuration details.",
+	RunE: runStatus,
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {

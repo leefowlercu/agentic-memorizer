@@ -13,10 +13,9 @@ import (
 var IntegrationsCmd = &cobra.Command{
 	Use:   "integrations",
 	Short: "Manage agent framework integrations",
-	Long: `Manage integrations with agent frameworks like Claude Code, Continue.dev, Cline, etc.
-
-The integrations command group provides tools for discovering, configuring, and managing
-integrations with various AI agent frameworks.`,
+	Long: "\nManage integrations with agent frameworks like Claude Code, Continue.dev, Cline, etc.\n\n" +
+		"The integrations command group provides tools for discovering, configuring, and managing " +
+		"integrations with various AI agent frameworks.",
 	Example: `  # List all available integrations
   agentic-memorizer integrations list
 
@@ -45,30 +44,27 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all available integrations",
-	Long: `List all integrations registered in the system.
-
-Shows the name, description, and current status (configured/not configured) of each integration.`,
+	Long: "\nList all integrations registered in the system.\n\n" +
+		"Shows the name, description, and current status (configured/not configured) of each integration.",
 	RunE: runList,
 }
 
 var detectCmd = &cobra.Command{
 	Use:   "detect",
 	Short: "Detect installed agent frameworks",
-	Long: `Detect which agent frameworks are installed on this system.
-
-Scans for configuration files and directories of supported frameworks like Claude Code,
-Continue.dev, Cline, etc.`,
+	Long: "\nDetect which agent frameworks are installed on this system.\n\n" +
+		"Scans for configuration files and directories of supported frameworks like Claude Code, " +
+		"Continue.dev, Cline, etc.",
 	RunE: runDetect,
 }
 
 var setupCmd = &cobra.Command{
 	Use:   "setup <integration-name>",
 	Short: "Setup a specific integration",
-	Long: `Setup integration with a specific agent framework.
-
-Configures the framework to use agentic-memorizer for memory indexing. The setup process
-varies by framework but typically involves adding hooks or tools to the framework's
-configuration files.`,
+	Long: "\nSetup integration with a specific agent framework.\n\n" +
+		"Configures the framework to use agentic-memorizer for memory indexing. The setup process " +
+		"varies by framework but typically involves adding hooks or tools to the framework's " +
+		"configuration files.",
 	Example: `  # Setup Claude Code integration
   agentic-memorizer integrations setup claude-code
 
@@ -81,9 +77,8 @@ configuration files.`,
 var removeCmd = &cobra.Command{
 	Use:   "remove <integration-name>",
 	Short: "Remove an integration",
-	Long: `Remove integration configuration from an agent framework.
-
-Removes hooks, tools, or other configuration entries that were added by the setup command.`,
+	Long: "\nRemove integration configuration from an agent framework.\n\n" +
+		"Removes hooks, tools, or other configuration entries that were added by the setup command.",
 	Example: `  # Remove Claude Code integration
   agentic-memorizer integrations remove claude-code`,
 	Args: cobra.ExactArgs(1),
@@ -93,25 +88,25 @@ Removes hooks, tools, or other configuration entries that were added by the setu
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate integration configurations",
-	Long: `Validate that all configured integrations are properly set up.
-
-Checks each integration's configuration files and settings to ensure they are valid
-and properly configured for use with agentic-memorizer.`,
+	Long: "\nValidate that all configured integrations are properly set up.\n\n" +
+		"Checks each integration's configuration files and settings to ensure they are valid " +
+		"and properly configured for use with agentic-memorizer.",
 	RunE: runValidate,
 }
 
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "Check health of all integrations",
-	Long: `Check the health status of all configured integrations.
-
-Performs comprehensive health checks including:
-- Configuration file accessibility
-- Settings validity
-- Binary path verification
-- Integration-specific checks
-
-This is more thorough than 'validate' and includes runtime checks.`,
+	Long: "\nCheck the health status of all configured integrations.\n\n" +
+		"Performs comprehensive health checks including:\n" +
+		"- Configuration file accessibility\n" +
+		"- Settings validity\n" +
+		"- Binary path verification\n" +
+		"- Integration-specific checks\n\n" +
+		"This is more thorough than 'validate' and includes runtime checks.\n\n" +
+		"Exit codes:\n" +
+		"  0 - All checked integrations are healthy\n" +
+		"  1 - One or more integrations have issues (useful for CI/CD scripts)",
 	Example: `  # Check health of all integrations
   agentic-memorizer integrations health
 

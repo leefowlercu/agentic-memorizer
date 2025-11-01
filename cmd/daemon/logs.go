@@ -17,8 +17,10 @@ var (
 var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show daemon logs",
-	Long:  "\nShow logs from the background indexing daemon.",
-	RunE:  runLogs,
+	Long: "\nShow logs from the background indexing daemon.\n\n" +
+		"By default, displays the last 50 lines. Use -f to follow logs in real-time, " +
+		"or -n to specify the number of lines to display.",
+	RunE: runLogs,
 }
 
 func init() {

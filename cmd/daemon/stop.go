@@ -12,8 +12,9 @@ import (
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the running daemon",
-	Long:  "\nStop the running background indexing daemon by sending a SIGTERM signal.",
-	RunE:  runStop,
+	Long: "\nStop the running background indexing daemon by sending a SIGTERM signal.\n\n" +
+		"The daemon will gracefully shut down, completing any in-progress operations before exiting.",
+	RunE: runStop,
 }
 
 func runStop(cmd *cobra.Command, args []string) error {

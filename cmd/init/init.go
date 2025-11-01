@@ -17,18 +17,15 @@ import (
 var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize configuration and memory directory",
-	Long: `Creates default configuration file and memory directory.
-
-The init command sets up the Agentic Memorizer by creating a default configuration
-file and the memory directory where you'll store files for analysis and indexing.
-
-Optionally configures integrations with agent frameworks like Claude Code for
-automatic memory indexing.
-
-The background daemon is required for Agentic Memorizer to function. The daemon
-maintains a precomputed index for quick startup. Use --with-daemon to start
-the daemon immediately after initialization, or start it manually later with
-'agentic-memorizer daemon start'.`,
+	Long: "\nCreates default configuration file and memory directory.\n\n" +
+		"The init command sets up the Agentic Memorizer by creating a default configuration " +
+		"file and the memory directory where you'll store files for analysis and indexing.\n\n" +
+		"Optionally configures integrations with agent frameworks like Claude Code for " +
+		"automatic memory indexing.\n\n" +
+		"The background daemon is required for Agentic Memorizer to function. The daemon " +
+		"maintains a precomputed index for quick startup. Use --with-daemon to start " +
+		"the daemon immediately after initialization, or start it manually later with " +
+		"'agentic-memorizer daemon start'.",
 	Example: `  # Default initialization (prompts for integrations and daemon)
   agentic-memorizer init
 

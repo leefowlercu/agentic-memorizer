@@ -16,13 +16,11 @@ import (
 var ReadCmd = &cobra.Command{
 	Use:   "read",
 	Short: "Read the memory index",
-	Long: `Read and display the memory index maintained by the daemon.
-
-This command loads the precomputed index file and formats it for output. The index
-contains metadata and semantic analysis for all files in your memory directory.
-
-The read command is typically called by agent framework hooks (like Claude Code's
-SessionStart hooks) to load the memory index into the agent's context.`,
+	Long: "\nRead and display the memory index maintained by the daemon.\n\n" +
+		"This command loads the precomputed index file and formats it for output. The index " +
+		"contains metadata and semantic analysis for all files in your memory directory.\n\n" +
+		"The read command is typically called by agent framework hooks (like Claude Code's " +
+		"SessionStart hooks) to load the memory index into the agent's context.",
 	Example: `  # Plain XML output (structured format)
   agentic-memorizer read
 

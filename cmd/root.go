@@ -15,12 +15,12 @@ import (
 
 var memorizerCmd = &cobra.Command{
 	Use:   "agentic-memorizer",
-	Short: "Agentic Memorizer for Claude Code or Claude Agents",
-	Long: "\nA local file 'memorizer' for Claude Code and Claude Agents that provides automatic " +
+	Short: "Local file memorizer for AI agent frameworks",
+	Long: "\nA local file 'memorizer' for AI agent frameworks that provides automatic " +
 		"awareness and understanding of files in your memory directory through AI-powered semantic analysis.\n\n" +
 		"The background daemon continuously maintains a precomputed index of your memory directory, enabling " +
-		"quick startup for Claude Code sessions. Files are automatically indexed and semantically analyzed " +
-		"in the background, with the index available via the 'read' command for SessionStart hooks.",
+		"quick startup for agent sessions. Files are automatically indexed and semantically analyzed " +
+		"in the background, with the index available via the 'read' command for framework hooks or tools.",
 	PersistentPreRunE: runInit,
 }
 

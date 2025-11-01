@@ -122,8 +122,8 @@ Extracts file-specific metadata from various file types without AI analysis.
 
 ---
 
-#### Semantic Analyzer
-**Status:** 🚧 Planned
+#### [Semantic Analyzer](./semantic-analyzer/)
+**Status:** ✅ Documented
 
 AI-powered semantic understanding using the Claude API.
 
@@ -138,14 +138,14 @@ AI-powered semantic understanding using the Claude API.
 - `internal/semantic/analyzer.go` - Analysis orchestration
 - `internal/semantic/client.go` - Claude API client
 
-**Documentation:** Coming soon
+**See:** [semantic-analyzer/README.md](./semantic-analyzer/README.md)
 
 ---
 
 ### Caching System
 
-#### Cache Manager
-**Status:** 🚧 Planned
+#### [Cache Manager](./cache-manager/)
+**Status:** ✅ Documented
 
 Stores and retrieves semantic analysis results keyed by file content hash.
 
@@ -159,14 +159,14 @@ Stores and retrieves semantic analysis results keyed by file content hash.
 **Primary Components:**
 - `internal/cache/manager.go` - Cache operations
 
-**Documentation:** Coming soon
+**See:** [cache-manager/README.md](./cache-manager/README.md)
 
 ---
 
 ### Configuration
 
-#### Config Manager
-**Status:** 🚧 Planned
+#### [Config Manager](./config-manager/)
+**Status:** ✅ Documented
 
 Loads, validates, and manages application configuration.
 
@@ -184,7 +184,7 @@ Loads, validates, and manages application configuration.
 - `internal/config/validate.go` - Validation logic
 - `internal/config/constants.go` - Default values
 
-**Documentation:** Coming soon
+**See:** [config-manager/README.md](./config-manager/README.md)
 
 ---
 

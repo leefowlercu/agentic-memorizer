@@ -20,12 +20,19 @@ var LogsCmd = &cobra.Command{
 	Long: "\nShow logs from the background indexing daemon.\n\n" +
 		"By default, displays the last 50 lines. Use -f to follow logs in real-time, " +
 		"or -n to specify the number of lines to display.",
-	RunE: runLogs,
+	PreRunE: validateLogs,
+	RunE:    runLogs,
 }
 
 func init() {
 	LogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
 	LogsCmd.Flags().IntVarP(&tailLines, "tail", "n", 50, "Number of lines to show from the end")
+}
+
+func validateLogs(cmd *cobra.Command, args []string) error {
+	// All errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runLogs(cmd *cobra.Command, args []string) error {

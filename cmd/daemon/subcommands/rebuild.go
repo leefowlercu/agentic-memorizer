@@ -15,7 +15,14 @@ var RebuildCmd = &cobra.Command{
 	Long: "\nForce the daemon to perform an immediate full index rebuild.\n\n" +
 		"This sends a SIGUSR1 signal to the running daemon. If the daemon is not running, " +
 		"this command will return an error.",
-	RunE: runRebuild,
+	PreRunE: validateRebuild,
+	RunE:    runRebuild,
+}
+
+func validateRebuild(cmd *cobra.Command, args []string) error {
+	// All errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runRebuild(cmd *cobra.Command, args []string) error {

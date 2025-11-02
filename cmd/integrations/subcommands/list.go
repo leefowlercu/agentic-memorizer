@@ -12,7 +12,14 @@ var ListCmd = &cobra.Command{
 	Short: "List all available integrations",
 	Long: "\nList all integrations registered in the system.\n\n" +
 		"Shows the name, description, and current status (configured/not configured) of each integration.",
-	RunE: runList,
+	PreRunE: validateList,
+	RunE:    runList,
+}
+
+func validateList(cmd *cobra.Command, args []string) error {
+	// All errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runList(cmd *cobra.Command, args []string) error {

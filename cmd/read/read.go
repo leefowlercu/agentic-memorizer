@@ -35,7 +35,8 @@ var ReadCmd = &cobra.Command{
 
   # Verbose output with additional details
   agentic-memorizer read --verbose`,
-	RunE: runRead,
+	PreRunE: validateRead,
+	RunE:    runRead,
 }
 
 func init() {
@@ -45,6 +46,37 @@ func init() {
 
 	viper.BindPFlag("output.format", ReadCmd.Flags().Lookup("format"))
 	viper.BindPFlag("output.verbose", ReadCmd.Flags().Lookup("verbose"))
+}
+
+func validateRead(cmd *cobra.Command, args []string) error {
+	// Validate format flag
+	formatStr, _ := cmd.Flags().GetString("format")
+	if formatStr != "" {
+		validFormats := []string{"xml", "markdown", "json"}
+		valid := false
+		for _, f := range validFormats {
+			if formatStr == f {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("invalid format %q (must be one of: xml, markdown, json)", formatStr)
+		}
+	}
+
+	// Validate integration flag
+	integrationName, _ := cmd.Flags().GetString("integration")
+	if integrationName != "" {
+		registry := integrations.GlobalRegistry()
+		if _, err := registry.Get(integrationName); err != nil {
+			return fmt.Errorf("invalid integration %q: %w", integrationName, err)
+		}
+	}
+
+	// All validation passed - errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runRead(cmd *cobra.Command, args []string) error {

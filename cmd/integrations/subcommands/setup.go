@@ -2,6 +2,7 @@ package subcommands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
@@ -19,12 +20,40 @@ var SetupCmd = &cobra.Command{
 
   # Setup with custom binary path
   agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer`,
-	Args: cobra.ExactArgs(1),
-	RunE: runSetup,
+	Args:    cobra.ExactArgs(1),
+	PreRunE: validateSetup,
+	RunE:    runSetup,
 }
 
 func init() {
 	SetupCmd.Flags().String("binary-path", "", "Custom path to agentic-memorizer binary (auto-detected if not specified)")
+}
+
+func validateSetup(cmd *cobra.Command, args []string) error {
+	integrationName := args[0]
+
+	// Validate integration exists
+	registry := integrations.GlobalRegistry()
+	if _, err := registry.Get(integrationName); err != nil {
+		return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+	}
+
+	// Validate binary path if provided
+	binaryPath, _ := cmd.Flags().GetString("binary-path")
+	if binaryPath != "" {
+		if _, err := os.Stat(binaryPath); err != nil {
+			return fmt.Errorf("binary-path %q is not accessible: %w", binaryPath, err)
+		}
+		// Check if executable
+		info, _ := os.Stat(binaryPath)
+		if info.Mode()&0111 == 0 {
+			return fmt.Errorf("binary-path %q is not executable", binaryPath)
+		}
+	}
+
+	// All validation passed - errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {

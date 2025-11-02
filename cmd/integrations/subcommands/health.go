@@ -25,11 +25,30 @@ var HealthCmd = &cobra.Command{
 
   # Check health of specific integration
   agentic-memorizer integrations health claude-code`,
-	RunE: runHealth,
+	PreRunE: validateHealth,
+	RunE:    runHealth,
 }
 
 func init() {
 	HealthCmd.Flags().StringSlice("integrations", []string{}, "Specific integrations to check (default: all)")
+}
+
+func validateHealth(cmd *cobra.Command, args []string) error {
+	specificIntegrations, _ := cmd.Flags().GetStringSlice("integrations")
+
+	// Validate integration names if specified
+	if len(specificIntegrations) > 0 {
+		registry := integrations.GlobalRegistry()
+		for _, name := range specificIntegrations {
+			if _, err := registry.Get(name); err != nil {
+				return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", name, err)
+			}
+		}
+	}
+
+	// All validation passed - errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runHealth(cmd *cobra.Command, args []string) error {

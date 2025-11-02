@@ -19,7 +19,14 @@ var StartCmd = &cobra.Command{
 		"the index as needed. Press Ctrl+C to stop the daemon.\n\n" +
 		"A PID file is created at ~/.agentic-memorizer/daemon.pid to track the running " +
 		"daemon. If you encounter 'daemon already running' errors, check the PID file.",
-	RunE: runStart,
+	PreRunE: validateStart,
+	RunE:    runStart,
+}
+
+func validateStart(cmd *cobra.Command, args []string) error {
+	// All errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runStart(cmd *cobra.Command, args []string) error {

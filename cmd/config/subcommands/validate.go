@@ -22,7 +22,14 @@ var ValidateCmd = &cobra.Command{
 
   # Validate specific config file
   agentic-memorizer config validate --config /path/to/config.yaml`,
-	RunE: runValidate,
+	PreRunE: validateConfigValidate,
+	RunE:    runValidate,
+}
+
+func validateConfigValidate(cmd *cobra.Command, args []string) error {
+	// All errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runValidate(cmd *cobra.Command, args []string) error {

@@ -40,7 +40,8 @@ var InitCmd = &cobra.Command{
 
   # Force overwrite existing config
   agentic-memorizer init --force`,
-	RunE: runInit,
+	PreRunE: validateInit,
+	RunE:    runInit,
 }
 
 func init() {
@@ -53,6 +54,25 @@ func init() {
 	InitCmd.Flags().Bool("skip-daemon", false, "Skip daemon start prompt")
 
 	InitCmd.Flags().SortFlags = false
+}
+
+func validateInit(cmd *cobra.Command, args []string) error {
+	// Validate mutually exclusive flags
+	setupIntegrations, _ := cmd.Flags().GetBool("setup-integrations")
+	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
+	if setupIntegrations && skipIntegrations {
+		return fmt.Errorf("--setup-integrations and --skip-integrations are mutually exclusive")
+	}
+
+	withDaemon, _ := cmd.Flags().GetBool("with-daemon")
+	skipDaemon, _ := cmd.Flags().GetBool("skip-daemon")
+	if withDaemon && skipDaemon {
+		return fmt.Errorf("--with-daemon and --skip-daemon are mutually exclusive")
+	}
+
+	// All validation passed - errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

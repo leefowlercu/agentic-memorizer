@@ -13,7 +13,14 @@ var DetectCmd = &cobra.Command{
 	Long: "\nDetect which agent frameworks are installed on this system.\n\n" +
 		"Scans for configuration files and directories of supported frameworks like Claude Code, " +
 		"Continue.dev, Cline, etc.",
-	RunE: runDetect,
+	PreRunE: validateDetect,
+	RunE:    runDetect,
+}
+
+func validateDetect(cmd *cobra.Command, args []string) error {
+	// All errors after this are runtime errors
+	cmd.SilenceUsage = true
+	return nil
 }
 
 func runDetect(cmd *cobra.Command, args []string) error {

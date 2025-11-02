@@ -1,4 +1,4 @@
-package cmdconfig
+package config
 
 import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/config/subcommands"

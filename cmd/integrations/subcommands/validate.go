@@ -13,11 +13,11 @@ var ValidateCmd = &cobra.Command{
 	Long: "\nValidate that all configured integrations are properly set up.\n\n" +
 		"Checks each integration's configuration files and settings to ensure they are valid " +
 		"and properly configured for use with agentic-memorizer.",
-	PreRunE: validateIntegrationsValidate,
+	PreRunE: validateValidate,
 	RunE:    runValidate,
 }
 
-func validateIntegrationsValidate(cmd *cobra.Command, args []string) error {
+func validateValidate(cmd *cobra.Command, args []string) error {
 	// All errors after this are runtime errors
 	cmd.SilenceUsage = true
 	return nil

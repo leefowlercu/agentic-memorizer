@@ -1,4 +1,4 @@
-package cmdinit
+package initialize
 
 import (
 	"bufio"
@@ -14,11 +14,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var InitCmd = &cobra.Command{
-	Use:   "init",
+var InitializeCmd = &cobra.Command{
+	Use:   "initialize",
 	Short: "Initialize configuration and memory directory",
 	Long: "\nCreates default configuration file and memory directory.\n\n" +
-		"The init command sets up the Agentic Memorizer by creating a default configuration " +
+		"The initialize command sets up the Agentic Memorizer by creating a default configuration " +
 		"file and the memory directory where you'll store files for analysis and indexing.\n\n" +
 		"Optionally configures integrations with agent frameworks like Claude Code for " +
 		"automatic memory indexing.\n\n" +
@@ -27,33 +27,33 @@ var InitCmd = &cobra.Command{
 		"the daemon immediately after initialization, or start it manually later with " +
 		"'agentic-memorizer daemon start'.",
 	Example: `  # Default initialization (prompts for integrations and daemon)
-  agentic-memorizer init
+  agentic-memorizer initialize
 
   # Initialize with integrations and daemon
-  agentic-memorizer init --setup-integrations --with-daemon
+  agentic-memorizer initialize --setup-integrations --with-daemon
 
   # Custom memory directory
-  agentic-memorizer init --memory-root ~/my-memory
+  agentic-memorizer initialize --memory-root ~/my-memory
 
   # Custom cache directory
-  agentic-memorizer init --cache-dir ~/my-memory/.cache
+  agentic-memorizer initialize --cache-dir ~/my-memory/.cache
 
   # Force overwrite existing config
-  agentic-memorizer init --force`,
+  agentic-memorizer initialize --force`,
 	PreRunE: validateInit,
 	RunE:    runInit,
 }
 
 func init() {
-	InitCmd.Flags().String("memory-root", config.DefaultConfig.MemoryRoot, "Memory directory")
-	InitCmd.Flags().String("cache-dir", config.DefaultConfig.Analysis.CacheDir, "Cache directory")
-	InitCmd.Flags().Bool("force", false, "Overwrite existing config")
-	InitCmd.Flags().Bool("setup-integrations", false, "Configure agent framework integrations")
-	InitCmd.Flags().Bool("skip-integrations", false, "Skip integration setup prompt")
-	InitCmd.Flags().Bool("with-daemon", false, "Start background daemon after initialization")
-	InitCmd.Flags().Bool("skip-daemon", false, "Skip daemon start prompt")
+	InitializeCmd.Flags().String("memory-root", config.DefaultConfig.MemoryRoot, "Memory directory")
+	InitializeCmd.Flags().String("cache-dir", config.DefaultConfig.Analysis.CacheDir, "Cache directory")
+	InitializeCmd.Flags().Bool("force", false, "Overwrite existing config")
+	InitializeCmd.Flags().Bool("setup-integrations", false, "Configure agent framework integrations")
+	InitializeCmd.Flags().Bool("skip-integrations", false, "Skip integration setup prompt")
+	InitializeCmd.Flags().Bool("with-daemon", false, "Start background daemon after initialization")
+	InitializeCmd.Flags().Bool("skip-daemon", false, "Skip daemon start prompt")
 
-	InitCmd.Flags().SortFlags = false
+	InitializeCmd.Flags().SortFlags = false
 }
 
 func validateInit(cmd *cobra.Command, args []string) error {

@@ -831,8 +831,8 @@ agentic-memorizer/
 ├── main.go           # Main entry point
 ├── cmd/
 │   ├── root.go               # Root command
-│   ├── init/                 # Initialization command
-│   │   └── init.go
+│   ├── initialize/           # Initialization command
+│   │   └── initialize.go
 │   ├── daemon/               # Daemon management commands
 │   │   ├── daemon.go         # Parent daemon command
 │   │   └── subcommands/      # Daemon subcommands

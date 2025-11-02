@@ -290,9 +290,9 @@ The `read` command (`cmd/read/read.go`) produces integration-specific output whe
 **Format Selection:**
 The `--format` flag (xml, markdown, json) selects the base output format. The integration adapter then wraps this base format appropriately for its framework.
 
-#### Init Command Integration
+#### Initialize Command Integration
 
-The `init` command (`cmd/init/init.go`) offers optional integration setup during initial configuration:
+The `initialize` command (`cmd/initialize/initialize.go`) offers optional integration setup during initial configuration:
 
 1. Detects available frameworks using registry's `DetectAvailable()`
 2. Prompts user to select integrations to configure

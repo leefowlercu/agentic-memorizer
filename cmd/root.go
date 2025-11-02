@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	cmdconfig "github.com/leefowlercu/agentic-memorizer/cmd/config"
-	cmddaemon "github.com/leefowlercu/agentic-memorizer/cmd/daemon"
-	cmdinit "github.com/leefowlercu/agentic-memorizer/cmd/init"
-	cmdintegrations "github.com/leefowlercu/agentic-memorizer/cmd/integrations"
-	cmdread "github.com/leefowlercu/agentic-memorizer/cmd/read"
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/cmd/config"
+	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
+	"github.com/leefowlercu/agentic-memorizer/cmd/initialize"
+	"github.com/leefowlercu/agentic-memorizer/cmd/integrations"
+	"github.com/leefowlercu/agentic-memorizer/cmd/read"
+	configint "github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -25,19 +25,19 @@ var memorizerCmd = &cobra.Command{
 }
 
 func init() {
-	memorizerCmd.AddCommand(cmdinit.InitCmd)
-	memorizerCmd.AddCommand(cmddaemon.DaemonCmd)
-	memorizerCmd.AddCommand(cmdread.ReadCmd)
-	memorizerCmd.AddCommand(cmdintegrations.IntegrationsCmd)
-	memorizerCmd.AddCommand(cmdconfig.ConfigCmd)
+	memorizerCmd.AddCommand(initialize.InitializeCmd)
+	memorizerCmd.AddCommand(daemon.DaemonCmd)
+	memorizerCmd.AddCommand(read.ReadCmd)
+	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
+	memorizerCmd.AddCommand(config.ConfigCmd)
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	if cmd.Name() == "init" {
+	if cmd.Name() == "initialize" {
 		return nil
 	}
 
-	err := config.InitConfig()
+	err := configint.InitConfig()
 	if err != nil {
 		return fmt.Errorf("failed to initialize configuration; %w", err)
 	}

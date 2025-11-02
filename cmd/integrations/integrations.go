@@ -1,4 +1,4 @@
-package cmdintegrations
+package integrations
 
 import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations/subcommands"

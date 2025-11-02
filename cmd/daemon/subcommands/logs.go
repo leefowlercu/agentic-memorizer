@@ -37,12 +37,12 @@ func validateLogs(cmd *cobra.Command, args []string) error {
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config: %w", err)
+		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
 	logFile := cfg.Daemon.LogFile
@@ -55,7 +55,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("log file does not exist: %s", logFile)
 		}
-		return fmt.Errorf("failed to access log file: %w", err)
+		return fmt.Errorf("failed to access log file; %w", err)
 	}
 
 	// Use tail command to show logs

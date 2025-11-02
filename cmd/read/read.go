@@ -70,7 +70,7 @@ func validateRead(cmd *cobra.Command, args []string) error {
 	if integrationName != "" {
 		registry := integrations.GlobalRegistry()
 		if _, err := registry.Get(integrationName); err != nil {
-			return fmt.Errorf("invalid integration %q: %w", integrationName, err)
+			return fmt.Errorf("invalid integration %q; %w", integrationName, err)
 		}
 	}
 
@@ -81,17 +81,17 @@ func validateRead(cmd *cobra.Command, args []string) error {
 
 func runRead(cmd *cobra.Command, args []string) error {
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config: %w", err)
+		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
 	indexPath, err := config.GetIndexPath()
 	if err != nil {
-		return fmt.Errorf("failed to get index path: %w", err)
+		return fmt.Errorf("failed to get index path; %w", err)
 	}
 	indexManager := index.NewManager(indexPath)
 
@@ -165,19 +165,19 @@ func outputForIntegration(name string, idx *types.Index, formatStr string) error
 	registry := integrations.GlobalRegistry()
 	integration, err := registry.Get(name)
 	if err != nil {
-		return fmt.Errorf("integration %q not found: %w", name, err)
+		return fmt.Errorf("integration %q not found; %w", name, err)
 	}
 
 	// Parse output format
 	format, err := integrations.ParseOutputFormat(formatStr)
 	if err != nil {
-		return fmt.Errorf("invalid format: %w", err)
+		return fmt.Errorf("invalid format; %w", err)
 	}
 
 	// Format output using integration
 	output, err := integration.FormatOutput(idx, format)
 	if err != nil {
-		return fmt.Errorf("failed to format output: %w", err)
+		return fmt.Errorf("failed to format output; %w", err)
 	}
 
 	fmt.Print(output)
@@ -188,7 +188,7 @@ func outputPlain(idx *types.Index, formatStr string) error {
 	// Parse output format
 	format, err := integrations.ParseOutputFormat(formatStr)
 	if err != nil {
-		return fmt.Errorf("invalid format: %w", err)
+		return fmt.Errorf("invalid format; %w", err)
 	}
 
 	// Create appropriate processor
@@ -207,7 +207,7 @@ func outputPlain(idx *types.Index, formatStr string) error {
 	// Format and output
 	content, err := processor.Format(idx)
 	if err != nil {
-		return fmt.Errorf("failed to format output: %w", err)
+		return fmt.Errorf("failed to format output; %w", err)
 	}
 
 	fmt.Print(content)

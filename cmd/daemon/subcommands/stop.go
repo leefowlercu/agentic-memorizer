@@ -26,12 +26,12 @@ func validateStop(cmd *cobra.Command, args []string) error {
 
 func runStop(cmd *cobra.Command, args []string) error {
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config: %w", err)
+		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
 	pidFile, err := config.GetPIDPath()
 	if err != nil {
-		return fmt.Errorf("failed to get PID path: %w", err)
+		return fmt.Errorf("failed to get PID path; %w", err)
 	}
 
 	// Read PID file
@@ -40,24 +40,24 @@ func runStop(cmd *cobra.Command, args []string) error {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("daemon is not running (PID file not found)")
 		}
-		return fmt.Errorf("failed to read PID file: %w", err)
+		return fmt.Errorf("failed to read PID file; %w", err)
 	}
 
 	var pid int
 	_, err = fmt.Sscanf(string(data), "%d", &pid)
 	if err != nil {
-		return fmt.Errorf("invalid PID file: %w", err)
+		return fmt.Errorf("invalid PID file; %w", err)
 	}
 
 	// Find process
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return fmt.Errorf("daemon process not found: %w", err)
+		return fmt.Errorf("daemon process not found; %w", err)
 	}
 
 	// Send SIGTERM
 	if err := process.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("failed to signal daemon: %w", err)
+		return fmt.Errorf("failed to signal daemon; %w", err)
 	}
 
 	fmt.Printf("Sent stop signal to daemon (PID %d)\n", pid)

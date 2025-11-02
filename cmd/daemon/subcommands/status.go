@@ -29,22 +29,22 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config: %w", err)
+		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
 	pidFile, err := config.GetPIDPath()
 	if err != nil {
-		return fmt.Errorf("failed to get PID path: %w", err)
+		return fmt.Errorf("failed to get PID path; %w", err)
 	}
 
 	indexPath, err := config.GetIndexPath()
 	if err != nil {
-		return fmt.Errorf("failed to get index path: %w", err)
+		return fmt.Errorf("failed to get index path; %w", err)
 	}
 
 	// Check if daemon is running

@@ -41,7 +41,7 @@ func validateHealth(cmd *cobra.Command, args []string) error {
 		registry := integrations.GlobalRegistry()
 		for _, name := range specificIntegrations {
 			if _, err := registry.Get(name); err != nil {
-				return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", name, err)
+				return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", name, err)
 			}
 		}
 	}
@@ -62,7 +62,7 @@ func runHealth(cmd *cobra.Command, args []string) error {
 		for _, name := range specificIntegrations {
 			integration, err := registry.Get(name)
 			if err != nil {
-				return fmt.Errorf("integration %q not found: %w", name, err)
+				return fmt.Errorf("integration %q not found; %w", name, err)
 			}
 			toCheck = append(toCheck, integration)
 		}

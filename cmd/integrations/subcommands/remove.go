@@ -25,7 +25,7 @@ func validateRemove(cmd *cobra.Command, args []string) error {
 	// Validate integration exists
 	registry := integrations.GlobalRegistry()
 	if _, err := registry.Get(integrationName); err != nil {
-		return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
 	}
 
 	// All validation passed - errors after this are runtime errors
@@ -39,13 +39,13 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	registry := integrations.GlobalRegistry()
 	integration, err := registry.Get(integrationName)
 	if err != nil {
-		return fmt.Errorf("integration %q not found: %w", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w", integrationName, err)
 	}
 
 	// Check if configured
 	enabled, err := integration.IsEnabled()
 	if err != nil {
-		return fmt.Errorf("failed to check integration status: %w", err)
+		return fmt.Errorf("failed to check integration status; %w", err)
 	}
 	if !enabled {
 		fmt.Printf("%s is not currently configured\n", integration.GetName())
@@ -56,7 +56,7 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Removing %s integration...\n", integration.GetName())
 
 	if err := integration.Remove(); err != nil {
-		return fmt.Errorf("failed to remove %s: %w", integrationName, err)
+		return fmt.Errorf("failed to remove %s; %w", integrationName, err)
 	}
 
 	fmt.Printf("✓ %s integration removed successfully\n", integration.GetName())

@@ -35,12 +35,12 @@ func validateConfigValidate(cmd *cobra.Command, args []string) error {
 func runValidate(cmd *cobra.Command, args []string) error {
 	// Initialize and load config
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
+		return fmt.Errorf("failed to get config; %w", err)
 	}
 
 	// Validate configuration

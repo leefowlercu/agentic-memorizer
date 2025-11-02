@@ -35,14 +35,14 @@ func validateSetup(cmd *cobra.Command, args []string) error {
 	// Validate integration exists
 	registry := integrations.GlobalRegistry()
 	if _, err := registry.Get(integrationName); err != nil {
-		return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
 	}
 
 	// Validate binary path if provided
 	binaryPath, _ := cmd.Flags().GetString("binary-path")
 	if binaryPath != "" {
 		if _, err := os.Stat(binaryPath); err != nil {
-			return fmt.Errorf("binary-path %q is not accessible: %w", binaryPath, err)
+			return fmt.Errorf("binary-path %q is not accessible; %w", binaryPath, err)
 		}
 		// Check if executable
 		info, _ := os.Stat(binaryPath)
@@ -64,7 +64,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	if binaryPath == "" {
 		path, err := FindBinaryPath()
 		if err != nil {
-			return fmt.Errorf("could not auto-detect binary path: %w\nPlease specify with --binary-path flag", err)
+			return fmt.Errorf("could not auto-detect binary path; %w\nPlease specify with --binary-path flag", err)
 		}
 		binaryPath = path
 	}
@@ -72,13 +72,13 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	registry := integrations.GlobalRegistry()
 	integration, err := registry.Get(integrationName)
 	if err != nil {
-		return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
 	}
 
 	// Check if framework is installed (skip for generic adapters)
 	detected, err := integration.Detect()
 	if err != nil {
-		return fmt.Errorf("failed to detect %s: %w", integrationName, err)
+		return fmt.Errorf("failed to detect %s; %w", integrationName, err)
 	}
 	if !detected {
 		// Try to setup anyway - generic adapters will provide helpful manual instructions
@@ -103,7 +103,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	if err := integration.Setup(binaryPath); err != nil {
-		return fmt.Errorf("failed to setup %s: %w", integrationName, err)
+		return fmt.Errorf("failed to setup %s; %w", integrationName, err)
 	}
 
 	fmt.Printf("✓ %s integration configured successfully\n", integration.GetName())

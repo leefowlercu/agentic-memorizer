@@ -28,12 +28,12 @@ func validateRestart(cmd *cobra.Command, args []string) error {
 
 func runRestart(cmd *cobra.Command, args []string) error {
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config: %w", err)
+		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
 	pidFile, err := config.GetPIDPath()
 	if err != nil {
-		return fmt.Errorf("failed to get PID path: %w", err)
+		return fmt.Errorf("failed to get PID path; %w", err)
 	}
 
 	// Try to stop existing daemon

@@ -31,12 +31,12 @@ func validateStart(cmd *cobra.Command, args []string) error {
 
 func runStart(cmd *cobra.Command, args []string) error {
 	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config: %w", err)
+		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
 	if !cfg.Daemon.Enabled {
@@ -46,13 +46,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Setup logger
 	logger, err := setupLogger(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to setup logger: %w", err)
+		return fmt.Errorf("failed to setup logger; %w", err)
 	}
 
 	// Create daemon instance
 	d, err := daemon.New(cfg, logger)
 	if err != nil {
-		return fmt.Errorf("failed to create daemon: %w", err)
+		return fmt.Errorf("failed to create daemon; %w", err)
 	}
 
 	// Start daemon (blocks until stopped)
@@ -82,7 +82,7 @@ func setupLogger(cfg *config.Config) (*slog.Logger, error) {
 	if cfg.Daemon.LogFile != "" {
 		logDir := cfg.Daemon.LogFile[:len(cfg.Daemon.LogFile)-len("/daemon.log")]
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create log directory: %w", err)
+			return nil, fmt.Errorf("failed to create log directory; %w", err)
 		}
 
 		// Use lumberjack for log rotation

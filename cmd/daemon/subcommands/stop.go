@@ -1,4 +1,4 @@
-package daemon
+package subcommands
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var stopCmd = &cobra.Command{
+var StopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the running daemon",
 	Long: "\nStop the running background indexing daemon by sending a SIGTERM signal.\n\n" +

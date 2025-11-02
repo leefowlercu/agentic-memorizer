@@ -1,0 +1,85 @@
+package subcommands
+
+import (
+	"fmt"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/spf13/cobra"
+)
+
+var SetupCmd = &cobra.Command{
+	Use:   "setup <integration-name>",
+	Short: "Setup a specific integration",
+	Long: "\nSetup integration with a specific agent framework.\n\n" +
+		"Configures the framework to use agentic-memorizer for memory indexing. The setup process " +
+		"varies by framework but typically involves adding hooks or tools to the framework's " +
+		"configuration files.",
+	Example: `  # Setup Claude Code integration
+  agentic-memorizer integrations setup claude-code
+
+  # Setup with custom binary path
+  agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSetup,
+}
+
+func init() {
+	SetupCmd.Flags().String("binary-path", "", "Custom path to agentic-memorizer binary (auto-detected if not specified)")
+}
+
+func runSetup(cmd *cobra.Command, args []string) error {
+	integrationName := args[0]
+	binaryPath, _ := cmd.Flags().GetString("binary-path")
+
+	// Find binary path if not specified
+	if binaryPath == "" {
+		path, err := FindBinaryPath()
+		if err != nil {
+			return fmt.Errorf("could not auto-detect binary path: %w\nPlease specify with --binary-path flag", err)
+		}
+		binaryPath = path
+	}
+
+	registry := integrations.GlobalRegistry()
+	integration, err := registry.Get(integrationName)
+	if err != nil {
+		return fmt.Errorf("integration %q not found: %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+	}
+
+	// Check if framework is installed (skip for generic adapters)
+	detected, err := integration.Detect()
+	if err != nil {
+		return fmt.Errorf("failed to detect %s: %w", integrationName, err)
+	}
+	if !detected {
+		// Try to setup anyway - generic adapters will provide helpful manual instructions
+		fmt.Printf("Warning: %s does not appear to be installed (auto-detection may not work for all frameworks)\n", integration.GetName())
+		fmt.Printf("Attempting setup anyway...\n\n")
+	}
+
+	// Check if already configured
+	enabled, _ := integration.IsEnabled()
+	if enabled {
+		fmt.Printf("%s is already configured.\n", integration.GetName())
+		fmt.Printf("To reconfigure, first remove the integration:\n")
+		fmt.Printf("  agentic-memorizer integrations remove %s\n", integrationName)
+		fmt.Printf("Then setup again:\n")
+		fmt.Printf("  agentic-memorizer integrations setup %s\n", integrationName)
+		return nil
+	}
+
+	// Setup integration
+	fmt.Printf("Setting up %s integration...\n", integration.GetName())
+	fmt.Printf("Binary path: %s\n", binaryPath)
+	fmt.Println()
+
+	if err := integration.Setup(binaryPath); err != nil {
+		return fmt.Errorf("failed to setup %s: %w", integrationName, err)
+	}
+
+	fmt.Printf("✓ %s integration configured successfully\n", integration.GetName())
+	fmt.Println()
+	fmt.Printf("The integration will be active on your next %s session.\n", integration.GetName())
+
+	return nil
+}

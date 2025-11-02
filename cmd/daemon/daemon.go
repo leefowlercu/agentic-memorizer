@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/cmd/daemon/subcommands"
 	"github.com/spf13/cobra"
 )
 
@@ -18,10 +19,10 @@ var DaemonCmd = &cobra.Command{
 }
 
 func init() {
-	DaemonCmd.AddCommand(startCmd)
-	DaemonCmd.AddCommand(stopCmd)
-	DaemonCmd.AddCommand(statusCmd)
-	DaemonCmd.AddCommand(restartCmd)
-	DaemonCmd.AddCommand(rebuildCmd)
-	DaemonCmd.AddCommand(logsCmd)
+	DaemonCmd.AddCommand(subcommands.StartCmd)
+	DaemonCmd.AddCommand(subcommands.StopCmd)
+	DaemonCmd.AddCommand(subcommands.StatusCmd)
+	DaemonCmd.AddCommand(subcommands.RestartCmd)
+	DaemonCmd.AddCommand(subcommands.RebuildCmd)
+	DaemonCmd.AddCommand(subcommands.LogsCmd)
 }

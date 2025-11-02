@@ -1,4 +1,4 @@
-package daemon
+package subcommands
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var startCmd = &cobra.Command{
+var StartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the daemon in foreground",
 	Long: "\nStart the background indexing daemon in foreground mode.\n\n" +

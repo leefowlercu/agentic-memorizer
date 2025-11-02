@@ -830,23 +830,48 @@ Abbreviated example showing structure (actual output includes all files):
 agentic-memorizer/
 ├── main.go           # Main entry point
 ├── cmd/
-│   ├── root.go               # Root command (orchestrates subcommands)
-│   ├── init/                 # Initialization subcommand
-│   ├── daemon/               # Daemon management (start/stop/status/restart/rebuild/logs)
+│   ├── root.go               # Root command
+│   ├── init/                 # Initialization command
+│   │   └── init.go
+│   ├── daemon/               # Daemon management commands
+│   │   ├── daemon.go         # Parent daemon command
+│   │   └── subcommands/      # Daemon subcommands
+│   │       ├── start.go
+│   │       ├── stop.go
+│   │       ├── status.go
+│   │       ├── restart.go
+│   │       ├── rebuild.go
+│   │       └── logs.go
+│   ├── integrations/         # Integration management commands
+│   │   ├── integrations.go   # Parent integrations command
+│   │   └── subcommands/      # Integration subcommands
+│   │       ├── list.go
+│   │       ├── detect.go
+│   │       ├── setup.go
+│   │       ├── remove.go
+│   │       ├── validate.go
+│   │       ├── health.go
+│   │       └── helpers.go
+│   ├── config/               # Configuration commands
+│   │   ├── config.go         # Parent config command
+│   │   └── subcommands/      # Config subcommands
+│   │       └── validate.go
 │   └── read/                 # Read precomputed index
+│       └── read.go
 ├── internal/
 │   ├── config/               # Configuration loading and path management
 │   ├── daemon/               # Background daemon implementation
 │   ├── index/                # Index management and atomic writes
 │   ├── watcher/              # File system watching (fsnotify)
-│   ├── hooks/                # Claude Code hook management
 │   ├── walker/               # File system traversal
 │   ├── metadata/             # File metadata extraction
 │   ├── semantic/             # Claude API integration
 │   ├── cache/                # Analysis caching
-│   ├── output/               # Output formatting (XML/Markdown)
+│   ├── output/               # Output formatting (XML/Markdown/JSON)
+│   ├── integrations/         # Integration framework and adapters
 │   └── version/              # Version information
 ├── pkg/types/                # Shared types and data structures
+├── docs/subsystems/          # Comprehensive subsystem documentation
 ├── examples/                 # Service configuration examples (systemd, launchd)
 └── testdata/                 # Test files
 ```

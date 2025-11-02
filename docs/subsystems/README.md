@@ -38,7 +38,8 @@ The background indexing daemon that maintains a precomputed memory index through
 - `internal/daemon/daemon.go` - Core orchestrator
 - `internal/daemon/worker_pool.go` - Parallel processing
 - `internal/daemon/health.go` - Health monitoring
-- `cmd/daemon/` - CLI commands
+- `cmd/daemon/daemon.go` - Parent CLI command
+- `cmd/daemon/subcommands/` - Daemon subcommands (start, stop, status, restart, rebuild, logs)
 
 **See:** [daemon/README.md](./daemon/README.md)
 

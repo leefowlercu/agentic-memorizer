@@ -257,7 +257,7 @@ The Integration Registry integrates deeply with CLI commands to provide user-fac
 
 #### Integrations Command Group
 
-The `integrations` command (`cmd/integrations/integrations.go`) provides comprehensive integration management:
+The `integrations` command group (`cmd/integrations/integrations.go` parent command with subcommands in `cmd/integrations/subcommands/`) provides comprehensive integration management:
 
 **`integrations list`:**
 Lists all registered integrations with their names, descriptions, versions, and detection status. Shows whether each framework is installed and enabled, helping users understand available options.

@@ -1,4 +1,4 @@
-package daemon
+package subcommands
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rebuildCmd = &cobra.Command{
+var RebuildCmd = &cobra.Command{
 	Use:   "rebuild",
 	Short: "Force immediate index rebuild",
 	Long: "\nForce the daemon to perform an immediate full index rebuild.\n\n" +

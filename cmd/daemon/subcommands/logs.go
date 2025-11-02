@@ -1,4 +1,4 @@
-package daemon
+package subcommands
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ var (
 	tailLines  int
 )
 
-var logsCmd = &cobra.Command{
+var LogsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show daemon logs",
 	Long: "\nShow logs from the background indexing daemon.\n\n" +
@@ -24,8 +24,8 @@ var logsCmd = &cobra.Command{
 }
 
 func init() {
-	logsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
-	logsCmd.Flags().IntVarP(&tailLines, "tail", "n", 50, "Number of lines to show from the end")
+	LogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
+	LogsCmd.Flags().IntVarP(&tailLines, "tail", "n", 50, "Number of lines to show from the end")
 }
 
 func runLogs(cmd *cobra.Command, args []string) error {

@@ -1,4 +1,4 @@
-package daemon
+package subcommands
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var restartCmd = &cobra.Command{
+var RestartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart the daemon",
 	Long: "\nRestart the background indexing daemon by stopping and starting it.\n\n" +

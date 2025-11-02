@@ -1,4 +1,4 @@
-package daemon
+package subcommands
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var statusCmd = &cobra.Command{
+var StatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show daemon status",
 	Long: "\nShow the current status of the background indexing daemon.\n\n" +

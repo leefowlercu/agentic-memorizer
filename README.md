@@ -867,8 +867,9 @@ agentic-memorizer/
 │   ├── metadata/             # File metadata extraction
 │   ├── semantic/             # Claude API integration
 │   ├── cache/                # Analysis caching
-│   ├── output/               # Output formatting (XML/Markdown/JSON)
 │   ├── integrations/         # Integration framework and adapters
+│   │   ├── output/           # Output formatting (XML/Markdown/JSON)
+│   │   └── adapters/         # Framework-specific adapters
 │   └── version/              # Version information
 ├── pkg/types/                # Shared types and data structures
 ├── docs/subsystems/          # Comprehensive subsystem documentation

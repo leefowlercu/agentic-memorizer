@@ -23,7 +23,7 @@
 
 The Metadata Extractor subsystem is a file processing component that extracts structural and format-specific metadata from various file types without performing AI analysis. It operates as the first stage of file processing, gathering information like word counts, dimensions, page counts, sections, and other file-type-specific attributes before files are optionally passed to the Semantic Analyzer for AI-powered analysis.
 
-The subsystem implements a handler pattern with specialized extractors for nine distinct file type categories: documents (Markdown, DOCX, PDF), presentations (PPTX), images (PNG, JPG, GIF, WebP), code files, structured data (JSON, YAML, TOML), transcripts (VTT, SRT), and others. Each handler implements a common interface while providing type-specific extraction logic optimized for its target format.
+The subsystem implements a handler pattern with specialized extractors for ten distinct file type categories: documents (Markdown, DOCX, PDF), presentations (PPTX), images (PNG, JPG, GIF, WebP), code files, structured data (JSON, YAML, TOML), transcripts (VTT, SRT), videos, audio, archives, and others. Each handler implements a common interface while providing type-specific extraction logic optimized for its target format.
 
 The Metadata Extractor serves as the foundation for file understanding in Agentic Memorizer, providing consistent baseline metadata for all files while enabling rich type-specific metadata extraction where possible. This separation of metadata extraction from semantic analysis allows the system to efficiently process files, cache results effectively, and provide graceful degradation when AI analysis is unavailable or unnecessary.
 
@@ -80,7 +80,7 @@ The Extractor (`internal/metadata/extractor.go`) serves as the central orchestra
 - Maintains a registry of all registered handlers indexed by handler type
 - Routes files to appropriate handlers based on `CanHandle()` matching
 - Provides fallback to base metadata when no handler matches
-- Categorizes files into nine high-level categories for organizational purposes
+- Categorizes files into ten high-level categories for organizational purposes
 - Determines file readability (whether Claude Code can process the file directly)
 
 **File Categories:**

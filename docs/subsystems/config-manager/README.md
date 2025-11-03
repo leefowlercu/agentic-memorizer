@@ -148,11 +148,25 @@ The `WriteConfig()` function enables programmatic configuration creation:
 3. Used by init command to create default configuration files
 
 **Path Helper Functions:**
-- `GetAppDir()` - Returns `~/.agentic-memorizer` directory path
-- `GetIndexPath()` - Returns path to precomputed index file
-- `GetPIDPath()` - Returns path to daemon PID file
+- `GetAppDir()` - Returns application directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
+- `GetIndexPath()` - Returns path to precomputed index file (uses app directory)
+- `GetPIDPath()` - Returns path to daemon PID file (uses app directory)
 - `ExpandHome()` - Expands tilde in arbitrary paths
 - `GetConfigPath()` - Returns path to loaded configuration file
+
+**App Directory Environment Variable:**
+The `MEMORIZER_APP_DIR` environment variable allows customization of where the application stores its own files (config, index, PID, logs). This enables:
+- **Testing**: Isolated test environments without affecting production
+- **Multi-instance**: Multiple independent instances for different projects
+- **Containers**: Custom paths in Docker or other containerized deployments
+- **CI/CD**: Isolated build/test environments
+
+When `MEMORIZER_APP_DIR` is set, it overrides the default `~/.agentic-memorizer` location. The path undergoes:
+1. **Home expansion**: Tilde (`~`) prefix expanded to user's home directory
+2. **Security validation**: Path safety checks prevent directory traversal
+3. **Search path update**: Configuration file search uses custom app directory
+
+Note that `MEMORIZER_APP_DIR` only affects the application's own files. The memory directory and cache directory locations are still controlled by `memory_root` and `analysis.cache_dir` settings in the configuration file.
 
 ### Configuration Types
 
@@ -449,3 +463,7 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 **Integration Configuration**: Framework-specific settings controlling output format and behavior for different AI agent platforms like Claude Code, Continue.dev, and Cursor.
 
 **Health Check Port**: Optional HTTP endpoint port for daemon monitoring, exposing metrics and health status for operational observability (0 disables the endpoint).
+
+**App Directory**: Location where the application stores its own files (configuration, index, PID file, logs), defaulting to `~/.agentic-memorizer` but configurable via `MEMORIZER_APP_DIR` environment variable for testing and multi-instance deployments.
+
+**MEMORIZER_APP_DIR**: Environment variable that overrides the default app directory location, enabling isolated test environments, multiple instances, and custom paths in containerized deployments.

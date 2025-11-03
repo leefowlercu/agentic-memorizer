@@ -15,4 +15,5 @@ var ConfigCmd = &cobra.Command{
 
 func init() {
 	ConfigCmd.AddCommand(subcommands.ValidateCmd)
+	ConfigCmd.AddCommand(subcommands.ReloadCmd)
 }

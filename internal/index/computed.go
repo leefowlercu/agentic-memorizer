@@ -10,10 +10,10 @@ import (
 // This wraps the core types.Index with additional metadata about
 // the index file itself (version, generation time, daemon info).
 type ComputedIndex struct {
-	Version       string       `json:"version"`
-	GeneratedAt   time.Time    `json:"generated_at"`
-	DaemonVersion string       `json:"daemon_version"`
-	Index         *types.Index `json:"index"`
+	Version       string        `json:"version"`
+	GeneratedAt   time.Time     `json:"generated_at"`
+	DaemonVersion string        `json:"daemon_version"`
+	Index         *types.Index  `json:"index"`
 	Metadata      BuildMetadata `json:"metadata"`
 }
 

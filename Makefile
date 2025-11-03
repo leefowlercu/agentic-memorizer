@@ -1,4 +1,4 @@
-.PHONY: build install test clean uninstall help coverage coverage-html build-release install-release lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config
+.PHONY: build install test test-integration test-all clean uninstall help coverage coverage-html build-release install-release lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config
 
 BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
@@ -45,9 +45,17 @@ install-release: build-release ## Install release build with version info
 	@echo "Verify installation:"
 	@$(INSTALL_PATH) --version 2>/dev/null || echo "  Run 'agentic-memorizer daemon status' to see version"
 
-test: ## Run tests
-	@echo "Running tests..."
+test: ## Run unit tests only (fast)
+	@echo "Running unit tests..."
 	@go test -v ./...
+
+test-integration: ## Run integration tests only (slower)
+	@echo "Running integration tests..."
+	@go test -tags=integration -v ./...
+
+test-all: test test-integration ## Run all tests (unit + integration)
+	@echo ""
+	@echo "✅ All tests passed"
 
 test-race: ## Run tests with race detector
 	@echo "Running tests with race detector..."
@@ -116,7 +124,7 @@ vet: ## Run go vet
 	@go vet ./...
 	@echo "✅ Vet complete"
 
-check: fmt vet test ## Run all code quality checks
+check: fmt vet test-all ## Run all code quality checks (format, vet, all tests)
 	@echo ""
 	@echo "✅ All checks passed"
 

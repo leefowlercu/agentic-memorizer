@@ -29,17 +29,18 @@ type Event struct {
 
 // Watcher watches a directory for file changes
 type Watcher struct {
-	rootPath      string
-	skipDirs      []string
-	skipFiles     []string
-	debounceMs    int
-	fsWatcher     *fsnotify.Watcher
-	logger        *slog.Logger
-	eventChan     chan Event
-	batchedEvents map[string]Event
-	eventMu       sync.Mutex
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
+	rootPath            string
+	skipDirs            []string
+	skipFiles           []string
+	debounceMs          int
+	fsWatcher           *fsnotify.Watcher
+	logger              *slog.Logger
+	eventChan           chan Event
+	batchedEvents       map[string]Event
+	eventMu             sync.Mutex
+	stopChan            chan struct{}
+	wg                  sync.WaitGroup
+	debounceIntervalCh  chan time.Duration // For updating debounce interval
 }
 
 // New creates a new file system watcher
@@ -50,15 +51,16 @@ func New(rootPath string, skipDirs []string, skipFiles []string, debounceMs int,
 	}
 
 	w := &Watcher{
-		rootPath:      rootPath,
-		skipDirs:      skipDirs,
-		skipFiles:     skipFiles,
-		debounceMs:    debounceMs,
-		fsWatcher:     fsWatcher,
-		logger:        logger,
-		eventChan:     make(chan Event, 100),
-		batchedEvents: make(map[string]Event),
-		stopChan:      make(chan struct{}),
+		rootPath:           rootPath,
+		skipDirs:           skipDirs,
+		skipFiles:          skipFiles,
+		debounceMs:         debounceMs,
+		fsWatcher:          fsWatcher,
+		logger:             logger,
+		eventChan:          make(chan Event, 100),
+		batchedEvents:      make(map[string]Event),
+		stopChan:           make(chan struct{}),
+		debounceIntervalCh: make(chan time.Duration, 1),
 	}
 
 	return w, nil
@@ -211,6 +213,12 @@ func (w *Watcher) debounceBatch() {
 		case <-ticker.C:
 			w.sendBatchedEvents()
 
+		case newInterval := <-w.debounceIntervalCh:
+			ticker.Stop()
+			ticker = time.NewTicker(newInterval)
+			w.debounceMs = int(newInterval.Milliseconds())
+			w.logger.Info("debounce interval changed", "new_interval_ms", w.debounceMs)
+
 		case <-w.stopChan:
 			return
 		}
@@ -274,4 +282,15 @@ func (w *Watcher) shouldSkipDir(path string) bool {
 	}
 
 	return false
+}
+
+// UpdateDebounceInterval signals the watcher to update its debounce interval
+func (w *Watcher) UpdateDebounceInterval(intervalMs int) {
+	select {
+	case w.debounceIntervalCh <- time.Duration(intervalMs) * time.Millisecond:
+		// Signal sent successfully
+	default:
+		// Channel full, interval will be updated on next signal
+		w.logger.Warn("debounce interval update channel full, skipping")
+	}
 }

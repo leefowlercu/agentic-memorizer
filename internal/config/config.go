@@ -13,8 +13,12 @@ import (
 func InitConfig() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("$HOME/" + AppDirName)
-	viper.AddConfigPath(".")
+
+	// Add app directory to config search path (respects MEMORIZER_APP_DIR)
+	if appDir, err := GetAppDir(); err == nil {
+		viper.AddConfigPath(appDir)
+	}
+	viper.AddConfigPath(".") // Current directory fallback
 
 	viper.SetDefault("memory_root", DefaultConfig.MemoryRoot)
 	viper.SetDefault("claude.api_key", DefaultConfig.Claude.APIKey)
@@ -111,11 +115,25 @@ func (c *Config) GetAPIKey() string {
 }
 
 // GetAppDir returns the application directory path.
-// Returns ~/.agentic-memorizer (expanded from ~)
+// Checks MEMORIZER_APP_DIR environment variable first, then falls back to ~/.agentic-memorizer
 func GetAppDir() (string, error) {
+	// Check environment variable first
+	if appDir := os.Getenv("MEMORIZER_APP_DIR"); appDir != "" {
+		// Expand home directory if path starts with ~
+		expanded := ExpandHome(appDir)
+
+		// Validate path safety
+		if err := SafePath(expanded); err != nil {
+			return "", fmt.Errorf("invalid MEMORIZER_APP_DIR; %w", err)
+		}
+
+		return expanded, nil
+	}
+
+	// Fall back to default
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+		return "", fmt.Errorf("failed to get home directory; %w", err)
 	}
 	return filepath.Join(home, AppDirName), nil
 }

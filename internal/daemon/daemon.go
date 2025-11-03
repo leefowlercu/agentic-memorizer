@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"reflect"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
@@ -17,26 +21,88 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Daemon manages background index computation
 type Daemon struct {
-	cfg               *config.Config
+	// Configuration (thread-safe access)
+	cfgMu sync.RWMutex
+	cfg   *config.Config
+
+	// Semantic analyzer (atomic replacement)
+	semanticAnalyzer atomic.Value // *semantic.Analyzer
+
+	// Logger (thread-safe replacement)
+	loggerMu  sync.RWMutex
+	logger    *slog.Logger
+	logWriter *lumberjack.Logger // Reuse for log level changes
+
+	// Health server (lifecycle management)
+	healthServer   *http.Server
+	healthServerMu sync.Mutex
+
+	// Reload signaling channels
+	rebuildIntervalCh chan time.Duration // Signal rebuild interval change
+
+	// Components
 	indexManager      *index.Manager
 	cacheManager      *cache.Manager
 	metadataExtractor *metadata.Extractor
-	semanticAnalyzer  *semantic.Analyzer
 	fileWatcher       *watcher.Watcher
 	healthMetrics     *HealthMetrics
-	logger            *slog.Logger
-	ctx               context.Context
-	cancel            context.CancelFunc
-	wg                sync.WaitGroup
-	pidFile           string
+
+	// Lifecycle
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	pidFile string
+}
+
+// GetConfig returns the current configuration (thread-safe)
+func (d *Daemon) GetConfig() *config.Config {
+	d.cfgMu.RLock()
+	defer d.cfgMu.RUnlock()
+	return d.cfg
+}
+
+// SetConfig sets the configuration atomically (thread-safe)
+func (d *Daemon) SetConfig(cfg *config.Config) {
+	d.cfgMu.Lock()
+	defer d.cfgMu.Unlock()
+	d.cfg = cfg
+}
+
+// GetSemanticAnalyzer returns the current semantic analyzer (lock-free)
+func (d *Daemon) GetSemanticAnalyzer() *semantic.Analyzer {
+	val := d.semanticAnalyzer.Load()
+	if val == nil {
+		return nil
+	}
+	return val.(*semantic.Analyzer)
+}
+
+// SetSemanticAnalyzer sets the semantic analyzer atomically (lock-free)
+func (d *Daemon) SetSemanticAnalyzer(a *semantic.Analyzer) {
+	d.semanticAnalyzer.Store(a)
+}
+
+// GetLogger returns the current logger (thread-safe)
+func (d *Daemon) GetLogger() *slog.Logger {
+	d.loggerMu.RLock()
+	defer d.loggerMu.RUnlock()
+	return d.logger
+}
+
+// SetLogger sets the logger atomically (thread-safe)
+func (d *Daemon) SetLogger(l *slog.Logger) {
+	d.loggerMu.Lock()
+	defer d.loggerMu.Unlock()
+	d.logger = l
 }
 
 // New creates a new daemon instance
-func New(cfg *config.Config, logger *slog.Logger) (*Daemon, error) {
+func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) (*Daemon, error) {
 	indexPath, err := config.GetIndexPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get index path: %w", err)
@@ -93,23 +159,31 @@ func New(cfg *config.Config, logger *slog.Logger) (*Daemon, error) {
 	// Create health metrics tracker
 	healthMetrics := NewHealthMetrics()
 
-	return &Daemon{
+	d := &Daemon{
 		cfg:               cfg,
 		indexManager:      indexManager,
 		cacheManager:      cacheManager,
 		metadataExtractor: metadataExtractor,
-		semanticAnalyzer:  semanticAnalyzer,
 		fileWatcher:       fileWatcher,
 		healthMetrics:     healthMetrics,
 		logger:            logger,
+		logWriter:         logWriter,
 		ctx:               ctx,
 		cancel:            cancel,
 		pidFile:           pidFile,
-	}, nil
+		rebuildIntervalCh: make(chan time.Duration, 1),
+	}
+
+	// Set semantic analyzer atomically
+	d.SetSemanticAnalyzer(semanticAnalyzer)
+
+	return d, nil
 }
 
 // Start starts the daemon
 func (d *Daemon) Start() error {
+	logger := d.GetLogger()
+
 	// Check if already running
 	if err := checkPIDFile(d.pidFile); err != nil {
 		return err
@@ -120,7 +194,7 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 
-	d.logger.Info("daemon starting", "version", version.GetVersion())
+	logger.Info("daemon starting", "version", version.GetVersion())
 
 	// Setup signal handling
 	setupSignalHandler(d)
@@ -128,20 +202,20 @@ func (d *Daemon) Start() error {
 	// Try to load existing index for crash recovery
 	existingIndex, err := d.indexManager.LoadComputed()
 	if err == nil {
-		d.logger.Info("loaded existing index from disk", "files", existingIndex.Index.Stats.TotalFiles)
+		logger.Info("loaded existing index from disk", "files", existingIndex.Index.Stats.TotalFiles)
 		// Set the loaded index as current
 		d.indexManager.SetIndex(existingIndex.Index, existingIndex.Metadata)
 	} else {
-		d.logger.Info("no existing index found, will perform full build")
+		logger.Info("no existing index found, will perform full build")
 	}
 
 	// Perform initial full build
-	d.logger.Info("performing initial index build")
+	logger.Info("performing initial index build")
 	if err := d.rebuildIndex(); err != nil {
-		d.logger.Error("initial build failed", "error", err)
+		logger.Error("initial build failed", "error", err)
 		// If we have an existing index loaded, continue with it
 		if existingIndex != nil {
-			d.logger.Warn("continuing with existing index due to build failure")
+			logger.Warn("continuing with existing index due to build failure")
 		} else {
 			return fmt.Errorf("initial build failed and no existing index available: %w", err)
 		}
@@ -149,7 +223,7 @@ func (d *Daemon) Start() error {
 
 	// Start file watcher
 	if err := d.fileWatcher.Start(); err != nil {
-		d.logger.Error("failed to start file watcher", "error", err)
+		logger.Error("failed to start file watcher", "error", err)
 		return fmt.Errorf("failed to start file watcher: %w", err)
 	}
 	d.healthMetrics.SetWatcherActive(true)
@@ -163,20 +237,26 @@ func (d *Daemon) Start() error {
 	go d.periodicRebuild()
 
 	// Start health check server if configured
-	if d.cfg.Daemon.HealthCheckPort > 0 {
-		if err := StartHealthCheckServer(d.cfg.Daemon.HealthCheckPort, d.healthMetrics); err != nil {
-			d.logger.Warn("failed to start health check server", "error", err)
+	cfg := d.GetConfig()
+	if cfg.Daemon.HealthCheckPort > 0 {
+		if err := d.startHealthServer(cfg.Daemon.HealthCheckPort); err != nil {
+			logger.Warn("failed to start health check server", "error", err)
 		} else {
-			d.logger.Info("health check server started", "port", d.cfg.Daemon.HealthCheckPort)
+			logger.Info("health check server started", "port", cfg.Daemon.HealthCheckPort)
 		}
 	}
 
-	d.logger.Info("daemon started successfully")
+	logger.Info("daemon started successfully")
 
 	// Wait for context cancellation
 	<-d.ctx.Done()
 
-	d.logger.Info("daemon shutting down")
+	logger.Info("daemon shutting down")
+
+	// Stop health server
+	if err := d.stopHealthServer(); err != nil {
+		logger.Warn("error stopping health server", "error", err)
+	}
 
 	// Stop file watcher
 	d.fileWatcher.Stop()
@@ -185,16 +265,17 @@ func (d *Daemon) Start() error {
 
 	// Remove PID file
 	if err := removePIDFile(d.pidFile); err != nil {
-		d.logger.Error("failed to remove PID file", "error", err)
+		logger.Error("failed to remove PID file", "error", err)
 	}
 
-	d.logger.Info("daemon stopped")
+	logger.Info("daemon stopped")
 	return nil
 }
 
 // Stop stops the daemon
 func (d *Daemon) Stop() {
-	d.logger.Info("stop requested")
+	logger := d.GetLogger()
+	logger.Info("stop requested")
 	d.cancel()
 }
 
@@ -202,18 +283,50 @@ func (d *Daemon) Stop() {
 func (d *Daemon) periodicRebuild() {
 	defer d.wg.Done()
 
-	interval := time.Duration(d.cfg.Daemon.FullRebuildIntervalMinutes) * time.Minute
+	cfg := d.GetConfig()
+	logger := d.GetLogger()
+	interval := time.Duration(cfg.Daemon.FullRebuildIntervalMinutes) * time.Minute
+
+	if interval <= 0 {
+		logger.Info("periodic rebuilds disabled")
+		// Wait for signal to enable
+		select {
+		case newInterval := <-d.rebuildIntervalCh:
+			if newInterval <= 0 {
+				logger.Info("periodic rebuilds remain disabled")
+				return
+			}
+			interval = newInterval
+			logger.Info("periodic rebuilds enabled", "interval_minutes", interval.Minutes())
+		case <-d.ctx.Done():
+			return
+		}
+	}
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+
+	logger.Info("periodic rebuild scheduler started", "interval_minutes", interval.Minutes())
 
 	for {
 		select {
 		case <-ticker.C:
-			d.logger.Info("performing periodic rebuild")
+			logger.Info("triggering periodic rebuild")
 			if err := d.rebuildIndex(); err != nil {
-				d.logger.Error("periodic rebuild failed", "error", err)
+				d.GetLogger().Error("periodic rebuild failed", "error", err)
 			}
+
+		case newInterval := <-d.rebuildIntervalCh:
+			ticker.Stop()
+			if newInterval <= 0 {
+				logger.Info("periodic rebuilds disabled, exiting scheduler")
+				return
+			}
+			ticker = time.NewTicker(newInterval)
+			logger.Info("rebuild interval changed", "new_interval_minutes", newInterval.Minutes())
+
 		case <-d.ctx.Done():
+			logger.Info("periodic rebuild scheduler stopping")
 			return
 		}
 	}
@@ -223,20 +336,24 @@ func (d *Daemon) periodicRebuild() {
 func (d *Daemon) rebuildIndex() error {
 	startTime := time.Now()
 
+	cfg := d.GetConfig()
+	logger := d.GetLogger()
+	analyzer := d.GetSemanticAnalyzer()
+
 	skipDirs := []string{".cache", ".git"}
-	skipFiles := d.cfg.Analysis.SkipFiles
+	skipFiles := cfg.Analysis.SkipFiles
 	if len(skipFiles) == 0 {
 		skipFiles = []string{"agentic-memorizer"}
 	}
 
 	// Create worker pool
 	pool := NewWorkerPool(
-		d.cfg.Daemon.Workers,
-		d.cfg.Daemon.RateLimitPerMin,
+		cfg.Daemon.Workers,
+		cfg.Daemon.RateLimitPerMin,
 		d.metadataExtractor,
-		d.semanticAnalyzer,
+		analyzer,
 		d.cacheManager,
-		d.logger,
+		logger,
 		d.ctx,
 	)
 
@@ -245,7 +362,7 @@ func (d *Daemon) rebuildIndex() error {
 
 	// Collect all files to process
 	var jobs []Job
-	err := walker.Walk(d.cfg.MemoryRoot, skipDirs, skipFiles, func(path string, info os.FileInfo) error {
+	err := walker.Walk(cfg.MemoryRoot, skipDirs, skipFiles, func(path string, info os.FileInfo) error {
 		job := Job{
 			Path:     path,
 			Info:     info,
@@ -259,7 +376,7 @@ func (d *Daemon) rebuildIndex() error {
 		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	d.logger.Info("processing files with worker pool", "files", len(jobs), "workers", d.cfg.Daemon.Workers)
+	logger.Info("processing files with worker pool", "files", len(jobs), "workers", cfg.Daemon.Workers)
 
 	// Submit all jobs
 	pool.SubmitBatch(jobs)
@@ -270,7 +387,7 @@ func (d *Daemon) rebuildIndex() error {
 		select {
 		case result := <-pool.Results():
 			// Set relative path
-			relPath, _ := walker.GetRelPath(d.cfg.MemoryRoot, result.Entry.Metadata.Path)
+			relPath, _ := walker.GetRelPath(cfg.MemoryRoot, result.Entry.Metadata.Path)
 			result.Entry.Metadata.RelPath = relPath
 			entries = append(entries, result.Entry)
 
@@ -282,7 +399,7 @@ func (d *Daemon) rebuildIndex() error {
 	// Build index
 	idx := &types.Index{
 		Generated: time.Now(),
-		Root:      d.cfg.MemoryRoot,
+		Root:      cfg.MemoryRoot,
 		Entries:   entries,
 		Stats:     types.IndexStats{},
 	}
@@ -322,7 +439,7 @@ func (d *Daemon) rebuildIndex() error {
 	d.healthMetrics.RecordBuild(idx.Stats.TotalFiles, idx.Stats.AnalyzedFiles, idx.Stats.CachedFiles, idx.Stats.ErrorFiles, true)
 	d.healthMetrics.SetIndexFileCount(idx.Stats.TotalFiles)
 
-	d.logger.Info("index rebuilt successfully",
+	logger.Info("index rebuilt successfully",
 		"duration_ms", buildDuration.Milliseconds(),
 		"files", idx.Stats.TotalFiles,
 		"analyzed", idx.Stats.AnalyzedFiles,
@@ -335,7 +452,7 @@ func (d *Daemon) rebuildIndex() error {
 
 // Rebuild forces an immediate index rebuild
 func (d *Daemon) Rebuild() error {
-	d.logger.Info("manual rebuild requested")
+	d.GetLogger().Info("manual rebuild requested")
 	return d.rebuildIndex()
 }
 
@@ -359,15 +476,19 @@ func (d *Daemon) processWatcherEvents() {
 
 // handleFileEvent handles a single file system event
 func (d *Daemon) handleFileEvent(event watcher.Event) {
-	relPath, err := walker.GetRelPath(d.cfg.MemoryRoot, event.Path)
+	cfg := d.GetConfig()
+	logger := d.GetLogger()
+	analyzer := d.GetSemanticAnalyzer()
+
+	relPath, err := walker.GetRelPath(cfg.MemoryRoot, event.Path)
 	if err != nil {
-		d.logger.Warn("failed to get relative path", "path", event.Path, "error", err)
+		logger.Warn("failed to get relative path", "path", event.Path, "error", err)
 		return
 	}
 
 	switch event.Type {
 	case watcher.EventCreate, watcher.EventModify:
-		d.logger.Info("file changed", "path", relPath, "type", event.Type)
+		logger.Info("file changed", "path", relPath, "type", event.Type)
 
 		// Check if file still exists (it might have been deleted quickly)
 		info, err := os.Stat(event.Path)
@@ -377,7 +498,7 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 				d.handleFileDelete(event.Path, relPath)
 				return
 			}
-			d.logger.Warn("failed to stat file", "path", event.Path, "error", err)
+			logger.Warn("failed to stat file", "path", event.Path, "error", err)
 			return
 		}
 
@@ -389,7 +510,7 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 		// Extract metadata
 		fileMetadata, err := d.metadataExtractor.Extract(event.Path, info)
 		if err != nil {
-			d.logger.Warn("failed to extract metadata", "path", event.Path, "error", err)
+			logger.Warn("failed to extract metadata", "path", event.Path, "error", err)
 			return
 		}
 
@@ -398,25 +519,25 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 		// Hash file
 		fileHash, err := cache.HashFile(event.Path)
 		if err != nil {
-			d.logger.Warn("failed to hash file", "path", event.Path, "error", err)
+			logger.Warn("failed to hash file", "path", event.Path, "error", err)
 			fileHash = ""
 		}
 		fileMetadata.Hash = fileHash
 
 		// Analyze semantically if enabled
 		var semanticAnalysis *types.SemanticAnalysis
-		if d.semanticAnalyzer != nil && fileHash != "" {
+		if analyzer != nil && fileHash != "" {
 			// Check cache first
 			cached, err := d.cacheManager.Get(fileHash)
 			if err == nil && cached != nil && !d.cacheManager.IsStale(cached, fileHash) {
 				semanticAnalysis = cached.Semantic
-				d.logger.Debug("using cached analysis", "path", relPath)
+				logger.Debug("using cached analysis", "path", relPath)
 			} else {
 				// Analyze file
-				d.logger.Debug("analyzing file", "path", relPath)
-				analysis, err := d.semanticAnalyzer.Analyze(fileMetadata)
+				logger.Debug("analyzing file", "path", relPath)
+				analysis, err := analyzer.Analyze(fileMetadata)
 				if err != nil {
-					d.logger.Warn("analysis failed", "path", event.Path, "error", err)
+					logger.Warn("analysis failed", "path", event.Path, "error", err)
 				} else {
 					semanticAnalysis = analysis
 
@@ -429,7 +550,7 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 						Semantic:   semanticAnalysis,
 					}
 					if err := d.cacheManager.Set(cachedAnalysis); err != nil {
-						d.logger.Warn("failed to cache analysis", "path", event.Path, "error", err)
+						logger.Warn("failed to cache analysis", "path", event.Path, "error", err)
 					}
 				}
 			}
@@ -442,15 +563,15 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 		}
 
 		if err := d.indexManager.UpdateSingle(entry); err != nil {
-			d.logger.Error("failed to update index", "path", event.Path, "error", err)
+			logger.Error("failed to update index", "path", event.Path, "error", err)
 			return
 		}
 
 		// Write updated index
 		if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
-			d.logger.Error("failed to write index", "error", err)
+			logger.Error("failed to write index", "error", err)
 		} else {
-			d.logger.Debug("index updated", "path", relPath)
+			logger.Debug("index updated", "path", relPath)
 		}
 
 	case watcher.EventDelete:
@@ -460,17 +581,249 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 
 // handleFileDelete handles file deletion
 func (d *Daemon) handleFileDelete(path string, relPath string) {
-	d.logger.Info("file deleted", "path", relPath)
+	logger := d.GetLogger()
+	logger.Info("file deleted", "path", relPath)
 
 	if err := d.indexManager.RemoveFile(path); err != nil {
-		d.logger.Error("failed to remove from index", "path", path, "error", err)
+		logger.Error("failed to remove from index", "path", path, "error", err)
 		return
 	}
 
 	// Write updated index
 	if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
-		d.logger.Error("failed to write index", "error", err)
+		logger.Error("failed to write index", "error", err)
 	} else {
-		d.logger.Debug("index updated after deletion", "path", relPath)
+		logger.Debug("index updated after deletion", "path", relPath)
 	}
+}
+
+// startHealthServer starts or restarts the health check HTTP server
+func (d *Daemon) startHealthServer(port int) error {
+	d.healthServerMu.Lock()
+	defer d.healthServerMu.Unlock()
+
+	logger := d.GetLogger()
+
+	// Stop existing server if running
+	if d.healthServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := d.healthServer.Shutdown(ctx); err != nil {
+			logger.Warn("health server shutdown failed", "error", err)
+		}
+		d.healthServer = nil
+	}
+
+	// Don't start if disabled (port 0)
+	if port == 0 {
+		logger.Info("health check server disabled")
+		return nil
+	}
+
+	// Create new server
+	handler := NewHealthCheckHandler(d.healthMetrics)
+	d.healthServer = &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: handler,
+	}
+
+	logger.Info("starting health check server", "port", port)
+
+	go func() {
+		if err := d.healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			d.GetLogger().Error("health server failed", "error", err)
+		}
+	}()
+
+	return nil
+}
+
+// stopHealthServer gracefully stops the health check HTTP server
+func (d *Daemon) stopHealthServer() error {
+	d.healthServerMu.Lock()
+	defer d.healthServerMu.Unlock()
+
+	if d.healthServer == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := d.healthServer.Shutdown(ctx)
+	d.healthServer = nil
+
+	return err
+}
+
+// ReloadConfig reloads configuration and applies changes
+func (d *Daemon) ReloadConfig() error {
+	logger := d.GetLogger()
+	logger.Info("starting configuration reload")
+
+	// Load new configuration
+	if err := config.InitConfig(); err != nil {
+		return fmt.Errorf("failed to reload config; %w", err)
+	}
+
+	newCfg, err := config.GetConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get config; %w", err)
+	}
+
+	// Validate configuration
+	if err := config.ValidateConfig(newCfg); err != nil {
+		return fmt.Errorf("config validation failed; %w", err)
+	}
+
+	// Validate reload compatibility
+	oldCfg := d.GetConfig()
+	if err := config.ValidateReload(oldCfg, newCfg); err != nil {
+		return fmt.Errorf("reload validation failed; %w", err)
+	}
+
+	// Detect changes
+	changes := d.detectChanges(oldCfg, newCfg)
+
+	// Apply configuration atomically
+	d.SetConfig(newCfg)
+	logger.Info("configuration swapped atomically")
+
+	// Apply component-specific changes
+	d.applyComponentChanges(changes, newCfg)
+
+	logger.Info("configuration reload complete",
+		"changes_applied", countChanges(changes))
+
+	return nil
+}
+
+// detectChanges compares old and new configs to detect changes
+func (d *Daemon) detectChanges(oldCfg, newCfg *config.Config) map[string]bool {
+	return map[string]bool{
+		"claude":           !reflect.DeepEqual(newCfg.Claude, oldCfg.Claude),
+		"log_level":        newCfg.Daemon.LogLevel != oldCfg.Daemon.LogLevel,
+		"debounce":         newCfg.Daemon.DebounceMs != oldCfg.Daemon.DebounceMs,
+		"rebuild_interval": newCfg.Daemon.FullRebuildIntervalMinutes != oldCfg.Daemon.FullRebuildIntervalMinutes,
+		"health_port":      newCfg.Daemon.HealthCheckPort != oldCfg.Daemon.HealthCheckPort,
+		"workers":          newCfg.Daemon.Workers != oldCfg.Daemon.Workers,
+		"rate_limit":       newCfg.Daemon.RateLimitPerMin != oldCfg.Daemon.RateLimitPerMin,
+		"skip_patterns":    !reflect.DeepEqual(newCfg.Analysis.SkipFiles, oldCfg.Analysis.SkipFiles) ||
+			!reflect.DeepEqual(newCfg.Analysis.SkipExtensions, oldCfg.Analysis.SkipExtensions),
+	}
+}
+
+// applyComponentChanges applies component-specific configuration changes
+func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.Config) {
+	logger := d.GetLogger()
+
+	if changes["claude"] {
+		if err := d.updateSemanticAnalyzer(newCfg); err != nil {
+			logger.Warn("failed to update semantic analyzer", "error", err)
+		} else {
+			logger.Info("semantic analyzer updated")
+		}
+	}
+
+	if changes["log_level"] {
+		if err := d.updateLogLevel(newCfg); err != nil {
+			logger.Warn("failed to update log level", "error", err)
+		} else {
+			logger.Info("log level updated", "level", newCfg.Daemon.LogLevel)
+		}
+	}
+
+	if changes["debounce"] {
+		d.fileWatcher.UpdateDebounceInterval(newCfg.Daemon.DebounceMs)
+		logger.Info("debounce interval updated", "ms", newCfg.Daemon.DebounceMs)
+	}
+
+	if changes["rebuild_interval"] {
+		interval := time.Duration(newCfg.Daemon.FullRebuildIntervalMinutes) * time.Minute
+		select {
+		case d.rebuildIntervalCh <- interval:
+			logger.Info("rebuild interval updated", "minutes", newCfg.Daemon.FullRebuildIntervalMinutes)
+		default:
+			logger.Warn("failed to signal rebuild interval change")
+		}
+	}
+
+	if changes["health_port"] {
+		if err := d.startHealthServer(newCfg.Daemon.HealthCheckPort); err != nil {
+			logger.Warn("failed to restart health server", "error", err)
+		} else {
+			logger.Info("health server restarted", "port", newCfg.Daemon.HealthCheckPort)
+		}
+	}
+
+	if changes["workers"] || changes["rate_limit"] {
+		logger.Info("worker pool settings will apply on next rebuild",
+			"workers", newCfg.Daemon.Workers,
+			"rate_limit", newCfg.Daemon.RateLimitPerMin)
+	}
+
+	if changes["skip_patterns"] {
+		logger.Info("skip patterns will apply on next file processing")
+	}
+}
+
+// updateSemanticAnalyzer creates and sets a new semantic analyzer
+func (d *Daemon) updateSemanticAnalyzer(cfg *config.Config) error {
+	if !cfg.Analysis.Enable {
+		d.SetSemanticAnalyzer(nil)
+		return nil
+	}
+
+	client := semantic.NewClient(
+		cfg.Claude.APIKey,
+		cfg.Claude.Model,
+		cfg.Claude.MaxTokens,
+		cfg.Claude.TimeoutSeconds,
+	)
+	analyzer := semantic.NewAnalyzer(
+		client,
+		cfg.Claude.EnableVision,
+		cfg.Analysis.MaxFileSize,
+	)
+
+	d.SetSemanticAnalyzer(analyzer)
+	return nil
+}
+
+// updateLogLevel creates a new logger with the specified log level
+func (d *Daemon) updateLogLevel(cfg *config.Config) error {
+	var logLevel slog.Level
+	switch strings.ToLower(cfg.Daemon.LogLevel) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "info":
+		logLevel = slog.LevelInfo
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		return fmt.Errorf("invalid log level; %s", cfg.Daemon.LogLevel)
+	}
+
+	handler := slog.NewJSONHandler(d.logWriter, &slog.HandlerOptions{
+		Level: logLevel,
+	})
+
+	newLogger := slog.New(handler)
+	d.SetLogger(newLogger)
+
+	return nil
+}
+
+// countChanges counts the number of true values in the changes map
+func countChanges(changes map[string]bool) int {
+	count := 0
+	for _, changed := range changes {
+		if changed {
+			count++
+		}
+	}
+	return count
 }

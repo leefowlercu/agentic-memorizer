@@ -21,6 +21,10 @@ Environment="HOME=/home/%i"
 # Optional: Set Claude API key if not in config file
 # Environment="ANTHROPIC_API_KEY=your-api-key-here"
 
+# Optional: Customize app directory location (default: ~/.agentic-memorizer)
+# Useful for multi-instance setups or custom paths
+# Environment="MEMORIZER_APP_DIR=/custom/path/to/app-dir"
+
 # Restart policy
 Restart=on-failure
 RestartSec=30s

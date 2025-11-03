@@ -303,6 +303,9 @@ agentic-memorizer daemon restart
 # Force immediate rebuild
 agentic-memorizer daemon rebuild
 
+# Reload configuration (hot-reload without restart)
+agentic-memorizer config reload
+
 # View daemon logs
 agentic-memorizer daemon logs              # Last 50 lines
 agentic-memorizer daemon logs -f           # Follow logs
@@ -335,6 +338,8 @@ daemon:
   log_file: ~/.agentic-memorizer/daemon.log
   log_level: info                        # debug, info, warn, error
 ```
+
+**Hot-Reloading**: Most settings can be changed and applied without restarting the daemon using `agentic-memorizer config reload`. Structural settings like `memory_root`, `analysis.cache_dir`, and `daemon.log_file` require a daemon restart
 
 #### Running as a Service
 
@@ -645,6 +650,35 @@ analysis:
 
 Files in the skip list are completely ignored during indexing and won't appear in the generated index.
 
+### Environment Variables
+
+#### MEMORIZER_APP_DIR
+
+By default, configuration and data files are stored in `~/.agentic-memorizer/`. You can customize this location by setting the `MEMORIZER_APP_DIR` environment variable:
+
+```bash
+# Use a custom app directory
+export MEMORIZER_APP_DIR=/path/to/custom/location
+agentic-memorizer initialize
+
+# Or for a single command
+MEMORIZER_APP_DIR=/tmp/test-instance agentic-memorizer daemon start
+```
+
+Files stored in the app directory:
+- `config.yaml` - Configuration file
+- `index.json` - Precomputed index
+- `daemon.pid` - Daemon process ID
+- `daemon.log` - Daemon logs (if configured)
+
+**Use cases:**
+- **Testing**: Run isolated test instances without affecting your main instance
+- **Multi-instance**: Run multiple independent instances for different projects
+- **Containers**: Use custom paths in Docker or other containerized environments
+- **CI/CD**: Isolate build/test environments
+
+**Note**: The memory directory and cache directory locations are still controlled by `config.yaml` settings, not `MEMORIZER_APP_DIR`. Only the application's own files (config, index, PID, logs) use the app directory.
+
 ### Output Formats
 
 The memorizer supports two output formats:
@@ -877,15 +911,39 @@ agentic-memorizer/
 └── testdata/                 # Test files
 ```
 
-### Building
+### Building and Testing
 
 ```bash
-make build      # Build binary
-make install    # Build and install
-make test       # Run tests
-make clean      # Remove build artifacts
-make deps       # Update dependencies
+# Building
+make build             # Build binary (development)
+make build-release     # Build with version information
+make install           # Build and install to ~/.local/bin
+make install-release   # Install release build with version info
+
+# Testing
+make test              # Run unit tests only (fast)
+make test-integration  # Run integration tests only (slower)
+make test-all          # Run all tests (unit + integration)
+make test-race         # Run tests with race detector
+make coverage          # Generate coverage report
+make coverage-html     # Generate and view HTML coverage report
+
+# Code Quality
+make fmt               # Format code with gofmt
+make vet               # Run go vet
+make lint              # Run golangci-lint (if installed)
+make check             # Run all checks (fmt, vet, test-all)
+
+# Utilities
+make clean             # Remove build artifacts
+make clean-cache       # Remove cache files only
+make deps              # Update dependencies
 ```
+
+**Note on tests:**
+- **Unit tests** run by default with `make test` (fast, no external dependencies)
+- **Integration tests** require `-tags=integration` and test full daemon lifecycle
+- Integration tests use `MEMORIZER_APP_DIR` to create isolated test environments
 
 ### Adding New File Type Handlers
 

@@ -25,7 +25,10 @@ var InitializeCmd = &cobra.Command{
 		"The background daemon is required for Agentic Memorizer to function. The daemon " +
 		"maintains a precomputed index for quick startup. Use --with-daemon to start " +
 		"the daemon immediately after initialization, or start it manually later with " +
-		"'agentic-memorizer daemon start'.",
+		"'agentic-memorizer daemon start'.\n\n" +
+		"By default, configuration and data files are stored in ~/.agentic-memorizer/. " +
+		"You can customize this location by setting the MEMORIZER_APP_DIR environment variable " +
+		"before running initialize.",
 	Example: `  # Default initialization (prompts for integrations and daemon)
   agentic-memorizer initialize
 
@@ -84,11 +87,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	withDaemon, _ := cmd.Flags().GetBool("with-daemon")
 	skipDaemon, _ := cmd.Flags().GetBool("skip-daemon")
 
-	home, err := os.UserHomeDir()
+	// Get app directory (respects MEMORIZER_APP_DIR environment variable)
+	appDir, err := config.GetAppDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory; %w", err)
+		return fmt.Errorf("failed to get app directory; %w", err)
 	}
-	configPath := filepath.Join(home, config.AppDirName, config.ConfigFile)
+	configPath := filepath.Join(appDir, config.ConfigFile)
 
 	if memoryRoot == "" {
 		memoryRoot = config.DefaultConfig.MemoryRoot

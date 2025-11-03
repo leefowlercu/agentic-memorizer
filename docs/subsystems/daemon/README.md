@@ -113,9 +113,11 @@ The PID file mechanism also enables CLI commands to interact with the running da
 
 ### Signal Handling
 
-Signal handling enables graceful shutdown and operational commands through UNIX signals. The daemon registers handlers for SIGINT and SIGTERM to trigger graceful shutdown, and SIGUSR1 to trigger an immediate index rebuild.
+Signal handling enables graceful shutdown, operational commands, and configuration reloading through UNIX signals. The daemon registers handlers for multiple signals: SIGINT and SIGTERM trigger graceful shutdown, SIGUSR1 triggers an immediate index rebuild, and SIGHUP triggers configuration reload.
 
 When a shutdown signal is received, the daemon cancels its context to trigger goroutine exits, stops the file watcher, waits for all worker goroutines to complete their current work, and performs cleanup including PID file removal. This ensures that no work is lost and resources are properly released.
+
+Configuration reload via SIGHUP allows hot-reloading of most operational parameters without daemon restart. When SIGHUP is received, the daemon validates the new configuration, checks for immutable field changes, and applies hot-reloadable settings including Claude API configuration, worker pool parameters, rate limits, log level, and health check port. Changes to structural settings like memory_root, cache_dir, or log_file require a daemon restart.
 
 ### Health Monitoring
 
@@ -129,7 +131,7 @@ An optional HTTP health check endpoint serves this information in JSON format, e
 
 The daemon reads configuration at startup from the system configuration file. Configuration options control all aspects of daemon behavior including whether the daemon is enabled, event debounce timing, worker pool size, API rate limits, full rebuild interval, health check endpoint port, log file location, and log level.
 
-Changes to configuration require a daemon restart to take effect. This design choice simplifies configuration management and avoids complex runtime reconfiguration logic while still providing comprehensive control over daemon behavior.
+Most configuration changes can be applied without daemon restart using the `config reload` command or by sending SIGHUP to the daemon process. Hot-reloadable settings include Claude API parameters, worker pool size, rate limits, debounce intervals, log level, health check port, rebuild intervals, and skip patterns. Structural settings that determine process architecture (memory_root, cache_dir, log_file) require a daemon restart. This design provides operational flexibility while maintaining system integrity.
 
 ### Cache System
 
@@ -157,7 +159,7 @@ The walker returns relative paths from the memory directory root, which are then
 
 ### CLI Commands
 
-CLI commands provide the user interface for daemon control. The start command launches the daemon process, the stop command sends SIGTERM to gracefully shut down, the status command checks daemon state and displays index information, the restart command performs stop followed by start, the rebuild command sends SIGUSR1 to trigger an immediate rebuild, and the logs command displays daemon log output with optional follow mode.
+CLI commands provide the user interface for daemon control. The start command launches the daemon process, the stop command sends SIGTERM to gracefully shut down, the status command checks daemon state and displays index information, the restart command performs stop followed by start, the rebuild command sends SIGUSR1 to trigger an immediate rebuild, the logs command displays daemon log output with optional follow mode, and the config reload command validates and applies configuration changes by sending SIGHUP to the running daemon.
 
 These commands interact with the daemon through the PID file and signal-based communication rather than direct API calls. This design keeps the CLI lightweight and ensures that commands can execute quickly without waiting for the daemon to process requests.
 
@@ -193,61 +195,9 @@ After all background work completes, the daemon removes its PID file to indicate
 
 ## Future Enhancements
 
-### Configuration Reload via SIGHUP
+No major enhancements are currently planned for the daemon subsystem. The core architecture is stable and feature-complete for the intended use cases.
 
-A planned enhancement to the daemon subsystem is runtime configuration reloading through the SIGHUP signal. This feature would enable operators to modify daemon configuration without requiring a full restart, reducing downtime and improving operational flexibility.
-
-#### Proposed Behavior
-
-When the daemon receives a SIGHUP signal, it would reload its configuration file and apply changes to runtime parameters where possible. This would allow tuning of operational settings in response to changing workload characteristics or resource availability without interrupting the daemon's operation.
-
-#### Reloadable Configuration
-
-Not all configuration parameters can be safely changed at runtime. The proposed implementation would support reloading of operational parameters while requiring restart for structural changes:
-
-**Safely Reloadable**:
-- Worker pool size (dynamically adjust concurrency)
-- API rate limits (tune based on quota usage)
-- Full rebuild interval (adjust rebuild frequency)
-- Debounce timing (tune event batching)
-- Log level (increase verbosity for debugging)
-- Health check port (enable/disable monitoring endpoint)
-
-**Requires Restart**:
-- Memory directory path (structural change)
-- Daemon enable/disable (lifecycle change)
-- Log file path (resource change)
-- Integration settings (not used by daemon)
-
-#### Implementation Considerations
-
-The implementation would need to address several technical challenges:
-
-**Worker Pool Adjustment**: Dynamically adding or removing workers requires careful coordination to avoid disrupting in-flight jobs. New workers can be added immediately, while worker reduction should wait for current jobs to complete.
-
-**Rate Limit Updates**: The token bucket rate limiter can be updated atomically by replacing the limiter instance, with worker goroutines transparently using the new limits for subsequent API calls.
-
-**Rebuild Interval Changes**: The periodic rebuild ticker can be stopped and recreated with new intervals. Any in-progress rebuild should complete before the new interval takes effect.
-
-**Configuration Validation**: Before applying configuration changes, the new configuration must be validated to ensure it contains valid values. If validation fails, the daemon should log an error and continue operating with the existing configuration.
-
-**Atomic Updates**: Configuration changes should be applied atomically to avoid inconsistent state where some components use old configuration while others use new configuration. This typically requires a configuration object protected by a read-write mutex.
-
-#### Operational Benefits
-
-Runtime configuration reload provides several operational advantages:
-
-**Reduced Downtime**: Tuning parameters can be adjusted without daemon restart, maintaining continuous index availability for agent frameworks.
-
-**Performance Tuning**: Worker count and rate limits can be adjusted in response to observed performance characteristics without interrupting service.
-
-**Debug Support**: Log levels can be increased temporarily for troubleshooting without requiring restart and losing in-memory state.
-
-**Resource Management**: Concurrency and rate limits can be adjusted based on current system load or API quota consumption.
-
-#### Alternative Approaches
-
-An alternative to signal-based reload would be file-based configuration watching, where the daemon monitors its configuration file for changes and automatically reloads when modifications are detected. This approach provides automatic reloading without requiring manual signal sending but adds complexity around file watching and determining when a configuration file is fully written.
+Potential minor improvements that could be considered in the future include file-based configuration watching (automatic reload on config file change without manual signal), metrics export to Prometheus or similar systems, and distributed operation for multi-machine knowledge bases.
 
 ## Glossary
 

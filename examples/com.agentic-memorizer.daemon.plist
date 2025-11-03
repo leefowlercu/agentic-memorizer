@@ -43,6 +43,11 @@
         <!-- Optional: Set Claude API key if not in config file -->
         <!-- <key>ANTHROPIC_API_KEY</key> -->
         <!-- <string>your-api-key-here</string> -->
+
+        <!-- Optional: Customize app directory location (default: ~/.agentic-memorizer) -->
+        <!-- Useful for multi-instance setups or custom paths -->
+        <!-- <key>MEMORIZER_APP_DIR</key> -->
+        <!-- <string>/custom/path/to/app-dir</string> -->
     </dict>
 
     <!-- Working directory -->

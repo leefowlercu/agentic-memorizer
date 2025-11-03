@@ -44,13 +44,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Setup logger
-	logger, err := setupLogger(cfg)
+	logger, logWriter, err := setupLogger(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to setup logger; %w", err)
 	}
 
 	// Create daemon instance
-	d, err := daemon.New(cfg, logger)
+	d, err := daemon.New(cfg, logger, logWriter)
 	if err != nil {
 		return fmt.Errorf("failed to create daemon; %w", err)
 	}
@@ -62,7 +62,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 }
 
 // setupLogger creates a logger based on configuration
-func setupLogger(cfg *config.Config) (*slog.Logger, error) {
+func setupLogger(cfg *config.Config) (*slog.Logger, *lumberjack.Logger, error) {
 	var level slog.Level
 	switch cfg.Daemon.LogLevel {
 	case "debug":
@@ -79,14 +79,15 @@ func setupLogger(cfg *config.Config) (*slog.Logger, error) {
 
 	// Create log file if specified
 	var handler slog.Handler
+	var logWriter *lumberjack.Logger
 	if cfg.Daemon.LogFile != "" {
 		logDir := cfg.Daemon.LogFile[:len(cfg.Daemon.LogFile)-len("/daemon.log")]
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create log directory; %w", err)
+			return nil, nil, fmt.Errorf("failed to create log directory; %w", err)
 		}
 
 		// Use lumberjack for log rotation
-		logWriter := &lumberjack.Logger{
+		logWriter = &lumberjack.Logger{
 			Filename:   cfg.Daemon.LogFile,
 			MaxSize:    10, // megabytes
 			MaxBackups: 3,
@@ -103,5 +104,5 @@ func setupLogger(cfg *config.Config) (*slog.Logger, error) {
 		})
 	}
 
-	return slog.New(handler), nil
+	return slog.New(handler), logWriter, nil
 }

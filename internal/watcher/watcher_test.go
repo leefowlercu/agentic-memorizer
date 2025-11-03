@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -291,4 +292,122 @@ loop:
 	if eventCount < 1 {
 		t.Error("expected at least one event for new directory or file")
 	}
+}
+
+func TestWatcher_DebounceUpdate(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "watcher-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create watcher with initial short debounce (100ms)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	w, err := New(tmpDir, []string{}, []string{}, 100, logger)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	t.Run("update to longer interval", func(t *testing.T) {
+		// Update to longer debounce interval (500ms)
+		w.UpdateDebounceInterval(500)
+
+		// Give the update time to apply
+		time.Sleep(50 * time.Millisecond)
+
+		testFile := filepath.Join(tmpDir, "test1.txt")
+
+		// Create rapid file changes
+		for i := 0; i < 5; i++ {
+			if err := os.WriteFile(testFile, []byte(fmt.Sprintf("content-%d", i)), 0644); err != nil {
+				t.Fatalf("failed to write file: %v", err)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+
+		// With 500ms debounce, all changes should batch into one event
+		// Wait slightly longer than debounce interval
+		time.Sleep(600 * time.Millisecond)
+
+		// Should receive exactly one batched event
+		eventCount := 0
+		timeout := time.After(100 * time.Millisecond)
+
+	loop1:
+		for {
+			select {
+			case <-w.Events():
+				eventCount++
+			case <-timeout:
+				break loop1
+			}
+		}
+
+		if eventCount == 0 {
+			t.Error("expected at least one event")
+		}
+		if eventCount > 2 {
+			// Allow up to 2 events due to timing uncertainty
+			t.Errorf("expected events to be batched, got %d events", eventCount)
+		}
+	})
+
+	t.Run("update to shorter interval", func(t *testing.T) {
+		// Update to very short debounce (50ms)
+		w.UpdateDebounceInterval(50)
+
+		// Give the update time to apply
+		time.Sleep(100 * time.Millisecond)
+
+		testFile := filepath.Join(tmpDir, "test2.txt")
+
+		// Create file changes with gaps longer than debounce
+		for i := 0; i < 3; i++ {
+			if err := os.WriteFile(testFile, []byte(fmt.Sprintf("content-%d", i)), 0644); err != nil {
+				t.Fatalf("failed to write file: %v", err)
+			}
+			time.Sleep(100 * time.Millisecond) // Wait longer than 50ms debounce
+		}
+
+		// With 50ms debounce and 100ms waits, should get multiple events
+		// Wait for all events to arrive
+		time.Sleep(200 * time.Millisecond)
+
+		eventCount := 0
+		timeout := time.After(100 * time.Millisecond)
+
+	loop2:
+		for {
+			select {
+			case <-w.Events():
+				eventCount++
+			case <-timeout:
+				break loop2
+			}
+		}
+
+		if eventCount < 2 {
+			// Should get at least 2 separate events with short debounce
+			t.Errorf("expected multiple events with short debounce, got %d", eventCount)
+		}
+	})
+
+	t.Run("channel full handling", func(t *testing.T) {
+		// The UpdateDebounceInterval method should be non-blocking
+		// even if called many times rapidly
+
+		for i := 0; i < 10; i++ {
+			w.UpdateDebounceInterval(100 + i*10)
+		}
+
+		// Should not hang or panic
+		time.Sleep(50 * time.Millisecond)
+	})
 }

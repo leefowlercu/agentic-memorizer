@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-11-03
+
+### Fixed
+- **Initialization command daemon startup** - Fixed bug where selecting "yes" to start daemon during `initialize` didn't actually start or enable it
+  - Daemon is now properly enabled in configuration (`daemon.enabled: true`) before startup
+  - Improved startup verification with retry logic to confirm daemon started successfully
+  - Better error visibility - startup errors are now shown to users instead of silently suppressed
+  - Success message displays daemon PID and verification command
+
 ## [0.8.0] - 2025-11-03
 
 ### Added
@@ -396,7 +405,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.0...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.5.0...v0.6.0

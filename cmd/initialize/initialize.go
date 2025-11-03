@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
@@ -142,7 +143,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	daemonStarted := false
-	if err := handleDaemonSetup(withDaemon, skipDaemon, &daemonStarted); err != nil {
+	if err := handleDaemonSetup(withDaemon, skipDaemon, configPath, &daemonStarted); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
 	}
 
@@ -229,7 +230,7 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 	return nil
 }
 
-func handleDaemonSetup(withDaemon, skipDaemon bool, daemonStarted *bool) error {
+func handleDaemonSetup(withDaemon, skipDaemon bool, configPath string, daemonStarted *bool) error {
 	*daemonStarted = false
 
 	if skipDaemon {
@@ -281,27 +282,64 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, daemonStarted *bool) error {
 			}
 		}
 
-		// Start daemon using timeout to prevent hanging
-		cmd := fmt.Sprintf("timeout 5 %s daemon start > /dev/null 2>&1 &", binaryPath)
-		if err := os.WriteFile("/tmp/start-daemon.sh", []byte("#!/bin/bash\n"+cmd), 0755); err != nil {
-			return fmt.Errorf("failed to create daemon start script; %w", err)
+		// Load the config file we just created
+		if err := config.InitConfig(); err != nil {
+			return fmt.Errorf("failed to initialize config; %w", err)
 		}
 
-		// Execute the script
-		execCmd := "/bin/bash"
-		args := []string{"/tmp/start-daemon.sh"}
-		process, err := os.StartProcess(execCmd, args, &os.ProcAttr{
-			Files: []*os.File{nil, nil, nil},
-		})
+		cfg, err := config.GetConfig()
 		if err != nil {
+			return fmt.Errorf("failed to load config; %w", err)
+		}
+
+		// Enable the daemon in configuration
+		cfg.Daemon.Enabled = true
+
+		// Write updated config back to disk
+		if err := config.WriteConfig(configPath, cfg); err != nil {
+			return fmt.Errorf("failed to update config with daemon.enabled=true; %w", err)
+		}
+
+		// Start daemon in background
+		cmd := exec.Command(binaryPath, "daemon", "start")
+
+		// Start the command but don't wait for it
+		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("failed to start daemon; %w\nStart daemon manually: agentic-memorizer daemon start", err)
 		}
 
-		// Don't wait for the daemon to finish
-		process.Release()
+		// Don't wait for the daemon process to finish (it will run in background)
+		// Just release the process so it doesn't become a zombie
+		go func() {
+			cmd.Wait()
+		}()
 
-		fmt.Printf("✓ Background daemon started\n")
-		*daemonStarted = true
+		// Wait for daemon to start and verify
+		// Try up to 8 times with 500ms between attempts (total 4 seconds)
+		for i := 0; i < 8; i++ {
+			time.Sleep(500 * time.Millisecond)
+
+			if _, err := os.Stat(pidFile); err == nil {
+				data, err := os.ReadFile(pidFile)
+				if err == nil && len(data) > 0 {
+					var pid int
+					if _, err := fmt.Sscanf(string(data), "%d", &pid); err == nil && pid > 0 {
+						// PID file exists with valid PID - daemon started
+						fmt.Printf("✓ Background daemon started (PID %d)\n", pid)
+						fmt.Printf("  Verify with: agentic-memorizer daemon status\n")
+						*daemonStarted = true
+						return nil
+					}
+				}
+			}
+		}
+
+		// Daemon didn't start successfully after 4 seconds
+		// This is just a warning - daemon might still be starting
+		fmt.Printf("⚠ Daemon start command executed but verification timed out\n")
+		fmt.Printf("  Check daemon status: agentic-memorizer daemon status\n")
+		*daemonStarted = false
+		return nil // Don't return error - daemon might still be starting
 	}
 
 	return nil

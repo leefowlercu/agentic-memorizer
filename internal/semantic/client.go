@@ -65,10 +65,10 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 		shouldRetry := false
 		switch resp.StatusCode {
 		case http.StatusTooManyRequests, // 429 rate limit
-			http.StatusInternalServerError,     // 500
-			http.StatusBadGateway,               // 502
-			http.StatusServiceUnavailable,       // 503
-			http.StatusGatewayTimeout:           // 504
+			http.StatusInternalServerError, // 500
+			http.StatusBadGateway,          // 502
+			http.StatusServiceUnavailable,  // 503
+			http.StatusGatewayTimeout:      // 504
 			shouldRetry = true
 		}
 
@@ -84,8 +84,8 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 }
 
 type Message struct {
-	Role    string        `json:"role"`
-	Content []any `json:"content"`
+	Role    string `json:"role"`
+	Content []any  `json:"content"`
 }
 
 type TextContent struct {

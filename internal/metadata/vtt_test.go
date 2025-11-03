@@ -15,7 +15,7 @@ func TestVTTHandler_CanHandle(t *testing.T) {
 	}{
 		{"vtt", ".vtt", true},
 		{"srt", ".srt", true},
-		{"sub", ".sub", false},  // Not handled by VTTHandler based on code
+		{"sub", ".sub", false}, // Not handled by VTTHandler based on code
 		{"txt", ".txt", false},
 		{"empty", "", false},
 	}

@@ -15,7 +15,7 @@ func TestPptxHandler_CanHandle(t *testing.T) {
 		expected bool
 	}{
 		{"pptx", ".pptx", true},
-		{"ppt", ".ppt", false},  // Not handled by PptxHandler
+		{"ppt", ".ppt", false}, // Not handled by PptxHandler
 		{"key", ".key", false},
 		{"txt", ".txt", false},
 		{"empty", "", false},
@@ -35,14 +35,14 @@ func TestPptxHandler_Extract(t *testing.T) {
 	handler := &PptxHandler{}
 
 	tests := []struct {
-		name             string
-		path             string
-		expectError      bool
-		expectedType     string
-		expectedCat      string
-		expectedRead     bool
-		expectedAuthor   string
-		expectedSlides   int
+		name           string
+		path           string
+		expectError    bool
+		expectedType   string
+		expectedCat    string
+		expectedRead   bool
+		expectedAuthor string
+		expectedSlides int
 	}{
 		{
 			name:           "valid pptx file",

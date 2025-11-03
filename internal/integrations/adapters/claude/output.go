@@ -11,10 +11,10 @@ import (
 
 // SessionStartOutput represents the Claude Code SessionStart hook response format
 type SessionStartOutput struct {
-	Continue       bool                 `json:"continue"`
-	SuppressOutput bool                 `json:"suppressOutput"`
-	SystemMessage  string               `json:"systemMessage,omitempty"`
-	HookSpecific   *HookSpecificOutput  `json:"hookSpecificOutput,omitempty"`
+	Continue       bool                `json:"continue"`
+	SuppressOutput bool                `json:"suppressOutput"`
+	SystemMessage  string              `json:"systemMessage,omitempty"`
+	HookSpecific   *HookSpecificOutput `json:"hookSpecificOutput,omitempty"`
 }
 
 // HookSpecificOutput contains the hook-specific output data

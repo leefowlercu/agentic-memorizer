@@ -18,8 +18,8 @@ func TestImageHandler_CanHandle(t *testing.T) {
 		{"jpeg", ".jpeg", true},
 		{"gif", ".gif", true},
 		{"webp", ".webp", true},
-		{"svg", ".svg", false},  // SVG not handled by ImageHandler
-		{"bmp", ".bmp", false},  // BMP not handled by ImageHandler
+		{"svg", ".svg", false}, // SVG not handled by ImageHandler
+		{"bmp", ".bmp", false}, // BMP not handled by ImageHandler
 		{"txt", ".txt", false},
 		{"empty", "", false},
 	}
@@ -38,13 +38,13 @@ func TestImageHandler_Extract(t *testing.T) {
 	handler := &ImageHandler{}
 
 	tests := []struct {
-		name          string
-		path          string
-		expectError   bool
-		expectedType  string
-		expectedCat   string
-		expectedRead  bool
-		expectedWidth int
+		name           string
+		path           string
+		expectError    bool
+		expectedType   string
+		expectedCat    string
+		expectedRead   bool
+		expectedWidth  int
 		expectedHeight int
 	}{
 		{

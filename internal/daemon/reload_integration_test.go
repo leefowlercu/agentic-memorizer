@@ -66,9 +66,15 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			EnableVision:   false,
 			TimeoutSeconds: 30,
 		},
+		Output: config.OutputConfig{
+			Format:         "xml",
+			Verbose:        false,
+			ShowRecentDays: 7,
+		},
 		Analysis: config.AnalysisConfig{
 			Enable:      false, // Disable analysis for faster tests
 			MaxFileSize: 1024 * 1024,
+			Parallel:    2, // Match daemon workers
 			CacheDir:    cacheDir,
 		},
 		Daemon: config.DaemonConfig{
@@ -167,7 +173,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 	}
 
 	// Set semantic analyzer to nil (analysis disabled for tests)
-	d.semanticAnalyzer.Store((*interface{})(nil))
+	d.SetSemanticAnalyzer(nil)
 
 	return d, nil
 }
@@ -286,10 +292,11 @@ func TestDaemon_ReloadConfig_ImmutableFieldRejection(t *testing.T) {
 		t.Fatalf("failed to create daemon: %v", err)
 	}
 
-	// Try to change memory_root (immutable field)
-	if err := env.UpdateConfig(func(cfg *config.Config) {
-		cfg.MemoryRoot = "/different/path"
-	}); err != nil {
+	// Create a modified copy of config and write it to file
+	// Important: Don't modify env.Config directly, as the daemon holds a reference to it
+	modifiedCfg := *env.Config // Shallow copy
+	modifiedCfg.MemoryRoot = "/different/path"
+	if err := config.WriteConfig(env.ConfigPath, &modifiedCfg); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
 

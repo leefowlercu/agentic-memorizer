@@ -5,12 +5,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	// configMu protects InitConfig from concurrent access
+	// This is necessary because viper uses global state
+	configMu sync.Mutex
+)
+
 func InitConfig() error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	// Reset viper state to force fresh config read during reload
+	// This clears cached config values and allows reading updated config files
+	viper.Reset()
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 

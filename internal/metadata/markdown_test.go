@@ -34,13 +34,13 @@ func TestMarkdownHandler_Extract(t *testing.T) {
 	handler := &MarkdownHandler{}
 
 	tests := []struct {
-		name            string
-		path            string
-		expectError     bool
-		expectedType    string
-		expectedCat     string
-		expectedRead    bool
-		minWordCount    int
+		name             string
+		path             string
+		expectError      bool
+		expectedType     string
+		expectedCat      string
+		expectedRead     bool
+		minWordCount     int
 		expectedSections []string
 	}{
 		{

@@ -1,12 +1,12 @@
 package config
 
 type Config struct {
-	MemoryRoot   string              `mapstructure:"memory_root" yaml:"memory_root"`
-	Claude       ClaudeConfig        `mapstructure:"claude" yaml:"claude"`
-	Output       OutputConfig        `mapstructure:"output" yaml:"output"`
-	Analysis     AnalysisConfig      `mapstructure:"analysis" yaml:"analysis"`
-	Daemon       DaemonConfig        `mapstructure:"daemon" yaml:"daemon"`
-	Integrations IntegrationsConfig  `mapstructure:"integrations" yaml:"integrations"`
+	MemoryRoot   string             `mapstructure:"memory_root" yaml:"memory_root"`
+	Claude       ClaudeConfig       `mapstructure:"claude" yaml:"claude"`
+	Output       OutputConfig       `mapstructure:"output" yaml:"output"`
+	Analysis     AnalysisConfig     `mapstructure:"analysis" yaml:"analysis"`
+	Daemon       DaemonConfig       `mapstructure:"daemon" yaml:"daemon"`
+	Integrations IntegrationsConfig `mapstructure:"integrations" yaml:"integrations"`
 }
 
 type ClaudeConfig struct {
@@ -46,8 +46,8 @@ type DaemonConfig struct {
 
 // IntegrationsConfig represents the complete integrations configuration section
 type IntegrationsConfig struct {
-	Enabled []string                       `mapstructure:"enabled" yaml:"enabled"`
-	Configs map[string]IntegrationConfig  `mapstructure:"configs" yaml:"configs"`
+	Enabled []string                     `mapstructure:"enabled" yaml:"enabled"`
+	Configs map[string]IntegrationConfig `mapstructure:"configs" yaml:"configs"`
 }
 
 // IntegrationConfig represents the configuration for a specific integration

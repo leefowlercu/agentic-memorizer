@@ -131,8 +131,6 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	pidFile, err := config.GetPIDPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get PID path: %w", err)
@@ -158,6 +156,9 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 
 	// Create health metrics tracker
 	healthMetrics := NewHealthMetrics()
+
+	// Create context after all fallible operations to avoid leaks on early returns
+	ctx, cancel := context.WithCancel(context.Background())
 
 	d := &Daemon{
 		cfg:               cfg,
@@ -709,7 +710,7 @@ func (d *Daemon) detectChanges(oldCfg, newCfg *config.Config) map[string]bool {
 		"health_port":      newCfg.Daemon.HealthCheckPort != oldCfg.Daemon.HealthCheckPort,
 		"workers":          newCfg.Daemon.Workers != oldCfg.Daemon.Workers,
 		"rate_limit":       newCfg.Daemon.RateLimitPerMin != oldCfg.Daemon.RateLimitPerMin,
-		"skip_patterns":    !reflect.DeepEqual(newCfg.Analysis.SkipFiles, oldCfg.Analysis.SkipFiles) ||
+		"skip_patterns": !reflect.DeepEqual(newCfg.Analysis.SkipFiles, oldCfg.Analysis.SkipFiles) ||
 			!reflect.DeepEqual(newCfg.Analysis.SkipExtensions, oldCfg.Analysis.SkipExtensions),
 	}
 }

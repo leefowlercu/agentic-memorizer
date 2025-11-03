@@ -29,18 +29,18 @@ type Event struct {
 
 // Watcher watches a directory for file changes
 type Watcher struct {
-	rootPath            string
-	skipDirs            []string
-	skipFiles           []string
-	debounceMs          int
-	fsWatcher           *fsnotify.Watcher
-	logger              *slog.Logger
-	eventChan           chan Event
-	batchedEvents       map[string]Event
-	eventMu             sync.Mutex
-	stopChan            chan struct{}
-	wg                  sync.WaitGroup
-	debounceIntervalCh  chan time.Duration // For updating debounce interval
+	rootPath           string
+	skipDirs           []string
+	skipFiles          []string
+	debounceMs         int
+	fsWatcher          *fsnotify.Watcher
+	logger             *slog.Logger
+	eventChan          chan Event
+	batchedEvents      map[string]Event
+	eventMu            sync.Mutex
+	stopChan           chan struct{}
+	wg                 sync.WaitGroup
+	debounceIntervalCh chan time.Duration // For updating debounce interval
 }
 
 // New creates a new file system watcher

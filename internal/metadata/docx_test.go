@@ -14,7 +14,7 @@ func TestDocxHandler_CanHandle(t *testing.T) {
 		expected bool
 	}{
 		{"docx", ".docx", true},
-		{"doc", ".doc", false},  // Not handled by DocxHandler
+		{"doc", ".doc", false}, // Not handled by DocxHandler
 		{"txt", ".txt", false},
 		{"empty", "", false},
 	}

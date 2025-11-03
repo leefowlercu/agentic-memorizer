@@ -1,16 +1,22 @@
 # Agentic Memorizer
 
-A local file 'memorizer' for Claude Code and Claude Agents that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis.
+A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code and manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
 ## Overview
 
-Agentic Memorizer provides Claude Code and Claude Agents with persistent, semantic awareness of your local files. Instead of manually managing which files to include in context or repeatedly explaining what files exist, Claude automatically receives a comprehensive, AI-powered index showing what files you have, what they contain, their purpose, and how to access them.
+Agentic Memorizer provides AI agents with persistent, semantic awareness of your local files. Instead of manually managing which files to include in context or repeatedly explaining what files exist, your AI agent automatically receives a comprehensive, AI-powered index showing what files you have, what they contain, their purpose, and how to access them.
+
+Works seamlessly with Claude Code (automatic setup), Cursor AI, Continue.dev, Aider, Cline, and any custom framework that can execute shell commands.
 
 ### How It Works
 
-A background daemon continuously watches your designated memory directory (`~/.agentic-memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when Claude Code starts.
+A background daemon continuously watches your designated memory directory (`~/.agentic-memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
 
-When you launch Claude Code, a SessionStart hook loads the precomputed index into Claude's context. Claude can then:
+When you launch your AI agent, the precomputed index is loaded into its context:
+- **Claude Code**: SessionStart hooks automatically load the index
+- **Other frameworks**: Configure your agent to run the read command on startup
+
+Your AI agent can then:
 - **Discover** what files exist without you listing them
 - **Understand** file content and purpose before reading them
 - **Decide** which files to access based on semantic relevance
@@ -41,11 +47,11 @@ When you launch Claude Code, a SessionStart hook loads the precomputed index int
 - Automatic metadata extraction for all file types
 
 **Integration:**
-- Seamless Claude Code integration via SessionStart hooks
-- Support for multiple agent frameworks (Claude Code, Continue.dev, Cline, Aider, Cursor)
-- Automatic setup for Claude Code, manual instructions for others
+- Framework-agnostic with native support for multiple AI agent frameworks
+- Automatic setup for Claude Code via SessionStart hooks
+- Manual integration for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks
 - Configurable output formats (XML, Markdown, JSON)
-- Integration management commands for easy setup and configuration
+- Integration management commands for detection, setup, validation, and health checks
 - Optional health monitoring and logging
 
 ## Why Use This?
@@ -58,10 +64,63 @@ When you launch Claude Code, a SessionStart hook loads the precomputed index int
 
 **You get:**
 - ✓ Automatic file awareness on every session
-- ✓ Smart, on-demand file access (Claude decides what to read)
+- ✓ Smart, on-demand file access (AI agent decides what to read)
 - ✓ Semantic understanding of content before reading
 - ✓ Efficient token usage (only index, not full content)
 - ✓ Works across sessions with persistent cache
+
+## Supported AI Agent Frameworks
+
+Agentic Memorizer integrates with multiple AI agent frameworks, providing either automatic setup or manual integration instructions.
+
+### Automatic Integration (Native Support)
+
+**Claude Code** - Full automatic integration with one-command setup
+- Automatic framework detection (checks for `~/.claude` directory)
+- One-command setup: `agentic-memorizer integrations setup claude-code`
+- SessionStart hook configuration with all matchers (startup, resume, clear, compact)
+- XML output with JSON envelope wrapping for proper hook formatting
+- Full lifecycle management (setup, update, remove, validate)
+
+### Manual Integration (Configuration Required)
+
+The following frameworks require manual configuration file editing. The `integrations setup` command provides detailed, framework-specific instructions:
+
+**Cursor AI** - Manual configuration with context file or custom commands
+- Command: `agentic-memorizer integrations setup cursor`
+- Provides setup instructions for context files or custom commands
+- Markdown output (optimized for readability)
+
+**Continue.dev** - Manual configuration via context providers
+- Command: `agentic-memorizer integrations setup continue`
+- Provides setup instructions for Continue config file (`~/.continue/config.json`)
+- Markdown output (optimized for readability)
+
+**Aider** - Manual integration via shell alias or command execution
+- Command: `agentic-memorizer integrations setup aider`
+- Provides setup instructions for shell aliases or pre-session commands
+- Markdown output (optimized for readability)
+
+**Cline** - Manual configuration via VS Code settings
+- Command: `agentic-memorizer integrations setup cline`
+- Provides setup instructions for Cline extension settings
+- Markdown output (optimized for readability)
+
+**Custom Frameworks** - Generic integration for any framework
+- Works with any agent that can execute shell commands
+- XML, Markdown, or JSON output formats available
+- Just needs ability to execute commands and capture output
+
+### Framework Comparison
+
+| Feature | Claude Code | Cursor/Continue/Aider/Cline |
+|---------|-------------|----------------------------|
+| **Setup Type** | Automatic | Manual |
+| **Detection** | Automatic | Not available |
+| **Config Modification** | Automatic | User-performed |
+| **Output Format** | XML (JSON-wrapped) | Markdown (default) |
+| **Validation** | Automatic | Manual |
+| **Maintenance** | One command | User-maintained |
 
 ## Architecture
 
@@ -71,14 +130,19 @@ When you launch Claude Code, a SessionStart hook loads the precomputed index int
 2. **File Processing** automatically extracts metadata and performs semantic analysis via Claude API
 3. **Smart Caching** stores analyses keyed by file hash (only re-analyzes when files change)
 4. **Precomputed Index** maintains `~/.agentic-memorizer/index.json` with all file information
-5. **SessionStart Hook** triggers `read` command when Claude Code starts
-6. **Index Read** loads and formats the precomputed index for Claude's context
+5. **Integration Layer** provides framework-specific output formatting:
+   - **Claude Code**: SessionStart hooks trigger `read` command automatically
+   - **Other Frameworks**: User-configured commands/hooks trigger `read` command
+6. **Index Read** loads precomputed index and formats for target framework:
+   - **Claude Code**: XML wrapped in SessionStart JSON envelope
+   - **Cursor/Continue/Aider/Cline**: Markdown (default) or XML/JSON
+   - **Custom**: Any format (XML/Markdown/JSON)
 
-The daemon handles all the heavy lifting in the background, so Claude Code startup remains quick regardless of how many files you have.
+The daemon handles all the heavy lifting in the background, so AI agent startup remains quick regardless of how many files you have.
 
 ## Quick Start
 
-Get up and running quickly:
+Get up and running quickly with your AI agent:
 
 ### 1. Install
 
@@ -92,37 +156,71 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-### 3. Initialize with Daemon and Hooks
+### 3. Choose Your Integration Path
+
+#### Path A: Claude Code (Automatic Integration)
+
+For Claude Code users, automatic setup configures everything for you:
 
 ```bash
-agentic-memorizer init --setup-integrations --with-daemon
+agentic-memorizer initialize --setup-integrations --with-daemon
 ```
 
 This will:
 - Create config at `~/.agentic-memorizer/config.yaml`
 - Create memory directory at `~/.agentic-memorizer/memory/`
-- Configure Claude Code SessionStart hooks automatically
+- **Automatically configure Claude Code SessionStart hooks** (no manual editing required)
 - Start the background daemon for automatic indexing
+
+**Skip to step 4 below.**
+
+#### Path B: Other Frameworks (Manual Integration)
+
+For Cursor AI, Continue.dev, Aider, or Cline:
+
+```bash
+# Initialize without automatic integration
+agentic-memorizer initialize --with-daemon
+```
+
+This creates the config and starts the daemon. Then get framework-specific setup instructions:
+
+```bash
+# Get setup instructions for your framework
+agentic-memorizer integrations setup cursor      # For Cursor AI
+agentic-memorizer integrations setup continue    # For Continue.dev
+agentic-memorizer integrations setup aider       # For Aider
+agentic-memorizer integrations setup cline       # For Cline
+```
+
+Each command provides detailed instructions on where to add the memory index command in your framework's configuration. **Follow those instructions before proceeding to step 4.**
 
 ### 4. Add Files to Memory
 
 ```bash
-# Add any files you want Claude to be aware of
+# Add any files you want your AI agent to be aware of
 cp ~/important-notes.md ~/.agentic-memorizer/memory/
 cp ~/project-docs/*.pdf ~/.agentic-memorizer/memory/documents/
 ```
 
 The daemon will automatically detect and index these files.
 
-### 5. Start Claude Code
+### 5. Start Your AI Agent
 
+**Claude Code:**
 ```bash
 claude
 ```
 
-Claude now automatically knows about all files in your memory directory!
+Claude automatically loads the memory index via SessionStart hooks.
+
+**Other Frameworks:**
+
+Start your agent normally. The memory index will load based on the configuration you set up in step 3.
 
 ---
+
+Your AI agent now automatically knows about all files in your memory directory!
 
 For detailed installation options, configuration, and advanced usage, see the sections below.
 
@@ -132,7 +230,7 @@ For detailed installation options, configuration, and advanced usage, see the se
 
 - Go 1.25.1 or later
 - Claude API key ([get one here](https://console.anthropic.com/))
-- Claude Code (or a Claude Agent that loads settings from `~/.claude/settings.json`) installed
+- An AI agent framework: Claude Code, Cursor AI, Continue.dev, Aider, or Cline
 
 ### Build and Install
 
@@ -142,14 +240,14 @@ For detailed installation options, configuration, and advanced usage, see the se
 go install github.com/leefowlercu/agentic-memorizer@latest
 ```
 
-Then run the init command to set up configuration:
+Then run the initialize command to set up configuration:
 
 ```bash
 # Interactive setup (prompts for hooks and daemon)
-agentic-memorizer init
+agentic-memorizer initialize
 
 # Or with flags for automated setup
-agentic-memorizer init --setup-integrations --with-daemon
+agentic-memorizer initialize --setup-integrations --with-daemon
 ```
 
 This creates:
@@ -158,7 +256,7 @@ This creates:
 - Cache directory at `~/.agentic-memorizer/.cache/` (for semantic analysis cache)
 - Index file at `~/.agentic-memorizer/index.json` (created by daemon on first run)
 
-The init command can optionally:
+The initialize command can optionally:
 - Configure Claude Code SessionStart hooks automatically (`--setup-integrations`)
 - Start the background daemon immediately (`--with-daemon`)
 - Both are recommended for the best experience
@@ -198,36 +296,44 @@ claude:
 
 ```bash
 # Custom memory directory
-agentic-memorizer init --memory-root ~/my-memory
+agentic-memorizer initialize --memory-root ~/my-memory
 
 # Custom cache directory
-agentic-memorizer init --cache-dir ~/my-memory/.cache
+agentic-memorizer initialize --cache-dir ~/my-memory/.cache
 
 # Force overwrite existing config
-agentic-memorizer init --force
+agentic-memorizer initialize --force
 ```
 
-### Configure Claude Code Hook
+## Integration Setup
+
+### Claude Code Integration (Automatic)
+
+Claude Code enjoys full automatic integration support with one-command setup.
 
 #### Automatic Setup (Recommended)
 
-The easiest way to set up hooks is to use the `--setup-integrations` flag during initialization:
-
 ```bash
-agentic-memorizer init --setup-integrations
+agentic-memorizer integrations setup claude-code
 ```
 
-This will:
-- Auto-detect the binary location
-- Configure all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`)
-- Preserve any existing hooks you have configured
-- Add the `read --format xml --integration claude-code` command for proper Claude Code integration
+This command automatically:
+1. Detects your Claude Code installation (`~/.claude/` directory)
+2. Creates or updates `~/.claude/settings.json`
+3. Preserves existing settings (won't overwrite other configurations)
+4. Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
+5. Configures the command: `agentic-memorizer read --format xml --integration claude-code`
+6. Creates backup at `~/.claude/settings.json.backup`
 
-You can also run the init command without flags and it will prompt you to set up hooks interactively.
+You can also use the `--setup-integrations` flag during initialization:
 
-#### Manual Setup
+```bash
+agentic-memorizer initialize --setup-integrations --with-daemon
+```
 
-Alternatively, add to `~/.claude/settings.json`:
+#### Manual Setup (Alternative)
+
+If you prefer manual configuration, add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -248,27 +354,419 @@ Alternatively, add to `~/.claude/settings.json`:
 }
 ```
 
-**Note**: Include all four SessionStart matchers (`startup`, `resume`, `clear`, `compact`) to ensure the memory index loads throughout your session lifecycle. Each matcher should use the same command: `agentic-memorizer read --format xml --integration claude-code`.
+**Note**: Include all four SessionStart matchers to ensure the memory index loads throughout your session lifecycle.
 
-### Using with Claude Agents
+#### Validation
 
-For [Claude Agents](https://docs.claude.com/en/api/agent-sdk/overview):
-
-1. Ensure the `agentic-memorizer` program is installed and configured on the same machine running the agent
-2. Ensure the background daemon is running: `agentic-memorizer daemon start`
-3. Configure your agent to run: `agentic-memorizer read --format xml --integration claude-code` on SessionStart Hook
-
-### Using with Other AI Agents
-
-The Agentic Memorizer works with any system that can execute shell commands and capture output. Make sure:
-
-1. The program is installed and configured
-2. The background daemon is running: `agentic-memorizer daemon start`
-3. Your agent runs this command and adds output to context:
+Verify your setup:
 
 ```bash
-agentic-memorizer read --format <xml|markdown>
+agentic-memorizer integrations validate
 ```
+
+#### Removal
+
+Remove the integration:
+
+```bash
+agentic-memorizer integrations remove claude-code
+```
+
+### Cursor AI Integration (Manual)
+
+Cursor AI requires manual configuration.
+
+#### Setup Instructions
+
+Get framework-specific instructions:
+
+```bash
+agentic-memorizer integrations setup cursor
+```
+
+#### Option A: Context File Generation
+
+Configure a script to regenerate context file:
+
+```bash
+#!/bin/bash
+agentic-memorizer read --format markdown > ~/.cursor/memory-context.md
+```
+
+Add to Cursor's context sources:
+- File path: `~/.cursor/memory-context.md`
+- Auto-reload: Enabled
+
+#### Option B: Custom Command
+
+If Cursor supports custom commands, add:
+
+```json
+{
+  "customCommands": [
+    {
+      "name": "Load Memory",
+      "command": "agentic-memorizer read --format markdown"
+    }
+  ]
+}
+```
+
+**Output Format**: Cursor works best with **Markdown** output (default for this integration).
+
+### Continue.dev Integration (Manual)
+
+Continue.dev requires manual configuration file editing.
+
+#### Setup Instructions
+
+Get framework-specific instructions:
+
+```bash
+agentic-memorizer integrations setup continue
+```
+
+#### Configuration
+
+1. Locate your Continue configuration (typically `~/.continue/config.json` or `.continue/config.json` in your workspace)
+
+2. Add a context provider for agentic-memorizer:
+
+```json
+{
+  "contextProviders": [
+    {
+      "name": "agentic-memory",
+      "params": {
+        "command": "agentic-memorizer read --format markdown"
+      }
+    }
+  ]
+}
+```
+
+3. Restart Continue.dev
+
+#### Usage in Continue
+
+In Continue chat, reference the memory index:
+
+```
+@agentic-memory What files do I have about API design?
+```
+
+**Output Format**: Continue works best with **Markdown** output (default for this integration).
+
+### Aider Integration (Manual)
+
+Aider can access the memory index via shell integration.
+
+#### Setup Instructions
+
+Get framework-specific instructions:
+
+```bash
+agentic-memorizer integrations setup aider
+```
+
+#### Option A: Shell Alias (Recommended)
+
+Add to your shell profile (`~/.bashrc`, `~/.zshrc`):
+
+```bash
+alias aider-with-memory='agentic-memorizer read --format markdown && aider'
+```
+
+Usage:
+
+```bash
+aider-with-memory
+```
+
+#### Option B: Manual Command
+
+Before starting Aider, run:
+
+```bash
+agentic-memorizer read --format markdown > /tmp/memory-index.md
+```
+
+Then in Aider:
+
+```
+/add /tmp/memory-index.md
+```
+
+**Output Format**: Aider works best with **Markdown** output (default for this integration).
+
+### Cline Integration (Manual)
+
+Cline requires manual configuration via VS Code settings.
+
+#### Setup Instructions
+
+Get framework-specific instructions:
+
+```bash
+agentic-memorizer integrations setup cline
+```
+
+#### Configuration
+
+1. Locate your Cline configuration (typically in VS Code settings under Cline extension)
+
+2. Add a startup command or context provider:
+
+```json
+{
+  "cline.contextCommands": [
+    {
+      "name": "Load Memory Index",
+      "command": "agentic-memorizer read --format markdown"
+    }
+  ]
+}
+```
+
+3. Configure Cline to run this command on session start or manually trigger it
+
+#### Usage in Cline
+
+Run the memory index command via Cline's command palette or configure it to run automatically on startup.
+
+**Output Format**: Cline works best with **Markdown** output (default for this integration).
+
+### Custom Framework Integration
+
+Any AI agent framework that can execute shell commands can integrate with agentic-memorizer.
+
+#### Requirements
+
+Your framework must be able to:
+1. Execute shell commands
+2. Capture command output (stdout)
+3. Add output to the agent's context
+
+#### Setup
+
+1. Determine how your framework executes commands at startup or on-demand
+
+2. Configure it to run:
+
+```bash
+agentic-memorizer read --format <xml|markdown|json>
+```
+
+3. Choose output format based on your framework:
+   - **XML**: Best for programmatic parsing, structured data
+   - **Markdown**: Best for human readability, LLM consumption
+   - **JSON**: Best for programmatic integration, custom parsing
+
+#### Example Integration Patterns
+
+**Pattern 1: Startup Hook**
+
+```json
+{
+  "onStartup": {
+    "commands": [
+      "agentic-memorizer read --format markdown"
+    ]
+  }
+}
+```
+
+**Pattern 2: Context Provider**
+
+```json
+{
+  "contextProviders": [
+    {
+      "name": "memory",
+      "command": "agentic-memorizer read --format markdown"
+    }
+  ]
+}
+```
+
+**Pattern 3: Manual Command**
+
+Add a custom agent command that runs:
+
+```bash
+agentic-memorizer read --format markdown
+```
+
+Then invoke it when needed:
+
+```
+@memory What files do I have?
+```
+
+#### Testing Your Integration
+
+1. Ensure daemon is running:
+
+```bash
+agentic-memorizer daemon status
+```
+
+2. Test command output:
+
+```bash
+agentic-memorizer read --format markdown
+```
+
+3. Verify your framework captures and displays the output
+
+## Managing Integrations
+
+The `integrations` command group provides comprehensive tools for managing integrations with various AI agent frameworks.
+
+### List Available Integrations
+
+```bash
+agentic-memorizer integrations list
+```
+
+Shows all registered integrations with their status and configuration:
+
+**Example Output:**
+
+```
+✓ claude-code
+  Description: Claude Code integration with automatic SessionStart hook setup
+  Version:     1.0.0
+  Status:      configured
+
+○ cursor
+  Description: Cursor AI integration (manual setup required)
+  Version:     1.0.0
+  Status:      not configured
+
+○ continue
+  Description: Continue.dev integration (manual setup required)
+  Version:     1.0.0
+  Status:      not configured
+
+○ aider
+  Description: Aider integration (manual setup required)
+  Version:     1.0.0
+  Status:      not configured
+
+○ cline
+  Description: Cline integration (manual setup required)
+  Version:     1.0.0
+  Status:      not configured
+```
+
+### Detect Installed Frameworks
+
+Automatically detect which agent frameworks are installed on your system:
+
+```bash
+agentic-memorizer integrations detect
+```
+
+**Example Output:**
+
+```
+Detected Frameworks:
+  ✓ claude-code (installed at ~/.claude)
+```
+
+Checks for framework-specific configuration directories and files.
+
+### Setup an Integration
+
+#### Claude Code (Automatic)
+
+```bash
+# Basic setup
+agentic-memorizer integrations setup claude-code
+
+# With custom binary path
+agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer
+```
+
+For Claude Code, this automatically:
+- Detects the Claude settings file (`~/.claude/settings.json`)
+- Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
+- Configures the correct command with `--integration claude-code` flag
+- Preserves existing settings and creates backup
+
+#### Other Frameworks (Manual Instructions)
+
+```bash
+# Get framework-specific setup instructions
+agentic-memorizer integrations setup cursor      # Cursor AI
+agentic-memorizer integrations setup continue    # Continue.dev
+agentic-memorizer integrations setup aider       # Aider
+agentic-memorizer integrations setup cline       # Cline
+```
+
+Each command provides detailed manual setup instructions specific to that framework, including:
+- Where to find the framework's configuration file
+- What configuration to add
+- Example configuration snippets
+- Recommended output format
+
+### Remove an Integration
+
+```bash
+agentic-memorizer integrations remove claude-code
+```
+
+Removes the integration configuration from the framework's settings file. For Claude Code, this:
+- Removes SessionStart hooks added by agentic-memorizer
+- Preserves other hooks and settings
+- Creates backup before modification
+
+### Validate Configurations
+
+Check that all configured integrations are properly set up:
+
+```bash
+agentic-memorizer integrations validate
+```
+
+**Example Output:**
+
+```
+Validating integrations...
+  ✓ claude-code: Valid (settings file exists, hooks configured)
+```
+
+Validates:
+- Configuration file exists and is readable
+- Integration-specific settings are properly formatted
+- Required commands are configured
+
+### Health Check
+
+Comprehensive health check including both detection and validation:
+
+```bash
+agentic-memorizer integrations health
+```
+
+**Example Output:**
+
+```
+Framework Detection:
+  ✓ claude-code (installed at ~/.claude)
+
+Configuration Validation:
+  ✓ claude-code: Valid (settings file exists, hooks configured)
+
+Overall Status: Healthy (1/1 configured integrations valid)
+```
+
+Performs:
+- Framework installation detection
+- Configuration file validation
+- Integration setup verification
+- Overall health status summary
 
 ## Usage
 
@@ -283,7 +781,7 @@ The background daemon is the core of Agentic Memorizer. It maintains a precomput
 agentic-memorizer daemon start
 ```
 
-**Note**: If you used `init --setup-integrations --with-daemon`, the daemon and hooks are already configured. Otherwise, make sure your hooks call `agentic-memorizer read --format xml --integration claude-code`.
+**Note**: If you used `init --setup-integrations --with-daemon`, the daemon and integration are already configured. Otherwise, configure your AI agent framework to call `agentic-memorizer read` (see Integration Setup section above).
 
 #### Daemon Commands
 
@@ -440,7 +938,7 @@ agentic-memorizer daemon start
 agentic-memorizer read
 ```
 
-This outputs the index (XML by default) that Claude Code receives from SessionStart hooks. The daemon must be running (or have completed at least one indexing cycle) for the index file to exist.
+This outputs the index (XML by default) that AI agents receive. The daemon must be running (or have completed at least one indexing cycle) for the index file to exist.
 
 ### CLI Usage
 
@@ -448,7 +946,7 @@ This outputs the index (XML by default) that Claude Code receives from SessionSt
 
 ```bash
 # Initialize config and memory directory
-agentic-memorizer init [flags]
+agentic-memorizer initialize [flags]
 
 # Manage background daemon
 agentic-memorizer daemon start
@@ -467,7 +965,7 @@ agentic-memorizer integrations validate
 
 # Get help
 agentic-memorizer --help
-agentic-memorizer init --help
+agentic-memorizer initialize --help
 agentic-memorizer daemon --help
 agentic-memorizer read --help
 agentic-memorizer integrations --help
@@ -493,7 +991,7 @@ agentic-memorizer integrations --help
 
 ```bash
 # Initialize with daemon
-agentic-memorizer init --with-daemon
+agentic-memorizer initialize --with-daemon
 
 # Read index (XML format)
 agentic-memorizer read
@@ -535,65 +1033,6 @@ agentic-memorizer integrations remove claude-code
 agentic-memorizer integrations validate
 ```
 
-### Managing Integrations
-
-The `integrations` command group provides tools for managing integrations with various AI agent frameworks.
-
-**List Available Integrations:**
-
-```bash
-agentic-memorizer integrations list
-```
-
-Shows all registered integrations, including:
-- Claude Code (automatic setup)
-- Continue.dev (manual setup)
-- Cline (manual setup)
-- Aider (manual setup)
-- Cursor AI (manual setup)
-- Custom integrations
-
-**Detect Installed Frameworks:**
-
-```bash
-agentic-memorizer integrations detect
-```
-
-Automatically detects which agent frameworks are installed on your system by checking for their configuration files.
-
-**Setup an Integration:**
-
-```bash
-# Setup Claude Code (automatic)
-agentic-memorizer integrations setup claude-code
-
-# Setup with custom binary path
-agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer
-```
-
-For Claude Code, this automatically:
-- Detects the Claude settings file (`~/.claude/settings.json`)
-- Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
-- Configures the correct command with `--integration claude-code` flag
-
-For generic integrations (Continue, Cline, Aider, Cursor), this provides manual setup instructions with the exact command to add to your framework's configuration.
-
-**Remove an Integration:**
-
-```bash
-agentic-memorizer integrations remove claude-code
-```
-
-Removes the integration configuration from the framework's settings.
-
-**Validate Configurations:**
-
-```bash
-agentic-memorizer integrations validate
-```
-
-Checks that all configured integrations are properly set up and their configuration files are valid.
-
 ### Controlling Semantic Analysis
 
 Semantic analysis can be enabled or disabled in `config.yaml`:
@@ -620,7 +1059,7 @@ When disabled, the daemon will only extract file metadata without semantic analy
 - PowerPoint (`.pptx`)
 - PDFs (`.pdf`)
 
-The index tells Claude Code which method to use for each file.
+The index tells your AI agent which method to use for each file.
 
 ## Configuration Options
 
@@ -995,13 +1434,15 @@ Set your API key in config or environment:
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-### Index not appearing in Claude Code
+### Index not appearing in AI agent
 
 1. Verify daemon is running: `agentic-memorizer daemon status`
-2. Check hooks are configured in `~/.claude/settings.json` with `read` command
+2. Check your framework's integration configuration:
+   - **Claude Code**: Check `~/.claude/settings.json` has SessionStart hooks configured
+   - **Other frameworks**: Verify you followed the setup instructions from `agentic-memorizer integrations setup <framework-name>`
 3. Verify binary path is correct (`~/.local/bin/agentic-memorizer` or `~/go/bin/agentic-memorizer`)
 4. Test manually: `agentic-memorizer read`
-5. Check Claude Code terminal output for errors
+5. Check your AI agent's output/logs for errors
 
 ### Reducing resource usage
 

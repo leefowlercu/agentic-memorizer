@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-11-03
+
+### Added
+- **Version command and flag** for displaying version information
+  - `version` subcommand (`agentic-memorizer version`) for standalone version display
+  - `--version` persistent flag available at root and all command levels
+  - `-v` short flag alias for convenient access
+  - Multi-line detailed format showing version, commit hash, and build timestamp
+  - Enhanced version package with `GetGitCommit()` and `GetBuildDate()` getter functions
+  - Custom version template for Cobra integration with consistent formatting
+  - Updated Makefile `install-release` target to verify installation with version command
+
+### Fixed
+- **Integration test configuration** missing required fields
+  - Added `Output` section with `Format: "xml"` to test environment configuration
+  - Added `Analysis.Parallel: 2` field to match daemon workers in test setup
+  - Prevents validation errors during integration test execution
+- **Mutex copy bug** in health metrics system
+  - Created separate `HealthSnapshot` struct without mutex for safe copying and serialization
+  - Changed `GetSnapshot()` return type from `HealthMetrics` to `HealthSnapshot`
+  - Eliminates `go vet` warning about copying `sync.RWMutex` which violates concurrency semantics
+- **Context leak** in daemon initialization
+  - Moved `context.WithCancel()` creation to after all fallible operations
+  - Ensures `cancel()` function is only created when initialization will succeed
+  - Prevents resource leaks on early returns during daemon startup
+- **Concurrent map writes** in viper configuration system
+  - Added package-level mutex to protect `InitConfig()` from concurrent access
+  - Added `viper.Reset()` to clear cached config state during reload
+  - Prevents fatal concurrent map writes when multiple goroutines reload configuration
+- **Type assertion panic** in integration tests
+  - Changed from direct `atomic.Value.Store()` to proper `SetSemanticAnalyzer()` API method
+  - Ensures type safety with atomic.Value requiring correct concrete types
+- **Immutable field validation** in reload integration test
+  - Fixed test to create config copy before writing to file
+  - Prevents unintended modification of daemon's in-memory config reference
+  - Now correctly detects and rejects immutable field changes during reload
+
 ## [0.7.0] - 2025-11-03
 
 ### Added
@@ -359,7 +396,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.7.0...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.3...v0.5.0

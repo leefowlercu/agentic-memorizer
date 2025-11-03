@@ -221,7 +221,7 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 
 		if setupCount > 0 {
 			fmt.Printf("\n✓ Configured %d integration(s)\n", setupCount)
-			fmt.Printf("  Binary path: %s\n\n", binaryPath)
+			fmt.Printf("  Binary path: %s\n", binaryPath)
 		} else {
 			fmt.Printf("\nNo integrations were configured successfully.\n\n")
 		}

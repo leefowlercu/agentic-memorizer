@@ -7,6 +7,141 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-11-03
+
+### Added
+- **Configuration hot-reload mechanism** for live updates without daemon restart
+  - `config reload` command for manual configuration reload with validation
+  - SIGHUP signal handler for graceful reload (compatible with systemd/launchd)
+  - Atomic reload with multi-stage validation and automatic rollback on errors
+  - Dynamic worker pool reconfiguration (rate limiter, worker count changes)
+  - File watcher reconfiguration with automatic directory re-monitoring
+  - Thread-safe reload implementation using RWMutex and atomic.Value
+  - Best-effort component updates with detailed logging
+  - Hot-reloadable settings: workers, rate limit, log level, health port, debounce interval, rebuild interval, Claude API settings
+  - Restart-required settings (validated against changes): memory root, cache directory, log file path
+- **MEMORIZER_APP_DIR environment variable** for custom application directory
+  - Override default `~/.agentic-memorizer/` location for config, index, PID, logs
+  - Path safety validation preventing directory traversal attacks
+  - Home directory (`~`) expansion support for portable configurations
+  - Use cases: testing isolation, multi-instance deployments, Docker containers, CI/CD pipelines
+  - Documented in README with usage examples and init system integration
+- **Comprehensive test suite** (1,951+ lines of new tests)
+  - Configuration loading and validation unit tests (`internal/config/config_test.go` - 247 lines)
+  - Configuration reload validation tests (`internal/config/reload_test.go` - 291 lines with 13 test scenarios)
+  - Daemon lifecycle and thread-safety tests (`internal/daemon/daemon_test.go` - 689 lines with 23 test scenarios)
+  - Full reload integration tests (`internal/daemon/reload_integration_test.go` - 603 lines with 11 test scenarios)
+  - File watcher debounce update tests (`internal/watcher/watcher_test.go` - 119 additional lines)
+  - Build tag separation (`//go:build !integration` for unit tests, `//go:build integration` for integration tests)
+  - Test isolation using MEMORIZER_APP_DIR with isolated temp directories per test
+  - TestEnv helper providing comprehensive test environment setup
+  - All tests pass with race detector (`go test -race ./...`)
+- **Subsystem documentation** (11 comprehensive architectural guides, ~3,500 lines)
+  - `docs/subsystems/README.md` - Index of all subsystems with architectural overview
+  - `docs/subsystems/daemon/README.md` - Daemon orchestration, signal handling, health monitoring, reload mechanism
+  - `docs/subsystems/index-manager/README.md` - Index structure, atomic updates, versioning, schema evolution
+  - `docs/subsystems/file-watcher/README.md` - fsnotify integration, debouncing, event handling, directory monitoring
+  - `docs/subsystems/metadata-extractor/README.md` - Handler pattern, 10 file type extractors, content-specific metadata
+  - `docs/subsystems/cache-manager/README.md` - SHA-256 content hashing, LRU eviction, cache hit optimization
+  - `docs/subsystems/config-manager/README.md` - Layered configuration, validation system, reload mechanism, MEMORIZER_APP_DIR
+  - `docs/subsystems/semantic-analyzer/README.md` - Claude API integration, content routing, vision support
+  - `docs/subsystems/integration-registry/README.md` - Adapter pattern, framework detection, output processors
+  - `docs/subsystems/version/README.md` - Build-time version injection, Makefile integration, semantic versioning
+  - `docs/subsystems/walker/README.md` - Directory traversal, callback pattern, two-tier filtering
+- **Enhanced Makefile targets** for release management and testing
+  - `build-release` - Build with version information (VERSION, GitCommit, BuildDate via ldflags)
+  - `install-release` - Install release build with version info and verification
+  - `test-integration` - Run integration tests separately with `-tags=integration`
+  - `test-all` - Run both unit and integration test suites
+  - `clean-cache` - Remove cache files without cleaning build artifacts
+  - Improved help documentation with clear target descriptions
+  - Version injection pattern: `-ldflags "-X internal/version.Version=$(VERSION)"`
+- **PreRunE input validation pattern** across all CLI commands
+  - Distinguishes user input errors (shows usage) from runtime errors (no usage)
+  - Named validation functions (`validateXxx`) for consistency and maintainability
+  - Sets `cmd.SilenceUsage = true` only after input validation passes
+  - Applied to all daemon subcommands (start, stop, restart, status, rebuild, logs)
+  - Applied to all integration subcommands (list, detect, setup, remove, validate, health)
+  - Applied to all config subcommands (validate, reload)
+  - Improved user experience with contextual help only when appropriate
+- **Init system integration enhancements**
+  - systemd service example updated with `Environment="MEMORIZER_APP_DIR=/custom/path"` directive
+  - launchd plist example updated with `EnvironmentVariables` key for MEMORIZER_APP_DIR
+  - SIGHUP reload support documented for both init systems
+  - Service file templates in `examples/` with comprehensive comments
+
+### Changed
+- **BREAKING**: Renamed `init` command to `initialize` (avoid Go reserved keyword conflict)
+  - Command-line usage: `agentic-memorizer initialize` (was `agentic-memorizer init`)
+  - Package path: `cmd/initialize/` (was `cmd/init/`)
+  - Variable name: `InitializeCmd` (was `InitCmd`)
+  - **Migration path**: Update any scripts, documentation, or automation referencing the old `init` command
+- **Command structure reorganization** following Cobra subcommands pattern
+  - Daemon commands moved from inline to `cmd/daemon/subcommands/` package
+  - Integration commands moved from inline to `cmd/integrations/subcommands/` package
+  - Config commands separated into `cmd/config/` parent and `cmd/config/subcommands/` package
+  - Removed `cmd` prefix aliases in package imports (was `cmddaemon`, now just `daemon`)
+  - Each subcommand in its own file with exported command variable
+  - Parent commands define structure, subcommands implement functionality
+  - Improved code maintainability, discoverability, and organization
+- **Error message formatting standardized** with semicolon separators
+  - Pattern changed: `fmt.Errorf("context; %w", err)` instead of `fmt.Errorf("context: %w", err)`
+  - Rationale: Root command already prefixes all errors with "Error:", semicolon provides cleaner output
+  - Example: `Error: failed to load config; file not found` (was `Error: failed to load config: file not found`)
+  - Applied consistently across entire codebase (~50+ error wrapping sites)
+- **Command help text standardized** with consistent Long description format
+  - Pattern: `"\n[introductory sentence]\n\n[detailed explanation paragraph]"`
+  - Opening newline for clean visual separation in help output
+  - Double newline between introduction and detailed description
+  - String concatenation with `+` operator for natural line breaks
+  - Applied to root, initialize, daemon, config, and integration commands
+  - Professional, consistent appearance across all CLI help output
+- **Daemon signal handling enhanced** with comprehensive reload support
+  - SIGHUP signal triggers configuration reload in dedicated goroutine
+  - Improved graceful shutdown coordination for SIGINT/SIGTERM
+  - SIGUSR1 triggers manual rebuild as before
+  - Better error propagation during signal-triggered operations
+  - Signal handler logs all received signals for debugging
+- **Configuration system** respects MEMORIZER_APP_DIR throughout
+  - `GetAppDir()` checks environment variable first, then defaults to `~/.agentic-memorizer`
+  - Path safety validation (`SafePath()`) applied to custom app directories
+  - Home directory expansion (`~`) supported in MEMORIZER_APP_DIR values
+  - `InitConfig()` adds custom app directory to viper config search path
+  - All path helper functions (`GetIndexPath()`, `GetPIDPath()`) use `GetAppDir()`
+- **README documentation significantly expanded**
+  - New "Environment Variables" section explaining MEMORIZER_APP_DIR with use cases
+  - Updated "Building and Testing" section distinguishing unit vs integration tests
+  - Enhanced init system integration examples showing environment variable usage
+  - Clarified daemon reload mechanism and hot-reloadable vs restart-required settings
+  - Updated development workflow with new Makefile targets
+  - Added note about integration test isolation via MEMORIZER_APP_DIR
+
+### Removed
+- **Outdated and WIP documentation** (7 files, ~7,000+ lines removed)
+  - `docs/wip/agent-framework-decoupling.md` (3,518 lines) - superseded by integration registry subsystem docs
+  - `docs/wip/background-index-computation-plan.md` (1,551 lines) - superseded by daemon subsystem docs
+  - `docs/wip/init-system-integration.md` (1,719 lines) - superseded by examples and daemon docs
+  - `docs/architecture.md` (506 lines) - superseded by comprehensive subsystem documentation
+  - `docs/integrations/claude-code.md` (406 lines) - superseded by integration registry docs
+  - `docs/integrations/custom.md` (643 lines) - superseded by integration registry docs
+  - `docs/integrations/generic.md` (441 lines) - superseded by integration registry docs
+  - Replaced with structured, comprehensive subsystem documentation in `docs/subsystems/`
+
+### Fixed
+- Configuration reload safety with proper validation and rollback
+  - Worker pool correctly reconfigures rate limiter during reload without dropping jobs
+  - File watcher successfully reconfigures debounce timing and re-monitors directories
+  - No race conditions during concurrent reload attempts (protected by config RWMutex)
+  - Validation errors prevent partial configuration application (atomic swap pattern)
+- Test isolation prevents interference between integration test runs
+  - Each test gets isolated temporary directory via `t.TempDir()`
+  - MEMORIZER_APP_DIR ensures no collision with production daemon or other tests
+  - Proper cleanup of test resources (temp dirs, goroutines, HTTP servers)
+- Init system service examples properly support SIGHUP reload
+  - systemd service includes commented Environment directive
+  - launchd plist includes commented EnvironmentVariables key
+  - Both examples document reload signal handling
+
 ## [0.6.0] - 2025-11-01
 
 ### Added
@@ -224,7 +359,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.6.0...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.4.2...v0.4.3

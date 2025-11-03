@@ -10,7 +10,7 @@ User=%i
 Group=%i
 
 # Path to the agentic-memorizer binary
-ExecStart=/usr/local/bin/agentic-memorizer daemon start
+ExecStart=/home/%i/.local/bin/agentic-memorizer daemon start
 
 # Working directory (where config is read from)
 WorkingDirectory=/home/%i

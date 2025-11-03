@@ -9,7 +9,7 @@
     <!-- Program to run -->
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/agentic-memorizer</string>
+        <string>/Users/YOUR_USERNAME/.local/bin/agentic-memorizer</string>
         <string>daemon</string>
         <string>start</string>
     </array>

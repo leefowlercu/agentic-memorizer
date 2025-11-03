@@ -190,7 +190,10 @@ output:
 Validate your config after making changes:
 
 ```bash
-# Check daemon can start with config
+# Validate config file syntax and settings
+agentic-memorizer config validate
+
+# Check if daemon is running
 agentic-memorizer daemon status
 
 # Check read command works

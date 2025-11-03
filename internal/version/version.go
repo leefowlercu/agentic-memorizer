@@ -25,3 +25,13 @@ func GetVersion() string {
 func GetShortVersion() string {
 	return Version
 }
+
+// GetGitCommit returns the git commit hash
+func GetGitCommit() string {
+	return GitCommit
+}
+
+// GetBuildDate returns the build date
+func GetBuildDate() string {
+	return BuildDate
+}

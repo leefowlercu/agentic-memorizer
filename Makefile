@@ -43,7 +43,7 @@ install-release: build-release ## Install release build with version info
 	@echo "✅ Installed $(VERSION) to $(INSTALL_PATH)"
 	@echo ""
 	@echo "Verify installation:"
-	@$(INSTALL_PATH) --version 2>/dev/null || echo "  Run 'agentic-memorizer daemon status' to see version"
+	@$(INSTALL_PATH) version
 
 test: ## Run unit tests only (fast)
 	@echo "Running unit tests..."

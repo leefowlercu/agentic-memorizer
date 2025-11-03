@@ -9,7 +9,9 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/initialize"
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations"
 	"github.com/leefowlercu/agentic-memorizer/cmd/read"
+	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	configint "github.com/leefowlercu/agentic-memorizer/internal/config"
+	versionint "github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,8 @@ var memorizerCmd = &cobra.Command{
 		"quick startup for agent sessions. Files are automatically indexed and semantically analyzed " +
 		"in the background, with the index available via the 'read' command for framework hooks or tools.",
 	PersistentPreRunE: runInit,
+	// Set custom version output
+	Version: getVersionString(),
 }
 
 func init() {
@@ -30,6 +34,18 @@ func init() {
 	memorizerCmd.AddCommand(read.ReadCmd)
 	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
 	memorizerCmd.AddCommand(config.ConfigCmd)
+	memorizerCmd.AddCommand(version.VersionCmd)
+
+	// Customize version output template to use multi-line format
+	memorizerCmd.SetVersionTemplate(getVersionString() + "\n")
+}
+
+// getVersionString returns the version information in multi-line format
+func getVersionString() string {
+	return fmt.Sprintf("Version: %s\nCommit:  %s\nBuilt:   %s",
+		versionint.GetShortVersion(),
+		versionint.GetGitCommit(),
+		versionint.GetBuildDate())
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

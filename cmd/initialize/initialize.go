@@ -7,12 +7,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var InitializeCmd = &cobra.Command{
@@ -129,6 +131,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 	cfg.MemoryRoot = memoryRoot
 	cfg.Analysis.CacheDir = cacheDir
 
+	// Prompt for API key configuration
+	apiKey, err := promptForAPIKey()
+	if err != nil {
+		return fmt.Errorf("failed to prompt for API key; %w", err)
+	}
+
+	// Track whether API key was configured (for Next Steps display)
+	apiKeyConfigured := apiKey != "" || os.Getenv("ANTHROPIC_API_KEY") != ""
+
+	// Set API key in config if provided (empty means using env var)
+	if apiKey != "" {
+		cfg.Claude.APIKey = apiKey
+	}
+
 	if err := config.WriteConfig(configPath, &cfg); err != nil {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
@@ -148,18 +164,107 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\nNext steps:\n")
-	fmt.Printf("1. Set your Claude API key: export ANTHROPIC_API_KEY=\"your-key-here\"\n")
-	fmt.Printf("2. Add files to %s\n", memoryRoot)
+	stepNum := 1
+	if !apiKeyConfigured {
+		fmt.Printf("%d. Set your Claude API key: export ANTHROPIC_API_KEY=\"your-key-here\"\n", stepNum)
+		stepNum++
+	}
+	fmt.Printf("%d. Add files to %s\n", stepNum, memoryRoot)
+	stepNum++
 	if daemonStarted {
-		fmt.Printf("3. Daemon is running in background (check status: agentic-memorizer daemon status)\n")
-		fmt.Printf("4. Start using your agent framework!\n")
+		fmt.Printf("%d. Daemon is running in background (check status: agentic-memorizer daemon status)\n", stepNum)
+		stepNum++
+		fmt.Printf("%d. Start using your agent framework!\n", stepNum)
 	} else {
-		fmt.Printf("3. Recommended: Start the background daemon:\n")
+		fmt.Printf("%d. Recommended: Start the background daemon:\n", stepNum)
 		fmt.Printf("   agentic-memorizer daemon start\n")
-		fmt.Printf("4. Or use on-demand indexing: agentic-memorizer\n")
+		stepNum++
+		fmt.Printf("%d. Or use on-demand indexing: agentic-memorizer\n", stepNum)
 	}
 
 	return nil
+}
+
+// promptForAPIKey prompts the user for Claude API key configuration
+// Returns the API key to be written to config (empty string if using env var)
+func promptForAPIKey() (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	// Check if ANTHROPIC_API_KEY is already set
+	existingKey := os.Getenv("ANTHROPIC_API_KEY")
+	if existingKey != "" {
+		fmt.Printf("\nClaude API key detected in ANTHROPIC_API_KEY environment variable.\n")
+		fmt.Printf("Use existing API key? [Y/n]: ")
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("failed to read input; %w", err)
+		}
+
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response != "n" && response != "no" {
+			// User wants to use the existing env var
+			fmt.Printf("Using ANTHROPIC_API_KEY from environment.\n")
+			return existingKey, nil
+		}
+	}
+
+	// Prompt for configuration method
+	fmt.Printf("\nHow would you like to configure your Claude API key?\n")
+	fmt.Printf("1. Use environment variable (ANTHROPIC_API_KEY)\n")
+	fmt.Printf("2. Enter API key directly (will be stored in config file)\n")
+	fmt.Printf("3. Skip (configure later)\n")
+	fmt.Printf("\nEnter your choice [1/2/3]: ")
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read input; %w", err)
+	}
+
+	response = strings.TrimSpace(response)
+
+	switch response {
+	case "1", "":
+		// Use environment variable
+		if existingKey == "" {
+			fmt.Printf("\nUsing environment variable reference.\n")
+			fmt.Printf("Remember to set: export ANTHROPIC_API_KEY=\"your-key-here\"\n")
+		} else {
+			fmt.Printf("\nUsing ANTHROPIC_API_KEY environment variable reference.\n")
+		}
+		return "", nil
+
+	case "2":
+		// Direct API key entry with masked input
+		fmt.Printf("\nEnter your Claude API key (input will be hidden): ")
+
+		// Read password (masked input)
+		bytepw, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Println() // Print newline after password input
+		if err != nil {
+			return "", fmt.Errorf("failed to read API key; %w", err)
+		}
+
+		apiKey := strings.TrimSpace(string(bytepw))
+		if apiKey == "" {
+			fmt.Printf("No API key entered. Falling back to environment variable reference.\n")
+			return "", nil
+		}
+
+		fmt.Printf("API key configured and will be stored in config file.\n")
+		return apiKey, nil
+
+	case "3":
+		// Skip
+		fmt.Printf("\nSkipping API key configuration.\n")
+		fmt.Printf("You can configure it later by:\n")
+		fmt.Printf("  - Setting environment variable: export ANTHROPIC_API_KEY=\"your-key\"\n")
+		fmt.Printf("  - Editing config file and adding claude.api_key\n")
+		return "", nil
+
+	default:
+		fmt.Printf("Invalid choice. Skipping API key configuration.\n")
+		return "", nil
+	}
 }
 
 func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
@@ -298,6 +403,26 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, configPath string, daemonSta
 		// Write updated config back to disk
 		if err := config.WriteConfig(configPath, cfg); err != nil {
 			return fmt.Errorf("failed to update config with daemon.enabled=true; %w", err)
+		}
+
+		// Validate API key is configured
+		if cfg.Claude.APIKey == "" {
+			fmt.Printf("\n⚠ Warning: No Claude API key configured\n")
+			fmt.Printf("The daemon will start but semantic analysis will be skipped.\n")
+			fmt.Printf("Set ANTHROPIC_API_KEY environment variable or add api_key to config.\n\n")
+
+			fmt.Printf("Continue starting daemon without API key? [y/N]: ")
+			reader := bufio.NewReader(os.Stdin)
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input; %w", err)
+			}
+
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				fmt.Printf("\nDaemon start cancelled. Configure API key and try again.\n")
+				return nil
+			}
 		}
 
 		// Start daemon in background

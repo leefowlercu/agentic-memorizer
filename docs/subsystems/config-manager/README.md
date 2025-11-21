@@ -198,10 +198,9 @@ Configures Claude API integration:
 - `TimeoutSeconds` - API request timeout (default: 30 seconds)
 
 **OutputConfig Structure:**
-Controls output format and verbosity:
+Controls output format and recent activity:
 - `Format` - Output format: xml, markdown, or json (default: xml)
-- `Verbose` - Enable verbose logging for debugging (default: false)
-- `ShowRecentDays` - Filter to files modified in last N days (default: 7)
+- `ShowRecentDays` - Show files modified in last N days in recent activity section (default: 7)
 
 **AnalysisConfig Structure:**
 Configures semantic analysis behavior:

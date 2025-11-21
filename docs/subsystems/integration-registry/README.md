@@ -199,7 +199,7 @@ Each generic adapter provides tailored instructions for configuring its target f
 Output Processors (`internal/integrations/output/`) are independent formatters that render the memory index into different base formats before integration-specific wrapping is applied.
 
 **Processor Interface:**
-All processors implement the `OutputProcessor` interface with a single `Format()` method that accepts an Index, recent days filter, and verbose flag, returning formatted output as a string.
+All processors implement the `OutputProcessor` interface with a single `Format()` method that accepts an Index and returns formatted output as a string. Processors can be configured with Options (e.g., ShowRecentDays filter) at creation time.
 
 #### XML Processor
 

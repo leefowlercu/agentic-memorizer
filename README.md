@@ -1122,7 +1122,6 @@ agentic-memorizer integrations --help
 # Read command flags
 --format <xml|markdown|json>        # Output format
 --integration <name>                # Format for specific integration (claude-code-hook, etc)
---verbose                           # Verbose output
 
 # Init command flags
 --memory-root <dir>                 # Custom memory directory
@@ -1149,9 +1148,6 @@ agentic-memorizer read --format json
 
 # Read with Claude Code integration wrapper (for SessionStart hooks)
 agentic-memorizer read --format xml --integration claude-code
-
-# Verbose output
-agentic-memorizer read --verbose
 
 # Start daemon
 agentic-memorizer daemon start

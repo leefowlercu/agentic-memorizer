@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The daemon uses `daemon.workers` to control parallel processing via worker pool
   - Users should use `daemon.workers` (default: 3) to configure parallel API calls
   - Existing configs with `analysis.parallel` will log a deprecation warning but continue working
+- **Dead configuration and flag** - Removed unused `output.verbose` configuration field and `--verbose` flag
+  - Infrastructure existed (config field, flag, Options struct) but no implementation ever used the value
+  - Setting `--verbose` or `output.verbose: true` had no effect on application behavior
+  - Removed incomplete/abandoned feature to reduce code complexity
 
 ## [0.9.0] - 2025-11-20
 

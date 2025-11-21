@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
@@ -39,10 +40,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config; %w", err)
 	}
 
-	if !cfg.Daemon.Enabled {
-		return fmt.Errorf("daemon is disabled in configuration (set daemon.enabled: true)")
-	}
-
 	// Setup logger
 	logger, logWriter, err := setupLogger(cfg)
 	if err != nil {
@@ -56,9 +53,27 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start daemon (blocks until stopped)
-	fmt.Println("Starting daemon in foreground mode...")
-	fmt.Println("Press Ctrl+C to stop")
-	return d.Start()
+	sm := daemon.DetectServiceManager()
+	managed := daemon.IsServiceManaged()
+
+	if managed {
+		fmt.Println("Starting daemon (service-managed)...")
+	} else {
+		fmt.Println("Starting daemon in foreground mode...")
+		fmt.Println("Press Ctrl+C to stop")
+		fmt.Print(daemon.GetServiceManagerHint(sm))
+	}
+
+	// Start daemon and wrap "already running" errors with helpful context
+	if err := d.Start(); err != nil {
+		// Check if this is an "already running" error
+		if strings.Contains(err.Error(), "daemon already running") {
+			return fmt.Errorf("%w\n\n%s", err, daemon.GetAlreadyRunningHelp())
+		}
+		return err
+	}
+
+	return nil
 }
 
 // setupLogger creates a logger based on configuration

@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,7 @@ func runStop(cmd *cobra.Command, args []string) error {
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("daemon is not running (PID file not found)")
+			return fmt.Errorf("daemon is not running (PID file not found)%s", daemon.GetNotRunningHelp())
 		}
 		return fmt.Errorf("failed to read PID file; %w", err)
 	}
@@ -57,7 +58,7 @@ func runStop(cmd *cobra.Command, args []string) error {
 
 	// Send SIGTERM
 	if err := process.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("failed to signal daemon; %w", err)
+		return fmt.Errorf("failed to signal daemon; %w%s", err, daemon.GetSignalErrorHelp(pid))
 	}
 
 	fmt.Printf("Sent stop signal to daemon (PID %d)\n", pid)

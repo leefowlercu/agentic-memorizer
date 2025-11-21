@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/index"
@@ -245,6 +246,13 @@ func (d *Daemon) Start() error {
 		} else {
 			logger.Info("health check server started", "port", cfg.Daemon.HealthCheckPort)
 		}
+	}
+
+	// Notify systemd we're ready (if running under systemd)
+	if supported, err := daemon.SdNotify(false, daemon.SdNotifyReady); err != nil {
+		logger.Warn("failed to notify systemd", "error", err)
+	} else if supported {
+		logger.Info("notified systemd of readiness")
 	}
 
 	logger.Info("daemon started successfully")

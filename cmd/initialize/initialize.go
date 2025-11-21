@@ -156,9 +156,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Configuration:\n")
-	fmt.Printf("✓ Created configuration file: %s\n", configPath)
-	fmt.Printf("✓ Created memory directory: %s\n", memoryRoot)
-	fmt.Printf("✓ Created cache directory: %s\n", cacheDir)
+	fmt.Printf("  ✓ Created configuration file: %s\n", configPath)
+	fmt.Printf("  ✓ Created memory directory: %s\n", memoryRoot)
+	fmt.Printf("  ✓ Created cache directory: %s\n", cacheDir)
 
 	enabledIntegrations, err := handleIntegrationSetup(setupIntegrations, skipIntegrations)
 	if err != nil {
@@ -246,9 +246,9 @@ func promptForAPIKey() (string, error) {
 		// Use environment variable
 		if existingKey == "" {
 			fmt.Printf("\nUsing environment variable reference.\n")
-			fmt.Printf("Remember to set: export ANTHROPIC_API_KEY=\"your-key-here\"\n")
+			fmt.Printf("Remember to set: export ANTHROPIC_API_KEY=\"your-key-here\"\n\n")
 		} else {
-			fmt.Printf("\nUsing ANTHROPIC_API_KEY environment variable reference.\n")
+			fmt.Printf("\nUsing ANTHROPIC_API_KEY environment variable reference.\n\n")
 		}
 		return "", nil
 
@@ -269,7 +269,7 @@ func promptForAPIKey() (string, error) {
 			return "", nil
 		}
 
-		fmt.Printf("API key configured and will be stored in config file.\n")
+		fmt.Printf("API key configured and will be stored in config file.\n\n")
 		return apiKey, nil
 
 	case "3":
@@ -277,11 +277,11 @@ func promptForAPIKey() (string, error) {
 		fmt.Printf("\nSkipping API key configuration.\n")
 		fmt.Printf("You can configure it later by:\n")
 		fmt.Printf("  - Setting environment variable: export ANTHROPIC_API_KEY=\"your-key\"\n")
-		fmt.Printf("  - Editing config file and adding claude.api_key\n")
+		fmt.Printf("  - Editing config file and adding claude.api_key\n\n")
 		return "", nil
 
 	default:
-		fmt.Printf("Invalid choice. Skipping API key configuration.\n")
+		fmt.Printf("Invalid choice. Skipping API key configuration.\n\n")
 		return "", nil
 	}
 }
@@ -409,7 +409,7 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, configPath string, daemonSta
 			}
 		}
 
-	// Config was already initialized after writing, just get it
+		// Config was already initialized after writing, just get it
 
 		cfg, err := config.GetConfig()
 		if err != nil {

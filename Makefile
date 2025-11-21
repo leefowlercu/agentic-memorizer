@@ -31,10 +31,8 @@ build-release: ## Build with version information
 install: build ## Install the binary (development)
 	@echo "Installing to $(INSTALL_PATH)..."
 	@mkdir -p $(INSTALL_DIR)
-	@# Stop daemon if running to avoid macOS code signing cache issues
 	@$(INSTALL_PATH) daemon stop 2>/dev/null || true
 	@sleep 1
-	@# Use mv to force new inode creation (avoids macOS code signing cache)
 	@mv $(BINARY_NAME) $(INSTALL_PATH).tmp && mv $(INSTALL_PATH).tmp $(INSTALL_PATH)
 	@chmod +x $(INSTALL_PATH)
 	@echo "✅ Installed successfully to $(INSTALL_PATH)"
@@ -44,10 +42,8 @@ install: build ## Install the binary (development)
 install-release: build-release ## Install release build with version info
 	@echo "Installing $(VERSION) to $(INSTALL_PATH)..."
 	@mkdir -p $(INSTALL_DIR)
-	@# Stop daemon if running to avoid macOS code signing cache issues
 	@$(INSTALL_PATH) daemon stop 2>/dev/null || true
 	@sleep 1
-	@# Use mv to force new inode creation (avoids macOS code signing cache)
 	@mv $(BINARY_NAME) $(INSTALL_PATH).tmp && mv $(INSTALL_PATH).tmp $(INSTALL_PATH)
 	@chmod +x $(INSTALL_PATH)
 	@echo "✅ Installed $(VERSION) to $(INSTALL_PATH)"
@@ -57,11 +53,11 @@ install-release: build-release ## Install release build with version info
 	@echo ""
 	@echo "To restart the daemon, run: $(INSTALL_PATH) daemon start"
 
-test: ## Run unit tests only (fast)
+test: ## Run unit tests only
 	@echo "Running unit tests..."
 	@go test -v ./...
 
-test-integration: ## Run integration tests only (slower)
+test-integration: ## Run integration tests only
 	@echo "Running integration tests..."
 	@go test -tags=integration -v ./...
 

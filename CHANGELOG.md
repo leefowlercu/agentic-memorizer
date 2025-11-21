@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-11-20
+
+### Added
+- **MCP Server Implementation** (`cmd/mcp/`, `internal/mcp/`) - Complete Model Context Protocol server for Claude Code integration
+  - New `mcp` command with stdio transport for MCP protocol communication
+  - Three MCP tools exposed: `search_files`, `get_file_metadata`, `list_recent_files`
+  - Semantic search capabilities integrated into MCP tool responses
+  - Protocol-compliant request/response handling with JSON-RPC 2.0
+  - Server lifecycle management (initialize, initialized, shutdown)
+  - Comprehensive logging with configurable log levels
+  - Integration with existing index and metadata subsystems
+- **Semantic Search Subsystem** (`internal/search/`) - Advanced file discovery and ranking
+  - Fuzzy filename matching with configurable threshold (default 0.3)
+  - Tag-based search with partial matching support
+  - Topic-based search across indexed file analysis
+  - Summary text search for content-based discovery
+  - Relevance scoring algorithm combining multiple signals
+  - File category filtering (documents, images, code, etc.)
+  - Results limited and ranked by relevance score
+- **Claude Code MCP Integration** (`internal/integrations/adapters/claude/mcp_adapter.go`)
+  - Dedicated MCP server adapter separate from SessionStart hooks
+  - Automatic `~/.claude.json` configuration management
+  - Environment variable setup for memory root path
+  - Binary path detection and configuration
+  - Health check verification for MCP server connectivity
+- **MCP Configuration Section** - New `mcp` section in config.yaml
+  - `mcp.log_file` - Dedicated MCP server log file path
+  - `mcp.log_level` - Independent log level control (debug, info, warn, error)
+  - Separate from daemon logging for clear operational visibility
+
+### Fixed
+- **MCP integration setup** - Fixed bug where `MEMORIZER_MEMORY_ROOT` environment variable was blank in `~/.claude.json` during `initialize` command
+  - Config is now initialized immediately after writing so integration setup can read config values
+  - MCP server now correctly receives memory root path from freshly initialized configuration
+  - Applies to both `initialize --setup-integrations` and standalone `integrations setup` commands
+- **Stdio transport test** - Fixed newline handling mismatch in MCP transport layer
+  - Tests now correctly expect trimmed output matching implementation behavior
+  - Read() method intentionally strips whitespace for clean JSON parsing
+
+### Changed
+- **Claude Code integration split** - Separated into two distinct integration types
+  - `claude-code-hook` - SessionStart hooks integration (existing functionality)
+  - `claude-code-mcp` - MCP server integration (new functionality)
+  - Users can choose one or both integration methods
+  - Each integration independently configurable and removable
+- **Integration tracking** - Config file now tracks which integrations are configured
+  - `integrations.enabled` list in config.yaml automatically updated by `initialize`, `setup`, and `remove` commands
+  - Provides visibility into configured integrations without checking framework-specific files
+  - Integration-specific settings remain in framework files (~/.claude.json, ~/.claude/settings.json, etc.)
+
+### Removed
+- **integrations.configs section** - Removed unused `configs` map from IntegrationsConfig structure
+  - The `configs` field was never populated and all integration-specific configuration lives in framework files
+  - Streamlines config file structure and eliminates vestigial code
+  - Only `integrations.enabled` list remains for tracking configured integrations
+- **Dead code cleanup** - Removed unused IntegrationConfig type and validation function from config package
+  - Deleted duplicate `IntegrationConfig` type definition from `internal/config/types.go` (integrations package version remains)
+  - Deleted unused `ValidateIntegrationConfig` function from `internal/config/validate.go`
+  - Eliminates confusion about which type definition to use and reduces dead code
+
+## [0.8.2] - 2025-11-05
+
+### Fixed
+- **Makefile installation targets** for macOS code signing compatibility
+  - Added automatic daemon stop before installation to prevent "Killed: 9" errors
+  - Changed from `cp` to `mv` with temporary file pattern to force new inode creation
+  - Prevents macOS code signing cache invalidation issues when replacing running binaries
+  - Added 1-second sleep after daemon stop for clean shutdown
+  - Added user prompt to restart daemon after installation completes
+  - Applied to both `install` and `install-release` targets
+
+### Changed
+- **Interactive initialization command** API key configuration workflow
+  - Added interactive prompt for Claude API key during `initialize` command
+  - Detects existing ANTHROPIC_API_KEY environment variable and offers to use it
+  - Allows users to enter API key directly (stored in config) or reference environment variable
+  - Supports secure password-style input (hidden characters) when entering API key
+  - Enhanced "Next steps" output to conditionally show API key setup based on configuration
+  - Improved user experience with clear options for API key management
+
 ## [0.8.1] - 2025-11-03
 
 ### Fixed
@@ -111,10 +191,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Applied to all config subcommands (validate, reload)
   - Improved user experience with contextual help only when appropriate
 - **Init system integration enhancements**
-  - systemd service example updated with `Environment="MEMORIZER_APP_DIR=/custom/path"` directive
-  - launchd plist example updated with `EnvironmentVariables` key for MEMORIZER_APP_DIR
+  - systemd service support with `Environment="MEMORIZER_APP_DIR=/custom/path"` directive
+  - launchd plist support with `EnvironmentVariables` key for MEMORIZER_APP_DIR
   - SIGHUP reload support documented for both init systems
-  - Service file templates in `examples/` with comprehensive comments
 
 ### Changed
 - **BREAKING**: Renamed `init` command to `initialize` (avoid Go reserved keyword conflict)
@@ -234,9 +313,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - File/directory existence checks
   - Binary path validation with permission verification
   - Output format parsing and validation
-- **Comprehensive documentation and examples**
-  - `examples/config-with-integrations.yaml` - Production configuration example
-  - `examples/README.md` - Guide to all configuration examples
+- **Comprehensive documentation**
+  - Detailed subsystem documentation in `docs/subsystems/`
+  - Integration setup guides and usage instructions
 
 ### Changed
 - **Init command** now uses integration registry
@@ -305,9 +384,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reads precomputed index instead of scanning files
   - Outputs formatted index for agent frameworks
   - Multiple output formats (XML, Markdown)
-- **System service integration examples**
-  - systemd service file (`examples/agentic-memorizer.service`)
-  - macOS launchd plist (`examples/com.agentic-memorizer.daemon.plist`)
+- **System service integration support**
+  - Compatible with systemd (Linux) and launchd (macOS)
+  - Service configuration is platform-specific
 - **Version information system** (`internal/version/`)
   - Version, git commit, and build date tracking
   - Build-time variable injection support
@@ -405,7 +484,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.1...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.6.0...v0.7.0

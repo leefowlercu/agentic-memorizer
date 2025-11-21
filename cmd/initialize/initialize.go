@@ -149,13 +149,32 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
 
+	// Initialize config system to load the freshly written config
+	// This is needed so integration setup can read config values (e.g., memory_root)
+	if err := config.InitConfig(); err != nil {
+		return fmt.Errorf("failed to initialize config; %w", err)
+	}
+
 	fmt.Printf("Configuration:\n")
 	fmt.Printf("✓ Created configuration file: %s\n", configPath)
 	fmt.Printf("✓ Created memory directory: %s\n", memoryRoot)
 	fmt.Printf("✓ Created cache directory: %s\n", cacheDir)
 
-	if err := handleIntegrationSetup(setupIntegrations, skipIntegrations); err != nil {
+	enabledIntegrations, err := handleIntegrationSetup(setupIntegrations, skipIntegrations)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
+	}
+
+	// Update config with enabled integrations list if any were set up
+	if len(enabledIntegrations) > 0 {
+		cfg.Integrations.Enabled = enabledIntegrations
+		if err := config.WriteConfig(configPath, &cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to update config with enabled integrations; %v\n", err)
+		}
+		// Reload config after writing
+		if err := config.InitConfig(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to reload config; %v\n", err)
+		}
 	}
 
 	daemonStarted := false
@@ -267,9 +286,9 @@ func promptForAPIKey() (string, error) {
 	}
 }
 
-func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
+func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) ([]string, error) {
 	if skipIntegrations {
-		return nil
+		return nil, nil
 	}
 
 	// Detect available integrations
@@ -280,7 +299,7 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 		fmt.Printf("\nNo agent frameworks detected on this system.\n")
 		fmt.Printf("Supported integrations: Claude Code, Continue.dev, Cline\n")
 		fmt.Printf("Install an agent framework and run 'agentic-memorizer integrations setup <name>' to configure.\n\n")
-		return nil
+		return nil, nil
 	}
 
 	if !setupIntegrations {
@@ -292,14 +311,13 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
-			return fmt.Errorf("failed to read input; %w", err)
+			return nil, fmt.Errorf("failed to read input; %w", err)
 		}
 
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			fmt.Printf("\nTo set up integrations manually, run:\n")
-			fmt.Printf("  agentic-memorizer integrations setup <integration-name>\n\n")
-			return nil
+			fmt.Printf("\nTo set up integrations manually, run: agentic-memorizer integrations setup <integration-name>\n")
+			return nil, nil
 		}
 		setupIntegrations = true
 	}
@@ -307,11 +325,12 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 	if setupIntegrations {
 		binaryPath, err := findBinaryPath()
 		if err != nil {
-			return fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure integrations", err)
+			return nil, fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure integrations", err)
 		}
 
 		fmt.Printf("\nConfiguring integrations...\n")
 		setupCount := 0
+		enabledIntegrations := []string{}
 
 		for _, integration := range available {
 			fmt.Printf("Setting up %s...\n", integration.GetName())
@@ -322,6 +341,7 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 			}
 			fmt.Printf("  ✓ %s configured\n", integration.GetName())
 			setupCount++
+			enabledIntegrations = append(enabledIntegrations, integration.GetName())
 		}
 
 		if setupCount > 0 {
@@ -330,9 +350,11 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) error {
 		} else {
 			fmt.Printf("\nNo integrations were configured successfully.\n\n")
 		}
+
+		return enabledIntegrations, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 func handleDaemonSetup(withDaemon, skipDaemon bool, configPath string, daemonStarted *bool) error {
@@ -387,10 +409,7 @@ func handleDaemonSetup(withDaemon, skipDaemon bool, configPath string, daemonSta
 			}
 		}
 
-		// Load the config file we just created
-		if err := config.InitConfig(); err != nil {
-			return fmt.Errorf("failed to initialize config; %w", err)
-		}
+	// Config was already initialized after writing, just get it
 
 		cfg, err := config.GetConfig()
 		if err != nil {

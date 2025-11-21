@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
 )
@@ -16,10 +17,10 @@ var SetupCmd = &cobra.Command{
 		"varies by framework but typically involves adding hooks or tools to the framework's " +
 		"configuration files.",
 	Example: `  # Setup Claude Code integration
-  agentic-memorizer integrations setup claude-code
+  agentic-memorizer integrations setup claude-code-hook
 
   # Setup with custom binary path
-  agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer`,
+  agentic-memorizer integrations setup claude-code-hook --binary-path /custom/path/agentic-memorizer`,
 	Args:    cobra.ExactArgs(1),
 	PreRunE: validateSetup,
 	RunE:    runSetup,
@@ -104,6 +105,28 @@ func runSetup(cmd *cobra.Command, args []string) error {
 
 	if err := integration.Setup(binaryPath); err != nil {
 		return fmt.Errorf("failed to setup %s; %w", integrationName, err)
+	}
+
+	// Update config to track this integration as enabled
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config; %w", err)
+	}
+
+	// Add integration to enabled list if not already present
+	integrationExists := false
+	for _, name := range cfg.Integrations.Enabled {
+		if name == integrationName {
+			integrationExists = true
+			break
+		}
+	}
+	if !integrationExists {
+		cfg.Integrations.Enabled = append(cfg.Integrations.Enabled, integrationName)
+		configPath := config.GetConfigPath()
+		if err := config.WriteConfig(configPath, cfg); err != nil {
+			return fmt.Errorf("failed to update config with enabled integration; %w", err)
+		}
 	}
 
 	fmt.Printf("✓ %s integration configured successfully\n", integration.GetName())

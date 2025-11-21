@@ -130,6 +130,12 @@ make validate-config
 
 # Validate configuration
 ./agentic-memorizer config validate
+
+# Hot-reload configuration (non-structural settings)
+./agentic-memorizer config reload
+
+# Start MCP server (for Claude Code integration)
+./agentic-memorizer mcp start
 ```
 
 ## High-Level Architecture
@@ -156,6 +162,17 @@ Jobs flow through a worker pool with priority calculation (recent files first) w
 4. On cache miss: waits for rate limiter token, performs semantic analysis, stores result
 5. Returns index entry with metadata + semantic analysis
 
+### Semantic Search
+
+The search engine (`internal/search/`) provides advanced file discovery for MCP tools:
+- **Fuzzy Filename Matching** - Configurable similarity threshold (default 0.3) for approximate filename searches
+- **Tag-Based Search** - Partial matching against indexed tags
+- **Topic-Based Search** - Search across key topics identified during semantic analysis
+- **Summary Text Search** - Content-based discovery via summary text matching
+- **Relevance Scoring** - Multi-signal ranking algorithm combining match quality across dimensions
+- **Category Filtering** - Optional filtering by file category (documents, images, code, etc.)
+- **Result Ranking** - Returns top N results sorted by relevance score
+
 ### Index Management
 
 The Index Manager (`internal/index/`) maintains the precomputed index with:
@@ -180,17 +197,36 @@ The Integration Registry (`internal/integrations/`) provides framework-agnostic 
 - **Output Processors** - Independent formatters (XML, Markdown, JSON) separate from integration wrapping
 - **Auto-registration** - Adapters register via init() functions
 
-Claude Code integration uses SessionStart hooks with matchers (startup, resume, clear, compact) that wrap XML output in JSON envelope with systemMessage and additionalContext fields.
+Claude Code integration uses two methods:
+1. **SessionStart hooks** (`claude-code-hook`) - Inject full index at session start via hooks with matchers (startup, resume, clear, compact)
+2. **MCP server** (`claude-code-mcp`) - Provide on-demand tools for semantic search and metadata retrieval
+
+Both wrap output appropriately: SessionStart hooks use JSON envelope with systemMessage and additionalContext fields; MCP uses JSON-RPC 2.0 protocol responses.
+
+### MCP Server
+
+The MCP server (`internal/mcp/`) implements Model Context Protocol for tool-based integration:
+- **Protocol Layer** (`internal/mcp/protocol/`) - JSON-RPC 2.0 message types and handlers
+- **Transport Layer** (`internal/mcp/transport/`) - Stdio transport for MCP communication
+- **Server Lifecycle** - Initialize, initialized, shutdown sequence following MCP spec
+- **Tool Integration** - Exposes three tools integrated with index and search:
+  - `search_files` - Semantic search with fuzzy matching, tag/topic/summary search
+  - `get_file_metadata` - Complete file metadata and semantic analysis retrieval
+  - `list_recent_files` - Recently modified files within configurable time window
+- **Logging** - Separate log file and level control via `mcp.log_file` and `mcp.log_level` config
 
 ### Configuration System
 
-The Config Manager (`internal/config/`) implements layered configuration with precedence: defaults → YAML file → environment variables (MEMORIZER_* prefix).
+The Config Manager (`internal/config/`) implements layered configuration with precedence: defaults → YAML file → environment variables (MEMORIZER_* prefix). Supports hot-reload via `config reload` command for non-structural settings.
 
 Key configuration sections:
 - `claude` - API credentials, model selection, vision toggle, timeouts
 - `analysis` - Enable flag, file size limits, skip patterns, cache directory
 - `daemon` - Workers, debounce timing, rate limits, rebuild intervals, health check port
 - `integrations` - Per-framework settings with type, output format, custom settings
+- `mcp` - MCP server log file path, log level (separate from daemon logging)
+
+Settings requiring daemon restart: `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file`.
 
 Validation uses error accumulation pattern (collects all errors before failing) with structured ValidationError providing field, rule, message, suggestion, and value.
 
@@ -198,7 +234,7 @@ Validation uses error accumulation pattern (collects all errors before failing) 
 
 ### Subsystem Independence
 
-Each major subsystem (`internal/daemon/`, `internal/metadata/`, `internal/semantic/`, `internal/cache/`, `internal/index/`, `internal/config/`, `internal/integrations/`) operates independently with clean boundaries. The daemon orchestrates but doesn't tightly couple to implementation details.
+Each major subsystem (`internal/daemon/`, `internal/metadata/`, `internal/semantic/`, `internal/cache/`, `internal/index/`, `internal/config/`, `internal/integrations/`, `internal/watcher/`, `internal/walker/`, `internal/mcp/`, `internal/search/`, `internal/version/`) operates independently with clean boundaries. The daemon orchestrates but doesn't tightly couple to implementation details.
 
 ### Separation of Metadata and Semantics
 
@@ -220,6 +256,8 @@ The project uses Go's standard testing package with table-based tests where appr
 - **Integration adapters** - Test registration, detection, and output formatting
 - **Worker pool** - Tests parallel processing, cache integration, priority ordering
 - **Configuration** - Tests validation rules, error accumulation, path safety
+- **MCP server** - Tests JSON-RPC 2.0 protocol implementation, tool handlers
+- **Semantic search** - Tests fuzzy matching, relevance scoring, tag/topic filtering
 
 When writing tests:
 - Use `t.Run()` for subtests within table-driven tests
@@ -231,13 +269,13 @@ When writing tests:
 
 **CLI Commands:**
 - Root command: `cmd/root.go`
-- Command packages: `cmd/{initialize,daemon,integrations,config,read}/`
+- Command packages: `cmd/{initialize,daemon,integrations,config,read,mcp}/`
 - Daemon commands: `cmd/daemon/daemon.go` (parent) + `cmd/daemon/subcommands/` (6 subcommands)
 - Integration commands: `cmd/integrations/integrations.go` (parent) + `cmd/integrations/subcommands/` (6 subcommands + helpers)
-- Config commands: `cmd/config/config.go` (parent) + `cmd/config/subcommands/` (1 subcommand)
+- Config commands: `cmd/config/config.go` (parent) + `cmd/config/subcommands/` (2 subcommands)
 
 **Core Subsystems:**
-- Main subsystems: `internal/{daemon,metadata,semantic,cache,index,config,integrations,watcher,walker}/`
+- Main subsystems: `internal/{daemon,metadata,semantic,cache,index,config,integrations,watcher,walker,mcp,search,version}/`
 - Type definitions: `pkg/types/types.go`
 
 **Documentation & Resources:**
@@ -257,11 +295,15 @@ When writing tests:
 
 - Commit messages use conventional commit format, lowercase, single line
 - Do not mention Claude Code coauthoring in commit messages
-- Current version: v0.6.0 (semantic versioning)
+- Current version: v0.9.0 (semantic versioning)
 
 ### API Rate Limiting
 
 The daemon implements token bucket rate limiting (default 20 calls/minute) to respect Claude API quotas. Workers call `rateLimiter.Wait(ctx)` before semantic analysis. Adjust `daemon.rate_limit_per_min` in config as needed for your API tier.
+
+### Configuration Hot-Reload
+
+The daemon supports hot-reloading non-structural configuration changes via `config reload` command without requiring a restart. Use the daemon's health check endpoint to trigger reloads. Settings requiring daemon restart: `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file`.
 
 ### Binary Path in Integrations
 

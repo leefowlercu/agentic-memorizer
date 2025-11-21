@@ -2,6 +2,8 @@
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code and manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
+**Current Version**: v0.9.0 ([CHANGELOG.md](CHANGELOG.md))
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -17,11 +19,11 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
   - [Installation](#installation)
   - [Integration Setup](#integration-setup)
   - [Adding Files to Memory](#adding-files-to-memory)
-- [Installation](#installation-1)
+- [Installation](#installation)
   - [Prerequisites](#prerequisites)
   - [Build and Install](#build-and-install)
   - [Configuration](#configuration)
-- [Integration Setup](#integration-setup-1)
+- [Integration Setup](#integration-setup)
   - [Claude Code Integration (Automatic)](#claude-code-integration-automatic)
   - [Claude Code MCP Integration (Automatic)](#claude-code-mcp-integration-automatic)
   - [Cursor AI Integration (Manual)](#cursor-ai-integration-manual)
@@ -162,32 +164,52 @@ The following frameworks require manual configuration file editing. The `integra
 
 ### Framework Comparison
 
-| Feature | Claude Code | Cursor/Continue/Aider/Cline |
-|---------|-------------|----------------------------|
-| **Setup Type** | Automatic | Manual |
-| **Detection** | Automatic | Not available |
-| **Config Modification** | Automatic | User-performed |
-| **Output Format** | XML (JSON-wrapped) | Markdown (default) |
-| **Validation** | Automatic | Manual |
-| **Maintenance** | One command | User-maintained |
+| Feature | Claude Code (Hook) | Claude Code (MCP) | Other Frameworks |
+|---------|-------------------|-------------------|------------------|
+| **Setup Type** | Automatic | Automatic | Manual |
+| **Delivery** | SessionStart injection | On-demand tools | User-configured |
+| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | Markdown |
+| **Best For** | Complete awareness | Large directories | Flexibility |
+| **Validation** | Automatic | Automatic | Manual |
 
 ## Architecture
 
-**Background Daemon Architecture:**
+**Three-Phase Processing Pipeline:**
 
-1. **Background Daemon** continuously watches `~/.agentic-memorizer/memory/` for file changes
-2. **File Processing** automatically extracts metadata and performs semantic analysis via Claude API
-3. **Smart Caching** stores analyses keyed by file hash (only re-analyzes when files change)
-4. **Precomputed Index** maintains `~/.agentic-memorizer/index.json` with all file information
-5. **Integration Layer** provides framework-specific output formatting:
-   - **Claude Code**: SessionStart hooks trigger `read` command automatically
-   - **Other Frameworks**: User-configured commands/hooks trigger `read` command
-6. **Index Read** loads precomputed index and formats for target framework:
-   - **Claude Code**: XML wrapped in SessionStart JSON envelope
-   - **Cursor/Continue/Aider/Cline**: Markdown (default) or XML/JSON
-   - **Custom**: Any format (XML/Markdown/JSON)
+1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 10 file type categories
+2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API
+3. **Caching** (`internal/cache/`) - Content-hash-based storage achieving >95% cache hit rates
 
-The daemon handles all the heavy lifting in the background, so AI agent startup remains quick regardless of how many files you have.
+**Background Daemon** (`internal/daemon/`):
+- **Walker** (`internal/walker/`) - Full directory scans during rebuilds
+- **File Watcher** (`internal/watcher/`) - Real-time monitoring with fsnotify
+- **Worker Pool** - Parallel processing with rate limiting (default 3 workers, 20 calls/min)
+
+**Semantic Search** (`internal/search/`):
+- Fuzzy filename matching
+- Tag and topic search
+- Summary text search
+- Relevance-ranked results
+
+**Index Management** (`internal/index/`):
+- Thread-safe operations
+- Atomic writes via temp file + rename
+- Two-level versioning
+
+**Integration Framework** (`internal/integrations/`):
+- Adapter pattern for Claude Code (hook + MCP), Cursor, Continue, Aider, Cline, custom
+- Independent output processors (XML, Markdown, JSON)
+
+**MCP Server** (`internal/mcp/`):
+- JSON-RPC 2.0 stdio transport
+- Three tools: `search_files`, `get_file_metadata`, `list_recent_files`
+- Integrates with semantic search
+
+**Configuration** (`internal/config/`):
+- Layered: defaults → YAML → environment variables
+- Hot-reload support via `config reload` command
+
+The daemon handles all processing in the background, so AI agent startup remains quick regardless of file count.
 
 ## Quick Start
 
@@ -476,10 +498,16 @@ The MCP server is automatically started by Claude Code when configured. You can 
 
 ```bash
 # Start MCP server in stdio mode
-agentic-memorizer mcp
+agentic-memorizer mcp start
 
-# The server communicates via stdin/stdout using JSON-RPC 2.0
+# Start with debug logging
+agentic-memorizer mcp start --log-level debug
+
+# View MCP logs
+tail -f ~/.agentic-memorizer/mcp.log
 ```
+
+The server communicates via stdin/stdout using JSON-RPC 2.0 protocol.
 
 #### MCP vs SessionStart Hooks
 
@@ -950,13 +978,13 @@ agentic-memorizer daemon restart
 # Force immediate rebuild
 agentic-memorizer daemon rebuild
 
-# Reload configuration (hot-reload without restart)
-agentic-memorizer config reload
-
 # View daemon logs
 agentic-memorizer daemon logs              # Last 50 lines
 agentic-memorizer daemon logs -f           # Follow logs
 agentic-memorizer daemon logs -n 100       # Last 100 lines
+
+# Hot-reload configuration without daemon restart
+agentic-memorizer config reload
 ```
 
 #### How It Works
@@ -967,6 +995,7 @@ The daemon:
 3. **Rate limits** API calls to respect Claude API limits (20/min default)
 4. **Maintains** a precomputed `index.json` file with all metadata and semantic analysis
 5. **Updates** the index automatically when files are added/modified/deleted
+6. **Supports** hot-reload of most configuration settings via `config reload` command
 
 When you run `agentic-memorizer read`, it simply loads the precomputed index from disk instead of analyzing all files.
 
@@ -986,7 +1015,11 @@ daemon:
   log_level: info                        # debug, info, warn, error
 ```
 
-**Hot-Reloading**: Most settings can be changed and applied without restarting the daemon using `agentic-memorizer config reload`. Structural settings like `memory_root`, `analysis.cache_dir`, and `daemon.log_file` require a daemon restart
+**Hot-Reloading**: Most settings can be hot-reloaded using `agentic-memorizer config reload` without restarting the daemon:
+- ✓ `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`
+- ✓ `daemon.full_rebuild_interval_minutes`, `daemon.health_check_port`
+- ✓ `analysis.*` settings, `claude.*` settings
+- ✗ `memory_root`, `analysis.cache_dir`, `daemon.log_file` (require restart)
 
 #### Running as a Service
 
@@ -1108,12 +1141,17 @@ agentic-memorizer integrations setup <integration-name>
 agentic-memorizer integrations remove <integration-name>
 agentic-memorizer integrations validate
 
+# Manage configuration
+agentic-memorizer config validate
+agentic-memorizer config reload
+
 # Get help
 agentic-memorizer --help
 agentic-memorizer initialize --help
 agentic-memorizer daemon --help
 agentic-memorizer read --help
 agentic-memorizer integrations --help
+agentic-memorizer config --help
 ```
 
 **Common Flags:**
@@ -1146,8 +1184,10 @@ agentic-memorizer read --format markdown
 # Read index (JSON format)
 agentic-memorizer read --format json
 
-# Read with Claude Code integration wrapper (for SessionStart hooks)
-agentic-memorizer read --format xml --integration claude-code
+# Read with Claude Code hook integration (SessionStart)
+agentic-memorizer read --format xml --integration claude-code-hook
+
+# Note: MCP integration uses tools, not read command
 
 # Start daemon
 agentic-memorizer daemon start
@@ -1164,11 +1204,15 @@ agentic-memorizer integrations list
 # Detect installed agent frameworks
 agentic-memorizer integrations detect
 
-# Setup Claude Code integration
-agentic-memorizer integrations setup claude-code
+# Setup Claude Code SessionStart hooks
+agentic-memorizer integrations setup claude-code-hook
 
-# Remove an integration
-agentic-memorizer integrations remove claude-code
+# Setup Claude Code MCP server
+agentic-memorizer integrations setup claude-code-mcp
+
+# Remove integrations
+agentic-memorizer integrations remove claude-code-hook
+agentic-memorizer integrations remove claude-code-mcp
 
 # Validate integration configurations
 agentic-memorizer integrations validate
@@ -1206,13 +1250,12 @@ The index tells your AI agent which method to use for each file.
 
 See `config.yaml.example` for all options:
 
-- **API Settings**: Model, tokens, timeout
-- **Analysis**: Enable/disable, file size limits, file exclusions
-- **Daemon**: Worker pool size (parallel processing), rate limits, rebuild intervals, health check
-- **Output**: Format (xml/markdown), verbosity, recent activity days
-- **Caching**: Automatic based on file hashes
-- **MCP**: Log file path, log level for MCP server
-- **Integrations**: Enabled integrations tracking
+- **API Settings**: Model, tokens, timeout, vision enable
+- **Analysis**: Enable/disable, file size limits, file exclusions, cache directory
+- **Daemon**: Worker count, rate limits, rebuild intervals, health check, debounce timing
+- **Output**: Format (xml/markdown/json), recent activity days
+- **MCP**: Log file path, log level
+- **Integrations**: Tracks enabled integrations (auto-managed by CLI)
 
 ### File Exclusions
 
@@ -1297,11 +1340,13 @@ agentic-memorizer read --format json
 Use the `--integration` flag to format output for specific agent frameworks. This wraps the index in the appropriate structure for that framework:
 
 ```bash
-# Claude Code integration (wraps in SessionStart JSON)
-agentic-memorizer read --format xml --integration claude-code
+# Claude Code hook integration (SessionStart injection)
+agentic-memorizer read --format xml --integration claude-code-hook
 
 # Can also use markdown or json formats
-agentic-memorizer read --format markdown --integration claude-code
+agentic-memorizer read --format markdown --integration claude-code-hook
+
+# Note: MCP integration doesn't use read - uses tools instead
 ```
 
 **Claude Code Integration Output Structure:**
@@ -1452,16 +1497,20 @@ agentic-memorizer/
 │   │   └── initialize.go
 │   ├── daemon/               # Daemon management commands
 │   │   ├── daemon.go         # Parent daemon command
-│   │   └── subcommands/      # Daemon subcommands
+│   │   └── subcommands/      # Daemon subcommands (6 total)
 │   │       ├── start.go
 │   │       ├── stop.go
 │   │       ├── status.go
 │   │       ├── restart.go
 │   │       ├── rebuild.go
 │   │       └── logs.go
+│   ├── mcp/                  # MCP server commands
+│   │   ├── mcp.go            # Parent mcp command
+│   │   └── subcommands/
+│   │       └── start.go      # Start MCP server
 │   ├── integrations/         # Integration management commands
 │   │   ├── integrations.go   # Parent integrations command
-│   │   └── subcommands/      # Integration subcommands
+│   │   └── subcommands/      # Integration subcommands (6 total)
 │   │       ├── list.go
 │   │       ├── detect.go
 │   │       ├── setup.go
@@ -1471,22 +1520,28 @@ agentic-memorizer/
 │   │       └── helpers.go
 │   ├── config/               # Configuration commands
 │   │   ├── config.go         # Parent config command
-│   │   └── subcommands/      # Config subcommands
-│   │       └── validate.go
+│   │   └── subcommands/      # Config subcommands (2 total)
+│   │       ├── validate.go
+│   │       └── reload.go
 │   └── read/                 # Read precomputed index
 │       └── read.go
 ├── internal/
-│   ├── config/               # Configuration loading and path management
-│   ├── daemon/               # Background daemon implementation
+│   ├── config/               # Configuration loading, validation, and hot-reload
+│   ├── daemon/               # Background daemon implementation and worker pool
 │   ├── index/                # Index management and atomic writes
 │   ├── watcher/              # File system watching (fsnotify)
-│   ├── walker/               # File system traversal
-│   ├── metadata/             # File metadata extraction
-│   ├── semantic/             # Claude API integration
-│   ├── cache/                # Analysis caching
+│   ├── walker/               # File system traversal with filtering
+│   ├── metadata/             # File metadata extraction (10 category handlers)
+│   ├── semantic/             # Claude API integration for semantic analysis
+│   ├── cache/                # Content-addressable analysis caching
+│   ├── search/               # Semantic search engine (fuzzy, tag, topic, summary)
+│   ├── mcp/                  # MCP server implementation
+│   │   ├── protocol/         # JSON-RPC 2.0 protocol messages
+│   │   └── transport/        # Stdio transport layer
 │   ├── integrations/         # Integration framework and adapters
 │   │   ├── output/           # Output formatting (XML/Markdown/JSON)
 │   │   └── adapters/         # Framework-specific adapters
+│   │       └── claude/       # Hook and MCP adapters for Claude Code
 │   └── version/              # Version information
 ├── pkg/types/                # Shared types and data structures
 ├── docs/subsystems/          # Comprehensive subsystem documentation
@@ -1503,10 +1558,10 @@ make install           # Build and install to ~/.local/bin
 make install-release   # Install release build with version info
 
 # Testing
-make test              # Run unit tests only (fast)
-make test-integration  # Run integration tests only (slower)
+make test              # Run unit tests only (fast, no external dependencies)
+make test-integration  # Run integration tests only (requires daemon, slower)
 make test-all          # Run all tests (unit + integration)
-make test-race         # Run tests with race detector
+make test-race         # Run tests with race detector (important for concurrent code)
 make coverage          # Generate coverage report
 make coverage-html     # Generate and view HTML coverage report
 
@@ -1522,10 +1577,11 @@ make clean-cache       # Remove cache files only
 make deps              # Update dependencies
 ```
 
-**Note on tests:**
-- **Unit tests** run by default with `make test` (fast, no external dependencies)
-- **Integration tests** require `-tags=integration` and test full daemon lifecycle
-- Integration tests use `MEMORIZER_APP_DIR` to create isolated test environments
+**Test Types:**
+- **Unit tests** (`make test`) - Fast, no external dependencies
+- **Integration tests** (`make test-integration`) - Full daemon lifecycle, requires `-tags=integration`
+- Integration tests use `MEMORIZER_APP_DIR` for isolated environments
+- Test data in `testdata/` directory
 
 ### Adding New File Type Handlers
 
@@ -1586,6 +1642,13 @@ export ANTHROPIC_API_KEY="your-key-here"
 3. Verify binary path is correct (`~/.local/bin/agentic-memorizer` or `~/go/bin/agentic-memorizer`)
 4. Test manually: `agentic-memorizer read`
 5. Check your AI agent's output/logs for errors
+
+### Config reload not applying changes
+
+1. Some settings require daemon restart (see Daemon Configuration section)
+2. Validate config syntax: `agentic-memorizer config validate`
+3. Check daemon logs: `tail -f ~/.agentic-memorizer/daemon.log`
+4. If reload fails, restart: `agentic-memorizer daemon restart`
 
 ### Reducing resource usage
 

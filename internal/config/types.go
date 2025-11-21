@@ -28,7 +28,6 @@ type OutputConfig struct {
 type AnalysisConfig struct {
 	Enable         bool     `mapstructure:"enable" yaml:"enable"`
 	MaxFileSize    int64    `mapstructure:"max_file_size" yaml:"max_file_size"`
-	Parallel       int      `mapstructure:"parallel" yaml:"parallel"`
 	SkipExtensions []string `mapstructure:"skip_extensions" yaml:"skip_extensions"`
 	SkipFiles      []string `mapstructure:"skip_files" yaml:"skip_files"`
 	CacheDir       string   `mapstructure:"cache_dir" yaml:"cache_dir"`

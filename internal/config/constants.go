@@ -31,7 +31,6 @@ var DefaultConfig = Config{
 	Analysis: AnalysisConfig{
 		Enable:         true,
 		MaxFileSize:    10485760, // 10 MB
-		Parallel:       3,
 		SkipExtensions: DefaultSkipExtensions,
 		SkipFiles:      DefaultSkipFiles,
 		CacheDir:       "~/" + AppDirName + "/" + CacheDirName,

@@ -2,9 +2,12 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/viper"
 )
 
 // ValidationError represents a configuration validation error
@@ -68,9 +71,27 @@ func (v *Validator) Error() string {
 	return b.String()
 }
 
+// checkDeprecatedKeys logs warnings for deprecated configuration keys
+func checkDeprecatedKeys() {
+	// Check for deprecated analysis.parallel key
+	if viper.IsSet("analysis.parallel") {
+		parallelValue := viper.GetInt("analysis.parallel")
+		slog.Warn(
+			"deprecated configuration key detected",
+			"key", "analysis.parallel",
+			"value", parallelValue,
+			"message", "analysis.parallel is no longer used and has been removed",
+			"suggestion", "use daemon.workers (default: 3) to control parallel processing",
+		)
+	}
+}
+
 // ValidateConfig validates the complete configuration
 func ValidateConfig(cfg *Config) error {
 	v := &Validator{}
+
+	// Check for deprecated keys and log warnings
+	checkDeprecatedKeys()
 
 	// Phase 1: Basic field validation
 	validateMemoryRoot(v, cfg)
@@ -156,11 +177,6 @@ func validateAnalysis(v *Validator, cfg *Config) {
 	// Validate max_file_size
 	if cfg.Analysis.MaxFileSize < 0 {
 		v.AddError("analysis.max_file_size", "range", "max_file_size cannot be negative", "Set max_file_size to a positive number or 0 for unlimited", cfg.Analysis.MaxFileSize)
-	}
-
-	// Validate parallel workers
-	if cfg.Analysis.Parallel < 1 || cfg.Analysis.Parallel > 20 {
-		v.AddError("analysis.parallel", "range", fmt.Sprintf("parallel %d is out of valid range (1-20)", cfg.Analysis.Parallel), "Set parallel between 1 and 20 workers", cfg.Analysis.Parallel)
 	}
 
 	// Validate cache dir

@@ -138,7 +138,6 @@ func TestValidateConfig_MCP(t *testing.T) {
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
-					Parallel: 3,
 				},
 				Daemon: DaemonConfig{
 					Workers:         3,
@@ -169,7 +168,6 @@ func TestValidateConfig_MCP(t *testing.T) {
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
-					Parallel: 3,
 				},
 				Daemon: DaemonConfig{
 					Workers:         3,
@@ -201,7 +199,6 @@ func TestValidateConfig_MCP(t *testing.T) {
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
-					Parallel: 3,
 				},
 				Daemon: DaemonConfig{
 					Workers:         3,

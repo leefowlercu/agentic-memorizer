@@ -46,7 +46,6 @@ func InitConfig() error {
 	viper.SetDefault("output.show_recent_days", DefaultConfig.Output.ShowRecentDays)
 	viper.SetDefault("analysis.enable", DefaultConfig.Analysis.Enable)
 	viper.SetDefault("analysis.max_file_size", DefaultConfig.Analysis.MaxFileSize)
-	viper.SetDefault("analysis.parallel", DefaultConfig.Analysis.Parallel)
 	viper.SetDefault("analysis.skip_extensions", DefaultConfig.Analysis.SkipExtensions)
 	viper.SetDefault("analysis.skip_files", DefaultConfig.Analysis.SkipFiles)
 	viper.SetDefault("analysis.cache_dir", DefaultConfig.Analysis.CacheDir)

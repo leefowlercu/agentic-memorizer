@@ -31,7 +31,7 @@ var ReadCmd = &cobra.Command{
   agentic-memorizer read --format json
 
   # Integration-wrapped output for Claude Code
-  agentic-memorizer read --format xml --integration claude-code
+  agentic-memorizer read --format xml --integration claude-code-hook
 
   # Verbose output with additional details
   agentic-memorizer read --verbose`,
@@ -41,7 +41,7 @@ var ReadCmd = &cobra.Command{
 
 func init() {
 	ReadCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (xml/markdown/json)")
-	ReadCmd.Flags().String("integration", "", "Format output for specific integration (claude-code, etc)")
+	ReadCmd.Flags().String("integration", "", "Format output for specific integration (claude-code-hook, etc)")
 	ReadCmd.Flags().Bool("verbose", config.DefaultConfig.Output.Verbose, "Verbose output")
 
 	viper.BindPFlag("output.format", ReadCmd.Flags().Lookup("format"))

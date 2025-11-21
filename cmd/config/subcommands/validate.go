@@ -58,6 +58,8 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Cache directory: %s\n", cfg.Analysis.CacheDir)
 	fmt.Printf("Output format: %s\n", cfg.Output.Format)
 	fmt.Printf("Daemon enabled: %v\n", cfg.Daemon.Enabled)
+	fmt.Printf("MCP log file: %s\n", cfg.MCP.LogFile)
+	fmt.Printf("MCP log level: %s\n", cfg.MCP.LogLevel)
 
 	return nil
 }

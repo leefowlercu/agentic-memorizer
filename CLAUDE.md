@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - [Building and Testing](#building-and-testing)
   - [Daemon Development](#daemon-development)
   - [Running the Application](#running-the-application)
+  - [Service Manager Integration](#service-manager-integration)
 - [High-Level Architecture](#high-level-architecture)
   - [Three-Phase Processing Pipeline](#three-phase-processing-pipeline)
   - [Background Daemon Architecture](#background-daemon-architecture)
@@ -114,9 +115,9 @@ make validate-config
 ./agentic-memorizer initialize
 
 # Initialize with automated setup
-./agentic-memorizer initialize --setup-integrations --with-daemon
+./agentic-memorizer initialize --setup-integrations
 
-# Start the background daemon
+# Start the daemon
 ./agentic-memorizer daemon start
 
 # Check daemon status
@@ -136,7 +137,72 @@ make validate-config
 
 # Start MCP server (for Claude Code integration)
 ./agentic-memorizer mcp start
+
+# Generate systemd unit file (Linux)
+./agentic-memorizer daemon systemctl
+
+# Generate launchd plist file (macOS)
+./agentic-memorizer daemon launchctl
 ```
+
+### Service Manager Integration
+
+**Implementation Philosophy:**
+The daemon follows modern Go best practices by running in foreground mode and delegating process supervision to external service managers. This avoids self-daemonization anti-patterns (os/exec re-execution, fork-based approaches) in favor of battle-tested external tools.
+
+**Why External Process Managers?**
+- **Idiomatic**: Go community consensus strongly recommends against self-daemonization due to runtime complexity (goroutines, thread pools make fork() unreliable)
+- **Reliable**: systemd, launchd, and supervisor provide production-grade process supervision, automatic restarts, and health monitoring
+- **Observable**: Native integration with journald, Console.app, and centralized logging
+- **Portable**: Same codebase works across Linux, macOS, and all distros without platform-specific fork logic
+- **Simple**: Eliminates complex daemonization code, reduces edge cases, simplifies debugging
+
+**Implementation Details:**
+
+#### systemd Integration (`cmd/daemon/subcommands/systemctl.go`)
+- **Command**: `daemon systemctl` - Generates systemd unit files
+- **Type=notify Integration**: `internal/daemon/daemon.go:251-256` calls `daemon.SdNotify(false, daemon.SdNotifyReady)` after initialization completes
+- **Dependency**: `github.com/coreos/go-systemd/v22/daemon` - Added in go.mod
+- **Readiness Signal**: Sent after health server starts, ensuring systemd knows daemon is fully operational
+- **Unit File Generation**: Detects binary path via `os.Executable()`, generates user and system-wide configurations
+- **Features**: Type=notify, RestartSec=5s, TimeoutStartSec=60s, security hardening (NoNewPrivileges, PrivateTmp)
+
+#### launchd Integration (`cmd/daemon/subcommands/launchctl.go`)
+- **Command**: `daemon launchctl` - Generates launchd plist files
+- **Features**: KeepAlive with SuccessfulExit=false, RunAtLoad, ThrottleInterval=30s
+- **Plist Generation**: Uses config.GetConfig() to read log file path, detects binary path
+- **Label Format**: `com.<username>.agentic-memorizer` for proper macOS service identification
+
+#### Testing Commands
+```bash
+# Test systemd unit generation
+./agentic-memorizer daemon systemctl
+
+# Test launchd plist generation
+./agentic-memorizer daemon launchctl
+
+# Test Type=notify integration (requires systemd)
+systemd-notify --status="Testing notification"
+```
+
+**Development Workflow:**
+1. Daemon runs normally in foreground (`daemon start`)
+2. Service files are generated on-demand via subcommands
+3. Users install generated files to appropriate system locations
+4. Service managers handle backgrounding, restarts, logging
+
+**Files Modified:**
+- `internal/daemon/daemon.go` - Added SdNotify call after health server initialization
+- `cmd/daemon/subcommands/systemctl.go` - New command for systemd unit generation
+- `cmd/daemon/subcommands/launchctl.go` - New command for launchd plist generation
+- `cmd/daemon/daemon.go` - Registered new subcommands
+- `go.mod` - Added github.com/coreos/go-systemd/v22 dependency
+
+**Testing:**
+- All existing tests pass (no regressions)
+- Commands generate valid service files
+- systemd Type=notify integration verified on Linux
+- See README.md for end-user setup instructions
 
 ## High-Level Architecture
 

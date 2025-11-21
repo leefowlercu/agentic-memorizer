@@ -34,6 +34,8 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
 - [Managing Integrations](#managing-integrations)
 - [Usage](#usage)
   - [Background Daemon (Required)](#background-daemon-required)
+  - [Running as a Service](#running-as-a-service)
+  - [Upgrading](#upgrading)
   - [Adding Files to Memory](#adding-files-to-memory-1)
   - [Manual Testing](#manual-testing)
   - [CLI Usage](#cli-usage)
@@ -234,14 +236,21 @@ export ANTHROPIC_API_KEY="your-key-here"
 For Claude Code users, automatic setup configures everything for you:
 
 ```bash
-agentic-memorizer initialize --setup-integrations --with-daemon
+agentic-memorizer initialize --setup-integrations
 ```
 
 This will:
 - Create config at `~/.agentic-memorizer/config.yaml`
 - Create memory directory at `~/.agentic-memorizer/memory/`
 - **Automatically configure Claude Code SessionStart hooks** (no manual editing required)
-- Start the background daemon for automatic indexing
+
+Then start the daemon:
+```bash
+agentic-memorizer daemon start
+# OR set up as system service (recommended):
+agentic-memorizer daemon systemctl  # Linux
+agentic-memorizer daemon launchctl  # macOS
+```
 
 **Skip to step 4 below.**
 
@@ -250,11 +259,14 @@ This will:
 For Cursor AI, Continue.dev, Aider, or Cline:
 
 ```bash
-# Initialize without automatic integration
-agentic-memorizer initialize --with-daemon
+# Initialize
+agentic-memorizer initialize
+
+# Start daemon
+agentic-memorizer daemon start
 ```
 
-This creates the config and starts the daemon. Then get framework-specific setup instructions:
+Then get framework-specific setup instructions:
 
 ```bash
 # Get setup instructions for your framework
@@ -314,11 +326,11 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 Then run the initialize command to set up configuration:
 
 ```bash
-# Interactive setup (prompts for hooks and daemon)
+# Interactive setup (prompts for integrations)
 agentic-memorizer initialize
 
 # Or with flags for automated setup
-agentic-memorizer initialize --setup-integrations --with-daemon
+agentic-memorizer initialize --setup-integrations
 ```
 
 This creates:
@@ -327,10 +339,15 @@ This creates:
 - Cache directory at `~/.agentic-memorizer/.cache/` (for semantic analysis cache)
 - Index file at `~/.agentic-memorizer/index.json` (created by daemon on first run)
 
-The initialize command can optionally:
-- Configure Claude Code SessionStart hooks automatically (`--setup-integrations`)
-- Start the background daemon immediately (`--with-daemon`)
-- Both are recommended for the best experience
+The initialize command can optionally configure Claude Code SessionStart hooks automatically with `--setup-integrations`.
+
+After initialization, start the daemon:
+```bash
+agentic-memorizer daemon start
+# OR set up as system service (recommended for production):
+agentic-memorizer daemon systemctl  # Linux
+agentic-memorizer daemon launchctl  # macOS
+```
 
 #### Option 2: Using Makefile
 
@@ -399,7 +416,8 @@ This command automatically:
 You can also use the `--setup-integrations` flag during initialization:
 
 ```bash
-agentic-memorizer initialize --setup-integrations --with-daemon
+agentic-memorizer initialize --setup-integrations
+agentic-memorizer daemon start
 ```
 
 #### Manual Setup (Alternative)
@@ -954,11 +972,15 @@ The background daemon is the core of Agentic Memorizer. It maintains a precomput
 #### Quick Start
 
 ```bash
-# Start the daemon (run in foreground - use Ctrl+C to stop, or run in background with systemd/launchd)
+# Start the daemon (run in foreground - use Ctrl+C to stop)
 agentic-memorizer daemon start
+
+# OR set up as system service for automatic management (recommended):
+agentic-memorizer daemon systemctl  # Linux
+agentic-memorizer daemon launchctl  # macOS
 ```
 
-**Note**: If you used `initialize --setup-integrations --with-daemon`, the daemon and integration are already configured. Otherwise, configure your AI agent framework to call `agentic-memorizer read` (see Integration Setup section above).
+**Note**: If you used `initialize --setup-integrations`, the integration is already configured. Otherwise, configure your AI agent framework to call `agentic-memorizer read` (see Integration Setup section above).
 
 #### Daemon Commands
 
@@ -1023,7 +1045,328 @@ daemon:
 
 #### Running as a Service
 
-The daemon can be configured to run as a system service using launchd (macOS) or systemd (Linux). Service configuration is platform-specific and should be customized for your environment.
+For production use, run the daemon as a system service that starts automatically and restarts on failure. The application provides commands to generate service configuration files for systemd (Linux) and launchd (macOS).
+
+**Benefits of running as a service:**
+- Automatic start on system boot or user login
+- Automatic restart if daemon crashes
+- Centralized log management
+- Health monitoring and status checking
+- No manual terminal session required
+
+##### systemd (Linux)
+
+Generate a systemd unit file:
+
+```bash
+agentic-memorizer daemon systemctl
+```
+
+This command outputs a complete systemd unit file. To install:
+
+**Option A: User Service (Recommended - No root required)**
+
+```bash
+# Create directory
+mkdir -p ~/.config/systemd/user
+
+# Generate and save unit file
+agentic-memorizer daemon systemctl > ~/.config/systemd/user/agentic-memorizer.service
+
+# Reload systemd
+systemctl --user daemon-reload
+
+# Enable autostart
+systemctl --user enable agentic-memorizer
+
+# Start service
+systemctl --user start agentic-memorizer
+
+# Check status
+systemctl --user status agentic-memorizer
+
+# View logs
+journalctl --user -u agentic-memorizer -f
+```
+
+**Option B: System-Wide Service (Requires root)**
+
+```bash
+# Generate and save unit file (requires sudo)
+agentic-memorizer daemon systemctl | sudo tee /etc/systemd/system/agentic-memorizer.service
+
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable autostart
+sudo systemctl enable agentic-memorizer
+
+# Start service
+sudo systemctl start agentic-memorizer
+
+# Check status
+systemctl status agentic-memorizer
+
+# View logs
+journalctl -u agentic-memorizer -f
+```
+
+**Managing the service:**
+
+```bash
+# Stop service
+systemctl --user stop agentic-memorizer
+
+# Restart service
+systemctl --user restart agentic-memorizer
+
+# Disable autostart
+systemctl --user disable agentic-memorizer
+
+# Remove service
+systemctl --user stop agentic-memorizer
+systemctl --user disable agentic-memorizer
+rm ~/.config/systemd/user/agentic-memorizer.service
+systemctl --user daemon-reload
+```
+
+##### launchd (macOS)
+
+Generate a launchd property list:
+
+```bash
+agentic-memorizer daemon launchctl
+```
+
+This command outputs a complete launchd plist file. To install:
+
+```bash
+# Create directory
+mkdir -p ~/Library/LaunchAgents
+
+# Generate and save plist
+agentic-memorizer daemon launchctl > ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+
+# Load service
+launchctl load ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+
+# Start service (if not running)
+launchctl start com.$(whoami).agentic-memorizer
+
+# Check if running
+launchctl list | grep agentic-memorizer
+```
+
+**Managing the service:**
+
+```bash
+# Stop service
+launchctl stop com.$(whoami).agentic-memorizer
+
+# Restart service
+launchctl stop com.$(whoami).agentic-memorizer
+launchctl start com.$(whoami).agentic-memorizer
+
+# Disable autostart (unload)
+launchctl unload ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+
+# Remove service
+launchctl unload ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+rm ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+```
+
+**View logs:**
+
+```bash
+# Tail daemon log
+tail -f ~/.agentic-memorizer/daemon.log
+
+# Check Console.app for system messages (macOS)
+open /Applications/Utilities/Console.app
+```
+
+##### Supervisor (Cross-Platform Alternative)
+
+For development environments or servers without systemd, use Supervisor:
+
+**Install Supervisor:**
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install supervisor
+
+# macOS
+brew install supervisor
+
+# Or via pip
+pip install supervisor
+```
+
+**Configure:**
+
+Create `/etc/supervisor/conf.d/agentic-memorizer.conf`:
+
+```ini
+[program:agentic-memorizer]
+command=/home/youruser/.local/bin/agentic-memorizer daemon start
+directory=/home/youruser
+autostart=true
+autorestart=true
+startretries=3
+user=youruser
+redirect_stderr=true
+stdout_logfile=/var/log/agentic-memorizer/daemon.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+environment=HOME="/home/youruser"
+```
+
+Replace `youruser` with your username and adjust paths as needed.
+
+**Manage with supervisorctl:**
+
+```bash
+# Reload config
+sudo supervisorctl reread
+sudo supervisorctl update
+
+# Start service
+sudo supervisorctl start agentic-memorizer
+
+# Check status
+sudo supervisorctl status agentic-memorizer
+
+# Stop service
+sudo supervisorctl stop agentic-memorizer
+
+# Restart service
+sudo supervisorctl restart agentic-memorizer
+
+# View logs
+sudo supervisorctl tail -f agentic-memorizer
+```
+
+### Upgrading
+
+When upgrading to a new version, the upgrade process depends on how you're running the daemon.
+
+#### Upgrading with Service Managers (Recommended)
+
+**systemd (Linux):**
+
+```bash
+# Stop service
+systemctl --user stop agentic-memorizer
+
+# Upgrade binary
+go install github.com/leefowlercu/agentic-memorizer@latest
+# OR: cd /path/to/repo && make install-release
+
+# Start service
+systemctl --user start agentic-memorizer
+
+# Verify
+systemctl --user status agentic-memorizer
+agentic-memorizer version
+```
+
+**Or use restart for one command:**
+```bash
+# Stop and upgrade (Makefile handles daemon stop)
+make install-release
+
+# Restart service
+systemctl --user restart agentic-memorizer
+```
+
+**launchd (macOS):**
+
+```bash
+# Stop service
+launchctl stop com.$(whoami).agentic-memorizer
+
+# Upgrade binary
+go install github.com/leefowlercu/agentic-memorizer@latest
+# OR: cd /path/to/repo && make install-release
+
+# Start service
+launchctl start com.$(whoami).agentic-memorizer
+
+# Verify
+launchctl list | grep agentic-memorizer
+agentic-memorizer version
+```
+
+**Supervisor:**
+
+```bash
+# Stop service
+sudo supervisorctl stop agentic-memorizer
+
+# Upgrade binary
+go install github.com/leefowlercu/agentic-memorizer@latest
+
+# Start service
+sudo supervisorctl start agentic-memorizer
+
+# Verify
+sudo supervisorctl status agentic-memorizer
+```
+
+#### Upgrading Manual Daemon
+
+If running daemon manually (not as service):
+
+```bash
+# Stop daemon
+agentic-memorizer daemon stop
+
+# Upgrade
+go install github.com/leefowlercu/agentic-memorizer@latest
+# OR: cd /path/to/repo && make install-release
+
+# Start daemon
+agentic-memorizer daemon start
+
+# Verify
+agentic-memorizer version
+```
+
+**Note:** The Makefile install targets automatically stop the daemon before replacing the binary:
+```bash
+# These commands handle daemon shutdown automatically
+make install          # Development build
+make install-release  # Production build with version info
+```
+
+#### Service File Updates
+
+Service files typically **do not need to be regenerated** when upgrading unless:
+- The binary path changed
+- New configuration options require service file changes
+- Release notes explicitly mention service file updates
+
+Service files reference the binary by path, not version:
+```ini
+ExecStart=/home/user/.local/bin/agentic-memorizer daemon start
+```
+
+The service manager automatically uses whatever binary exists at that path after upgrade.
+
+#### Why Service Managers Handle Upgrades Better
+
+**Manual daemon process:**
+- ✗ Must manually stop before upgrade
+- ✗ Must manually restart after upgrade
+- ✗ On macOS, replacing running binary triggers security warnings
+- ✗ Old process may continue running from deleted inode
+
+**Service managers:**
+- ✓ Orchestrated shutdown and restart
+- ✓ No security warnings
+- ✓ One-command upgrade with restart
+- ✓ Rollback capability if new version fails
+- ✓ Health monitoring during upgrade
 
 #### Health Monitoring
 
@@ -1130,6 +1473,8 @@ agentic-memorizer initialize [flags]
 agentic-memorizer daemon start
 agentic-memorizer daemon stop
 agentic-memorizer daemon status
+agentic-memorizer daemon systemctl      # Generate systemd unit file
+agentic-memorizer daemon launchctl      # Generate launchd plist
 
 # Read precomputed index (for SessionStart hooks)
 agentic-memorizer read [flags]
@@ -1166,14 +1511,13 @@ agentic-memorizer config --help
 --cache-dir <dir>                   # Custom cache directory
 --force                             # Overwrite existing config
 --setup-integrations                # Configure agent framework integrations
---with-daemon                       # Start daemon after initialize
 ```
 
 **Examples:**
 
 ```bash
-# Initialize with daemon
-agentic-memorizer initialize --with-daemon
+# Initialize
+agentic-memorizer initialize
 
 # Read index (XML format)
 agentic-memorizer read

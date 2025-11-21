@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2025-11-21
+
+### Added
+- **Comprehensive test suite expansion** (1,966 lines of new tests)
+  - Cache manager unit tests (`internal/cache/manager_test.go` - 386 lines)
+  - Integration types unit tests (`internal/integrations/types_test.go` - 84 lines)
+  - Integration utilities unit tests (`internal/integrations/utils_test.go` - 453 lines)
+  - MCP server lifecycle unit tests (`internal/mcp/server_lifecycle_test.go` - 324 lines)
+  - Version package unit tests (`internal/version/version_test.go` - 312 lines)
+  - Walker package unit tests (`internal/walker/walker_test.go` - 407 lines)
+  - Improved test coverage across core subsystems
+
+### Changed
+- **Enhanced documentation** - CLAUDE.md and README.md updated to fully reflect v0.9.0 features
+  - Added MCP server architecture and tools documentation
+  - Added semantic search capabilities description
+  - Added configuration hot-reload instructions
+  - Updated command examples for both hook and MCP integrations
+  - Enhanced architecture overview with all subsystems
+  - Added troubleshooting section for config reload
+  - Clarified integration types (claude-code-hook vs claude-code-mcp)
+  - Updated framework comparison table with MCP column
+  - Added table of contents to both documentation files
+
+### Fixed
+- **JSON output HTML escaping** - Prevented HTML entity encoding in JSON formatted output
+  - JSON output now preserves angle brackets, ampersands, and quotes as-is
+  - Ensures clean JSON parsing for programmatic consumption
+  - Created `marshalIndentNoEscape()` helper using `json.NewEncoder()` with `SetEscapeHTML(false)`
+  - Added comprehensive tests verifying no escape sequences in output
+- **Initialize command output formatting** - Improved readability and structure of initialization output
+  - Clearer section headers and progress indicators
+  - Better visual hierarchy in command output
+
 ### Removed
 - **Dead configuration key** - Removed unused `analysis.parallel` configuration field
   - This field was defined, validated, and documented but never actually used by any application code
@@ -17,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Infrastructure existed (config field, flag, Options struct) but no implementation ever used the value
   - Setting `--verbose` or `output.verbose: true` had no effect on application behavior
   - Removed incomplete/abandoned feature to reduce code complexity
+
+### Chore
+- **Dependency organization** - Moved direct dependencies from indirect section in go.mod
+  - Improved dependency management clarity
 
 ## [0.9.0] - 2025-11-20
 
@@ -495,7 +533,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.2...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.7.0...v0.8.0

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
@@ -25,18 +24,16 @@ var InitializeCmd = &cobra.Command{
 		"file and the memory directory where you'll store files for analysis and indexing.\n\n" +
 		"Optionally configures integrations with agent frameworks like Claude Code for " +
 		"automatic memory indexing.\n\n" +
-		"The background daemon is required for Agentic Memorizer to function. The daemon " +
-		"maintains a precomputed index for quick startup. Use --with-daemon to start " +
-		"the daemon immediately after initialization, or start it manually later with " +
-		"'agentic-memorizer daemon start'.\n\n" +
+		"After initialization, start the daemon manually with 'agentic-memorizer daemon start' " +
+		"or set up as a system service for automatic management (recommended for production).\n\n" +
 		"By default, configuration and data files are stored in ~/.agentic-memorizer/. " +
 		"You can customize this location by setting the MEMORIZER_APP_DIR environment variable " +
 		"before running initialize.",
-	Example: `  # Default initialization (prompts for integrations and daemon)
+	Example: `  # Default initialization
   agentic-memorizer initialize
 
-  # Initialize with integrations and daemon
-  agentic-memorizer initialize --setup-integrations --with-daemon
+  # Initialize with integrations
+  agentic-memorizer initialize --setup-integrations
 
   # Custom memory directory
   agentic-memorizer initialize --memory-root ~/my-memory
@@ -45,7 +42,12 @@ var InitializeCmd = &cobra.Command{
   agentic-memorizer initialize --cache-dir ~/my-memory/.cache
 
   # Force overwrite existing config
-  agentic-memorizer initialize --force`,
+  agentic-memorizer initialize --force
+
+  # After initialization, start the daemon:
+  agentic-memorizer daemon start              # Manual start
+  agentic-memorizer daemon systemctl          # Generate systemd unit
+  agentic-memorizer daemon launchctl          # Generate launchd plist`,
 	PreRunE: validateInit,
 	RunE:    runInit,
 }
@@ -56,8 +58,6 @@ func init() {
 	InitializeCmd.Flags().Bool("force", false, "Overwrite existing config")
 	InitializeCmd.Flags().Bool("setup-integrations", false, "Configure agent framework integrations")
 	InitializeCmd.Flags().Bool("skip-integrations", false, "Skip integration setup prompt")
-	InitializeCmd.Flags().Bool("with-daemon", false, "Start background daemon after initialization")
-	InitializeCmd.Flags().Bool("skip-daemon", false, "Skip daemon start prompt")
 
 	InitializeCmd.Flags().SortFlags = false
 }
@@ -68,12 +68,6 @@ func validateInit(cmd *cobra.Command, args []string) error {
 	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
 	if setupIntegrations && skipIntegrations {
 		return fmt.Errorf("--setup-integrations and --skip-integrations are mutually exclusive")
-	}
-
-	withDaemon, _ := cmd.Flags().GetBool("with-daemon")
-	skipDaemon, _ := cmd.Flags().GetBool("skip-daemon")
-	if withDaemon && skipDaemon {
-		return fmt.Errorf("--with-daemon and --skip-daemon are mutually exclusive")
 	}
 
 	// All validation passed - errors after this are runtime errors
@@ -87,8 +81,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	setupIntegrations, _ := cmd.Flags().GetBool("setup-integrations")
 	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
-	withDaemon, _ := cmd.Flags().GetBool("with-daemon")
-	skipDaemon, _ := cmd.Flags().GetBool("skip-daemon")
 
 	// Get app directory (respects MEMORIZER_APP_DIR environment variable)
 	appDir, err := config.GetAppDir()
@@ -177,11 +169,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	daemonStarted := false
-	if err := handleDaemonSetup(withDaemon, skipDaemon, configPath, &daemonStarted); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
-	}
-
 	fmt.Printf("\nNext steps:\n")
 	stepNum := 1
 	if !apiKeyConfigured {
@@ -190,16 +177,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("%d. Add files to %s\n", stepNum, memoryRoot)
 	stepNum++
-	if daemonStarted {
-		fmt.Printf("%d. Daemon is running in background (check status: agentic-memorizer daemon status)\n", stepNum)
-		stepNum++
-		fmt.Printf("%d. Start using your agent framework!\n", stepNum)
-	} else {
-		fmt.Printf("%d. Recommended: Start the background daemon:\n", stepNum)
-		fmt.Printf("   agentic-memorizer daemon start\n")
-		stepNum++
-		fmt.Printf("%d. Or use on-demand indexing: agentic-memorizer\n", stepNum)
-	}
+	fmt.Printf("%d. Start the daemon:\n", stepNum)
+	fmt.Printf("   # Option A: Manual (foreground)\n")
+	fmt.Printf("   agentic-memorizer daemon start\n\n")
+	fmt.Printf("   # Option B: Manual (background)\n")
+	fmt.Printf("   nohup agentic-memorizer daemon start &\n\n")
+	fmt.Printf("   # Option C: System service (background, recommended)\n")
+	fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
+	fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
 
 	return nil
 }
@@ -222,7 +207,7 @@ func promptForAPIKey() (string, error) {
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "n" && response != "no" {
 			// User wants to use the existing env var
-			fmt.Printf("Using ANTHROPIC_API_KEY from environment.\n")
+			fmt.Printf("\nUsing ANTHROPIC_API_KEY from environment.\n\n")
 			return existingKey, nil
 		}
 	}
@@ -328,25 +313,23 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) ([]string,
 			return nil, fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure integrations", err)
 		}
 
-		fmt.Printf("\nConfiguring integrations...\n")
+		fmt.Printf("\nConfigured integrations:\n")
 		setupCount := 0
 		enabledIntegrations := []string{}
 
 		for _, integration := range available {
-			fmt.Printf("Setting up %s...\n", integration.GetName())
 			err := integration.Setup(binaryPath)
 			if err != nil {
 				fmt.Printf("  Warning: Failed to setup %s: %v\n", integration.GetName(), err)
 				continue
 			}
-			fmt.Printf("  ✓ %s configured\n", integration.GetName())
+			fmt.Printf("  ✓ Integration %s configured\n", integration.GetName())
 			setupCount++
 			enabledIntegrations = append(enabledIntegrations, integration.GetName())
 		}
 
 		if setupCount > 0 {
-			fmt.Printf("\n✓ Configured %d integration(s)\n", setupCount)
-			fmt.Printf("  Binary path: %s\n", binaryPath)
+			fmt.Printf("\nBinary path: %s\n", binaryPath)
 		} else {
 			fmt.Printf("\nNo integrations were configured successfully.\n\n")
 		}
@@ -355,138 +338,6 @@ func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) ([]string,
 	}
 
 	return nil, nil
-}
-
-func handleDaemonSetup(withDaemon, skipDaemon bool, configPath string, daemonStarted *bool) error {
-	*daemonStarted = false
-
-	if skipDaemon {
-		return nil
-	}
-
-	if !withDaemon {
-		fmt.Printf("\nStart background daemon? [y/N]: ")
-		reader := bufio.NewReader(os.Stdin)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input; %w", err)
-		}
-
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
-			fmt.Printf("\nYou can start the daemon later with: agentic-memorizer daemon start\n")
-			return nil
-		}
-		withDaemon = true
-	}
-
-	if withDaemon {
-		fmt.Printf("\nStarting background daemon...\n")
-
-		binaryPath, err := findBinaryPath()
-		if err != nil {
-			return fmt.Errorf("could not find agentic-memorizer binary; %w\nStart daemon manually: agentic-memorizer daemon start", err)
-		}
-
-		// Check if daemon is already running
-		pidFile, err := config.GetPIDPath()
-		if err != nil {
-			return fmt.Errorf("failed to get PID path; %w", err)
-		}
-
-		if _, err := os.Stat(pidFile); err == nil {
-			// PID file exists, check if daemon is actually running
-			data, err := os.ReadFile(pidFile)
-			if err == nil {
-				var pid int
-				fmt.Sscanf(string(data), "%d", &pid)
-				process, err := os.FindProcess(pid)
-				if err == nil && process.Signal(os.Signal(nil)) == nil {
-					fmt.Printf("✓ Daemon is already running (PID %d)\n", pid)
-					*daemonStarted = true
-					return nil
-				}
-			}
-		}
-
-		// Config was already initialized after writing, just get it
-
-		cfg, err := config.GetConfig()
-		if err != nil {
-			return fmt.Errorf("failed to load config; %w", err)
-		}
-
-		// Enable the daemon in configuration
-		cfg.Daemon.Enabled = true
-
-		// Write updated config back to disk
-		if err := config.WriteConfig(configPath, cfg); err != nil {
-			return fmt.Errorf("failed to update config with daemon.enabled=true; %w", err)
-		}
-
-		// Validate API key is configured
-		if cfg.Claude.APIKey == "" {
-			fmt.Printf("\n⚠ Warning: No Claude API key configured\n")
-			fmt.Printf("The daemon will start but semantic analysis will be skipped.\n")
-			fmt.Printf("Set ANTHROPIC_API_KEY environment variable or add api_key to config.\n\n")
-
-			fmt.Printf("Continue starting daemon without API key? [y/N]: ")
-			reader := bufio.NewReader(os.Stdin)
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				return fmt.Errorf("failed to read input; %w", err)
-			}
-
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
-				fmt.Printf("\nDaemon start cancelled. Configure API key and try again.\n")
-				return nil
-			}
-		}
-
-		// Start daemon in background
-		cmd := exec.Command(binaryPath, "daemon", "start")
-
-		// Start the command but don't wait for it
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("failed to start daemon; %w\nStart daemon manually: agentic-memorizer daemon start", err)
-		}
-
-		// Don't wait for the daemon process to finish (it will run in background)
-		// Just release the process so it doesn't become a zombie
-		go func() {
-			cmd.Wait()
-		}()
-
-		// Wait for daemon to start and verify
-		// Try up to 8 times with 500ms between attempts (total 4 seconds)
-		for i := 0; i < 8; i++ {
-			time.Sleep(500 * time.Millisecond)
-
-			if _, err := os.Stat(pidFile); err == nil {
-				data, err := os.ReadFile(pidFile)
-				if err == nil && len(data) > 0 {
-					var pid int
-					if _, err := fmt.Sscanf(string(data), "%d", &pid); err == nil && pid > 0 {
-						// PID file exists with valid PID - daemon started
-						fmt.Printf("✓ Background daemon started (PID %d)\n", pid)
-						fmt.Printf("  Verify with: agentic-memorizer daemon status\n")
-						*daemonStarted = true
-						return nil
-					}
-				}
-			}
-		}
-
-		// Daemon didn't start successfully after 4 seconds
-		// This is just a warning - daemon might still be starting
-		fmt.Printf("⚠ Daemon start command executed but verification timed out\n")
-		fmt.Printf("  Check daemon status: agentic-memorizer daemon status\n")
-		*daemonStarted = false
-		return nil // Don't return error - daemon might still be starting
-	}
-
-	return nil
 }
 
 // findBinaryPath attempts to locate the agentic-memorizer binary

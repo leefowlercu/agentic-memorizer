@@ -29,9 +29,6 @@ output:
   # Output format: "xml", "markdown", or "json" (default: xml)
   format: xml
 
-  # Verbose logging
-  verbose: false
-
   # Show files modified in last N days in "Recent Activity" section
   show_recent_days: 7
 

@@ -21,7 +21,6 @@ type ClaudeConfig struct {
 
 type OutputConfig struct {
 	Format         string `mapstructure:"format" yaml:"format"`
-	Verbose        bool   `mapstructure:"verbose" yaml:"verbose"`
 	ShowRecentDays int    `mapstructure:"show_recent_days" yaml:"show_recent_days"`
 }
 

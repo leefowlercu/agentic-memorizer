@@ -186,7 +186,6 @@ func TestJSONProcessor(t *testing.T) {
 func TestOutputOptions(t *testing.T) {
 	// Test with ShowRecentDays option
 	opts := Options{
-		Verbose:        true,
 		ShowRecentDays: 7,
 	}
 

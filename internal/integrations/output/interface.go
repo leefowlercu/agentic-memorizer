@@ -16,9 +16,6 @@ type OutputProcessor interface {
 
 // Options contains formatting options that can be applied to any output processor
 type Options struct {
-	// Verbose controls whether to include detailed information
-	Verbose bool
-
 	// ShowRecentDays limits recent activity section to this many days (0 = disabled)
 	ShowRecentDays int
 }
@@ -26,7 +23,6 @@ type Options struct {
 // DefaultOptions returns the default formatting options
 func DefaultOptions() Options {
 	return Options{
-		Verbose:        false,
 		ShowRecentDays: 0,
 	}
 }

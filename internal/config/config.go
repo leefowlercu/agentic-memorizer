@@ -42,7 +42,6 @@ func InitConfig() error {
 	viper.SetDefault("claude.enable_vision", DefaultConfig.Claude.EnableVision)
 	viper.SetDefault("claude.timeout_seconds", DefaultConfig.Claude.TimeoutSeconds)
 	viper.SetDefault("output.format", DefaultConfig.Output.Format)
-	viper.SetDefault("output.verbose", DefaultConfig.Output.Verbose)
 	viper.SetDefault("output.show_recent_days", DefaultConfig.Output.ShowRecentDays)
 	viper.SetDefault("analysis.enable", DefaultConfig.Analysis.Enable)
 	viper.SetDefault("analysis.max_file_size", DefaultConfig.Analysis.MaxFileSize)

@@ -42,10 +42,8 @@ var ReadCmd = &cobra.Command{
 func init() {
 	ReadCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (xml/markdown/json)")
 	ReadCmd.Flags().String("integration", "", "Format output for specific integration (claude-code-hook, etc)")
-	ReadCmd.Flags().Bool("verbose", config.DefaultConfig.Output.Verbose, "Verbose output")
 
 	viper.BindPFlag("output.format", ReadCmd.Flags().Lookup("format"))
-	viper.BindPFlag("output.verbose", ReadCmd.Flags().Lookup("verbose"))
 }
 
 func validateRead(cmd *cobra.Command, args []string) error {

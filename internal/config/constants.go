@@ -25,7 +25,6 @@ var DefaultConfig = Config{
 	},
 	Output: OutputConfig{
 		Format:         "xml",
-		Verbose:        false,
 		ShowRecentDays: 7,
 	},
 	Analysis: AnalysisConfig{

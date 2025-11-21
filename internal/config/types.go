@@ -33,7 +33,6 @@ type AnalysisConfig struct {
 }
 
 type DaemonConfig struct {
-	Enabled                    bool   `mapstructure:"enabled" yaml:"enabled"`
 	DebounceMs                 int    `mapstructure:"debounce_ms" yaml:"debounce_ms"`
 	Workers                    int    `mapstructure:"workers" yaml:"workers"`
 	RateLimitPerMin            int    `mapstructure:"rate_limit_per_min" yaml:"rate_limit_per_min"`

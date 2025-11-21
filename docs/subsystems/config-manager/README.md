@@ -372,7 +372,7 @@ The daemon uses configuration helper functions to locate system files:
 - Path expansion ensures portable configuration across user accounts
 
 **Dynamic Behavior:**
-The daemon's operational mode is entirely determined by configuration. Setting `daemon.enabled = false` switches to on-demand operation. Adjusting worker counts or rate limits changes concurrency characteristics. All behavior is externalized to configuration rather than hardcoded.
+The daemon's operational mode is entirely determined by configuration. Users control whether the daemon runs by starting or stopping the process (via `daemon start`/`daemon stop` or service managers). Adjusting worker counts or rate limits changes concurrency characteristics. All behavior is externalized to configuration rather than hardcoded.
 
 ### Semantic Analyzer
 

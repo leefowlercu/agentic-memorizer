@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
 	"github.com/leefowlercu/agentic-memorizer/internal/index"
 	"github.com/spf13/cobra"
 )
@@ -66,9 +68,24 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("Daemon Status")
 	fmt.Println("=============")
 	if running {
-		fmt.Printf("Status: Running (PID %d)\n", pid)
+		managed := daemon.IsServiceManaged()
+		if managed {
+			fmt.Printf("Status: Running (PID %d, service-managed)\n", pid)
+		} else {
+			fmt.Printf("Status: Running (PID %d, foreground)\n", pid)
+		}
 	} else {
 		fmt.Println("Status: Not running")
+
+		// Add service manager check
+		sm := daemon.DetectServiceManager()
+		if sm == "systemd" {
+			fmt.Println("\nNote: Check if managed by systemd:")
+			fmt.Println("  systemctl --user status agentic-memorizer")
+		} else if sm == "launchd" {
+			fmt.Println("\nNote: Check if managed by launchd:")
+			fmt.Println("  launchctl list | grep agentic-memorizer")
+		}
 	}
 
 	// Check index status
@@ -94,14 +111,26 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("-------------")
 	fmt.Printf("Memory Root: %s\n", cfg.MemoryRoot)
 	fmt.Printf("Cache Dir: %s\n", cfg.Analysis.CacheDir)
-	fmt.Printf("Daemon Enabled: %t\n", cfg.Daemon.Enabled)
-	if cfg.Daemon.Enabled {
-		fmt.Printf("Rebuild Interval: %d minutes\n", cfg.Daemon.FullRebuildIntervalMinutes)
-		fmt.Printf("Workers: %d\n", cfg.Daemon.Workers)
-		fmt.Printf("Rate Limit: %d/min\n", cfg.Daemon.RateLimitPerMin)
-		if cfg.Daemon.HealthCheckPort > 0 {
-			fmt.Printf("Health Check: http://localhost:%d\n", cfg.Daemon.HealthCheckPort)
-		}
+	fmt.Printf("Rebuild Interval: %d minutes\n", cfg.Daemon.FullRebuildIntervalMinutes)
+	fmt.Printf("Workers: %d\n", cfg.Daemon.Workers)
+	fmt.Printf("Rate Limit: %d/min\n", cfg.Daemon.RateLimitPerMin)
+	if cfg.Daemon.HealthCheckPort > 0 {
+		fmt.Printf("Health Check: http://localhost:%d\n", cfg.Daemon.HealthCheckPort)
+	}
+
+	// Service Management
+	fmt.Println("\nService Management")
+	fmt.Println("------------------")
+	sm := daemon.DetectServiceManager()
+	if sm == "systemd" {
+		fmt.Println("Platform: Linux (systemd available)")
+		fmt.Println("Setup: agentic-memorizer daemon systemctl")
+	} else if sm == "launchd" {
+		fmt.Println("Platform: macOS (launchd available)")
+		fmt.Println("Setup: agentic-memorizer daemon launchctl")
+	} else {
+		fmt.Printf("Platform: %s\n", runtime.GOOS)
+		fmt.Println("Manual management required")
 	}
 
 	return nil

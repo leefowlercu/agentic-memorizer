@@ -61,9 +61,6 @@ analysis:
 
 # Background Daemon Configuration
 daemon:
-  # Enable daemon mode (background indexing)
-  enabled: false
-
   # Debounce period for file changes (milliseconds)
   # Batches rapid file changes together to avoid excessive rebuilds
   debounce_ms: 500

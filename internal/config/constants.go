@@ -35,7 +35,6 @@ var DefaultConfig = Config{
 		CacheDir:       "~/" + AppDirName + "/" + CacheDirName,
 	},
 	Daemon: DaemonConfig{
-		Enabled:                    false,
 		DebounceMs:                 500,
 		Workers:                    3,
 		RateLimitPerMin:            20,

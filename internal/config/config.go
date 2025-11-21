@@ -48,7 +48,6 @@ func InitConfig() error {
 	viper.SetDefault("analysis.skip_extensions", DefaultConfig.Analysis.SkipExtensions)
 	viper.SetDefault("analysis.skip_files", DefaultConfig.Analysis.SkipFiles)
 	viper.SetDefault("analysis.cache_dir", DefaultConfig.Analysis.CacheDir)
-	viper.SetDefault("daemon.enabled", DefaultConfig.Daemon.Enabled)
 	viper.SetDefault("daemon.debounce_ms", DefaultConfig.Daemon.DebounceMs)
 	viper.SetDefault("daemon.workers", DefaultConfig.Daemon.Workers)
 	viper.SetDefault("daemon.rate_limit_per_min", DefaultConfig.Daemon.RateLimitPerMin)

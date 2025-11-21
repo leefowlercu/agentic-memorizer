@@ -6,6 +6,7 @@ type Config struct {
 	Output       OutputConfig       `mapstructure:"output" yaml:"output"`
 	Analysis     AnalysisConfig     `mapstructure:"analysis" yaml:"analysis"`
 	Daemon       DaemonConfig       `mapstructure:"daemon" yaml:"daemon"`
+	MCP          MCPConfig          `mapstructure:"mcp" yaml:"mcp"`
 	Integrations IntegrationsConfig `mapstructure:"integrations" yaml:"integrations"`
 }
 
@@ -44,16 +45,15 @@ type DaemonConfig struct {
 	LogLevel                   string `mapstructure:"log_level" yaml:"log_level"`
 }
 
-// IntegrationsConfig represents the complete integrations configuration section
-type IntegrationsConfig struct {
-	Enabled []string                     `mapstructure:"enabled" yaml:"enabled"`
-	Configs map[string]IntegrationConfig `mapstructure:"configs" yaml:"configs"`
+type MCPConfig struct {
+	LogFile  string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel string `mapstructure:"log_level" yaml:"log_level"`
 }
 
-// IntegrationConfig represents the configuration for a specific integration
-type IntegrationConfig struct {
-	Type         string         `mapstructure:"type" yaml:"type"`
-	Enabled      bool           `mapstructure:"enabled" yaml:"enabled"`
-	OutputFormat string         `mapstructure:"output_format" yaml:"output_format"`
-	Settings     map[string]any `mapstructure:"settings" yaml:"settings"`
+// IntegrationsConfig represents the complete integrations configuration section.
+// The Enabled list tracks which integrations have been configured via setup commands.
+// Integration-specific configuration (hooks, tools, etc.) is stored in framework-specific
+// files (e.g., ~/.claude.json, ~/.claude/settings.json) rather than in this config file.
+type IntegrationsConfig struct {
+	Enabled []string `mapstructure:"enabled" yaml:"enabled"`
 }

@@ -78,6 +78,7 @@ func ValidateConfig(cfg *Config) error {
 	validateOutput(v, cfg)
 	validateAnalysis(v, cfg)
 	validateDaemon(v, cfg)
+	validateMCP(v, cfg)
 
 	if v.HasErrors() {
 		return v
@@ -211,6 +212,22 @@ func validateDaemon(v *Validator, cfg *Config) {
 	}
 }
 
+// validateMCP validates MCP server configuration
+func validateMCP(v *Validator, cfg *Config) {
+	// Validate log level
+	validLogLevels := []string{"debug", "info", "warn", "error"}
+	if !contains(validLogLevels, cfg.MCP.LogLevel) {
+		v.AddError("mcp.log_level", "enum", fmt.Sprintf("invalid log_level '%s', must be one of: %v", cfg.MCP.LogLevel, validLogLevels), "Set log_level to 'debug', 'info', 'warn', or 'error'", cfg.MCP.LogLevel)
+	}
+
+	// Validate log file path
+	if cfg.MCP.LogFile == "" {
+		v.AddError("mcp.log_file", "required", "log_file is required", "Set log_file to a valid file path", nil)
+	} else if strings.Contains(cfg.MCP.LogFile, "..") {
+		v.AddError("mcp.log_file", "security", "log_file contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.MCP.LogFile)
+	}
+}
+
 // contains checks if a slice contains a string
 func contains(slice []string, str string) bool {
 	for _, s := range slice {
@@ -219,30 +236,6 @@ func contains(slice []string, str string) bool {
 		}
 	}
 	return false
-}
-
-// ValidateIntegrationConfig validates an integration configuration
-func ValidateIntegrationConfig(name string, cfg IntegrationConfig) error {
-	v := &Validator{}
-
-	// Validate type field
-	if cfg.Type == "" {
-		v.AddError(fmt.Sprintf("integrations.configs.%s.type", name), "required", "integration type is required", "Set type to the integration adapter name (e.g., 'claude-code')", nil)
-	}
-
-	// Validate output format if specified
-	if cfg.OutputFormat != "" {
-		validFormats := []string{"xml", "markdown", "json"}
-		if !contains(validFormats, cfg.OutputFormat) {
-			v.AddError(fmt.Sprintf("integrations.configs.%s.output_format", name), "enum", fmt.Sprintf("invalid output_format '%s'", cfg.OutputFormat), "Set to 'xml', 'markdown', or 'json'", cfg.OutputFormat)
-		}
-	}
-
-	if v.HasErrors() {
-		return v
-	}
-
-	return nil
 }
 
 // SafePath validates that a path is safe (no directory traversal)

@@ -58,6 +58,8 @@ func InitConfig() error {
 	viper.SetDefault("daemon.health_check_port", DefaultConfig.Daemon.HealthCheckPort)
 	viper.SetDefault("daemon.log_file", DefaultConfig.Daemon.LogFile)
 	viper.SetDefault("daemon.log_level", DefaultConfig.Daemon.LogLevel)
+	viper.SetDefault("mcp.log_file", DefaultConfig.MCP.LogFile)
+	viper.SetDefault("mcp.log_level", DefaultConfig.MCP.LogLevel)
 
 	viper.SetEnvPrefix("MEMORIZER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -79,9 +81,24 @@ func GetConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config; %w", err)
 	}
 
+	// Validate paths for safety BEFORE expansion
+	if strings.Contains(cfg.MemoryRoot, "..") {
+		return nil, fmt.Errorf("memory_root contains parent directory reference (..): %s", cfg.MemoryRoot)
+	}
+	if strings.Contains(cfg.Analysis.CacheDir, "..") {
+		return nil, fmt.Errorf("analysis.cache_dir contains parent directory reference (..): %s", cfg.Analysis.CacheDir)
+	}
+	if strings.Contains(cfg.Daemon.LogFile, "..") {
+		return nil, fmt.Errorf("daemon.log_file contains parent directory reference (..): %s", cfg.Daemon.LogFile)
+	}
+	if strings.Contains(cfg.MCP.LogFile, "..") {
+		return nil, fmt.Errorf("mcp.log_file contains parent directory reference (..): %s", cfg.MCP.LogFile)
+	}
+
 	cfg.MemoryRoot = ExpandHome(cfg.MemoryRoot)
 	cfg.Analysis.CacheDir = ExpandHome(cfg.Analysis.CacheDir)
 	cfg.Daemon.LogFile = ExpandHome(cfg.Daemon.LogFile)
+	cfg.MCP.LogFile = ExpandHome(cfg.MCP.LogFile)
 
 	if cfg.Claude.APIKey == "" && cfg.Claude.APIKeyEnv != "" {
 		cfg.Claude.APIKey = os.Getenv(cfg.Claude.APIKeyEnv)
@@ -170,4 +187,13 @@ func GetPIDPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(appDir, DaemonPIDFile), nil
+}
+
+// ResetForTesting resets viper state for testing purposes.
+// This allows tests to use different config files without interference.
+// Should only be called from test code.
+func ResetForTesting() {
+	configMu.Lock()
+	defer configMu.Unlock()
+	viper.Reset()
 }

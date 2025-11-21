@@ -8,6 +8,7 @@ const (
 	IndexFile     = "index.json"
 	DaemonLogFile = "daemon.log"
 	DaemonPIDFile = "daemon.pid"
+	MCPLogFile    = "mcp.log"
 )
 
 var DefaultSkipExtensions = []string{".zip", ".tar", ".gz", ".exe", ".bin", ".dmg", ".iso"}
@@ -45,8 +46,11 @@ var DefaultConfig = Config{
 		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,
 		LogLevel:                   "info",
 	},
+	MCP: MCPConfig{
+		LogFile:  "~/" + AppDirName + "/" + MCPLogFile,
+		LogLevel: "info",
+	},
 	Integrations: IntegrationsConfig{
-		Enabled: []string{}, // Empty by default - user chooses during init
-		Configs: make(map[string]IntegrationConfig),
+		Enabled: []string{}, // Empty by default - populated during init/setup/remove commands
 	},
 }

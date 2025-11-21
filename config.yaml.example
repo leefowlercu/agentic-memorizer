@@ -71,7 +71,7 @@ daemon:
   # Batches rapid file changes together to avoid excessive rebuilds
   debounce_ms: 500
 
-  # Number of worker threads for processing files
+  # Number of parallel workers for processing files
   workers: 3
 
   # Rate limit for Claude API calls (per minute)
@@ -91,3 +91,17 @@ daemon:
 
   # Log level: debug, info, warn, error
   log_level: info
+
+# MCP Server Configuration
+mcp:
+  # Log file for MCP server (when running as MCP server)
+  log_file: ~/.agentic-memorizer/mcp.log
+
+  # Log level for MCP server: debug, info, warn, error
+  log_level: info
+
+# Integration Configuration
+# Tracks which AI agent framework integrations are configured
+# Managed automatically by 'integrations setup/remove' commands
+integrations:
+  enabled: []

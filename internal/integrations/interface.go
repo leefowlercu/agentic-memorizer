@@ -8,7 +8,7 @@ import "github.com/leefowlercu/agentic-memorizer/pkg/types"
 type Integration interface {
 	// Metadata returns identifying information about the integration
 
-	// GetName returns the unique identifier for this integration (e.g., "claude-code")
+	// GetName returns the unique identifier for this integration (e.g., "claude-code-hook")
 	GetName() string
 
 	// GetDescription returns a human-readable description of the integration
@@ -48,7 +48,7 @@ type Integration interface {
 	// GetCommand returns the full command string that the framework should execute
 	// binaryPath is the path to the agentic-memorizer binary
 	// format is the desired output format (xml, markdown, json)
-	// Returns a command string like "agentic-memorizer read --format xml --integration claude-code"
+	// Returns a command string like "agentic-memorizer read --format xml --integration claude-code-hook"
 	GetCommand(binaryPath string, format OutputFormat) string
 
 	// Output formatting

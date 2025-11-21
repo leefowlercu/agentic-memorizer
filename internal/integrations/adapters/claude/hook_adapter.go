@@ -12,10 +12,10 @@ import (
 
 const (
 	// IntegrationName is the unique identifier for this integration
-	IntegrationName = "claude-code"
+	IntegrationName = "claude-code-hook"
 
 	// IntegrationVersion is the adapter version
-	IntegrationVersion = "1.0.0"
+	IntegrationVersion = "1.0.1"
 
 	// SessionStartEvent is the hook event name for Claude Code
 	SessionStartEvent = "SessionStart"

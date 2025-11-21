@@ -34,7 +34,7 @@ func (f OutputFormat) String() string {
 // IntegrationConfig represents the configuration for a specific integration.
 // This is stored in the main config file under the integrations section.
 type IntegrationConfig struct {
-	// Type is the integration type (e.g., "claude-code", "continue", "cline")
+	// Type is the integration type (e.g., "claude-code-hook", "continue", "cline")
 	Type string `mapstructure:"type" yaml:"type"`
 
 	// Enabled indicates if this integration is active
@@ -50,13 +50,13 @@ type IntegrationConfig struct {
 	Settings map[string]any `mapstructure:"settings" yaml:"settings"`
 }
 
-// IntegrationsConfig represents the complete integrations configuration section
+// IntegrationsConfig represents the complete integrations configuration section.
+// The Enabled list tracks which integrations have been configured via setup commands.
+// Integration-specific configuration (hooks, tools, etc.) is stored in framework-specific
+// files (e.g., ~/.claude.json, ~/.claude/settings.json) rather than in this config file.
 type IntegrationsConfig struct {
 	// Enabled is a list of integration names that are enabled
 	Enabled []string `mapstructure:"enabled" yaml:"enabled"`
-
-	// Configs maps integration names to their configuration
-	Configs map[string]IntegrationConfig `mapstructure:"configs" yaml:"configs"`
 }
 
 // HealthStatus represents the health status of an integration

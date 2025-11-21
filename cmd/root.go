@@ -8,6 +8,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
 	"github.com/leefowlercu/agentic-memorizer/cmd/initialize"
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations"
+	"github.com/leefowlercu/agentic-memorizer/cmd/mcp"
 	"github.com/leefowlercu/agentic-memorizer/cmd/read"
 	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	configint "github.com/leefowlercu/agentic-memorizer/internal/config"
@@ -34,6 +35,7 @@ func init() {
 	memorizerCmd.AddCommand(read.ReadCmd)
 	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
 	memorizerCmd.AddCommand(config.ConfigCmd)
+	memorizerCmd.AddCommand(mcp.McpCmd)
 	memorizerCmd.AddCommand(version.VersionCmd)
 
 	// Customize version output template to use multi-line format

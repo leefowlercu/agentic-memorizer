@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Development Commands](#development-commands)
+  - [Building and Testing](#building-and-testing)
+  - [Daemon Development](#daemon-development)
+  - [Running the Application](#running-the-application)
+- [High-Level Architecture](#high-level-architecture)
+  - [Three-Phase Processing Pipeline](#three-phase-processing-pipeline)
+  - [Background Daemon Architecture](#background-daemon-architecture)
+  - [Index Management](#index-management)
+  - [Integration Framework](#integration-framework)
+  - [Configuration System](#configuration-system)
+- [Code Organization Principles](#code-organization-principles)
+  - [Subsystem Independence](#subsystem-independence)
+  - [Separation of Metadata and Semantics](#separation-of-metadata-and-semantics)
+  - [Content-Addressable Caching](#content-addressable-caching)
+  - [Handler/Adapter Patterns](#handleradapter-patterns)
+- [Testing Approach](#testing-approach)
+- [Key File Locations](#key-file-locations)
+- [Development Notes](#development-notes)
+  - [Go Standards](#go-standards)
+  - [Git Workflow](#git-workflow)
+  - [API Rate Limiting](#api-rate-limiting)
+  - [Binary Path in Integrations](#binary-path-in-integrations)
+  - [CLI Error Handling Pattern](#cli-error-handling-pattern)
+  - [Error Message Formatting](#error-message-formatting)
+
 ## Project Overview
 
 Agentic Memorizer is a local file memorizer for Claude Code that provides automatic awareness and understanding of files through AI-powered semantic analysis. A background daemon watches a memory directory, extracts metadata, performs semantic analysis via Claude API, and maintains a precomputed index that loads into Claude's context via SessionStart hooks.

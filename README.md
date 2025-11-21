@@ -2,6 +2,55 @@
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code and manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
+## Table of Contents
+
+- [Overview](#overview)
+  - [How It Works](#how-it-works)
+  - [Key Capabilities](#key-capabilities)
+- [Why Use This?](#why-use-this)
+- [Supported AI Agent Frameworks](#supported-ai-agent-frameworks)
+  - [Automatic Integration (Native Support)](#automatic-integration-native-support)
+  - [Manual Integration (Configuration Required)](#manual-integration-configuration-required)
+  - [Framework Comparison](#framework-comparison)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+  - [Installation](#installation)
+  - [Integration Setup](#integration-setup)
+  - [Adding Files to Memory](#adding-files-to-memory)
+- [Installation](#installation-1)
+  - [Prerequisites](#prerequisites)
+  - [Build and Install](#build-and-install)
+  - [Configuration](#configuration)
+- [Integration Setup](#integration-setup-1)
+  - [Claude Code Integration (Automatic)](#claude-code-integration-automatic)
+  - [Claude Code MCP Integration (Automatic)](#claude-code-mcp-integration-automatic)
+  - [Cursor AI Integration (Manual)](#cursor-ai-integration-manual)
+  - [Continue.dev Integration (Manual)](#continuedev-integration-manual)
+  - [Aider Integration (Manual)](#aider-integration-manual)
+  - [Cline Integration (Manual)](#cline-integration-manual)
+  - [Custom Framework Integration](#custom-framework-integration)
+- [Managing Integrations](#managing-integrations)
+- [Usage](#usage)
+  - [Background Daemon (Required)](#background-daemon-required)
+  - [Adding Files to Memory](#adding-files-to-memory-1)
+  - [Manual Testing](#manual-testing)
+  - [CLI Usage](#cli-usage)
+  - [Controlling Semantic Analysis](#controlling-semantic-analysis)
+- [Supported File Types](#supported-file-types)
+- [Configuration Options](#configuration-options)
+  - [File Exclusions](#file-exclusions)
+  - [Environment Variables](#environment-variables)
+  - [Output Formats](#output-formats)
+- [Example Outputs](#example-outputs)
+- [Development](#development)
+  - [Project Structure](#project-structure)
+  - [Building and Testing](#building-and-testing)
+  - [Adding New File Type Handlers](#adding-new-file-type-handlers)
+- [Limitations & Known Issues](#limitations--known-issues)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Overview
 
 Agentic Memorizer provides AI agents with persistent, semantic awareness of your local files. Instead of manually managing which files to include in context or repeatedly explaining what files exist, your AI agent automatically receives a comprehensive, AI-powered index showing what files you have, what they contain, their purpose, and how to access them.
@@ -76,10 +125,10 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing either
 ### Automatic Integration (Native Support)
 
 **Claude Code** - Full automatic integration with one-command setup
-- Automatic framework detection (checks for `~/.claude` directory)
+- Automatic framework detection and configuration
 - One-command setup: `agentic-memorizer integrations setup claude-code-hook`
 - SessionStart hook configuration with all matchers (startup, resume, clear, compact)
-- XML output with JSON envelope wrapping for proper hook formatting
+- Default XML output with JSON envelope wrapping for proper hook formatting
 - Full lifecycle management (setup, update, remove, validate)
 
 ### Manual Integration (Configuration Required)

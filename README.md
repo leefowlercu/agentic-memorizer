@@ -1211,7 +1211,8 @@ The index tells your AI agent which method to use for each file.
 See `config.yaml.example` for all options:
 
 - **API Settings**: Model, tokens, timeout
-- **Analysis**: Enable/disable, file size limits, parallel processing, file exclusions
+- **Analysis**: Enable/disable, file size limits, file exclusions
+- **Daemon**: Worker pool size (parallel processing), rate limits, rebuild intervals, health check
 - **Output**: Format (xml/markdown), verbosity, recent activity days
 - **Caching**: Automatic based on file hashes
 - **MCP**: Log file path, log level for MCP server

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **Dead configuration key** - Removed unused `analysis.parallel` configuration field
+  - This field was defined, validated, and documented but never actually used by any application code
+  - The daemon uses `daemon.workers` to control parallel processing via worker pool
+  - Users should use `daemon.workers` (default: 3) to configure parallel API calls
+  - Existing configs with `analysis.parallel` will log a deprecation warning but continue working
+
 ## [0.9.0] - 2025-11-20
 
 ### Added

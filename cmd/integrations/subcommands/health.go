@@ -24,7 +24,7 @@ var HealthCmd = &cobra.Command{
   agentic-memorizer integrations health
 
   # Check health of specific integration
-  agentic-memorizer integrations health claude-code`,
+  agentic-memorizer integrations health claude-code-hook`,
 	PreRunE: validateHealth,
 	RunE:    runHealth,
 }

@@ -77,7 +77,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing either
 
 **Claude Code** - Full automatic integration with one-command setup
 - Automatic framework detection (checks for `~/.claude` directory)
-- One-command setup: `agentic-memorizer integrations setup claude-code`
+- One-command setup: `agentic-memorizer integrations setup claude-code-hook`
 - SessionStart hook configuration with all matchers (startup, resume, clear, compact)
 - XML output with JSON envelope wrapping for proper hook formatting
 - Full lifecycle management (setup, update, remove, validate)
@@ -314,7 +314,7 @@ Claude Code enjoys full automatic integration support with one-command setup.
 #### Automatic Setup (Recommended)
 
 ```bash
-agentic-memorizer integrations setup claude-code
+agentic-memorizer integrations setup claude-code-hook
 ```
 
 This command automatically:
@@ -322,7 +322,7 @@ This command automatically:
 2. Creates or updates `~/.claude/settings.json`
 3. Preserves existing settings (won't overwrite other configurations)
 4. Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
-5. Configures the command: `agentic-memorizer read --format xml --integration claude-code`
+5. Configures the command: `agentic-memorizer read --format xml --integration claude-code-hook`
 6. Creates backup at `~/.claude/settings.json.backup`
 
 You can also use the `--setup-integrations` flag during initialization:
@@ -344,7 +344,7 @@ If you prefer manual configuration, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer read --format xml --integration claude-code"
+            "command": "/path/to/agentic-memorizer read --format xml --integration claude-code-hook"
           }
         ]
       }
@@ -369,7 +369,98 @@ agentic-memorizer integrations validate
 Remove the integration:
 
 ```bash
-agentic-memorizer integrations remove claude-code
+agentic-memorizer integrations remove claude-code-hook
+```
+
+### Claude Code MCP Integration (Automatic)
+
+Claude Code also supports integration via the Model Context Protocol (MCP), providing advanced semantic search capabilities through MCP tools.
+
+#### Automatic Setup (Recommended)
+
+```bash
+agentic-memorizer integrations setup claude-code-mcp
+```
+
+This command automatically:
+1. Detects your Claude Code installation (`~/.claude/` directory)
+2. Creates or updates `~/.claude.json` (MCP server configuration)
+3. Registers the `agentic-memorizer` MCP server
+4. Configures environment variables (`MEMORIZER_MEMORY_ROOT`)
+5. Sets the binary command path
+6. Creates backup at `~/.claude.json.backup`
+
+#### MCP Tools Provided
+
+The MCP server exposes three tools to Claude Code:
+
+- **`search_files`** - Semantic search across indexed files
+  - Fuzzy filename matching
+  - Tag and topic search
+  - Summary text search
+  - Relevance-ranked results
+  - Category filtering
+
+- **`get_file_metadata`** - Retrieve complete metadata for a specific file
+  - File metadata (size, type, category)
+  - Semantic analysis (summary, tags, topics)
+  - Document-specific fields (word count, page count, dimensions)
+
+- **`list_recent_files`** - List recently modified files
+  - Configurable lookback period (days)
+  - Sorted by modification date
+  - Includes full metadata
+
+#### MCP Configuration
+
+The MCP server has dedicated configuration in `config.yaml`:
+
+```yaml
+mcp:
+  log_file: ~/.agentic-memorizer/mcp.log  # MCP server logs
+  log_level: info                          # Log level (debug/info/warn/error)
+```
+
+#### Running the MCP Server
+
+The MCP server is automatically started by Claude Code when configured. You can also run it manually for testing:
+
+```bash
+# Start MCP server in stdio mode
+agentic-memorizer mcp
+
+# The server communicates via stdin/stdout using JSON-RPC 2.0
+```
+
+#### MCP vs SessionStart Hooks
+
+You can use one or both Claude Code integration methods:
+
+- **SessionStart Hooks** (`claude-code-hook`): Injects full memory index at session start
+  - Best for: Always-available context, complete file awareness
+  - Trade-off: Larger initial context, all files loaded upfront
+
+- **MCP Server** (`claude-code-mcp`): Provides on-demand tools for semantic search
+  - Best for: Large memory directories, selective file discovery
+  - Trade-off: Requires explicit tool use, context fetched on demand
+
+Many users enable both for maximum flexibility.
+
+#### Validation
+
+Verify your MCP setup:
+
+```bash
+agentic-memorizer integrations validate
+agentic-memorizer integrations health
+```
+
+#### Removal
+
+Remove the MCP integration:
+
+```bash
+agentic-memorizer integrations remove claude-code-mcp
 ```
 
 ### Cursor AI Integration (Manual)
@@ -634,8 +725,13 @@ Shows all registered integrations with their status and configuration:
 **Example Output:**
 
 ```
-✓ claude-code
-  Description: Claude Code integration with automatic SessionStart hook setup
+✓ claude-code-hook
+  Description: Claude Code SessionStart hooks integration
+  Version:     1.0.0
+  Status:      configured
+
+✓ claude-code-mcp
+  Description: Claude Code MCP server integration
   Version:     1.0.0
   Status:      configured
 
@@ -672,7 +768,7 @@ agentic-memorizer integrations detect
 
 ```
 Detected Frameworks:
-  ✓ claude-code (installed at ~/.claude)
+  ✓ claude-code-hook (installed at ~/.claude)
 ```
 
 Checks for framework-specific configuration directories and files.
@@ -682,17 +778,20 @@ Checks for framework-specific configuration directories and files.
 #### Claude Code (Automatic)
 
 ```bash
-# Basic setup
-agentic-memorizer integrations setup claude-code
+# SessionStart hooks setup
+agentic-memorizer integrations setup claude-code-hook
+
+# MCP server setup
+agentic-memorizer integrations setup claude-code-mcp
 
 # With custom binary path
-agentic-memorizer integrations setup claude-code --binary-path /custom/path/agentic-memorizer
+agentic-memorizer integrations setup claude-code-hook --binary-path /custom/path/agentic-memorizer
 ```
 
 For Claude Code, this automatically:
 - Detects the Claude settings file (`~/.claude/settings.json`)
 - Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
-- Configures the correct command with `--integration claude-code` flag
+- Configures the correct command with `--integration claude-code-hook` flag
 - Preserves existing settings and creates backup
 
 #### Other Frameworks (Manual Instructions)
@@ -714,7 +813,8 @@ Each command provides detailed manual setup instructions specific to that framew
 ### Remove an Integration
 
 ```bash
-agentic-memorizer integrations remove claude-code
+agentic-memorizer integrations remove claude-code-hook
+agentic-memorizer integrations remove claude-code-mcp
 ```
 
 Removes the integration configuration from the framework's settings file. For Claude Code, this:
@@ -734,7 +834,7 @@ agentic-memorizer integrations validate
 
 ```
 Validating integrations...
-  ✓ claude-code: Valid (settings file exists, hooks configured)
+  ✓ claude-code-hook: Valid (settings file exists, hooks configured)
 ```
 
 Validates:
@@ -754,10 +854,10 @@ agentic-memorizer integrations health
 
 ```
 Framework Detection:
-  ✓ claude-code (installed at ~/.claude)
+  ✓ claude-code-hook (installed at ~/.claude)
 
 Configuration Validation:
-  ✓ claude-code: Valid (settings file exists, hooks configured)
+  ✓ claude-code-hook: Valid (settings file exists, hooks configured)
 
 Overall Status: Healthy (1/1 configured integrations valid)
 ```
@@ -781,7 +881,7 @@ The background daemon is the core of Agentic Memorizer. It maintains a precomput
 agentic-memorizer daemon start
 ```
 
-**Note**: If you used `init --setup-integrations --with-daemon`, the daemon and integration are already configured. Otherwise, configure your AI agent framework to call `agentic-memorizer read` (see Integration Setup section above).
+**Note**: If you used `initialize --setup-integrations --with-daemon`, the daemon and integration are already configured. Otherwise, configure your AI agent framework to call `agentic-memorizer read` (see Integration Setup section above).
 
 #### Daemon Commands
 
@@ -841,11 +941,7 @@ daemon:
 
 #### Running as a Service
 
-**macOS (launchd):**
-See `examples/com.agentic-memorizer.daemon.plist` for a complete launchd configuration.
-
-**Linux (systemd):**
-See `examples/agentic-memorizer.service` for a complete systemd unit file.
+The daemon can be configured to run as a system service using launchd (macOS) or systemd (Linux). Service configuration is platform-specific and should be customized for your environment.
 
 #### Health Monitoring
 
@@ -976,7 +1072,7 @@ agentic-memorizer integrations --help
 ```bash
 # Read command flags
 --format <xml|markdown|json>        # Output format
---integration <name>                # Format for specific integration (claude-code, etc)
+--integration <name>                # Format for specific integration (claude-code-hook, etc)
 --verbose                           # Verbose output
 
 # Init command flags
@@ -984,7 +1080,7 @@ agentic-memorizer integrations --help
 --cache-dir <dir>                   # Custom cache directory
 --force                             # Overwrite existing config
 --setup-integrations                # Configure agent framework integrations
---with-daemon                       # Start daemon after init
+--with-daemon                       # Start daemon after initialize
 ```
 
 **Examples:**
@@ -1069,6 +1165,8 @@ See `config.yaml.example` for all options:
 - **Analysis**: Enable/disable, file size limits, parallel processing, file exclusions
 - **Output**: Format (xml/markdown), verbosity, recent activity days
 - **Caching**: Automatic based on file hashes
+- **MCP**: Log file path, log level for MCP server
+- **Integrations**: Enabled integrations tracking
 
 ### File Exclusions
 
@@ -1346,7 +1444,6 @@ agentic-memorizer/
 │   └── version/              # Version information
 ├── pkg/types/                # Shared types and data structures
 ├── docs/subsystems/          # Comprehensive subsystem documentation
-├── examples/                 # Service configuration examples (systemd, launchd)
 └── testdata/                 # Test files
 ```
 

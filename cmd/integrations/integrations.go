@@ -20,10 +20,10 @@ var IntegrationsCmd = &cobra.Command{
   agentic-memorizer integrations detect
 
   # Setup a specific integration
-  agentic-memorizer integrations setup claude-code
+  agentic-memorizer integrations setup claude-code-hook
 
   # Remove an integration
-  agentic-memorizer integrations remove claude-code
+  agentic-memorizer integrations remove claude-code-hook
 
   # Validate configuration
   agentic-memorizer integrations validate`,

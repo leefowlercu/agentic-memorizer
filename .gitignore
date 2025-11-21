@@ -36,9 +36,5 @@ config.yaml
 # Cache
 .cache/
 
-# Agent files
-CLAUDE.MD
-AGENTS.md
-
 # WIP Docs
 docs/wip/

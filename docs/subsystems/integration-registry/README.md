@@ -100,7 +100,7 @@ The registry's mutex-protected operations ensure correct behavior under concurre
 The Integration interface (`internal/integrations/interface.go`) defines the contract that all framework adapters must implement, providing a uniform API for integration management regardless of framework specifics.
 
 **Metadata Methods:**
-- `GetName()` - Returns unique integration identifier (e.g., "claude-code", "continue-dev")
+- `GetName()` - Returns unique integration identifier (e.g., "claude-code-hook", "continue-dev")
 - `GetDescription()` - Provides human-readable description of the integration's purpose
 - `GetVersion()` - Indicates adapter version for compatibility tracking
 
@@ -116,7 +116,7 @@ The Integration interface (`internal/integrations/interface.go`) defines the con
 - `Reload()` - Reloads configuration from disk after external changes
 
 **Command Generation:**
-- `GetCommand()` - Generates the shell command that frameworks should invoke to access the index (e.g., `agentic-memorizer read --format xml --integration claude-code`)
+- `GetCommand()` - Generates the shell command that frameworks should invoke to access the index (e.g., `agentic-memorizer read --format xml --integration claude-code-hook`)
 
 **Output Formatting:**
 - `FormatOutput()` - Transforms base index format into framework-specific output, applying any necessary wrapping or envelope structures
@@ -161,7 +161,7 @@ Checks for the existence of the `~/.claude` directory, indicating Claude Code is
 1. Locates or creates `~/.claude/settings.json` file
 2. Reads existing settings, preserving all unknown fields
 3. Adds or updates SessionStart hooks with matchers (startup, resume, clear, compact)
-4. Configures hook to run `agentic-memorizer read --format xml --integration claude-code`
+4. Configures hook to run `agentic-memorizer read --format xml --integration claude-code-hook`
 5. Writes modified settings atomically with backup creation
 6. Returns detailed success/failure information
 
@@ -266,10 +266,10 @@ Lists all registered integrations with their names, descriptions, versions, and 
 Scans the system for installed frameworks and reports which ones are detected. Useful for discovering what integrations are possible on the current system.
 
 **`integrations setup <name>`:**
-Configures the specified integration. For specialized adapters like Claude Code, performs automatic setup including config file modification. For generic adapters, displays detailed manual setup instructions.
+Configures the specified integration. For specialized adapters like Claude Code, performs automatic setup including config file modification. For generic adapters, displays detailed manual setup instructions. Updates `integrations.enabled` list in config.yaml to track configured integrations.
 
 **`integrations remove <name>`:**
-Removes the specified integration configuration, cleaning up hooks and settings modifications. Restores frameworks to their pre-integration state.
+Removes the specified integration configuration, cleaning up hooks and settings modifications. Restores frameworks to their pre-integration state. Removes integration from `integrations.enabled` list in config.yaml.
 
 **`integrations validate`:**
 Checks configuration health for all enabled integrations, reporting any issues with binary paths, settings files, or configuration validity.

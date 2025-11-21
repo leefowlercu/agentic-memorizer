@@ -53,6 +53,11 @@ Environment variables use automatic transformation from configuration structure 
 - Dot-to-underscore: Nested fields use underscores (e.g., `claude.api_key` becomes `MEMORIZER_CLAUDE_API_KEY`)
 - Case-insensitive: Variable names are case-insensitive for flexibility
 
+Examples:
+- `claude.api_key` becomes `MEMORIZER_CLAUDE_API_KEY`
+- `mcp.log_level` becomes `MEMORIZER_MCP_LOG_LEVEL`
+- `daemon.log_file` becomes `MEMORIZER_DAEMON_LOG_FILE`
+
 This pattern enables containerized deployments and CI/CD pipelines to inject configuration without modifying files. Sensitive values like API keys can be provided through environment variables, avoiding storage in version control.
 
 ### Error Accumulation Pattern
@@ -93,6 +98,7 @@ Path expansion and safety validation apply to:
 - `memory_root` - User file storage directory
 - `analysis.cache_dir` - Cache storage location
 - `daemon.log_file` - Daemon log output location
+- `mcp.log_file` - MCP server log output location
 
 ### Separation of Concerns
 
@@ -145,7 +151,7 @@ The `GetConfig()` function provides access to loaded configuration:
 The `WriteConfig()` function enables programmatic configuration creation:
 1. Marshals configuration structure to YAML format
 2. Writes to specified file path with appropriate permissions
-3. Used by init command to create default configuration files
+3. Used by initialize command to create default configuration files
 
 **Path Helper Functions:**
 - `GetAppDir()` - Returns application directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
@@ -173,12 +179,13 @@ Note that `MEMORIZER_APP_DIR` only affects the application's own files. The memo
 The Configuration Types component (`internal/config/types.go`) defines the schema for all configuration using strongly-typed Go structures with comprehensive tag annotations for serialization.
 
 **Root Configuration Structure:**
-The `Config` struct serves as the top-level container with five major sections:
+The `Config` struct serves as the top-level container with seven major sections:
 - `MemoryRoot` - Directory path where user files are stored
 - `Claude` - Claude API configuration (credentials, model, settings)
 - `Output` - Output formatting preferences
 - `Analysis` - Semantic analysis configuration
 - `Daemon` - Background daemon settings
+- `MCP` - Model Context Protocol server configuration
 - `Integrations` - Integration framework configuration
 
 **ClaudeConfig Structure:**
@@ -216,10 +223,22 @@ Configures background daemon operation:
 - `LogFile` - Daemon log file path (default: `~/.agentic-memorizer/daemon.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
 
+**MCPConfig Structure:**
+Configures Model Context Protocol server logging:
+- `LogFile` - MCP server log file path (default: `~/.agentic-memorizer/mcp.log`)
+- `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
+
+The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized.
+
 **IntegrationsConfig Structure:**
 Manages integration framework settings:
-- `Enabled` - List of enabled integration names
-- `Configs` - Map of integration-specific configurations with type, output format, and custom settings
+- `Enabled` - List of enabled integration names (automatically populated by init/setup/remove commands)
+
+Integration-specific configuration (hooks, tools, server settings) is stored in framework-specific files:
+- Claude Code SessionStart hooks: `~/.claude/settings.json`
+- Claude Code MCP server: `~/.claude.json`
+- Continue.dev: `~/.continue/config.json`
+- Other frameworks: respective configuration files
 
 **Tag Annotations:**
 Each field includes three tags:
@@ -239,6 +258,7 @@ The Constants and Defaults component (`internal/config/constants.go`) centralize
 - `IndexFile` = "index.json" - Precomputed index filename
 - `DaemonLogFile` = "daemon.log" - Daemon log filename
 - `DaemonPIDFile` = "daemon.pid" - Daemon process ID filename
+- `MCPLogFile` = "mcp.log" - MCP server log filename
 
 **Default Skip Patterns:**
 The system ships with sensible defaults for files to exclude from indexing:
@@ -264,6 +284,8 @@ A complete `Config` instance with all fields populated with production-ready def
 - Daemon disabled by default (on-demand operation)
 - Rate limit: 20 calls/minute
 - Rebuild interval: 60 minutes
+- MCP log file: `~/.agentic-memorizer/mcp.log`
+- MCP log level: info
 
 ### Validation System
 
@@ -304,6 +326,10 @@ The system uses structured validation with the `Validator` type accumulating err
 - Health check port range validation (0-65535)
 - Log level enumeration check (debug, info, warn, error)
 - Log file path required and safety validation
+
+**MCP Validation:**
+- Log level enumeration check (must be debug, info, warn, or error)
+- Log file path required and safety validation (no parent directory traversal)
 
 **Integration Validation:**
 - Type field required for each integration
@@ -397,7 +423,7 @@ The cache manager is only created when semantic analysis is enabled. The daemon 
 All CLI commands depend on the Config Manager to load configuration before executing their operations, establishing configuration as a foundational concern.
 
 **Universal Initialization:**
-The root command defines a `PersistentPreRunE` hook that calls `config.InitConfig()` before any command executes (except `init` command which creates new configuration). This hook ensures configuration is loaded, validated, and available to all subcommands.
+The root command defines a `PersistentPreRunE` hook that calls `config.InitConfig()` before any command executes (except `initialize` command which creates new configuration). This hook ensures configuration is loaded, validated, and available to all subcommands.
 
 **Command-Specific Usage:**
 
@@ -467,3 +493,7 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 **App Directory**: Location where the application stores its own files (configuration, index, PID file, logs), defaulting to `~/.agentic-memorizer` but configurable via `MEMORIZER_APP_DIR` environment variable for testing and multi-instance deployments.
 
 **MEMORIZER_APP_DIR**: Environment variable that overrides the default app directory location, enabling isolated test environments, multiple instances, and custom paths in containerized deployments.
+
+**MCP Log File**: Path to the Model Context Protocol (MCP) server log output, separate from daemon logs, enabling independent logging configuration for MCP integrations (typically `~/.agentic-memorizer/mcp.log`).
+
+**MCP Log Level**: Logging verbosity control for MCP server operations (debug, info, warn, error), allows independent configuration from daemon logging for troubleshooting MCP integration issues.

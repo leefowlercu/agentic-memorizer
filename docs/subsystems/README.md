@@ -20,6 +20,30 @@ This documentation is intended for:
 
 ## Available Subsystems
 
+**Table of Contents:**
+- **Core Subsystems**
+  - [Daemon](#daemon)
+- **Index Management**
+  - [Index Manager](#index-manager)
+  - [File Watcher](#file-watcher)
+- **File Processing**
+  - [Metadata Extractor](#metadata-extractor)
+  - [Semantic Analyzer](#semantic-analyzer)
+- **Caching System**
+  - [Cache Manager](#cache-manager)
+- **Configuration**
+  - [Config Manager](#config-manager)
+- **Integration Framework**
+  - [Integration Registry](#integration-registry)
+- **External Integration**
+  - [MCP Server](#mcp-server)
+  - [Semantic Search](#semantic-search)
+- **Utilities**
+  - [Walker](#walker)
+  - [Version](#version)
+
+---
+
 ### Core Subsystems
 
 #### [Daemon](./daemon/)
@@ -222,6 +246,50 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 
 ---
 
+### External Integration
+
+#### [MCP Server](./mcp/)
+**Status:** 🚧 Planned
+
+Exposes the precomputed index through the Model Context Protocol (MCP) as a standardized server interface for universal integration with AI development tools.
+
+**Key Features:**
+- JSON-RPC 2.0 protocol implementation
+- Static context delivery in multiple formats (XML, Markdown, JSON)
+- Dynamic semantic search across indexed files
+- Metadata retrieval and time-based filtering
+- Support for Claude Code, GitHub Copilot CLI, and future MCP clients
+
+**Primary Components:**
+- `internal/mcp/server.go` - MCP server orchestrator
+- `internal/mcp/protocol/` - JSON-RPC message types and protocol definitions
+- `internal/mcp/transport/` - Transport abstraction (stdio implementation)
+- `cmd/mcp/` - CLI command for running the MCP server
+
+**See:** [mcp/README.md](./mcp/README.md)
+
+---
+
+#### [Semantic Search](./semantic-search/)
+**Status:** ✅ Documented
+
+Provides weighted, relevance-based search capabilities across the precomputed index using token-based matching.
+
+**Key Features:**
+- Token-based semantic search across seven fields (filename, category, type, summary, tags, topics, document type)
+- Weighted proportional scoring algorithm for relevance ranking
+- Stop word filtering and case-insensitive matching
+- Category filtering and configurable result limits
+- Stateless, thread-safe operation with pure function design
+
+**Primary Components:**
+- `internal/search/semantic.go` - Searcher implementation
+- `internal/search/` - Query parsing and scoring algorithms
+
+**See:** [semantic-search/README.md](./semantic-search/README.md)
+
+---
+
 ### Utilities
 
 #### [Walker](./walker/)
@@ -263,56 +331,56 @@ Version information management for build-time metadata.
 ## Subsystem Interactions
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    CLI Commands (cmd/)                      │
-│  ┌──────────┐ ┌──────────┐ ┌────────────┐ ┌──────────────┐  │
-│  │   init   │ │  daemon  │ │    read    │ │ integrations │  │
-│  └────┬─────┘ └────┬─────┘ └─────┬──────┘ └──────┬───────┘  │
-└───────┼────────────┼─────────────┼───────────────┼──────────┘
-        │            │             │               │
-        v            v             v               v
-┌─────────────────────────────────────────────────────────────┐
-│              Configuration (internal/config)                │
-│         Loads settings, validates, manages paths            │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        v                    v                    v
-┌──────────────┐    ┌─────────────────┐   ┌──────────────────┐
-│   Daemon     │───>│ Index Manager   │   │   Integration    │
-│  Subsystem   │    │  (atomic I/O)   │   │    Registry      │
-└──────┬───────┘    └────────┬────────┘   └────────┬─────────┘
-       │                     │                     │
-       │                     │                     │
-   ┌───┴───────┬─────────────┤                     │
-   │           │             │                     │
-   v           v             v                     v
-┌────────┐ ┌─────────┐ ┌────────────┐       ┌──────────────┐
-│Watcher │ │ Worker  │ │   Read     │       │   Output     │
-│        │ │  Pool   │ │  Command   │       │  Processors  │
-└────────┘ └────┬────┘ └────────────┘       └──────────────┘
-                │
-        ┌───────┴───────┐
-        │               │
-        v               v
-   ┌─────────┐    ┌──────────┐
-   │Metadata │    │ Semantic │
-   │Extractor│    │ Analyzer │
-   └────┬────┘    └────┬─────┘
-        │              │
-        │              v
-        │         ┌─────────┐
-        │         │ Claude  │
-        │         │   API   │
-        │         └─────────┘
-        │              │
-        └──────┬───────┘
-               v
-        ┌────────────┐
-        │   Cache    │
-        │  Manager   │
-        └────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                      CLI Commands (cmd/)                        │
+│  ┌──────┐ ┌────────┐ ┌──────┐ ┌──────┐ ┌──────────────┐         │
+│  │ init │ │ daemon │ │ read │ │ mcp  │ │ integrations │         │
+│  └───┬──┘ └───┬────┘ └───┬──┘ └───┬──┘ └──────┬───────┘         │
+└──────┼────────┼──────────┼────────┼───────────┼─────────────────┘
+       │        │          │        │           │
+       v        v          v        v           v
+┌──────────────────────────────────────────────────────────────────┐
+│                Configuration (internal/config)                   │
+│           Loads settings, validates, manages paths               │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+        ┌──────────────────────┼────────────────────────────┐
+        │                      │                            │
+        v                      v                            v
+┌──────────────┐        ┌──────────────────┐       ┌──────────────────┐
+│   Daemon     │───────>│ Index Manager    │       │   Integration    │
+│  Subsystem   │        │  (atomic I/O)    │       │    Registry      │
+└──────┬───────┘        └────────┬─────────┘       └────────┬─────────┘
+       │                         │                          │
+       │                ┌────────┼───────┐                  │
+   ┌───┴───────┐        │                │                  │
+   │           │        │                │                  │
+   v           v        v                v                  v
+┌────────┐ ┌──────┐ ┌───────┐  ┌──────────────────┐  ┌──────────────┐
+│Watcher │ │Worker│ │ Read  │  │   MCP Server     │  │   Output     │
+│        │ │ Pool │ │Command│  │                  │  │  Processors  │
+└────────┘ └───┬──┘ └───────┘  └─────────┬────────┘  └──────────────┘
+               │                         │
+       ┌───────┴───────┐                 │
+       │               │                 │
+       v               v                 v
+  ┌─────────┐    ┌──────────┐    ┌──────────────┐
+  │Metadata │    │ Semantic │    │   Semantic   │
+  │Extractor│    │ Analyzer │    │    Search    │
+  └────┬────┘    └────┬─────┘    └───────┬──────┘
+       │              │                  │
+       │              v                  │
+       │         ┌─────────┐             │
+       │         │ Claude  │             │
+       │         │   API   │             │
+       │         └─────────┘             │
+       │              │                  │
+       └──────┬───────┘                  │
+              v                          v
+       ┌────────────┐            ┌──────────────┐
+       │   Cache    │            │ External MCP │
+       │  Manager   │            │   Clients    │
+       └────────────┘            └──────────────┘
 ```
 
 ## Documentation Standards
@@ -361,10 +429,6 @@ Before marking subsystem documentation as complete, verify:
 - [README](../../README.md) - User-facing documentation
 - [CHANGELOG](../../CHANGELOG.md) - Version history
 
-### Configuration Examples
-- [Examples Directory](../../examples/) - Configuration templates
-- [Examples README](../../examples/README.md) - Example documentation
-
 ## Getting Help
 
 If you're looking for specific subsystem information:
@@ -383,4 +447,4 @@ If you're looking for specific subsystem information:
 
 ---
 
-**Last Updated:** 2025-11-01
+**Last Updated:** 2025-11-07

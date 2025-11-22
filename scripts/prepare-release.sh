@@ -160,6 +160,38 @@ ${new_link}
     return 0
 }
 
+# Update version references in documentation files
+update_version_references() {
+    local version="$1"
+    local version_number="${version#v}"  # Strip 'v' prefix
+
+    echo -e "${YELLOW}Updating version references in documentation...${NC}"
+
+    # Update README.md
+    if [ -f "README.md" ]; then
+        if grep -q "Current Version.*v[0-9]\+\.[0-9]\+\.[0-9]\+" README.md; then
+            sed -i.bak "s/\*\*Current Version\*\*: v[0-9]\+\.[0-9]\+\.[0-9]\+/**Current Version**: ${version}/" README.md
+            rm -f README.md.bak
+            echo -e "${GREEN}Updated README.md version reference to ${version}${NC}"
+        else
+            echo -e "${YELLOW}Warning: Could not find version reference in README.md${NC}"
+        fi
+    fi
+
+    # Update CLAUDE.md
+    if [ -f "CLAUDE.md" ]; then
+        if grep -q "Current version: v[0-9]\+\.[0-9]\+\.[0-9]\+" CLAUDE.md; then
+            sed -i.bak "s/Current version: v[0-9]\+\.[0-9]\+\.[0-9]\+/Current version: ${version}/" CLAUDE.md
+            rm -f CLAUDE.md.bak
+            echo -e "${GREEN}Updated CLAUDE.md version reference to ${version}${NC}"
+        else
+            echo -e "${YELLOW}Warning: Could not find version reference in CLAUDE.md${NC}"
+        fi
+    fi
+
+    return 0
+}
+
 # Validate version argument
 if [ -z "$VERSION" ]; then
     echo -e "${RED}Error: VERSION argument is required${NC}"
@@ -259,10 +291,21 @@ fi
 
 echo -e "${GREEN}Changelog merged successfully!${NC}"
 
-# Amend commit to include CHANGELOG.md changes
-git add CHANGELOG.md
+# Update version references in documentation
+if ! update_version_references "$VERSION"; then
+    echo -e "${RED}Error: Version reference update failed${NC}"
+    echo -e "${YELLOW}Undoing tag and commit...${NC}"
+    git tag -d "$VERSION"
+    git reset --hard HEAD~1
+    exit 1
+fi
+
+echo -e "${GREEN}Version references updated successfully!${NC}"
+
+# Amend commit to include CHANGELOG.md and version reference changes
+git add CHANGELOG.md README.md CLAUDE.md
 git commit --amend --no-edit
-echo -e "${GREEN}Updated release commit with changelog${NC}"
+echo -e "${GREEN}Updated release commit with changelog and version references${NC}"
 
 # Delete temporary tag and recreate on amended commit (so tag points to final commit hash)
 echo -e "${YELLOW}Recreating git tag ${VERSION} on final commit...${NC}"

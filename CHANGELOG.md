@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2025-11-21
+
+### Added
+- **Service manager integration** - Comprehensive support for systemd and launchd service managers
+  - Service file generation commands: `daemon systemctl` (systemd) and `daemon launchctl` (launchd)
+  - Automatic service manager detection on Linux and macOS platforms
+  - Generated service files include proper paths, environment variables, and security configurations
+  - systemd integration uses Type=notify for precise readiness signaling via SdNotify
+  - launchd integration includes KeepAlive, ThrottleInterval, and proper environment setup
+  - Helper utilities for platform detection and service manager availability checks
+- **Enhanced daemon commands** - Context-aware help and suggestions based on detected service manager
+  - `daemon start` detects service-managed vs foreground mode and provides appropriate startup messages
+  - `daemon start` provides platform-specific setup hints for non-service-managed starts
+  - `daemon start` wraps "already running" errors with troubleshooting steps and service manager commands
+  - `daemon status` shows service-managed vs foreground status and adds "Service Management" section
+  - `daemon status` suggests checking service manager when daemon not running
+  - `daemon stop` provides platform-specific service manager commands when errors occur
+  - Improved user experience with actionable next steps for all daemon lifecycle commands
+- **Comprehensive documentation** - Service manager integration guide (430 lines added to README.md and CLAUDE.md)
+  - Step-by-step setup instructions for systemd (Linux) with user-level and system-wide options
+  - Step-by-step setup instructions for launchd (macOS) with complete plist generation
+  - Service file generation examples and customization guidance
+  - Platform-specific troubleshooting and common issues resolution
+  - Upgrade procedures for service-managed and manual daemon installations
+  - Updated CLAUDE.md with service manager workflow and development notes
+
+### Changed
+- **BREAKING**: Removed `daemon.enabled` configuration field
+  - This field was only used to control whether daemon started during initialization
+  - Daemon behavior is now controlled entirely by whether it's running (PID file check)
+  - Users with `daemon.enabled` in config files should remove it (no functional impact)
+  - `daemon status` command enhanced to show detailed status without relying on config field
+  - Simplified daemon management: start/stop/restart commands work regardless of config
+- **Initialize command output** - Simplified and streamlined formatting (149 lines removed)
+  - Clearer, more concise progress indicators and section headers
+  - Improved readability with better visual hierarchy
+  - Added blank lines for better section separation
+  - Enhanced integration setup output with clearer success messages
+  - Improved "Next steps" guidance directing users to service manager setup
+
+### Removed
+- **daemon.enabled config field** - No longer needed for daemon behavior control
+  - Removed from config types (`internal/config/types.go`)
+  - Removed from config validation (`cmd/config/subcommands/validate.go`)
+  - Removed from default config constants (`internal/config/constants.go`)
+  - Removed from example configuration (`config.yaml.example`)
+  - Removed from status command output (`cmd/daemon/subcommands/status.go`)
+  - Removed from subsystem documentation (`docs/subsystems/config-manager/README.md`)
+  - Status checks now rely on PID file and process state instead of config flag
+
 ## [0.9.1] - 2025-11-21
 
 ### Added
@@ -533,7 +583,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.1...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.1...v0.8.2

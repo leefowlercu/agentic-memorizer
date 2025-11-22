@@ -104,7 +104,7 @@ The Manager struct (`internal/cache/manager.go`) provides the central interface 
 The manager maintains minimal state, holding only the cache directory path. All other information (cached analyses, metadata, timestamps) is stored in individual JSON files within the cache directory structure.
 
 **Initialization:**
-The `NewManager()` constructor accepts a cache directory path, validates it to prevent security issues (rejects parent directory references like `..`), expands home directory notation (`~`), and creates the `summaries` subdirectory structure. This initialization ensures the cache directory is ready for storage operations before any caching occurs.
+The `NewManager()` constructor accepts a cache directory path and creates the `summaries` subdirectory structure using `os.MkdirAll()`. Path validation (rejecting parent directory references like `..`) and home directory expansion (`~`) happen in the Config subsystem before the cache manager is created, not within `NewManager()` itself. This initialization ensures the cache directory is ready for storage operations before any caching occurs.
 
 **Thread Safety:**
 The current implementation provides implicit thread safety through file system atomicity. Individual file writes are atomic at the OS level, and concurrent reads don't conflict. However, the implementation lacks explicit locking, so future enhancements requiring coordinated operations (like cache size tracking or LRU eviction) would need to add synchronization primitives.
@@ -114,16 +114,21 @@ The current implementation provides implicit thread safety through file system a
 The Cache Manager provides five core operations that implement the complete cache lifecycle:
 
 **Get Operation:**
-The `Get(fileHash string)` method retrieves cached analysis for a given content hash. It constructs the cache file path from the hash (using the first 16 characters as the filename), attempts to read the JSON file, and unmarshals the content into a `CachedAnalysis` structure. On success, it returns the cached analysis. On failure (file not found, JSON parse error), it returns nil, indicating a cache miss. This simple API enables callers to use the pattern `if cached := manager.Get(hash); cached != nil { use cached }`.
+The `Get(fileHash string)` method retrieves cached analysis for a given content hash. It constructs the cache file path from the hash (using the first 16 characters as the filename), attempts to read the JSON file, and unmarshals the content into a `CachedAnalysis` structure. The return values distinguish between cache misses and errors:
+- `(cached, nil)` - Cache hit, analysis found and valid
+- `(nil, nil)` - Cache miss, file not found (normal case, not an error)
+- `(nil, error)` - Read or unmarshal error (abnormal, indicates corruption or permission issues)
+
+This distinction enables callers to use the pattern `if cached := manager.Get(hash); cached != nil { use cached }`.
 
 **Set Operation:**
-The `Set(cached *CachedAnalysis)` method stores a new cache entry. It marshals the `CachedAnalysis` structure to pretty-printed JSON and writes it to a file named after the first 16 characters of the file hash. The operation is synchronous, ensuring the cache entry is durable before returning. Errors during write operations are logged but don't prevent the caller from continuing (the analysis result is still valid, just not cached).
+The `Set(cached *CachedAnalysis)` method stores a new cache entry. It marshals the `CachedAnalysis` structure to pretty-printed JSON and writes it to a file named after the first 16 characters of the file hash. The operation is synchronous, ensuring the cache entry is durable before returning. The method returns errors rather than logging them internally; the caller (worker pool or daemon event handler) logs errors and continues processing (the analysis result is still valid, just not cached).
 
 **Staleness Check:**
 The `IsStale(cached *CachedAnalysis, currentHash string)` method determines whether a cached entry is still valid by comparing the cached file hash against the current file's content hash. If the hashes match, the cache is valid. If they differ, the content has changed, and the cache entry is stale. This simple comparison implements content-based cache invalidation without time-based expiration or version tracking.
 
 **Clear Operation:**
-The `Clear()` method removes all cached files by deleting the entire `summaries` subdirectory and recreating it empty. This operation provides manual cache maintenance capability, useful for testing, troubleshooting, or recovering from cache corruption. The operation is not typically needed during normal operation since content addressing prevents stale cache usage.
+The `Clear()` method removes all cached files by iterating through entries in the `summaries` directory and deleting each file individually. The directory structure itself is preserved (subdirectories within summaries are skipped, only files are deleted). This operation provides manual cache maintenance capability, useful for testing, troubleshooting, or recovering from cache corruption. The operation is not typically needed during normal operation since content addressing prevents stale cache usage.
 
 **Hash Computation:**
 The `HashFile(filePath string)` function computes the SHA-256 hash of a file's content. It streams the entire file through the hasher without size limits, producing a deterministic hash value. The hash is returned in the format `"sha256:" + hex-encoded-hash`, matching the cache key format used throughout the system. This function is typically called by worker threads before cache lookup.
@@ -139,7 +144,7 @@ The subsystem uses SHA-256, a cryptographic hash function that produces 256-bit 
 Computed hashes use the format `"sha256:<hex-encoded-hash>"` where the hex encoding produces a 64-character string. The `sha256:` prefix provides algorithm identification, enabling future support for alternative hash algorithms without breaking existing caches. This format is consistent across metadata structures, cache keys, and file names.
 
 **Filename Convention:**
-Cache files are named using the first 16 characters of the hex-encoded hash followed by `.json` extension. For example, a file with hash `sha256:abc123def456...` would have cache file `abc123def456.json`. This truncation provides manageable filename lengths while maintaining negligible collision probability (16 hex characters = 64 bits, 2^64 possible values).
+Cache files are named using the first 16 characters of the full hash string (including the "sha256:" prefix) followed by `.json` extension. For example, a file with hash `sha256:abc123def456...` would have cache file `sha256:abc123de.json`, yielding 9 hex characters after the "sha256:" prefix. This truncation provides manageable filename lengths while maintaining negligible collision probability for the hex portion (9 hex characters = 36 bits, over 68 billion possible values).
 
 **Streaming Computation:**
 The hash computation streams file content through the hasher rather than loading the entire file into memory. This streaming approach enables hashing of arbitrarily large files without memory constraints. The hasher processes chunks as they're read from disk, accumulating the hash state incrementally.
@@ -158,7 +163,7 @@ Once computed, the file hash serves multiple purposes:
 The Daemon subsystem (`internal/daemon/daemon.go`) creates and manages the Cache Manager as an optional component that's only initialized when semantic analysis is enabled.
 
 **Initialization:**
-During daemon startup, if `cfg.Analysis.Enable` is true, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)`. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). If semantic analysis is disabled, the cache manager is not created, and all caching logic is bypassed.
+During daemon startup at `daemon.go:113-116`, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enable` at lines 120-133).
 
 **Worker Pool Distribution:**
 The daemon passes the cache manager instance to the worker pool during initialization. All worker threads share this single cache manager instance, enabling coordinated cache access across parallel processing. The cache manager's stateless design ensures this sharing is safe without explicit synchronization.
@@ -187,7 +192,7 @@ Each worker processes files through a multi-stage pipeline where caching is inte
 The worker pool maintains counters for cache hits and API calls, enabling calculation of cache hit rate. These statistics are logged during processing and exposed through health metrics. High cache hit rates (>95%) indicate effective caching, while low rates may indicate frequent file changes or cache issues.
 
 **Rate Limiting Integration:**
-Rate limiting occurs only on the cache miss path. When cache provides results, no rate limiter token is consumed, allowing workers to process cached files at maximum speed without API quota constraints. This integration ensures that caching provides not just performance benefits but also quota preservation.
+Rate limiting occurs only on the cache miss path within the worker pool processing (`worker_pool.go:212`). When cache provides results, no rate limiter token is consumed, allowing workers to process cached files at maximum speed without API quota constraints. Note: The daemon event handler for incremental updates (`daemon.go:540-563`) does NOT use rate limiting, processing file changes immediately with cache-first logic but without rate limiter token acquisition. This integration ensures that caching provides not just performance benefits but also quota preservation in the worker pool context.
 
 **Concurrency:**
 Multiple workers access the cache manager concurrently during parallel processing. The cache manager's stateless design and file system atomicity ensure this concurrent access is safe. Each worker independently checks cache, performs analysis on misses, and stores results without coordination overhead.
@@ -205,8 +210,8 @@ The cache stores the entire `SemanticAnalysis` structure returned by the analyze
 **Metadata Preservation:**
 The cache stores not just semantic analysis results but also the complete `FileMetadata` structure alongside them. This enables reconstruction of full index entries from cache without re-extracting metadata. The cached metadata also provides context for debugging and cache inspection.
 
-**Error Caching:**
-The cache structure includes an optional `Error` field that stores error messages when analysis fails. This enables caching of negative results (analysis attempts that failed), preventing repeated API calls for files that consistently fail analysis. Future enhancements could implement retry logic that respects this cached error state.
+**Error Caching (Not Currently Implemented):**
+The `CachedAnalysis` structure includes an optional `Error` field designed to store error messages when analysis fails. However, this feature is not currently implemented in the codebase. Currently, only successful analyses are cached; failed analyses result in no cache entry being created. The worker pool and daemon event handler log warnings for failed analyses but do not call `Set()` to cache the error. This field exists in the data structure for potential future enhancement.
 
 ### Type System
 
@@ -256,7 +261,7 @@ The `FileHash` field in `CachedAnalysis` serves as both the cache key and a stor
 
 **Stateless Operations**: Cache operations that don't maintain runtime state between calls, enabling concurrent access from multiple workers without coordination overhead.
 
-**Hash Prefix**: First 16 characters of content hash used as cache filename, providing manageable filename lengths while maintaining negligible collision probability.
+**Hash Prefix**: First 16 characters of the full hash string (including "sha256:" prefix) used as cache filename, yielding 9 hex characters after the prefix and providing manageable filename lengths while maintaining negligible collision probability.
 
 **Cache Directory**: Designated file system location for storing cache files (default: `~/.agentic-memorizer/.cache`), containing `summaries` subdirectory with JSON files.
 

@@ -37,9 +37,10 @@ The routing decision tree operates as follows:
 1. Files exceeding the maximum size limit are rejected before analysis begins
 2. Files in the "images" category with vision enabled are routed to vision analysis with base64 encoding
 3. Files with type "docx" or "pptx" trigger document analysis with ZIP-based text extraction
-4. PDF files use document content blocks for native Claude PDF understanding
-5. All other readable files undergo text analysis with content truncation at 100KB
-6. Non-readable or binary files fall back to metadata-only analysis
+4. All other readable files (including PDFs) undergo text analysis with content truncation at 100KB
+5. Non-readable or binary files fall back to metadata-only analysis
+
+**Note on PDF Handling**: While PDF analysis code with document content blocks exists in `analyzeDocument()` (lines 143-190 of analyzer.go), it is currently unreachable from the main `Analyze()` routing method. PDFs route through `analyzeText()` which attempts to read them as text files. The document content block implementation represents planned future functionality that requires routing logic updates to activate.
 
 This routing strategy maximizes the effectiveness of Claude's multimodal capabilities by matching file characteristics to appropriate API features. Vision analysis leverages Claude's ability to understand visual content in diagrams and screenshots. Document blocks enable native PDF comprehension. Text extraction surfaces content from Office formats. The fallback strategy ensures that all files receive at least baseline analysis from metadata.
 
@@ -48,8 +49,8 @@ This routing strategy maximizes the effectiveness of Claude's multimodal capabil
 The Client component implements robust retry logic with exponential backoff to handle transient API failures gracefully. This pattern increases system resilience against temporary network issues, rate limiting responses, and server errors without overwhelming the API with repeated requests.
 
 The retry mechanism operates with the following characteristics:
-- Maximum of 3 attempts per API request
-- Exponential delay sequence: 1 second, 2 seconds, 4 seconds between attempts
+- Maximum of 4 total attempts per API request (1 initial attempt + 3 retries)
+- Exponential delay sequence: 1 second, 2 seconds, 4 seconds between retry attempts
 - Retries triggered by network errors and specific HTTP status codes (429 rate limiting, 500/502/503/504 server errors)
 - Immediate failure without retry for client errors (400 bad request, 401 unauthorized, 403 forbidden)
 - Preservation of the last error message for debugging and user visibility
@@ -165,8 +166,9 @@ The Client component (`internal/semantic/client.go`) manages all HTTP communicat
 All API requests use the Claude Messages API format with:
 - `model` field specifying the Claude model
 - `max_tokens` field limiting response length
-- `system` field containing base instructions
 - `messages` array with single user message containing content blocks (text, image, or document)
+
+**Note**: The current implementation does not use the `system` field. All prompts are sent as user messages without system-level instructions.
 
 **Error Handling:**
 The client distinguishes between retryable errors (network failures, 429 rate limiting, 500/502/503/504 server errors) and permanent errors (400/401/403 client errors), implementing retry logic only for transient failures.
@@ -232,18 +234,20 @@ The Semantic Analyzer employs distinct strategies for different file types, each
 
 **Optimization**: Simple XML text extraction (not full DOM parsing) reduces dependencies and improves performance
 
-#### PDF Analysis Strategy
+#### PDF Analysis Strategy (Currently Inactive)
 
 **Target Files**: PDF documents
 
-**Approach**:
+**Current Status**: While PDF document content block analysis code exists in the implementation (`analyzeDocument()` method at analyzer.go:143-190), this functionality is currently **not reachable** from the main routing logic. PDFs currently route through the text analysis strategy which attempts to read them as text files.
+
+**Planned Approach** (when activated):
 1. Read entire PDF file into memory
 2. Base64 encode the PDF data for transmission
 3. Build prompt including filename, size, and optional page count from metadata
 4. Send document message with document content block (MIME type: application/pdf)
 5. Parse JSON response leveraging Claude's native PDF understanding
 
-**Capability**: Uses Claude's built-in PDF comprehension to understand document structure, text, and layout without external PDF parsing libraries
+**Future Capability**: Once routing is updated, this will use Claude's built-in PDF comprehension to understand document structure, text, and layout without external PDF parsing libraries
 
 #### Binary/Fallback Strategy
 
@@ -368,11 +372,12 @@ The `Semantic` field is nil in three cases:
 
 **Confidence Scoring**:
 Confidence scores indicate analysis reliability:
-- **1.0**: Full semantic analysis from Claude API completed successfully
-- **0.5**: Fallback analysis synthesized from metadata only (binary files, extraction failures)
-- **0.0**: Could be used for placeholder or failed analysis (though current implementation uses nil instead)
+- **0.5**: Explicitly set for fallback analysis synthesized from metadata only (binary files, extraction failures) at `analyzeBinary()` line 455
+- **0.0**: Default value for Claude API responses (Go's zero value for float64)
 
-Downstream consumers can check confidence scores to adjust trust in analysis results, potentially treating low-confidence entries as requiring human review or re-analysis.
+**Important Note**: The current implementation does NOT request confidence scores from Claude in its prompts. None of the analysis prompts (lines 99-104, 166-171, 289-294, 410-415, 470-475) ask Claude to provide a confidence field. As a result, successful Claude analyses return with Confidence=0.0 (the zero value) unless Claude spontaneously includes a confidence field in the JSON response.
+
+Downstream consumers should be aware that confidence scores are only meaningful for binary fallback analyses (0.5). The absence of a confidence request in prompts means this field doesn't reliably distinguish between successful Claude analyses and other scenarios.
 
 ## Glossary
 
@@ -382,9 +387,9 @@ Downstream consumers can check confidence scores to adjust trust in analysis res
 
 **Content-Based Routing**: Strategy selection based on file type and metadata characteristics, matching file properties to optimal Claude API capabilities (text, vision, document blocks).
 
-**Exponential Backoff**: Retry strategy that doubles wait time between attempts (1s, 2s, 4s), preventing API overload while handling transient failures gracefully.
+**Exponential Backoff**: Retry strategy that doubles wait time between retry attempts (1s, 2s, 4s) for up to 4 total attempts (1 initial + 3 retries), preventing API overload while handling transient failures gracefully.
 
-**Rate Limiting**: Token bucket algorithm controlling Claude API call frequency to maintain quota compliance (default 20 calls/minute with burst capacity of 3).
+**Rate Limiting**: Token bucket algorithm controlling Claude API call frequency to maintain quota compliance (default 20 calls/minute). **Note**: Rate limiting is implemented in the Daemon subsystem's worker pool (`internal/daemon/worker_pool.go`), not in the Semantic Analyzer subsystem. The worker pool calls `rateLimiter.Wait(ctx)` before invoking the analyzer on cache misses. The analyzer itself has no rate limiting logic.
 
 **Content Truncation**: Limiting analyzed content to fixed sizes (100KB for text, 50KB for extracted document text) to manage API token usage and control costs.
 
@@ -404,6 +409,6 @@ Downstream consumers can check confidence scores to adjust trust in analysis res
 
 **Retry Logic**: Error handling pattern that attempts failed API requests multiple times with increasing delays, distinguishing between transient failures (retry) and permanent errors (fail immediately).
 
-**Confidence Score**: Numeric value from 0.0 to 1.0 indicating reliability of semantic analysis, with 1.0 for successful Claude analysis and 0.5 for metadata-only fallback.
+**Confidence Score**: Numeric value from 0.0 to 1.0 indicating reliability of semantic analysis. Currently, 0.5 is explicitly set for metadata-only fallback (binary files), while Claude API responses default to 0.0 since confidence is not requested in prompts. This field does not currently provide reliable distinction between successful and unsuccessful Claude analyses.
 
 **Token Budget**: Maximum number of tokens Claude can use in response (default 1500), controlling response length and API costs while ensuring complete analysis output.

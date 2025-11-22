@@ -52,6 +52,8 @@ All index operations are protected by a reader-writer mutex to enable safe concu
 
 The Index Manager stores the current index in memory and protects it with a RWMutex, enabling the daemon to update the index frequently while still allowing concurrent reads. This pattern is essential for supporting high-throughput indexing operations without sacrificing access speed.
 
+**Important Safety Caveat:** The `GetCurrent()` method returns a pointer to the shared index structure, not a deep copy. Callers must treat the returned index as read-only and must not mutate any fields or nested structures. Mutations would create data races with concurrent updates. The Index Manager prioritizes performance (avoiding expensive deep copies) over defensive programming, placing the burden of correct usage on callers.
+
 ### Atomic Operations
 
 All writes to the index file use atomic operations to prevent corruption. The atomic write pattern follows these steps: marshal the index to JSON, write to a temporary file with a `.tmp` extension, sync the temporary file to disk to ensure durability, and atomically rename the temporary file to the final index path.
@@ -82,9 +84,24 @@ This metadata enables future enhancements like schema migrations, index format c
 
 The Manager type provides the primary interface for index operations. It maintains an in-memory representation of the current index, stores the file system path where the index should be persisted, protects access with a reader-writer mutex, and tracks build metadata from the most recent index generation.
 
-The Manager exposes several key operations: LoadComputed reads and validates an existing index file, SetIndex updates the in-memory index from a full rebuild, WriteAtomic persists the current index atomically, GetCurrent returns a thread-safe read of the current index, UpdateSingle modifies a single entry incrementally, and RemoveFile deletes an entry from the index.
+**Constructor:**
+- `NewManager(indexPath string) *Manager` - Creates a new index manager with the specified file path for persistence
+
+**Core Operations:**
+The Manager exposes several key operations:
+- `LoadComputed()` - Reads and validates an existing index file from disk
+- `SetIndex(*types.Index)` - Updates the in-memory index from a full rebuild
+- `WriteAtomic(daemonVersion string)` - Persists the current index atomically to disk
+- `GetCurrent() *types.Index` - Returns a thread-safe read of the current index (**Returns pointer, not copy - callers must not mutate**)
+- `UpdateSingle(*types.IndexEntry)` - Modifies a single entry incrementally (**O(n) linear search** through entries)
+- `RemoveFile(path string)` - Deletes an entry from the index (**O(n) linear search** through entries)
 
 Each operation is designed to be composable and safe. The daemon can call SetIndex followed by WriteAtomic to persist a full rebuild, or call UpdateSingle followed by WriteAtomic to persist an incremental change. Thread safety is maintained regardless of the operation sequence.
+
+**Performance Considerations:**
+- UpdateSingle and RemoveFile perform linear searches through the entries array (O(n) complexity)
+- For large indexes with thousands of files, these operations may take milliseconds
+- Full rebuilds replace the entire entries array, avoiding repeated linear searches
 
 ### Computed Index Structure
 

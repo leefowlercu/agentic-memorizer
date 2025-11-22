@@ -85,19 +85,26 @@ The Extractor (`internal/metadata/extractor.go`) serves as the central orchestra
 
 **File Categories:**
 The orchestrator categorizes files into semantic groupings that guide downstream processing:
-- **documents**: Text-based files like Markdown, DOCX, PDF, RTF
-- **presentations**: Slide-based formats like PPTX, PPT, Keynote
-- **images**: Visual formats like PNG, JPG, GIF, SVG, WebP
-- **transcripts**: Time-coded text like VTT and SRT subtitle files
-- **data**: Structured data formats like JSON, YAML, TOML, XML
-- **code**: Source code files across ten programming languages
-- **videos**: Video container formats like MP4, MOV, AVI, MKV
-- **audio**: Audio formats like MP3, WAV, OGG, FLAC
-- **archives**: Compressed archives like ZIP, TAR, GZ, 7Z
+- **documents**: Text-based files like Markdown (.md, .markdown), TXT (.txt), DOCX (.docx, .doc), PDF (.pdf), RTF (.rtf)
+- **presentations**: Slide-based formats like PPTX (.pptx, .ppt), Keynote (.key)
+- **images**: Visual formats like PNG (.png), JPG (.jpg, .jpeg), GIF (.gif), SVG (.svg), BMP (.bmp), WebP (.webp)
+- **transcripts**: Time-coded text like VTT (.vtt) and SRT (.srt, .sub) subtitle files
+- **data**: Structured data formats like JSON (.json), YAML (.yaml, .yml), TOML (.toml), XML (.xml)
+- **code**: Source code files (Go, Python, JavaScript, TypeScript, Java, Ruby, Rust, C, C++, Shell)
+- **videos**: Video container formats like MP4 (.mp4), MOV (.mov), AVI (.avi), MKV (.mkv), WebM (.webm)
+- **audio**: Audio formats like MP3 (.mp3), WAV (.wav), OGG (.ogg), FLAC (.flac), M4A (.m4a)
+- **archives**: Compressed archives like ZIP (.zip), TAR (.tar), GZ (.gz), 7Z (.7z)
 - **other**: Unknown or unsupported file types
 
 **Readability Detection:**
-The orchestrator marks files as "readable" when Claude Code can process them directly without intermediate extraction. Readable file types include text formats (Markdown, code, JSON, YAML, XML), images (which Claude's vision capabilities can process), and transcripts. Binary formats like DOCX, PPTX, and archives are marked as not readable since they require extraction before processing.
+The orchestrator marks files as "readable" when Claude Code can process them directly without intermediate extraction. Readable file types include:
+- Text formats: Markdown (.md, .markdown), TXT (.txt), XML (.xml), HTML (.html), CSS (.css)
+- Code files: All supported programming languages including Shell (.sh, .bash)
+- Structured data: JSON (.json), YAML (.yaml, .yml), TOML (.toml)
+- Images: PNG, JPG, GIF, WebP (processed via Claude's vision capabilities)
+- Transcripts: VTT (.vtt), SRT (.srt)
+
+Binary formats like DOCX, PPTX, PDF, and archives are marked as not readable since they require extraction or specialized processing before Claude can analyze them.
 
 ### Handler Interface
 
@@ -130,6 +137,8 @@ Extracts metadata from Markdown and text-based documentation files by parsing th
 
 **Supported Extensions:** `.md`, `.markdown`
 
+**Type Field Value:** Sets `Type: "markdown"` (semantic type name, not raw extension)
+
 **Readability:** Marked as readable (Claude Code can process Markdown directly)
 
 #### ImageHandler
@@ -146,6 +155,8 @@ Extracts dimensional metadata from image files using Go's standard image decodin
 - Image dimensions (width and height in pixels)
 
 **Supported Extensions:** `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
+
+**Type Field Value:** Sets `Type: ext` where ext is the extension without the dot (e.g., "png", "jpg", "gif", "webp")
 
 **Readability:** Marked as readable (Claude's vision capabilities can process images)
 
@@ -165,6 +176,8 @@ Extracts metadata from Microsoft Word documents by treating them as ZIP archives
 - Author (document creator from core properties)
 
 **Supported Extensions:** `.docx`
+
+**Type Field Value:** Sets `Type: "docx"`
 
 **Readability:** Marked as not readable (requires extraction before Claude can process)
 
@@ -188,6 +201,8 @@ Extracts metadata from Microsoft PowerPoint presentations using similar ZIP-base
 The handler includes an `ExtractText()` method used by the Semantic Analyzer to gather full presentation content for AI analysis. This method is separate from the metadata extraction to maintain clear separation of concerns.
 
 **Supported Extensions:** `.pptx`
+
+**Type Field Value:** Sets `Type: "pptx"`
 
 **Readability:** Marked as not readable (requires extraction)
 
@@ -338,9 +353,19 @@ The Type System (`pkg/types/types.go`) defines the data structures used througho
 
 **Core Structures:**
 
-**FileInfo**: Base metadata for all files, containing path, relative path, hash, size, modification time, type (file extension), category (semantic grouping), and readability flag. Every file in the system has this baseline information.
+**FileInfo**: Base metadata for all files (embedded in FileMetadata), containing:
+- `Path`: Absolute file path
+- `RelPath`: Relative path from memory root (enables portable index entries)
+- `Hash`: SHA-256 content hash (computed after extraction by worker pool)
+- `Size`: File size in bytes
+- `Modified`: Last modification timestamp
+- `Type`: Semantic type identifier (e.g., "markdown", "png", "docx" - not raw extensions)
+- `Category`: High-level grouping (documents, images, code, etc.)
+- `IsReadable`: Whether Claude Code can process the file directly
 
-**FileMetadata**: Extended metadata structure that inherits from FileInfo and adds optional type-specific fields. These fields use pointers to indicate when data is available versus absent:
+Every file in the system has this baseline information.
+
+**FileMetadata**: Extended metadata structure that embeds FileInfo (making all FileInfo fields directly accessible) and adds optional type-specific fields. These fields use pointers to indicate when data is available versus absent:
 - `WordCount`: Used by Markdown, DOCX handlers (and repurposed for line count in code files)
 - `PageCount`: Reserved for future PDF handler enhancement
 - `SlideCount`: Used by PPTX handler

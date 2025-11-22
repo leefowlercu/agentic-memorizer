@@ -174,7 +174,7 @@ The protocol layer defines the message types that flow between MCP clients and t
 **Prompt Types** (Future - Phase 5)
 - Templated workflows for common operations
 - Prompt discovery and parameter collection
-- Placeholder types exist but handlers not yet implemented
+- Type definitions planned for Phase 5 (handler stubs exist returning "not yet implemented" errors)
 
 ### Transport Layer
 
@@ -208,7 +208,7 @@ The server orchestrator coordinates all subsystem components and manages protoco
 - Graceful shutdown on disconnect or signals
 
 **Handler Registries**
-- `resourceHandlers`: Maps resource URIs to handler functions
+- `resourceHandlers`: Declared for future extensibility but currently unused (resources use direct switch-case routing in `handleResourcesRead()` for simplicity)
 - `toolHandlers`: Maps tool names to execution functions
 - `promptHandlers`: Reserved for Phase 5 prompt implementations
 
@@ -251,7 +251,7 @@ Queries are tokenized through a multi-step process:
 4. Remove punctuation from word boundaries (`.`, `,`, `!`, `?`, `;`, `:`, `"`, `'`, `()`, `[]`, `{}`)
 5. Discard tokens shorter than 2 characters
 
-Each file is scored by counting how many query tokens match in each searchable field, normalized by the total number of query tokens. This enables partial matching where files containing any subset of query terms will be ranked by relevance.
+Each file is scored by counting how many query tokens substring-match in each searchable field, normalized by the total number of query tokens. Token matching uses case-insensitive substring containment (not fuzzy algorithms like Levenshtein distance), so the query token "form" would match the word "terraform". The minimum relevance threshold is hardcoded to 0.1; entries scoring below this value are filtered out.
 
 **Weighted Scoring System**
 
@@ -264,7 +264,7 @@ Results are ranked using cumulative weighted scoring with partial token matching
 - **File type match**: 0.5 × (matched_tokens / total_tokens) - file extension and type field
 - **Document type match**: 0.5 × (matched_tokens / total_tokens) - AI-classified document type
 
-Entries must score above 0.1 (minimum relevance threshold) to be included in results. Results are sorted by cumulative score descending and limited to the requested maximum. The primary match type (highest-weighted matching field) is returned for display purposes.
+Entries must score above 0.1 (minimum relevance threshold, hardcoded in implementation at `semantic.go:94`) to be included in results. Results are sorted by cumulative score descending and limited to the requested maximum. The match type indicating the first matching field in weighted order (not necessarily the highest-scoring field) is returned for display purposes.
 
 **Example Scoring**:
 
@@ -333,8 +333,10 @@ tail -f ~/.agentic-memorizer/mcp.log
 ```
 
 **Dual Output**:
-- **File**: Structured logs written to `log_file` with rotation for persistent debugging
-- **Stderr**: Real-time logs visible to MCP client for immediate feedback
+- **File**: Text-format logs written to `log_file` with rotation for persistent debugging
+- **Stderr**: Text-format real-time logs visible to MCP client for immediate feedback
+
+**Note**: Both outputs use `slog.NewTextHandler` (text format), not JSON format, despite the comment at line 164 of `cmd/mcp/subcommands/start.go` claiming JSON for file output. The actual implementation uses text format for both channels.
 
 **Environment Variables**:
 Configuration values can also be set via environment variables:
@@ -569,7 +571,6 @@ An algorithm that assigns different point values to different types of matches w
 ## Additional Resources
 
 For detailed implementation information, see:
-- Implementation plan: `docs/wip/mcp-server-implementation-plan.md`
 - Protocol types: `internal/mcp/protocol/`
 - Server implementation: `internal/mcp/server.go`
 - Search implementation: `internal/search/semantic.go`

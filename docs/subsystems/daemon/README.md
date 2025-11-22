@@ -93,7 +93,7 @@ Priority calculation considers file modification time, giving highest priority t
 
 The file watcher component provides real-time file system monitoring using the fsnotify library. It recursively watches all directories within the memory path, debounces rapid event sequences to avoid redundant processing, and dynamically adds watchers for newly created directories.
 
-Event debouncing uses a map-based batching mechanism where events accumulate for a configurable period before being sent for processing. This batching ensures that the last write wins for any given path, preventing redundant work when files are modified multiple times in quick succession.
+Event debouncing uses a map-based batching mechanism where events accumulate for a configurable period before being sent for processing. This batching ensures that the last write wins for any given path, preventing redundant work when files are modified multiple times in quick succession. The debounce interval can be changed at runtime during configuration reload by signaling the watcher through a channel, causing it to recreate its internal ticker with the new interval.
 
 The watcher filters events intelligently, skipping hidden files and directories, ignoring configurable file patterns, and handling special cases like the cache directory and version control directories. It translates file system events into appropriate actions: Create and Modify events trigger analysis, Delete events trigger index removal, and Rename events are handled as deletion followed by creation.
 
@@ -117,7 +117,9 @@ Signal handling enables graceful shutdown, operational commands, and configurati
 
 When a shutdown signal is received, the daemon cancels its context to trigger goroutine exits, stops the file watcher, waits for all worker goroutines to complete their current work, and performs cleanup including PID file removal. This ensures that no work is lost and resources are properly released.
 
-Configuration reload via SIGHUP allows hot-reloading of most operational parameters without daemon restart. When SIGHUP is received, the daemon validates the new configuration, checks for immutable field changes, and applies hot-reloadable settings including Claude API configuration, worker pool parameters, rate limits, log level, and health check port. Changes to structural settings like memory_root, cache_dir, or log_file require a daemon restart.
+Configuration reload via SIGHUP allows hot-reloading of most operational parameters without daemon restart. When SIGHUP is received, the daemon validates the new configuration and checks for immutable field changes. Three fields are immutable during reload: memory_root (the watched directory), analysis.cache_dir (the cache storage location), and daemon.log_file (the log output path). If any immutable field has changed, the reload fails with an error message indicating a daemon restart is required.
+
+After validation succeeds, the daemon applies hot-reloadable settings including Claude API configuration, worker pool parameters, rate limits, debounce intervals, rebuild intervals, log level, and health check port. Settings take effect immediately without requiring any downtime.
 
 ### Health Monitoring
 
@@ -125,13 +127,27 @@ Health monitoring provides operational visibility through metrics tracking and o
 
 An optional HTTP health check endpoint serves this information in JSON format, enabling integration with monitoring systems. The health status is computed based on recent build success and error rates, allowing automated detection of degraded daemon operation.
 
+The health server can be disabled by setting the health check port to 0 in configuration. When the port changes during configuration reload, the daemon automatically stops the existing health server and starts a new one on the updated port. This hot-restart capability allows operational teams to reconfigure monitoring endpoints without full daemon restarts.
+
+### Service Manager Integration
+
+The daemon follows modern Go best practices by running in foreground mode and delegating process supervision to external service managers. This design avoids self-daemonization anti-patterns in favor of battle-tested tools like systemd and launchd.
+
+The daemon provides two commands for generating service manager configuration files. The `systemctl` command generates systemd unit files for Linux systems, while the `launchctl` command generates launchd plist files for macOS. Both commands detect the binary path automatically and create user-level and system-level configuration templates.
+
+When running under systemd, the daemon implements the Type=notify protocol by sending a readiness notification after the health server starts. This integration ensures systemd knows when the daemon is fully operational and ready to handle requests. The notification occurs via the go-systemd library's SdNotify function.
+
+Service managers handle backgrounding, automatic restarts on failure, and logging integration with system facilities like journald or Console.app. This approach provides production-grade process supervision without complex daemonization code in the application itself.
+
 ## Integration Points
 
 ### Configuration System
 
 The daemon reads configuration at startup from the system configuration file. Configuration options control all aspects of daemon behavior including whether the daemon is enabled, event debounce timing, worker pool size, API rate limits, full rebuild interval, health check endpoint port, log file location, and log level.
 
-Most configuration changes can be applied without daemon restart using the `config reload` command or by sending SIGHUP to the daemon process. Hot-reloadable settings include Claude API parameters, worker pool size, rate limits, debounce intervals, log level, health check port, rebuild intervals, and skip patterns. Structural settings that determine process architecture (memory_root, cache_dir, log_file) require a daemon restart. This design provides operational flexibility while maintaining system integrity.
+Most configuration changes can be applied without daemon restart using the `config reload` command or by sending SIGHUP to the daemon process. Hot-reloadable settings include Claude API parameters, worker pool size, rate limits, debounce intervals, log level, health check port, rebuild intervals, and skip patterns. Structural settings that determine process architecture (memory_root, cache_dir, log_file) require a daemon restart.
+
+When the rebuild interval changes during configuration reload, the daemon signals the periodic rebuild loop through a channel. The loop responds by stopping its current ticker and creating a new one with the updated interval. If the interval is set to 0 or negative, periodic rebuilds are disabled entirely, and the loop exits until the daemon restarts or receives a new non-zero interval. This design provides operational flexibility while maintaining system integrity.
 
 ### Cache System
 
@@ -159,9 +175,13 @@ The walker returns relative paths from the memory directory root, which are then
 
 ### CLI Commands
 
-CLI commands provide the user interface for daemon control. The start command launches the daemon process, the stop command sends SIGTERM to gracefully shut down, the status command checks daemon state and displays index information, the restart command performs stop followed by start, the rebuild command sends SIGUSR1 to trigger an immediate rebuild, the logs command displays daemon log output with optional follow mode, and the config reload command validates and applies configuration changes by sending SIGHUP to the running daemon.
+CLI commands provide the user interface for daemon control. The daemon supports eight subcommands: start, stop, status, restart, rebuild, logs, systemctl, and launchctl.
 
-These commands interact with the daemon through the PID file and signal-based communication rather than direct API calls. This design keeps the CLI lightweight and ensures that commands can execute quickly without waiting for the daemon to process requests.
+The start command launches the daemon process. The stop command sends SIGTERM to gracefully shut down. The status command checks daemon state and displays index information. The restart command performs stop followed by start. The rebuild command sends SIGUSR1 to trigger an immediate rebuild. The logs command displays daemon log output with optional follow mode.
+
+The systemctl command generates systemd unit files for Linux service manager integration. The launchctl command generates launchd plist files for macOS service manager integration. Both commands detect the binary path automatically and create user-level and system-level configuration templates.
+
+The config reload command validates and applies configuration changes by sending SIGHUP to the running daemon. Most commands interact with the daemon through the PID file and signal-based communication rather than direct API calls. This design keeps the CLI lightweight and ensures that commands can execute quickly without waiting for the daemon to process requests.
 
 ### Read Command
 
@@ -225,8 +245,12 @@ Potential minor improvements that could be considered in the future include file
 
 **Semantic Analysis**: AI-powered understanding of file contents including summarization, tagging, and topic extraction.
 
+**Service Manager Integration**: Integration with operating system service managers like systemd and launchd for process supervision. The daemon generates service configuration files and implements readiness protocols.
+
 **Signal Handler**: Code that executes in response to UNIX signals like SIGINT or SIGTERM. Enables graceful shutdown and operational commands.
 
 **Token Bucket**: A rate limiting algorithm that allows bursts up to a capacity while maintaining an average rate. Used for Claude API call throttling.
+
+**Type=notify**: A systemd service type where the daemon signals readiness after initialization. The daemon sends a notification to systemd when fully operational, ensuring proper service ordering and health tracking.
 
 **Worker Pool**: A collection of goroutines that process jobs concurrently with a shared job queue and result collection.

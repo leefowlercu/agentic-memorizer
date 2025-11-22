@@ -299,14 +299,16 @@ SearchResult represents a single match with relevance metadata:
 - `Score` (float64) - Cumulative relevance score from token-based proportional weighted algorithm
 - `MatchType` (string) - Primary match type: "filename", "summary", "tag", "category", "topic", "file_type", or "document_type"
 
-**Match Type Logic**: Records the highest-weighted field that matched, used for display and tie-breaking. Priority order:
-1. "filename" (weight 3.0) - highest priority
-2. "summary" (weight 2.0)
-3. "tag" (weight 1.5)
-4. "category" (weight 1.0)
-5. "topic" (weight 1.0)
-6. "file_type" (weight 0.5)
-7. "document_type" (weight 0.5) - lowest priority
+**Match Type Logic**: Records the first field that matched in weighted evaluation order (not necessarily the highest-scoring field). Evaluation proceeds in priority order:
+1. "filename" (weight 3.0) - evaluated first
+2. "summary" (weight 2.0) - only set if filename didn't match
+3. "tag" (weight 1.5) - only set if filename and summary didn't match
+4. "category" (weight 1.0) - only set if no higher-weighted fields matched
+5. "topic" (weight 1.0) - only set if no higher-weighted fields matched
+6. "file_type" (weight 0.5) - only set if no higher-weighted fields matched
+7. "document_type" (weight 0.5) - only set if no other fields matched
+
+**Note**: Because fields are evaluated from highest to lowest weight, the first match is typically also the highest-weighted match, but the implementation sets matchType based on first-encountered match, not cumulative score contribution.
 
 **Score Characteristics**:
 - Minimum threshold: 0.1 (entries scoring below are filtered out)
@@ -399,25 +401,27 @@ Example: Document type `technical-guide`, Query `["technical", "guide"]` → 2/2
 
 **Cumulative Scoring**: Scores from all matching phases are summed. Entries with total score ≤ 0.1 are filtered out as not relevant enough.
 
-**Match Type Priority**: The primary match type is the highest-weighted field that matched, used for display and sorting tie-breaking:
-1. filename (3.0)
-2. summary (2.0)
-3. tag (1.5)
-4. category (1.0)
-5. topic (1.0)
-6. file_type (0.5)
-7. document_type (0.5)
+**Match Type Assignment**: The primary match type is the first field (in weighted evaluation order) that matched any query tokens, used for display purposes:
+1. filename (3.0) - set if any tokens match filename
+2. summary (2.0) - set only if filename didn't match but summary does
+3. tag (1.5) - set only if filename and summary didn't match but tags do
+4. category (1.0) - set only if higher-weighted fields didn't match
+5. topic (1.0) - set only if higher-weighted fields didn't match
+6. file_type (0.5) - set only if higher-weighted fields didn't match
+7. document_type (0.5) - set only if no other fields matched
+
+This sequential assignment means matchType indicates the first-encountered match in priority order, not necessarily the field contributing the most to the total score.
 
 **Result**: Return cumulative score and primary match type
 
 **Example Full Calculation**:
 - File: `terraform-aws-guide.pdf` with summary "Guide to Terraform on AWS", tags `["terraform", "aws", "infrastructure"]`, category `documents`
 - Query: `"terraform aws guide"` → Tokens: `["terraform", "aws", "guide"]` (3 tokens)
-- Filename: 2/3 tokens (`terraform`, `aws`) × 3.0 = 2.0
-- Category: 0/3 tokens × 1.0 = 0.0
-- Summary: 3/3 tokens × 2.0 = 2.0
-- Tags: 2/3 tokens × 1.5 = 1.0
-- **Total Score: 5.0**, Match Type: `filename` (highest weighted match)
+- Filename `terraform-aws-guide.pdf`: 3/3 tokens (`terraform`, `aws`, `guide`) × 3.0 = 3.0
+- Category `documents`: 0/3 tokens × 1.0 = 0.0
+- Summary "Guide to Terraform on AWS": 3/3 tokens × 2.0 = 2.0
+- Tags `["terraform", "aws", "infrastructure"]`: 2/3 tokens × 1.5 = 1.0
+- **Total Score: 6.0**, Match Type: `filename` (first field evaluated that matched)
 
 ---
 
@@ -469,17 +473,27 @@ The MCP server is the primary consumer of the Semantic Search subsystem:
 The subsystem depends on type definitions from the `pkg/types` package:
 
 **types.Index**:
+- `Generated` (time.Time) - Timestamp when index was built
+- `Root` (string) - Root directory path for the indexed files
 - `Entries` ([]IndexEntry) - Array of all indexed files
+- `Stats` (IndexStats) - Summary statistics about the index
 
 **types.IndexEntry**:
 - `Metadata` (FileMetadata) - File information including path and category
 - `Semantic` (*SemanticAnalysis) - Optional semantic understanding, nil if analysis failed
 
 **types.FileMetadata**:
+Embeds `types.FileInfo` which contains:
 - `Path` (string) - Full file path, basename used for filename matching
-- `Category` (string) - File category (documents, code, images, etc.)
+- `RelPath` (string) - Relative path from memory root
+- `Hash` (string) - SHA-256 content hash
 - `Size` (int64) - File size in bytes
 - `Modified` (time.Time) - Last modification timestamp
+- `Type` (string) - Semantic type identifier (e.g., "markdown", "png", "docx")
+- `Category` (string) - File category (documents, code, images, etc.)
+- `IsReadable` (bool) - Whether Claude Code can process the file directly
+
+Plus optional type-specific fields (WordCount, PageCount, SlideCount, Dimensions, etc.)
 
 **types.SemanticAnalysis**:
 - `Summary` (string) - AI-generated content summary

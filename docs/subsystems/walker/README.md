@@ -75,7 +75,7 @@ The walk visits nodes in pre-order (parent before children), meaning directories
 Before traversal begins, the walker normalizes the root path using `filepath.Clean()`, removing redundant separators and resolving relative references like `.` and `..`. This normalization ensures consistent path representation throughout the traversal, preventing duplicate visits or missed paths due to path string variations.
 
 **Symbolic Link Handling:**
-The walker follows symbolic links by default, treating them as regular files or directories. While this simplifies traversal, it means symbolic links to directories outside the memory root will be followed. Callers should be aware of this behavior and structure their memory directories accordingly.
+The walker does NOT follow symbolic links. Go's `filepath.Walk()` explicitly does not follow symbolic links, treating them as regular files instead. This means symbolic links to directories will appear as files in the walker's traversal and will not trigger recursion into the linked directories. This behavior prevents potential infinite loops from circular symlinks and ensures the walker only processes files directly within the memory root directory tree.
 
 ### Error Handling Strategy
 
@@ -169,7 +169,7 @@ The Walker's filtering system implements a hierarchical approach that distinguis
 Directory filtering operates at the directory node level, making pruning decisions before examining directory contents. The walker maintains an absolute path map for skip directories, enabling O(1) lookup during traversal. When a directory matches a skip pattern, the walker returns `filepath.SkipDir` to prevent descending into that subtree.
 
 **Skip Directory Resolution:**
-Skip directories can be specified as relative or absolute paths. The walker resolves relative names by joining with the root path, producing absolute paths for consistent matching during traversal. This resolution happens once at walk initialization rather than repeatedly during traversal.
+Skip directories should be specified as basenames or paths relative to the root directory. The walker resolves these by joining with the root path, producing absolute paths for matching during traversal (`skipPaths[filepath.Join(root, dir)] = true`). This means absolute paths passed to `skipDirs` will be incorrectly joined with the root path, resulting in paths like `/root/path/absolute/path` that won't match any actual directories. For correct behavior, use directory basenames (e.g., ".cache", ".git") or relative paths (e.g., "subdir/nested"). This resolution happens once at walk initialization rather than repeatedly during traversal.
 
 **File Filtering:**
 File filtering operates after a directory has passed filtering and its contents are being examined. Files are checked against the skip files list by basename comparison (not full path). Matching files are silently skipped without callback invocation.
@@ -250,11 +250,11 @@ The Walker and File Watcher serve complementary roles in the daemon's file disco
 - **Watcher**: Monitors individual file changes in real-time (create, modify, delete events)
 
 **Shared Filtering Approach:**
-Both components implement similar skip pattern logic but with independent implementations:
-- Walker uses `skipDirs` and `skipFiles` parameters with map-based lookup
-- Watcher uses `shouldSkip()` and `shouldSkipDir()` methods with slice-based checking
+Both components implement similar skip pattern logic but with independent implementations and different matching strategies:
+- **Walker**: Uses `skipDirs` and `skipFiles` parameters with map-based lookup. Directory filtering compares **full absolute paths** against skip patterns.
+- **Watcher**: Uses `shouldSkip()` and `shouldSkipDir()` methods with slice-based checking. Directory filtering compares only **basenames** against skip patterns.
 
-This duplication is intentional - the components operate independently with different operational characteristics (walker is one-shot, watcher is continuous) and different performance requirements (walker optimizes for batch processing, watcher optimizes for real-time response).
+This difference means the walker's directory skip patterns must be specified as basenames or relative paths (which get joined with root to form absolute paths), while the watcher matches skip directories by basename only. This duplication is intentional - the components operate independently with different operational characteristics (walker is one-shot, watcher is continuous) and different performance requirements (walker optimizes for batch processing, watcher optimizes for real-time response).
 
 **Operational Distinction:**
 The walker runs when:

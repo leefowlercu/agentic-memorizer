@@ -42,10 +42,10 @@ The Config Manager implements a multi-layer configuration system where settings 
 
 **Search Path for Configuration Files:**
 The subsystem searches for configuration files in multiple locations, using the first one found:
-1. `$HOME/.agentic-memorizer/config.yaml` - User-specific configuration
-2. `./config.yaml` - Project-specific configuration in current directory
+1. `./config.yaml` - Project-specific configuration in current directory (searched first)
+2. `$HOME/.agentic-memorizer/config.yaml` - User-specific configuration (searched second)
 
-This search strategy enables both global user preferences and per-project overrides. Users can maintain personal defaults while projects can provide recommended configurations.
+This search strategy prioritizes project-specific configurations over user defaults, enabling per-project overrides while maintaining global user preferences as fallback. Projects can provide recommended configurations that take precedence over personal defaults.
 
 **Environment Variable Override Pattern:**
 Environment variables use automatic transformation from configuration structure to variable names:
@@ -59,6 +59,9 @@ Examples:
 - `daemon.log_file` becomes `MEMORIZER_DAEMON_LOG_FILE`
 
 This pattern enables containerized deployments and CI/CD pipelines to inject configuration without modifying files. Sensitive values like API keys can be provided through environment variables, avoiding storage in version control.
+
+**Special Environment Variables:**
+Note that `MEMORIZER_APP_DIR` is a special system variable that affects configuration file search paths rather than overriding configuration values. It controls where the application looks for its own files (config, index, PID, logs) but does not override the `memory_root` or `analysis.cache_dir` settings.
 
 ### Error Accumulation Pattern
 
@@ -154,7 +157,7 @@ The `WriteConfig()` function enables programmatic configuration creation:
 3. Used by initialize command to create default configuration files
 
 **Path Helper Functions:**
-- `GetAppDir()` - Returns application directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
+- `GetAppDir()` - Returns app directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
 - `GetIndexPath()` - Returns path to precomputed index file (uses app directory)
 - `GetPIDPath()` - Returns path to daemon PID file (uses app directory)
 - `ExpandHome()` - Expands tilde in arbitrary paths
@@ -173,6 +176,57 @@ When `MEMORIZER_APP_DIR` is set, it overrides the default `~/.agentic-memorizer`
 3. **Search path update**: Configuration file search uses custom app directory
 
 Note that `MEMORIZER_APP_DIR` only affects the application's own files. The memory directory and cache directory locations are still controlled by `memory_root` and `analysis.cache_dir` settings in the configuration file.
+
+**Configuration Hot-Reload:**
+The subsystem supports hot-reloading configuration changes without requiring a daemon restart, enabling dynamic operational adjustments for running deployments.
+
+**Reload Mechanism:**
+Configuration reload is triggered via the `config reload` CLI command, which:
+1. Loads the new configuration from file and environment variables
+2. Validates the configuration using standard validation rules
+3. Checks reload compatibility via `ValidateReload()` function
+4. Sends a SIGHUP signal to the running daemon process
+5. Daemon's signal handler executes `ReloadConfig()` to apply changes
+
+**Immutable Settings (Require Daemon Restart):**
+These settings cannot be hot-reloaded and require stopping and starting the daemon:
+- `memory_root` - Changing the watched directory requires full restart
+- `analysis.cache_dir` - Cache storage location is initialized at startup
+- `daemon.log_file` - Log file handle is opened at startup
+- `mcp.log_file` - MCP log file handle is opened at startup
+
+**Hot-Reloadable Settings:**
+These settings can be changed dynamically while the daemon is running:
+- **Claude API Settings**: `api_key`, `model`, `max_tokens`, `enable_vision`, `timeout_seconds`
+- **Worker Configuration**: `daemon.workers` (concurrent processing capacity)
+- **Rate Limiting**: `daemon.rate_limit_per_min` (API call throttling)
+- **Debounce Timing**: `daemon.debounce_ms` (file change batching delay)
+- **Logging**: `daemon.log_level`, `mcp.log_level` (verbosity control)
+- **Health Monitoring**: `daemon.health_check_port` (enables/disables HTTP endpoint)
+- **Rebuild Timing**: `daemon.full_rebuild_interval_minutes` (periodic rebuild schedule)
+- **Skip Patterns**: `analysis.skip_extensions`, `analysis.skip_files` (file filtering)
+
+**Component Update Logic:**
+When reload is triggered, the daemon detects which settings changed and updates only affected components:
+- **Claude API changes**: Creates new semantic analyzer with updated client
+- **Worker/rate limit changes**: Signals worker pool to adjust concurrency
+- **Debounce changes**: Updates file watcher debounce interval
+- **Log level changes**: Reconfigures logger verbosity
+- **Health port changes**: Restarts health check server on new port
+- **Rebuild interval changes**: Adjusts rebuild timer
+- **Skip pattern changes**: Updates walker file filters
+
+**Validation:**
+The `ValidateReload()` function (`internal/config/reload.go`) compares old and new configurations to ensure only hot-reloadable fields have changed. If immutable fields differ, the reload is rejected with an error message indicating which settings require a full restart.
+
+**Usage Example:**
+```bash
+# Edit configuration file
+vim ~/.agentic-memorizer/config.yaml
+
+# Validate and reload without restarting daemon
+agentic-memorizer config reload
+```
 
 ### Configuration Types
 
@@ -206,14 +260,14 @@ Controls output format and recent activity:
 Configures semantic analysis behavior:
 - `Enable` - Toggle semantic analysis entirely (default: true)
 - `MaxFileSize` - Maximum file size for analysis in bytes (default: 10MB)
-- `Parallel` - Number of concurrent analysis workers (default: 3)
 - `SkipExtensions` - File extensions to exclude from analysis
 - `SkipFiles` - Specific filenames to exclude
 - `CacheDir` - Cache storage location (default: `~/.agentic-memorizer/.cache`)
 
+Note: The `Parallel` field has been deprecated. Worker concurrency is now controlled by `daemon.workers` configuration.
+
 **DaemonConfig Structure:**
 Configures background daemon operation:
-- `Enabled` - Toggle daemon mode (default: false for on-demand operation)
 - `DebounceMs` - File change debounce delay in milliseconds (default: 500)
 - `Workers` - Number of concurrent processing workers (default: 3)
 - `RateLimitPerMin` - Maximum API calls per minute (default: 20)
@@ -221,6 +275,8 @@ Configures background daemon operation:
 - `HealthCheckPort` - HTTP health endpoint port (default: 0 for disabled)
 - `LogFile` - Daemon log file path (default: `~/.agentic-memorizer/daemon.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
+
+Note: Daemon operation is controlled via CLI commands (`daemon start`, `daemon stop`) or service managers, not through configuration.
 
 **MCPConfig Structure:**
 Configures Model Context Protocol server logging:
@@ -273,16 +329,23 @@ A complete `Config` instance with all fields populated with production-ready def
 
 **Default Values Summary:**
 - Memory root: `~/.agentic-memorizer/memory`
-- Claude model: claude-sonnet-4-5-20250929
+- Claude API key environment variable: `ANTHROPIC_API_KEY`
+- Claude model: `claude-sonnet-4-5-20250929`
 - Max tokens: 1500
 - Vision enabled: true
 - API timeout: 30 seconds
 - Output format: xml
+- Show recent days: 7
+- Analysis enabled: true
+- Max file size: 10485760 (10 MB)
 - Cache directory: `~/.agentic-memorizer/.cache`
-- Analysis workers: 3
-- Daemon disabled by default (on-demand operation)
+- Daemon workers: 3
+- Debounce delay: 500 ms
 - Rate limit: 20 calls/minute
 - Rebuild interval: 60 minutes
+- Health check port: 0 (disabled)
+- Daemon log file: `~/.agentic-memorizer/daemon.log`
+- Daemon log level: info
 - MCP log file: `~/.agentic-memorizer/mcp.log`
 - MCP log level: info
 
@@ -313,7 +376,6 @@ The system uses structured validation with the `Validator` type accumulating err
 
 **Analysis Validation:**
 - Max file size non-negative check
-- Parallel workers range enforcement (1-20 workers)
 - Cache directory required and safe path validation
 - Skip patterns validity (proper format and safe paths)
 
@@ -336,9 +398,15 @@ The system uses structured validation with the `Validator` type accumulating err
 - Integration-specific settings validation
 
 **Security Validation:**
-- `SafePath()` function prevents directory traversal attacks using parent references
+- `SafePath()` function prevents directory traversal attacks using parent references (`..` in paths)
 - `ValidateBinaryPath()` ensures executable paths are safe and accessible
 - Applied to all user-specified paths (memory root, cache directory, log files)
+- Verifies executables exist, are files (not directories), and have execute permissions
+
+**Deprecated Configuration Detection:**
+The validator detects and warns about deprecated configuration keys that have been removed from the system:
+- `analysis.parallel` - Removed in favor of `daemon.workers` for worker pool sizing
+- Warning messages provide migration guidance to help users update their configuration
 
 **Error Structure:**
 Each `ValidationError` contains:
@@ -373,6 +441,34 @@ The daemon uses configuration helper functions to locate system files:
 
 **Dynamic Behavior:**
 The daemon's operational mode is entirely determined by configuration. Users control whether the daemon runs by starting or stopping the process (via `daemon start`/`daemon stop` or service managers). Adjusting worker counts or rate limits changes concurrency characteristics. All behavior is externalized to configuration rather than hardcoded.
+
+**Configuration Hot-Reload:**
+The daemon supports dynamic configuration updates without requiring a full restart, implemented through SIGHUP signal handling.
+
+**Thread-Safe Configuration Storage:**
+- Daemon stores configuration with `sync.RWMutex` for concurrent access protection
+- `GetConfig()` method provides safe read access to current configuration
+- `SetConfig()` method enables atomic configuration replacement
+
+**Reload Process:**
+When a SIGHUP signal is received (triggered by `config reload` command):
+1. Daemon's signal handler invokes `ReloadConfig()` method
+2. Loads new configuration via `config.InitConfig()` and `config.GetConfig()`
+3. Validates with `config.ValidateReload()` to ensure compatibility
+4. Detects which configuration settings have changed
+5. Updates only affected components atomically
+
+**Component-Specific Updates:**
+- **Claude API changes**: Replaces semantic analyzer with new instance (uses `atomic.Value` for lock-free replacement)
+- **Worker/rate limit changes**: Signals worker pool manager to adjust concurrency
+- **Debounce changes**: Updates file watcher debounce interval
+- **Log level changes**: Reconfigures logger with new verbosity setting
+- **Health port changes**: Stops old health server and starts new one on different port
+- **Rebuild interval changes**: Sends signal to rebuild scheduler via channel
+- **Skip pattern changes**: Updates walker file filters for future scans
+
+**Immutable Settings:**
+Attempts to change `memory_root`, `analysis.cache_dir`, `daemon.log_file`, or `mcp.log_file` are rejected during validation, requiring a full daemon restart.
 
 ### Semantic Analyzer
 
@@ -440,6 +536,15 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 - Loads configuration via `InitConfig()`
 - Retrieves config via `GetConfig()`
 - Runs full validation and reports all errors
+
+**Config Reload Command:**
+- Loads new configuration from file and environment variables
+- Validates configuration with standard validation rules
+- Checks reload compatibility via `ValidateReload()` to ensure only hot-reloadable fields changed
+- Locates running daemon process via PID file (`config.GetPIDPath()`)
+- Sends SIGHUP signal to daemon to trigger reload
+- Reports which settings will be updated and which require restart
+- Fails with clear error if immutable settings (memory_root, cache_dir, log files) have changed
 
 **Daemon Command:**
 - Reads complete daemon configuration section

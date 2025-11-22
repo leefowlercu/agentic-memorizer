@@ -100,6 +100,7 @@ Monitors the file system for changes using fsnotify with intelligent event debou
 **Key Features:**
 - Real-time file change detection
 - Event debouncing and batching
+- Configuration hot-reload (debounce interval)
 - Recursive directory watching
 - Skip pattern support
 - Automatic new directory monitoring
@@ -228,7 +229,8 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 - Output format processors
 
 **Supported Integrations:**
-- Claude Code (automatic setup)
+- Claude Code Hook (claude-code-hook) - SessionStart hooks for context injection
+- Claude Code MCP (claude-code-mcp) - MCP server for on-demand tools
 - Continue.dev (manual setup)
 - Cline (manual setup)
 - Aider (manual setup)
@@ -249,7 +251,7 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 ### External Integration
 
 #### [MCP Server](./mcp/)
-**Status:** 🚧 Planned
+**Status:** ✅ Documented
 
 Exposes the precomputed index through the Model Context Protocol (MCP) as a standardized server interface for universal integration with AI development tools.
 
@@ -447,4 +449,9 @@ If you're looking for specific subsystem information:
 
 ---
 
-**Last Updated:** 2025-11-07
+**Last Updated:** 2025-11-22
+
+**Recent Updates:**
+- Comprehensive accuracy review of all subsystem documentation (2025-11-22)
+- 47 inaccuracies corrected across 9 subsystems
+- MCP Server documentation completed and verified

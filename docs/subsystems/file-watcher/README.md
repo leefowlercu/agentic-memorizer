@@ -73,6 +73,7 @@ The Watcher struct (`internal/watcher/watcher.go`) is the core component that ma
 - `skipDirs`: Directories to ignore during recursive watching
 - `skipFiles`: Specific files to ignore
 - `debounceMs`: Debounce period in milliseconds
+- `debounceIntervalCh`: Buffered channel (capacity 1) for runtime debounce interval updates
 
 **Concurrency Controls:**
 - `eventMu`: Mutex protecting the batchedEvents map
@@ -92,15 +93,18 @@ Each event includes the event type and the absolute path to the affected file.
 ### Core Methods
 
 **Lifecycle Management:**
-- `New()`: Creates a new watcher with configuration (root path, skip patterns, debounce period)
+- `New()`: Creates a new watcher with configuration (root path, skip patterns, debounce period, logger)
 - `Start()`: Begins watching by walking the directory tree and launching processing goroutines
 - `Stop()`: Initiates graceful shutdown
 - `Events()`: Returns a read-only channel for consuming debounced events
 
+**Runtime Configuration:**
+- `UpdateDebounceInterval(intervalMs int)`: Updates the debounce interval without restarting the watcher, enabling hot-reload of daemon configuration
+
 **Internal Event Processing:**
 - `processEvents()`: Goroutine that reads from fsnotify and delegates to handleEvent
 - `handleEvent()`: Translates fsnotify events to Watcher events, filters based on skip patterns, and handles dynamic directory registration
-- `debounceBatch()`: Ticker goroutine that periodically flushes batched events
+- `debounceBatch()`: Ticker goroutine that periodically flushes batched events; monitors `debounceIntervalCh` to recreate ticker when interval changes
 - `sendBatchedEvents()`: Flushes accumulated events to the output channel
 
 **Directory Management:**
@@ -112,7 +116,7 @@ Each event includes the event type and the absolute path to the affected file.
 
 ### Daemon Subsystem
 
-The Daemon subsystem creates and manages the File Watcher lifecycle. During daemon initialization (`internal/daemon/daemon.go:75-92`), it instantiates a watcher with configuration-driven parameters:
+The Daemon subsystem creates and manages the File Watcher lifecycle. During daemon initialization (`internal/daemon/daemon.go:140-156`), it instantiates a watcher with configuration-driven parameters:
 
 - Root path from `cfg.MemoryRoot`
 - Skip directories hardcoded as `.cache` and `.git`
@@ -127,6 +131,9 @@ The daemon runs a dedicated goroutine (`processWatcherEvents()`) that consumes e
 All changes are immediately persisted via atomic write operations to ensure index consistency.
 
 The daemon also tracks watcher health via `HealthMetrics.WatcherActive`, which is exposed through an optional HTTP health check endpoint.
+
+**Configuration Hot-Reload:**
+The daemon supports runtime debounce interval updates without restarting via the `config reload` command. When configuration is reloaded (`daemon.go:747`), the daemon calls `watcher.UpdateDebounceInterval()` with the new value. The watcher uses a buffered channel (capacity 1) to signal the debounce goroutine, which then recreates the ticker with the new interval. If the channel is full (a previous update hasn't been processed), a warning is logged and the update is skipped. This design enables non-blocking configuration updates while the watcher continues processing events.
 
 ### Index Manager
 

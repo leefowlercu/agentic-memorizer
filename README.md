@@ -1839,20 +1839,24 @@ Abbreviated example showing structure (actual output includes all files):
 
 ```
 agentic-memorizer/
-├── main.go           # Main entry point
+├── main.go                   # Main entry point
+├── LICENSE                   # MIT License
+├── .goreleaser.yaml          # GoReleaser configuration for multi-platform releases
 ├── cmd/
 │   ├── root.go               # Root command
 │   ├── initialize/           # Initialization command
 │   │   └── initialize.go
 │   ├── daemon/               # Daemon management commands
 │   │   ├── daemon.go         # Parent daemon command
-│   │   └── subcommands/      # Daemon subcommands (6 total)
+│   │   └── subcommands/      # Daemon subcommands (8 total)
 │   │       ├── start.go
 │   │       ├── stop.go
 │   │       ├── status.go
 │   │       ├── restart.go
 │   │       ├── rebuild.go
-│   │       └── logs.go
+│   │       ├── logs.go
+│   │       ├── systemctl.go  # Generate systemd unit files
+│   │       └── launchctl.go  # Generate launchd plist files
 │   ├── mcp/                  # MCP server commands
 │   │   ├── mcp.go            # Parent mcp command
 │   │   └── subcommands/
@@ -1872,8 +1876,10 @@ agentic-memorizer/
 │   │   └── subcommands/      # Config subcommands (2 total)
 │   │       ├── validate.go
 │   │       └── reload.go
-│   └── read/                 # Read precomputed index
-│       └── read.go
+│   ├── read/                 # Read precomputed index
+│   │   └── read.go
+│   └── version/              # Version command
+│       └── version.go
 ├── internal/
 │   ├── config/               # Configuration loading, validation, and hot-reload
 │   ├── daemon/               # Background daemon implementation and worker pool
@@ -1891,7 +1897,13 @@ agentic-memorizer/
 │   │   ├── output/           # Output formatting (XML/Markdown/JSON)
 │   │   └── adapters/         # Framework-specific adapters
 │   │       └── claude/       # Hook and MCP adapters for Claude Code
-│   └── version/              # Version information
+│   └── version/              # Version information and embedding
+│       ├── VERSION           # Semantic version file (embedded)
+│       ├── version.go        # Version getters with buildinfo fallback
+│       └── version_test.go
+├── scripts/                  # Release automation scripts
+│   ├── bump-version.sh       # Semantic version bumping
+│   └── prepare-release.sh    # Release preparation and automation
 ├── pkg/types/                # Shared types and data structures
 ├── docs/subsystems/          # Comprehensive subsystem documentation
 └── testdata/                 # Test files

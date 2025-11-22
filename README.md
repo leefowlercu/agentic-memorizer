@@ -1656,7 +1656,7 @@ Files stored in the app directory:
 
 ### Output Formats
 
-The memorizer supports two output formats:
+The memorizer supports three output formats:
 
 #### XML (Default)
 

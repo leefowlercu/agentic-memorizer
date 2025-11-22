@@ -1,0 +1,119 @@
+version: 2
+
+project_name: agentic-memorizer
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: agentic-memorizer
+    main: ./main.go
+    binary: agentic-memorizer
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/leefowlercu/agentic-memorizer/internal/version.Version={{.Version}}
+      - -X github.com/leefowlercu/agentic-memorizer/internal/version.GitCommit={{.FullCommit}}
+      - -X github.com/leefowlercu/agentic-memorizer/internal/version.BuildDate={{.Date}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
+
+signs:
+  - artifacts: checksum
+    cmd: gpg2
+    args:
+      - "--batch"
+      - "-u"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+changelog:
+  use: git
+  sort: asc
+  abbrev: 7
+
+  groups:
+    - title: Added
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Fixed
+      regexp: '^.*?(fix|bug)(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Changed
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Documentation
+      regexp: '^.*?docs?(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: Build
+      regexp: '^.*?(build|chore)(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: Tests
+      regexp: '^.*?(test|style)(\([[:word:]]+\))??!?:.+$'
+      order: 5
+
+  filters:
+    exclude:
+      - '^release: prepare v'
+      - '^docs: update changelog'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: leefowlercu
+    name: agentic-memorizer
+
+  draft: true
+  replace_existing_draft: true
+  name_template: "{{.Tag}}"
+  prerelease: auto
+
+  header: |
+    ## Agentic Memorizer {{.Tag}}
+
+    AI-powered semantic file analysis and indexing for Claude Code.
+
+    **Installation:**
+
+    Download the appropriate binary for your platform from the assets below:
+    - Linux (amd64): `agentic-memorizer_{{.Tag}}_linux_amd64.tar.gz`
+    - Linux (arm64): `agentic-memorizer_{{.Tag}}_linux_arm64.tar.gz`
+    - macOS (amd64): `agentic-memorizer_{{.Tag}}_darwin_amd64.tar.gz`
+    - macOS (arm64): `agentic-memorizer_{{.Tag}}_darwin_arm64.tar.gz`
+
+    Extract and install:
+    ```bash
+    tar -xzf agentic-memorizer_{{.Tag}}_*.tar.gz
+    sudo mv agentic-memorizer /usr/local/bin/
+    ```
+
+    Or use `go install`:
+    ```bash
+    go install github.com/leefowlercu/agentic-memorizer@{{.Tag}}
+    ```
+
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/leefowlercu/agentic-memorizer/compare/{{.PreviousTag}}...{{.Tag}}
+
+    See [CHANGELOG.md](https://github.com/leefowlercu/agentic-memorizer/blob/master/CHANGELOG.md) for detailed changes.

@@ -38,3 +38,7 @@ config.yaml
 
 # WIP Docs
 docs/wip/
+
+# Goreleaser
+dist/
+.next-version

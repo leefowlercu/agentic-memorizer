@@ -27,9 +27,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - [Go Standards](#go-standards)
   - [Git Workflow](#git-workflow)
   - [API Rate Limiting](#api-rate-limiting)
+  - [Configuration Hot-Reload](#configuration-hot-reload)
   - [Binary Path in Integrations](#binary-path-in-integrations)
   - [CLI Error Handling Pattern](#cli-error-handling-pattern)
   - [Error Message Formatting](#error-message-formatting)
+  - [Releasing](#releasing)
 
 ## Project Overview
 
@@ -420,3 +422,96 @@ Error: failed to initialize config: configuration file not found
 ```
 
 This pattern provides consistent punctuation with only one colon in the entire error message chain.
+
+### Releasing
+
+The project uses automated release tooling via Goreleaser. All release commands are in the Makefile.
+
+**Release Workflow:**
+
+```bash
+# Bump version and prepare release (choose one)
+make release-patch  # 0.10.0 → 0.10.1 (bug fixes)
+make release-minor  # 0.10.0 → 0.11.0 (new features)
+make release-major  # 0.10.0 → 1.0.0 (breaking changes)
+
+# Or specify version manually
+make release-prep VERSION=v0.11.0
+```
+
+**What the release command does:**
+
+1. Validates prerequisites (clean git status, goreleaser installed, GITHUB_TOKEN set)
+2. Calculates next version from `internal/version/VERSION`
+3. Updates VERSION file with new version
+4. Creates commit: `release: prepare vX.Y.Z`
+5. Creates temporary git tag
+6. Runs GoReleaser:
+   - Builds multi-platform binaries (Linux/macOS, amd64/arm64)
+   - Generates checksums and tar.gz archives
+   - Creates dist/CHANGELOG.md from conventional commits
+   - Creates draft GitHub release with binaries
+7. Merges dist/CHANGELOG.md into root CHANGELOG.md
+8. Amends commit to include changelog changes
+9. Recreates tag on amended commit
+
+**After successful release preparation:**
+
+1. Review changes:
+   ```bash
+   git show HEAD:CHANGELOG.md
+   git diff HEAD~1 CHANGELOG.md
+   ```
+
+2. Review draft release on GitHub:
+   https://github.com/leefowlercu/agentic-memorizer/releases
+
+3. If changes needed:
+   - Edit CHANGELOG.md locally and/or release notes on GitHub
+   - Amend and update tag:
+     ```bash
+     git add CHANGELOG.md && git commit --amend --no-edit
+     git tag -fa vX.Y.Z -m "Agentic Memorizer vX.Y.Z"
+     ```
+
+4. When ready to publish:
+   ```bash
+   git push && git push --tags
+   ```
+   Then publish the draft release on GitHub
+
+**Undoing a release (before pushing):**
+
+```bash
+git tag -d vX.Y.Z && git reset --hard HEAD~1
+```
+
+**Testing Goreleaser:**
+
+```bash
+# Validate configuration
+make goreleaser-check
+
+# Test local build without publishing
+make goreleaser-snapshot
+```
+
+**Prerequisites:**
+
+- GoReleaser installed: `go install github.com/goreleaser/goreleaser/v2@latest`
+- GITHUB_TOKEN environment variable set with `repo` scope
+- GPG_FINGERPRINT environment variable set (get with `gpg --list-secret-keys --keyid-format=long`)
+- Clean git working directory
+- Conventional commit messages for changelog generation
+
+**Conventional Commits:**
+
+Use conventional commit format for automatic changelog generation:
+- `feat:` → Added section
+- `fix:`, `bug:` → Fixed section
+- `refactor:` → Changed section
+- `docs:` → Documentation section
+- `build:`, `chore:` → Build section
+- `test:`, `style:` → Tests section
+
+The release scripts filter out merge commits and release preparation commits from the changelog.

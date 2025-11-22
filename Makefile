@@ -1,4 +1,4 @@
-.PHONY: build install test test-integration test-all clean uninstall help coverage coverage-html lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config release-major release-minor release-patch
+.PHONY: build install test test-integration test-all clean uninstall help coverage coverage-html lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config goreleaser-check goreleaser-snapshot release-check release-major release-minor release-patch
 
 BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
@@ -144,44 +144,55 @@ validate-config: build ## Validate configuration file
 	@./$(BINARY_NAME) config validate
 	@echo "✅ Configuration valid"
 
-release-major: ## Bump major version, update VERSION file, create git tag
-	@echo "Current version: $(CURRENT_VERSION)"
-	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{print $$1+1".0.0"}'); \
-	echo "Bumping to major version: $$NEW_VERSION"; \
-	echo $$NEW_VERSION > $(VERSION_FILE); \
-	git add $(VERSION_FILE); \
-	git commit -m "release: bump version to $$NEW_VERSION"; \
-	git tag -a v$$NEW_VERSION -m "Release v$$NEW_VERSION"; \
-	echo "✅ Version bumped to $$NEW_VERSION and tagged as v$$NEW_VERSION"; \
-	echo ""; \
-	echo "Next steps:"; \
-	echo "  git push origin master"; \
-	echo "  git push origin v$$NEW_VERSION"
+goreleaser-check: ## Validate Goreleaser configuration
+	@echo "Validating Goreleaser configuration..."
+	@if ! command -v goreleaser &> /dev/null; then \
+		echo "Error: goreleaser is not installed"; \
+		echo "Install with: go install github.com/goreleaser/goreleaser/v2@latest"; \
+		exit 1; \
+	fi
+	@goreleaser check
+	@echo "✅ Goreleaser configuration is valid"
 
-release-minor: ## Bump minor version, update VERSION file, create git tag
-	@echo "Current version: $(CURRENT_VERSION)"
-	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{print $$1"."$$2+1".0"}'); \
-	echo "Bumping to minor version: $$NEW_VERSION"; \
-	echo $$NEW_VERSION > $(VERSION_FILE); \
-	git add $(VERSION_FILE); \
-	git commit -m "release: bump version to $$NEW_VERSION"; \
-	git tag -a v$$NEW_VERSION -m "Release v$$NEW_VERSION"; \
-	echo "✅ Version bumped to $$NEW_VERSION and tagged as v$$NEW_VERSION"; \
-	echo ""; \
-	echo "Next steps:"; \
-	echo "  git push origin master"; \
-	echo "  git push origin v$$NEW_VERSION"
+goreleaser-snapshot: goreleaser-check ## Test release locally without publishing
+	@echo "Building snapshot release..."
+	@goreleaser release --snapshot --clean --skip=publish
+	@echo "✅ Snapshot build complete in dist/"
 
-release-patch: ## Bump patch version, update VERSION file, create git tag
-	@echo "Current version: $(CURRENT_VERSION)"
-	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{print $$1"."$$2"."$$3+1}'); \
-	echo "Bumping to patch version: $$NEW_VERSION"; \
-	echo $$NEW_VERSION > $(VERSION_FILE); \
-	git add $(VERSION_FILE); \
-	git commit -m "release: bump version to $$NEW_VERSION"; \
-	git tag -a v$$NEW_VERSION -m "Release v$$NEW_VERSION"; \
-	echo "✅ Version bumped to $$NEW_VERSION and tagged as v$$NEW_VERSION"; \
-	echo ""; \
-	echo "Next steps:"; \
-	echo "  git push origin master"; \
-	echo "  git push origin v$$NEW_VERSION"
+release-check: ## Verify release prerequisites
+	@echo "Checking release prerequisites..."
+	@if ! command -v goreleaser &> /dev/null; then \
+		echo "Error: goreleaser is not installed"; \
+		echo "Install with: go install github.com/goreleaser/goreleaser/v2@latest"; \
+		exit 1; \
+	fi
+	@if [ -z "$(GITHUB_TOKEN)" ]; then \
+		echo "Warning: GITHUB_TOKEN environment variable not set"; \
+		echo "GoReleaser needs this to create GitHub releases"; \
+		echo "See README.md for setup instructions"; \
+	fi
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Error: Working directory is not clean"; \
+		git status --short; \
+		exit 1; \
+	fi
+	@echo "✅ Release prerequisites satisfied"
+
+release-major: release-check ## Prepare major version release
+	@./scripts/bump-version.sh major
+	@$(MAKE) release-prep VERSION=$$(cat .next-version)
+
+release-minor: release-check ## Prepare minor version release
+	@./scripts/bump-version.sh minor
+	@$(MAKE) release-prep VERSION=$$(cat .next-version)
+
+release-patch: release-check ## Prepare patch version release
+	@./scripts/bump-version.sh patch
+	@$(MAKE) release-prep VERSION=$$(cat .next-version)
+
+release-prep: ## Prepare release (internal target, use release-{major,minor,patch})
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION not specified"; \
+		exit 1; \
+	fi
+	@./scripts/prepare-release.sh $(VERSION)

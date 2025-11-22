@@ -42,17 +42,11 @@ Agentic Memorizer is a local file memorizer for Claude Code that provides automa
 ### Building and Testing
 
 ```bash
-# Build the binary (development - version shows as "dev")
+# Build the binary with version information from git
 make build
 
-# Build with version information from git
-make build-release
-
-# Install to ~/.local/bin (development)
+# Install to ~/.local/bin
 make install
-
-# Install with version information (recommended for production)
-make install-release
 
 # Run all tests
 make test
@@ -212,7 +206,7 @@ systemd-notify --status="Testing notification"
 
 The system processes files through three distinct phases:
 
-1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction of file-specific metadata (word counts, dimensions, page counts) using a handler pattern with specialized extractors for 10 file type categories
+1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction of file-specific metadata (word counts, dimensions, page counts) using a handler pattern with specialized extractors for 9 file type categories
 2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API with content-based routing (text, vision for images, document blocks for PDFs, extraction for Office files)
 3. **Caching** (`internal/cache/`) - Content-hash-based storage of analysis results that achieves >95% hit rates, dramatically reducing API costs
 
@@ -233,7 +227,7 @@ Jobs flow through a worker pool with priority calculation (recent files first) w
 ### Semantic Search
 
 The search engine (`internal/search/`) provides advanced file discovery for MCP tools:
-- **Fuzzy Filename Matching** - Configurable similarity threshold (default 0.3) for approximate filename searches
+- **Substring Filename Matching** - Fast substring-based filename searches
 - **Tag-Based Search** - Partial matching against indexed tags
 - **Topic-Based Search** - Search across key topics identified during semantic analysis
 - **Summary Text Search** - Content-based discovery via summary text matching
@@ -278,7 +272,7 @@ The MCP server (`internal/mcp/`) implements Model Context Protocol for tool-base
 - **Transport Layer** (`internal/mcp/transport/`) - Stdio transport for MCP communication
 - **Server Lifecycle** - Initialize, initialized, shutdown sequence following MCP spec
 - **Tool Integration** - Exposes three tools integrated with index and search:
-  - `search_files` - Semantic search with fuzzy matching, tag/topic/summary search
+  - `search_files` - Semantic search with substring matching, tag/topic/summary search
   - `get_file_metadata` - Complete file metadata and semantic analysis retrieval
   - `list_recent_files` - Recently modified files within configurable time window
 - **Logging** - Separate log file and level control via `mcp.log_file` and `mcp.log_level` config
@@ -325,7 +319,7 @@ The project uses Go's standard testing package with table-based tests where appr
 - **Worker pool** - Tests parallel processing, cache integration, priority ordering
 - **Configuration** - Tests validation rules, error accumulation, path safety
 - **MCP server** - Tests JSON-RPC 2.0 protocol implementation, tool handlers
-- **Semantic search** - Tests fuzzy matching, relevance scoring, tag/topic filtering
+- **Semantic search** - Tests substring matching, relevance scoring, tag/topic filtering
 
 When writing tests:
 - Use `t.Run()` for subtests within table-driven tests

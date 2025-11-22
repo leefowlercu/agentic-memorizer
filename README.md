@@ -183,7 +183,7 @@ The following frameworks require manual configuration file editing. The `integra
 
 **Three-Phase Processing Pipeline:**
 
-1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 10 file type categories
+1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 9 file type categories
 2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API
 3. **Caching** (`internal/cache/`) - Content-hash-based storage achieving >95% cache hit rates
 
@@ -193,7 +193,7 @@ The following frameworks require manual configuration file editing. The `integra
 - **Worker Pool** - Parallel processing with rate limiting (default 3 workers, 20 calls/min)
 
 **Semantic Search** (`internal/search/`):
-- Fuzzy filename matching
+- Substring-based filename matching
 - Tag and topic search
 - Summary text search
 - Relevance-ranked results
@@ -357,18 +357,15 @@ agentic-memorizer daemon launchctl  # macOS
 #### Option 2: Using Makefile
 
 ```bash
-# Development build (version shows as "dev")
+# Build and install
 make install
-
-# Production build with version information
-make install-release
 ```
 
 This will:
-- Build the `agentic-memorizer` binary (with version info for release builds)
+- Build the `agentic-memorizer` binary with version info from git
 - Install it to `~/.local/bin/agentic-memorizer`
 
-The `install-release` target injects version information from git tags and commits, providing accurate version tracking in logs and index files.
+The build automatically injects version information from git tags and commits, providing accurate version tracking in logs and index files.
 
 ### Configuration
 
@@ -489,7 +486,7 @@ This command automatically:
 The MCP server exposes three tools to Claude Code:
 
 - **`search_files`** - Semantic search across indexed files
-  - Fuzzy filename matching
+  - Substring-based filename matching
   - Tag and topic search
   - Summary text search
   - Relevance-ranked results
@@ -1046,7 +1043,7 @@ daemon:
 - ✓ `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`
 - ✓ `daemon.full_rebuild_interval_minutes`, `daemon.health_check_port`
 - ✓ `analysis.*` settings, `claude.*` settings
-- ✗ `memory_root`, `analysis.cache_dir`, `daemon.log_file` (require restart)
+- ✗ `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file` (require restart)
 
 #### Running as a Service
 
@@ -1265,7 +1262,7 @@ systemctl --user stop agentic-memorizer
 
 # Upgrade binary
 go install github.com/leefowlercu/agentic-memorizer@latest
-# OR: cd /path/to/repo && make install-release
+# OR: cd /path/to/repo && make install
 
 # Start service
 systemctl --user start agentic-memorizer
@@ -1278,7 +1275,7 @@ agentic-memorizer version
 **Or use restart for one command:**
 ```bash
 # Stop and upgrade (Makefile handles daemon stop)
-make install-release
+make install
 
 # Restart service
 systemctl --user restart agentic-memorizer
@@ -1292,7 +1289,7 @@ launchctl stop com.$(whoami).agentic-memorizer
 
 # Upgrade binary
 go install github.com/leefowlercu/agentic-memorizer@latest
-# OR: cd /path/to/repo && make install-release
+# OR: cd /path/to/repo && make install
 
 # Start service
 launchctl start com.$(whoami).agentic-memorizer
@@ -1328,7 +1325,7 @@ agentic-memorizer daemon stop
 
 # Upgrade
 go install github.com/leefowlercu/agentic-memorizer@latest
-# OR: cd /path/to/repo && make install-release
+# OR: cd /path/to/repo && make install
 
 # Start daemon
 agentic-memorizer daemon start
@@ -1337,11 +1334,10 @@ agentic-memorizer daemon start
 agentic-memorizer version
 ```
 
-**Note:** The Makefile install targets automatically stop the daemon before replacing the binary:
+**Note:** The Makefile install target automatically stops the daemon before replacing the binary:
 ```bash
-# These commands handle daemon shutdown automatically
-make install          # Development build
-make install-release  # Production build with version info
+# This command handles daemon shutdown automatically
+make install
 ```
 
 #### Service File Updates
@@ -1490,6 +1486,10 @@ agentic-memorizer integrations detect
 agentic-memorizer integrations setup <integration-name>
 agentic-memorizer integrations remove <integration-name>
 agentic-memorizer integrations validate
+agentic-memorizer integrations health
+
+# MCP server
+agentic-memorizer mcp start
 
 # Manage configuration
 agentic-memorizer config validate
@@ -1516,6 +1516,7 @@ agentic-memorizer config --help
 --cache-dir <dir>                   # Custom cache directory
 --force                             # Overwrite existing config
 --setup-integrations                # Configure agent framework integrations
+--skip-integrations                 # Skip integration setup prompt
 ```
 
 **Examples:**
@@ -1583,9 +1584,9 @@ When disabled, the daemon will only extract file metadata without semantic analy
 ### Directly Readable by Claude Code
 - Markdown (`.md`)
 - Text files (`.txt`)
-- JSON/YAML (`.json`, `.yaml`)
-- Images (`.png`, `.jpg`, `.gif`, `.webp`)
-- Code files (`.go`, `.py`, `.js`, `.ts`, etc.)
+- Configuration files (`.json`, `.yaml`, `.yml`, `.toml`, `.xml`)
+- Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`)
+- Code files (`.go`, `.py`, `.js`, `.ts`, `.java`, `.c`, `.cpp`, `.rs`, `.rb`, `.php`, `.html`, `.css`, `.sh`, `.bash`)
 - Transcripts (`.vtt`, `.srt`)
 
 ### Requires Extraction
@@ -1761,7 +1762,16 @@ Abbreviated example showing structure (actual output includes all files):
         <readable>true</readable>
         <metadata>
           <word_count>4520</word_count>
-          <section_count>8</section_count>
+          <sections>
+            <section>Introduction</section>
+            <section>RESTful Principles</section>
+            <section>Versioning Strategies</section>
+            <section>Authentication</section>
+            <section>Error Handling</section>
+            <section>Rate Limiting</section>
+            <section>Documentation</section>
+            <section>Best Practices</section>
+          </sections>
         </metadata>
         <semantic>
           <summary>Comprehensive API design guidelines covering RESTful principles, versioning strategies, authentication patterns, and best practices for building scalable microservices.</summary>
@@ -1811,7 +1821,8 @@ Abbreviated example showing structure (actual output includes all files):
 
 ### api-design-guide.md
 **Path**: `/Users/username/.agentic-memorizer/memory/documents/api-design-guide.md`
-**Modified**: 2025-10-04 | **Size**: 45.2 KB | **Words**: 4,520 | **Sections**: 8
+**Modified**: 2025-10-04 | **Size**: 45.2 KB | **Words**: 4,520
+**Sections**: Introduction • RESTful Principles • Versioning Strategies • Authentication • Error Handling • Rate Limiting • Documentation • Best Practices
 **Type**: Markdown • Technical-Guide
 
 **Summary**: Comprehensive API design guidelines covering RESTful principles, versioning strategies, authentication patterns, and best practices for building scalable microservices.
@@ -1886,10 +1897,10 @@ agentic-memorizer/
 │   ├── index/                # Index management and atomic writes
 │   ├── watcher/              # File system watching (fsnotify)
 │   ├── walker/               # File system traversal with filtering
-│   ├── metadata/             # File metadata extraction (10 category handlers)
+│   ├── metadata/             # File metadata extraction (9 category handlers)
 │   ├── semantic/             # Claude API integration for semantic analysis
 │   ├── cache/                # Content-addressable analysis caching
-│   ├── search/               # Semantic search engine (fuzzy, tag, topic, summary)
+│   ├── search/               # Semantic search engine (substring, tag, topic, summary)
 │   ├── mcp/                  # MCP server implementation
 │   │   ├── protocol/         # JSON-RPC 2.0 protocol messages
 │   │   └── transport/        # Stdio transport layer
@@ -1913,10 +1924,8 @@ agentic-memorizer/
 
 ```bash
 # Building
-make build             # Build binary (development)
-make build-release     # Build with version information
+make build             # Build binary with version info from git
 make install           # Build and install to ~/.local/bin
-make install-release   # Install release build with version info
 
 # Testing
 make test              # Run unit tests only (fast, no external dependencies)

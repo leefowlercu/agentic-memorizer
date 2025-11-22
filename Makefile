@@ -1,10 +1,12 @@
-.PHONY: build install test test-integration test-all clean uninstall help coverage coverage-html build-release install-release lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config
+.PHONY: build install test test-integration test-all clean uninstall help coverage coverage-html lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config release-major release-minor release-patch
 
 BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
 INSTALL_PATH=$(INSTALL_DIR)/$(BINARY_NAME)
 
-# Version information for release builds
+# Version information for builds
+VERSION_FILE=internal/version/VERSION
+CURRENT_VERSION=$(shell cat $(VERSION_FILE) 2>/dev/null || echo "0.0.0")
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -18,28 +20,12 @@ help: ## Show this help message
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-build: ## Build the binary (development)
-	@echo "Building $(BINARY_NAME)..."
-	@go build -o $(BINARY_NAME) .
-	@echo "✅ Build complete: ./$(BINARY_NAME)"
-
-build-release: ## Build with version information
+build: ## Build the binary with version information
 	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) .
-	@echo "✅ Release build complete: ./$(BINARY_NAME) $(VERSION)"
+	@echo "✅ Build complete: ./$(BINARY_NAME) $(VERSION)"
 
-install: build ## Install the binary (development)
-	@echo "Installing to $(INSTALL_PATH)..."
-	@mkdir -p $(INSTALL_DIR)
-	@$(INSTALL_PATH) daemon stop 2>/dev/null || true
-	@sleep 1
-	@mv $(BINARY_NAME) $(INSTALL_PATH).tmp && mv $(INSTALL_PATH).tmp $(INSTALL_PATH)
-	@chmod +x $(INSTALL_PATH)
-	@echo "✅ Installed successfully to $(INSTALL_PATH)"
-	@echo ""
-	@echo "To restart the daemon, run: $(INSTALL_PATH) daemon start"
-
-install-release: build-release ## Install release build with version info
+install: build ## Install the binary with version information
 	@echo "Installing $(VERSION) to $(INSTALL_PATH)..."
 	@mkdir -p $(INSTALL_DIR)
 	@$(INSTALL_PATH) daemon stop 2>/dev/null || true
@@ -157,3 +143,45 @@ validate-config: build ## Validate configuration file
 	@echo "Validating configuration..."
 	@./$(BINARY_NAME) config validate
 	@echo "✅ Configuration valid"
+
+release-major: ## Bump major version, update VERSION file, create git tag
+	@echo "Current version: $(CURRENT_VERSION)"
+	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{print $$1+1".0.0"}'); \
+	echo "Bumping to major version: $$NEW_VERSION"; \
+	echo $$NEW_VERSION > $(VERSION_FILE); \
+	git add $(VERSION_FILE); \
+	git commit -m "release: bump version to $$NEW_VERSION"; \
+	git tag -a v$$NEW_VERSION -m "Release v$$NEW_VERSION"; \
+	echo "✅ Version bumped to $$NEW_VERSION and tagged as v$$NEW_VERSION"; \
+	echo ""; \
+	echo "Next steps:"; \
+	echo "  git push origin master"; \
+	echo "  git push origin v$$NEW_VERSION"
+
+release-minor: ## Bump minor version, update VERSION file, create git tag
+	@echo "Current version: $(CURRENT_VERSION)"
+	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{print $$1"."$$2+1".0"}'); \
+	echo "Bumping to minor version: $$NEW_VERSION"; \
+	echo $$NEW_VERSION > $(VERSION_FILE); \
+	git add $(VERSION_FILE); \
+	git commit -m "release: bump version to $$NEW_VERSION"; \
+	git tag -a v$$NEW_VERSION -m "Release v$$NEW_VERSION"; \
+	echo "✅ Version bumped to $$NEW_VERSION and tagged as v$$NEW_VERSION"; \
+	echo ""; \
+	echo "Next steps:"; \
+	echo "  git push origin master"; \
+	echo "  git push origin v$$NEW_VERSION"
+
+release-patch: ## Bump patch version, update VERSION file, create git tag
+	@echo "Current version: $(CURRENT_VERSION)"
+	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{print $$1"."$$2"."$$3+1}'); \
+	echo "Bumping to patch version: $$NEW_VERSION"; \
+	echo $$NEW_VERSION > $(VERSION_FILE); \
+	git add $(VERSION_FILE); \
+	git commit -m "release: bump version to $$NEW_VERSION"; \
+	git tag -a v$$NEW_VERSION -m "Release v$$NEW_VERSION"; \
+	echo "✅ Version bumped to $$NEW_VERSION and tagged as v$$NEW_VERSION"; \
+	echo ""; \
+	echo "Next steps:"; \
+	echo "  git push origin master"; \
+	echo "  git push origin v$$NEW_VERSION"

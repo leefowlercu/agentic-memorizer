@@ -1,5 +1,10 @@
 # Agentic Memorizer
 
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.25.1-blue.svg)](https://golang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Report Card](https://goreportcard.com/badge/github.com/leefowlercu/agentic-memorizer)](https://goreportcard.com/report/github.com/leefowlercu/agentic-memorizer)
+[![GitHub Release](https://img.shields.io/github/v/release/leefowlercu/agentic-memorizer)](https://github.com/leefowlercu/agentic-memorizer/releases)
+
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code and manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
 **Current Version**: v0.9.0 ([CHANGELOG.md](CHANGELOG.md))

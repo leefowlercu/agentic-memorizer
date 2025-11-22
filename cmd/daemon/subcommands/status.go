@@ -1,7 +1,6 @@
 package subcommands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -79,10 +78,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 		// Add service manager check
 		sm := daemon.DetectServiceManager()
-		if sm == "systemd" {
+		switch sm {
+		case "systemd":
 			fmt.Println("\nNote: Check if managed by systemd:")
 			fmt.Println("  systemctl --user status agentic-memorizer")
-		} else if sm == "launchd" {
+		case "launchd":
 			fmt.Println("\nNote: Check if managed by launchd:")
 			fmt.Println("  launchctl list | grep agentic-memorizer")
 		}
@@ -122,26 +122,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nService Management")
 	fmt.Println("------------------")
 	sm := daemon.DetectServiceManager()
-	if sm == "systemd" {
+	switch sm {
+	case "systemd":
 		fmt.Println("Platform: Linux (systemd available)")
 		fmt.Println("Setup: agentic-memorizer daemon systemctl")
-	} else if sm == "launchd" {
+	case "launchd":
 		fmt.Println("Platform: macOS (launchd available)")
 		fmt.Println("Setup: agentic-memorizer daemon launchctl")
-	} else {
+	default:
 		fmt.Printf("Platform: %s\n", runtime.GOOS)
 		fmt.Println("Manual management required")
 	}
 
-	return nil
-}
-
-// prettyPrintJSON prints JSON with indentation
-func prettyPrintJSON(v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(data))
 	return nil
 }

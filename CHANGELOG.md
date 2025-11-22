@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2025-11-22
+
+### Added
+- Interactive release tagline support in Goreleaser workflow - Makefile prompts for custom release taglines that appear in GitHub release titles
+- Hybrid version embedding with VERSION file and buildinfo fallback - go install users get version from embedded VERSION file, Make builds use git describe
+
+### Changed
+- Simplified daemon status command implementation - Cleaner code structure and improved maintainability
+
+### Documentation
+- Added GitHub badges to README (Go Version, MIT License, Go Report Card, GitHub Release)
+- Added MIT License to project
+- Updated README for accuracy
+
+### Build
+- Implemented Goreleaser for multi-platform releases - Automated builds for Linux/macOS (amd64/arm64) with checksums and draft GitHub releases
+- Moved systemd dependency to direct requirements in go.mod
+
+### Tests
+- Aligned struct field declarations in test files for consistency
+- Fixed reload integration test for config schema changes
+
 ## [0.10.0] - 2025-11-21
 
 ### Added
@@ -583,7 +605,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface with Cobra + Viper
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
-[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.10.0...HEAD
+[unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.8.2...v0.9.0

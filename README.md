@@ -7,7 +7,7 @@
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code and manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
-**Current Version**: v0.9.0 ([CHANGELOG.md](CHANGELOG.md))
+**Current Version**: v0.11.0 ([CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 

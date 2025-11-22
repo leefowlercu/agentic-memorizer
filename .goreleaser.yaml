@@ -30,18 +30,6 @@ archives:
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
 
-signs:
-  - artifacts: checksum
-    cmd: gpg2
-    args:
-      - "--batch"
-      - "-u"
-      - "{{ .Env.GPG_FINGERPRINT }}"
-      - "--output"
-      - "${signature}"
-      - "--detach-sign"
-      - "${artifact}"
-
 snapshot:
   version_template: "{{ .Tag }}-next"
 

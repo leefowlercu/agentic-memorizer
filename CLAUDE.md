@@ -363,7 +363,7 @@ When writing tests:
 
 - Commit messages use conventional commit format, lowercase, single line
 - Do not mention Claude Code coauthoring in commit messages
-- Current version: v0.9.0 (semantic versioning)
+- Current version: v0.11.0 (semantic versioning)
 
 ### API Rate Limiting
 
@@ -500,7 +500,6 @@ make goreleaser-snapshot
 
 - GoReleaser installed: `go install github.com/goreleaser/goreleaser/v2@latest`
 - GITHUB_TOKEN environment variable set with `repo` scope
-- GPG_FINGERPRINT environment variable set (get with `gpg --list-secret-keys --keyid-format=long`)
 - Clean git working directory
 - Conventional commit messages for changelog generation
 

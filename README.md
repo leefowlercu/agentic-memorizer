@@ -2023,4 +2023,4 @@ See existing code for examples and patterns.
 
 ## License
 
-[Add license information here]
+MIT License - see [LICENSE](LICENSE) file for details.

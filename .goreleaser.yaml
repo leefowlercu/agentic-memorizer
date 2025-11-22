@@ -84,7 +84,7 @@ release:
 
   draft: true
   replace_existing_draft: true
-  name_template: "{{.Tag}}"
+  name_template: "Agentic Memorizer {{.Tag}}{{if .Env.RELEASE_TAGLINE}} - {{.Env.RELEASE_TAGLINE}}{{end}}"
   prerelease: auto
 
   header: |

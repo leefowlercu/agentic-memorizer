@@ -179,16 +179,19 @@ release-check: ## Verify release prerequisites
 	@echo "✅ Release prerequisites satisfied"
 
 release-major: release-check ## Prepare major version release
-	@./scripts/bump-version.sh major
-	@$(MAKE) release-prep VERSION=$$(cat .next-version)
+	@read -p "Release tagline (e.g., 'Breaking Changes & New Architecture'): " tagline; \
+	./scripts/bump-version.sh major; \
+	RELEASE_TAGLINE="$$tagline" $(MAKE) release-prep VERSION=$$(cat .next-version)
 
 release-minor: release-check ## Prepare minor version release
-	@./scripts/bump-version.sh minor
-	@$(MAKE) release-prep VERSION=$$(cat .next-version)
+	@read -p "Release tagline (e.g., 'MCP Server Implementation'): " tagline; \
+	./scripts/bump-version.sh minor; \
+	RELEASE_TAGLINE="$$tagline" $(MAKE) release-prep VERSION=$$(cat .next-version)
 
 release-patch: release-check ## Prepare patch version release
-	@./scripts/bump-version.sh patch
-	@$(MAKE) release-prep VERSION=$$(cat .next-version)
+	@read -p "Release tagline (e.g., 'Bug Fixes & Performance'): " tagline; \
+	./scripts/bump-version.sh patch; \
+	RELEASE_TAGLINE="$$tagline" $(MAKE) release-prep VERSION=$$(cat .next-version)
 
 release-prep: ## Prepare release (internal target, use release-{major,minor,patch})
 	@if [ -z "$(VERSION)" ]; then \

@@ -19,11 +19,11 @@ import (
 )
 
 type Server struct {
-	transport     transport.Transport
-	index         *types.Index
-	initialized   bool
-	capabilities  protocol.ServerCapabilities
-	logger        *slog.Logger
+	transport    transport.Transport
+	index        *types.Index
+	initialized  bool
+	capabilities protocol.ServerCapabilities
+	logger       *slog.Logger
 
 	// Handler registries (for Phase 2+)
 	resourceHandlers map[string]ResourceHandler

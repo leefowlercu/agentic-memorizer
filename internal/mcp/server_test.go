@@ -39,10 +39,10 @@ func (m *mockTransport) Close() error {
 
 func TestServer_Initialize(t *testing.T) {
 	tests := []struct {
-		name           string
-		request        protocol.JSONRPCRequest
-		wantError      bool
-		wantErrorCode  int
+		name             string
+		request          protocol.JSONRPCRequest
+		wantError        bool
+		wantErrorCode    int
 		checkInitialized bool
 	}{
 		{

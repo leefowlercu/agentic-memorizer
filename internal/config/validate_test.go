@@ -117,9 +117,9 @@ func TestValidateMCP(t *testing.T) {
 
 func TestValidateConfig_MCP(t *testing.T) {
 	tests := []struct {
-		name       string
-		cfg        *Config
-		wantErr    bool
+		name        string
+		cfg         *Config
+		wantErr     bool
 		errContains string
 	}{
 		{

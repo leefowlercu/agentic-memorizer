@@ -36,11 +36,11 @@ func TestWalk(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		skipDirs      []string
-		skipFiles     []string
-		wantFiles     []string
-		wantNotFiles  []string
+		name         string
+		skipDirs     []string
+		skipFiles    []string
+		wantFiles    []string
+		wantNotFiles []string
 	}{
 		{
 			name:      "no filters",

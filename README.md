@@ -242,7 +242,7 @@ agentic-memorizer initialize --setup-integrations
 This will:
 - Create config at `~/.agentic-memorizer/config.yaml`
 - Create memory directory at `~/.agentic-memorizer/memory/`
-- **Automatically configure Claude Code SessionStart hooks** (no manual editing required)
+- **Automatically configure Claude Code SessionStart hooks and MCP Server integration** (no manual editing required)
 
 Then start the daemon:
 ```bash

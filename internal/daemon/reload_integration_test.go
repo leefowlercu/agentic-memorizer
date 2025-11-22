@@ -68,13 +68,11 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		},
 		Output: config.OutputConfig{
 			Format:         "xml",
-			Verbose:        false,
 			ShowRecentDays: 7,
 		},
 		Analysis: config.AnalysisConfig{
 			Enable:      false, // Disable analysis for faster tests
 			MaxFileSize: 1024 * 1024,
-			Parallel:    2, // Match daemon workers
 			CacheDir:    cacheDir,
 		},
 		Daemon: config.DaemonConfig{
@@ -85,6 +83,10 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			HealthCheckPort:            0, // Random port
 			LogFile:                    logPath,
 			LogLevel:                   "info",
+		},
+		MCP: config.MCPConfig{
+			LogFile:  filepath.Join(appDir, "mcp.log"),
+			LogLevel: "info",
 		},
 	}
 

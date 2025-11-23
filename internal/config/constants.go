@@ -40,12 +40,14 @@ var DefaultConfig = Config{
 		RateLimitPerMin:            20,
 		FullRebuildIntervalMinutes: 60,
 		HealthCheckPort:            0, // Disabled by default
+		SSENotifyPort:              0, // Disabled by default
 		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,
 		LogLevel:                   "info",
 	},
 	MCP: MCPConfig{
-		LogFile:  "~/" + AppDirName + "/" + MCPLogFile,
-		LogLevel: "info",
+		LogFile:      "~/" + AppDirName + "/" + MCPLogFile,
+		LogLevel:     "info",
+		DaemonSSEURL: "", // No automatic connection - must be explicitly configured
 	},
 	Integrations: IntegrationsConfig{
 		Enabled: []string{}, // Empty by default - populated during init/setup/remove commands

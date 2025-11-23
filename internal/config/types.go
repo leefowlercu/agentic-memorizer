@@ -38,13 +38,15 @@ type DaemonConfig struct {
 	RateLimitPerMin            int    `mapstructure:"rate_limit_per_min" yaml:"rate_limit_per_min"`
 	FullRebuildIntervalMinutes int    `mapstructure:"full_rebuild_interval_minutes" yaml:"full_rebuild_interval_minutes"`
 	HealthCheckPort            int    `mapstructure:"health_check_port" yaml:"health_check_port"`
+	SSENotifyPort              int    `mapstructure:"sse_notify_port" yaml:"sse_notify_port"`
 	LogFile                    string `mapstructure:"log_file" yaml:"log_file"`
 	LogLevel                   string `mapstructure:"log_level" yaml:"log_level"`
 }
 
 type MCPConfig struct {
-	LogFile  string `mapstructure:"log_file" yaml:"log_file"`
-	LogLevel string `mapstructure:"log_level" yaml:"log_level"`
+	LogFile      string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel     string `mapstructure:"log_level" yaml:"log_level"`
+	DaemonSSEURL string `mapstructure:"daemon_sse_url" yaml:"daemon_sse_url"`
 }
 
 // IntegrationsConfig represents the complete integrations configuration section.

@@ -30,3 +30,19 @@ type ResourceContent struct {
 	Text     string `json:"text,omitempty"`
 	Blob     string `json:"blob,omitempty"` // Base64-encoded binary data
 }
+
+// ResourcesSubscribeRequest is the request for resources/subscribe
+type ResourcesSubscribeRequest struct {
+	URI string `json:"uri"`
+}
+
+// ResourcesSubscribeResponse is the response for resources/subscribe (empty on success)
+type ResourcesSubscribeResponse struct{}
+
+// ResourcesUnsubscribeRequest is the request for resources/unsubscribe
+type ResourcesUnsubscribeRequest struct {
+	URI string `json:"uri"`
+}
+
+// ResourcesUnsubscribeResponse is the response for resources/unsubscribe (empty on success)
+type ResourcesUnsubscribeResponse struct{}

@@ -18,6 +18,7 @@
    - [Server Orchestrator](#server-orchestrator)
    - [Search Integration](#search-integration)
    - [Tool Implementations](#tool-implementations)
+   - [Prompt Implementations](#prompt-implementations)
 4. [Configuration](#configuration)
 5. [Integration Points](#integration-points)
    - [Index System Integration](#index-system-integration)
@@ -59,13 +60,13 @@ The subsystem maintains backward compatibility with existing Claude Code hooks w
 
 ### Current Implementation Status
 
-The MCP subsystem is currently in Phase 4 of a 5-phase implementation plan:
+The MCP subsystem has completed Phase 5 of the implementation plan:
 
 - **Phase 1: Protocol Foundation** (Complete) - JSON-RPC 2.0 server, stdio transport, handshake protocol
 - **Phase 2: Resource Implementation** (Complete) - Static index serving in three formats
 - **Phase 3: Tool Implementation** (Complete) - Three tools for search, metadata, and recent files
-- **Phase 4: Integration & Testing** (In Progress) - End-to-end testing with real MCP clients
-- **Phase 5: Advanced Features** (Planned) - Prompts, notifications, subscriptions, HTTP transport
+- **Phase 4: Integration & Testing** (Complete) - SSE notifications, index subscriptions, daemon integration
+- **Phase 5: MCP Prompts** (Complete) - Pre-configured prompt templates with index-aware message generation
 
 ---
 
@@ -306,6 +307,62 @@ The subsystem implements three tools for interacting with the file index:
 - Use case: "What files changed this week?" or "Show recent documentation updates"
 
 All tools validate inputs, handle missing data gracefully, and return structured JSON results that clients can parse and present to users.
+
+### Prompt Implementations
+
+The subsystem provides three pre-configured prompt templates that generate context-aware messages using index data:
+
+**analyze-file**
+- Deep analysis of a specific file with semantic metadata
+- Required arguments: `file_path` (string)
+- Optional arguments: None
+- Implementation: `prompts.go:118-180`
+  - Validates file exists in index
+  - Validates file has semantic analysis
+  - Generates formatted prompt including metadata (path, type, category, size), semantic summary, tags, and key topics
+  - Returns protocol.PromptMessage array with role="user" and text content
+- Use case: "I want to analyze the API documentation" or "Help me understand this configuration file"
+- Error handling: Returns error if file not found or lacks semantic analysis
+
+**search-context**
+- Builds effective semantic search queries with guidance
+- Required arguments: `topic` (string)
+- Optional arguments: `category` (string, e.g., "documents", "code", "images")
+- Implementation: `prompts.go:182-216`
+  - Generates search guidance prompt with topic and optional category filter
+  - Provides suggestions for constructing effective searches
+  - Does not require index data (generates guidance, not results)
+- Use case: "How do I search for authentication-related files?" or "Find deployment documentation"
+- Error handling: Returns error if topic is missing
+
+**explain-summary**
+- Detailed explanation of a file's AI-generated semantic analysis
+- Required arguments: `file_path` (string)
+- Optional arguments: None
+- Implementation: `prompts.go:218-276`
+  - Validates file exists in index with semantic analysis
+  - Generates explanation prompt including summary, tags, topics, document type, and confidence
+  - Returns detailed context about how the AI analyzed the file
+- Use case: "Explain the semantic analysis for this file" or "What do these tags mean?"
+- Error handling: Returns error if file not found or lacks semantic analysis
+
+**Prompt Registry** (`prompts.go:10-87`)
+- Centralized registry managing all available prompts
+- NewPromptRegistry() initializes 3 default prompts with metadata
+- ListPrompts() returns all registered prompts for client discovery
+- GetPrompt(name) retrieves prompt definition by name
+- GeneratePromptMessages(name, args, server) creates context-aware messages
+- Validates required arguments before message generation
+- Routes to specific generator functions based on prompt name
+
+**Message Format**
+All prompt generators return `protocol.PromptMessage` array with:
+- Role: "user" (all current prompts generate user messages)
+- Content: protocol.PromptContent with Type="text" and formatted Text field
+- Text includes structured markdown with file metadata, semantic data, and user guidance
+
+**Client Integration**
+MCP clients discover prompts via `prompts/list` request and invoke them using `prompts/get` with arguments. The server capabilities declare `prompts` support, making these templates available in client UI (e.g., Claude Code's prompt selector).
 
 ### Configuration
 

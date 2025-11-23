@@ -22,7 +22,7 @@ func TestServer_Run_ContextCancellation(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -61,7 +61,7 @@ func TestServer_Run_ClientDisconnect(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	// Transport with empty buffer will return EOF immediately
 	readBuf := bytes.NewBuffer(nil)
@@ -91,7 +91,7 @@ func TestServer_Shutdown(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	readBuf := bytes.NewBuffer(nil)
 	writeBuf := bytes.NewBuffer(nil)
@@ -116,7 +116,7 @@ func TestServer_HandleMessage_NotificationWithInvalidVersion(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	readBuf := bytes.NewBuffer(nil)
 	writeBuf := bytes.NewBuffer(nil)
@@ -157,7 +157,7 @@ func TestServer_HandleMessage_UnknownNotification(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	readBuf := bytes.NewBuffer(nil)
 	writeBuf := bytes.NewBuffer(nil)
@@ -196,7 +196,7 @@ func TestServer_HandleMessage_MalformedNotification(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	readBuf := bytes.NewBuffer(nil)
 	writeBuf := bytes.NewBuffer(nil)
@@ -226,7 +226,7 @@ func TestServer_HandlePromptsList(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	readBuf := bytes.NewBuffer(nil)
 	writeBuf := bytes.NewBuffer(nil)
@@ -249,23 +249,51 @@ func TestServer_HandlePromptsList(t *testing.T) {
 	ctx := context.Background()
 	err := server.handleMessage(ctx, data)
 
-	// Should not error, but response should indicate not implemented
+	// Should not error
 	if err != nil {
 		t.Errorf("handleMessage() error = %v, want nil", err)
 	}
 
-	// Check response contains error
+	// Check response contains prompts list
 	response := writeBuf.String()
 	if response == "" {
-		t.Error("No response written for prompts/list")
+		t.Fatal("No response written for prompts/list")
 	}
 
 	var resp protocol.JSONRPCResponse
-	if err := json.Unmarshal([]byte(response), &resp); err == nil {
-		if resp.Error == nil {
-			t.Error("Expected error response for prompts/list (not implemented)")
-		} else if resp.Error.Code != -32601 {
-			t.Errorf("Expected error code -32601 (method not found), got %d", resp.Error.Code)
+	if err := json.Unmarshal([]byte(response), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.Error != nil {
+		t.Errorf("Unexpected error in response: %v", resp.Error)
+	}
+
+	// Unmarshal result
+	var listResp protocol.PromptsListResponse
+	if err := json.Unmarshal(resp.Result, &listResp); err != nil {
+		t.Fatalf("Failed to unmarshal prompts list result: %v", err)
+	}
+
+	// Verify we have the 3 default prompts
+	if len(listResp.Prompts) != 3 {
+		t.Errorf("Expected 3 prompts, got %d", len(listResp.Prompts))
+	}
+
+	// Verify prompt names
+	expectedPrompts := map[string]bool{
+		"analyze-file":    false,
+		"search-context":  false,
+		"explain-summary": false,
+	}
+	for _, prompt := range listResp.Prompts {
+		if _, ok := expectedPrompts[prompt.Name]; ok {
+			expectedPrompts[prompt.Name] = true
+		}
+	}
+	for name, found := range expectedPrompts {
+		if !found {
+			t.Errorf("Expected prompt %q not found in list", name)
 		}
 	}
 }
@@ -279,7 +307,7 @@ func TestServer_HandlePromptsGet(t *testing.T) {
 	}
 
 	logger := slog.Default()
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	readBuf := bytes.NewBuffer(nil)
 	writeBuf := bytes.NewBuffer(nil)
@@ -290,11 +318,21 @@ func TestServer_HandlePromptsGet(t *testing.T) {
 
 	server.initialized = true
 
-	// Create prompts/get request
+	// Create prompts/get request for search-context prompt
+	params := protocol.PromptsGetRequest{
+		Name: "search-context",
+		Arguments: map[string]string{
+			"topic":    "authentication",
+			"category": "code",
+		},
+	}
+	paramsData, _ := json.Marshal(params)
+
 	req := protocol.JSONRPCRequest{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "prompts/get",
+		Params:  paramsData,
 	}
 
 	data, _ := json.Marshal(req)
@@ -302,23 +340,52 @@ func TestServer_HandlePromptsGet(t *testing.T) {
 	ctx := context.Background()
 	err := server.handleMessage(ctx, data)
 
-	// Should not error, but response should indicate not implemented
+	// Should not error
 	if err != nil {
 		t.Errorf("handleMessage() error = %v, want nil", err)
 	}
 
-	// Check response contains error
+	// Check response contains prompt messages
 	response := writeBuf.String()
 	if response == "" {
-		t.Error("No response written for prompts/get")
+		t.Fatal("No response written for prompts/get")
 	}
 
 	var resp protocol.JSONRPCResponse
-	if err := json.Unmarshal([]byte(response), &resp); err == nil {
-		if resp.Error == nil {
-			t.Error("Expected error response for prompts/get (not implemented)")
-		} else if resp.Error.Code != -32601 {
-			t.Errorf("Expected error code -32601 (method not found), got %d", resp.Error.Code)
+	if err := json.Unmarshal([]byte(response), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.Error != nil {
+		t.Fatalf("Unexpected error in response: %v", resp.Error)
+	}
+
+	// Unmarshal result
+	var getResp protocol.PromptsGetResponse
+	if err := json.Unmarshal(resp.Result, &getResp); err != nil {
+		t.Fatalf("Failed to unmarshal prompts/get result: %v", err)
+	}
+
+	// Verify description is present
+	if getResp.Description == "" {
+		t.Error("Expected non-empty description in response")
+	}
+
+	// Verify we have at least one message
+	if len(getResp.Messages) == 0 {
+		t.Error("Expected at least one message in response")
+	}
+
+	// Verify message structure
+	for i, msg := range getResp.Messages {
+		if msg.Role == "" {
+			t.Errorf("Message %d has empty role", i)
+		}
+		if msg.Content.Type == "" {
+			t.Errorf("Message %d has empty content type", i)
+		}
+		if msg.Content.Text == "" {
+			t.Errorf("Message %d has empty text content", i)
 		}
 	}
 }

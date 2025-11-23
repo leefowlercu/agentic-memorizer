@@ -502,6 +502,27 @@ The MCP server exposes three tools to Claude Code:
   - Sorted by modification date
   - Includes full metadata
 
+#### MCP Prompts
+
+The MCP server provides pre-configured prompt templates that help you interact with your memory index efficiently:
+
+- **`analyze-file`** - Deep analysis of a specific file
+  - Generates detailed analysis using semantic metadata
+  - Arguments: `file_path` (required), `focus` (optional)
+  - Example: Focus on security, performance, or architecture aspects
+
+- **`search-context`** - Build effective search queries
+  - Helps construct semantic search queries
+  - Arguments: `topic` (required), `category` (optional)
+  - Returns ranked search strategies and related terms
+
+- **`explain-summary`** - Understand AI-generated summaries
+  - Detailed explanation of file semantic analysis
+  - Arguments: `file_path` (required)
+  - Explains summary, tags, topics, and confidence scores
+
+These prompts appear in Claude Code's prompt selector and can be invoked with arguments to generate context-aware messages based on your memory index.
+
 #### MCP Configuration
 
 The MCP server has dedicated configuration in `config.yaml`:

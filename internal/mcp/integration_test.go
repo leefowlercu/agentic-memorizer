@@ -66,7 +66,7 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -321,7 +321,7 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)

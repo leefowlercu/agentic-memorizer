@@ -12,6 +12,7 @@
    - [PID Management](#pid-management)
    - [Signal Handling](#signal-handling)
    - [Health Monitoring](#health-monitoring)
+   - [SSE Notification Hub](#sse-notification-hub)
 4. [Integration Points](#integration-points)
    - [Configuration System](#configuration-system)
    - [Cache System](#cache-system)
@@ -20,6 +21,7 @@
    - [Directory Walker](#directory-walker)
    - [CLI Commands](#cli-commands)
    - [Read Command](#read-command)
+   - [MCP Server Integration](#mcp-server-integration)
 5. [Lifecycle Management](#lifecycle-management)
    - [Startup Sequence](#startup-sequence)
    - [Runtime Operations](#runtime-operations)
@@ -39,6 +41,7 @@ The daemon provides several critical capabilities:
 - **Parallel Processing**: Processes files concurrently using a worker pool architecture with configurable concurrency limits
 - **Precomputed Indexes**: Maintains an always-up-to-date index file that can be loaded in milliseconds
 - **Intelligent Caching**: Reduces API costs and processing time by caching semantic analysis results keyed by content hash
+- **Real-Time Notifications**: Broadcasts index update events to connected MCP servers via Server-Sent Events (SSE)
 - **Resilient Operation**: Recovers gracefully from crashes, handles errors without stopping, and uses atomic operations to prevent data corruption
 
 ### Role in the System
@@ -129,6 +132,24 @@ An optional HTTP health check endpoint serves this information in JSON format, e
 
 The health server can be disabled by setting the health check port to 0 in configuration. When the port changes during configuration reload, the daemon automatically stops the existing health server and starts a new one on the updated port. This hot-restart capability allows operational teams to reconfigure monitoring endpoints without full daemon restarts.
 
+### SSE Notification Hub
+
+The SSE notification hub provides real-time index update notifications to connected MCP server instances via Server-Sent Events. This enables MCP servers to reload their indexes immediately when changes occur, rather than polling or waiting for manual refresh.
+
+The hub exposes two HTTP endpoints: `/notifications/stream` for the SSE event stream and `/health` for monitoring connected clients. The SSE stream endpoint delivers notifications in standard SSE format with event type "notification" and JSON-formatted data containing the notification type (`index_updated` for single file changes, `index_rebuilt` for full rebuilds), timestamp, and optional metadata (file path for updates, total file count for rebuilds).
+
+The hub supports unlimited concurrent MCP server connections. Each connection receives all broadcast notifications until it disconnects. Client connections are tracked in a thread-safe map, and the `/health` endpoint reports the current count of connected clients for operational monitoring.
+
+Keepalive comments are sent every 30 seconds to prevent connection timeouts and enable detection of disconnected clients. The hub uses a non-blocking broadcast strategy where slow clients that cannot keep up with the notification rate will have notifications dropped rather than blocking other clients.
+
+Configuration is controlled by the `sse_notify_port` setting in daemon configuration. Setting the port to 0 disables the SSE hub entirely. The hub supports hot-reload: when the port changes during configuration reload, the existing hub shuts down gracefully and a new hub starts on the updated port.
+
+Lifecycle management follows a strict ordering to ensure clean startup and shutdown. The SSE hub starts after the health server during daemon initialization (if enabled), ensuring the health endpoint is available before external connections begin. During shutdown, the hub stops before the health server, allowing graceful disconnection of MCP clients before the monitoring endpoint becomes unavailable.
+
+Notifications are broadcast by the daemon after successful index writes. The `BroadcastIndexUpdate()` method is called immediately following `WriteAtomic()` in both the event processing loop (single file updates) and periodic rebuild loop (full rebuilds). This ensures MCP servers receive notifications for all index changes, enabling real-time synchronization.
+
+Implementation is located in `internal/daemon/sse_hub.go`, with integration points in `internal/daemon/daemon.go` for lifecycle management and broadcast calls.
+
 ### Service Manager Integration
 
 The daemon follows modern Go best practices by running in foreground mode and delegating process supervision to external service managers. This design avoids self-daemonization anti-patterns in favor of battle-tested tools like systemd and launchd.
@@ -189,6 +210,22 @@ The read command represents the primary consumption interface for the daemon's o
 
 Critically, the read command is daemon-independent. It directly reads the index file without any communication with the daemon process. This design provides fast read operations, resilience to daemon unavailability, and simplicity in the integration interface.
 
+### MCP Server Integration
+
+The daemon integrates with MCP server instances through the SSE notification hub, enabling real-time index synchronization for MCP-enabled AI tools. MCP servers connect to the daemon's SSE stream endpoint and receive notifications whenever the index changes.
+
+When an MCP server starts, it connects to `http://localhost:{sse_notify_port}/notifications/stream` if the SSE hub is enabled. The connection uses standard HTTP with `Accept: text/event-stream` header and remains open for the duration of the MCP server's lifecycle. Multiple MCP servers can connect simultaneously, each maintaining its own independent stream.
+
+The daemon broadcasts notifications to all connected MCP servers immediately after successful index writes. After processing a file event through the worker pool, the daemon calls `index.Manager.WriteAtomic()` to persist the updated index, then calls `sseHub.BroadcastIndexUpdate()` with notification type `index_updated` and the affected file path. Similarly, after completing a full rebuild, the daemon broadcasts type `index_rebuilt` with the total file count.
+
+MCP servers receive these notifications as SSE events with JSON payloads containing `type`, `timestamp`, and optional metadata fields. Upon receiving a notification, an MCP server reloads its in-memory index from disk via `index.Manager.LoadComputed()`, then sends JSON-RPC notifications to its connected clients (e.g., Claude Code) informing them that resources have changed. This cascading notification chain ensures AI tools can react immediately to index changes.
+
+The integration supports configuration hot-reload. When the `sse_notify_port` setting changes during daemon configuration reload, the existing SSE hub shuts down gracefully (disconnecting all MCP servers), and a new hub starts on the updated port. MCP servers detect the disconnection, wait with exponential backoff, and automatically reconnect when the hub becomes available again.
+
+Error handling follows a resilient design. If no MCP servers are connected, broadcasts are no-ops with no performance impact. If a broadcast fails to a specific client (slow consumer, network issue), that client is removed from the active connection pool without affecting other clients. The daemon continues operating normally whether MCP servers are connected or not, maintaining the principle that MCP integration is an optional enhancement rather than a core dependency.
+
+Implementation touchpoints include: `internal/daemon/daemon.go` (lifecycle management, broadcast calls after index writes), `internal/daemon/sse_hub.go` (SSE server and client management), `internal/mcp/server.go` (MCP server integration), and `internal/mcp/sse_client.go` (SSE client with auto-reconnect).
+
 ## Lifecycle Management
 
 ### Startup Sequence
@@ -197,21 +234,21 @@ Daemon startup follows a carefully orchestrated sequence to ensure proper initia
 
 Process management begins with checking for an existing daemon through PID file validation. If no daemon is running, a new PID file is written. Signal handlers are registered for graceful shutdown and operational commands. Crash recovery is attempted by loading any existing index file.
 
-The daemon then performs an initial full rebuild to ensure the index is current, starts the file watcher to begin monitoring for changes, launches background goroutines for event processing and periodic rebuilds, and optionally starts the health check HTTP server. Finally, it logs successful startup and blocks waiting for the context to be cancelled.
+The daemon then performs an initial full rebuild to ensure the index is current, starts the file watcher to begin monitoring for changes, launches background goroutines for event processing and periodic rebuilds, optionally starts the health check HTTP server, and optionally starts the SSE notification hub (if `sse_notify_port > 0`). Finally, it logs successful startup and blocks waiting for the context to be cancelled.
 
 ### Runtime Operations
 
-During normal operation, the daemon runs several concurrent processes. The event processing loop receives events from the file watcher, submits them to the worker pool, collects results, updates the in-memory index, and atomically writes the updated index to disk.
+During normal operation, the daemon runs several concurrent processes. The event processing loop receives events from the file watcher, submits them to the worker pool, collects results, updates the in-memory index, atomically writes the updated index to disk, and broadcasts an `index_updated` notification to connected MCP servers via the SSE hub (if enabled).
 
-The periodic rebuild loop triggers full directory walks at configured intervals, submits all discovered files to the worker pool with priority sorting, collects results, builds a complete index structure, calculates statistics, and atomically replaces the index file.
+The periodic rebuild loop triggers full directory walks at configured intervals, submits all discovered files to the worker pool with priority sorting, collects results, builds a complete index structure, calculates statistics, atomically replaces the index file, and broadcasts an `index_rebuilt` notification to connected MCP servers.
 
-Both loops operate concurrently and handle context cancellation to enable clean shutdown. The worker pool processes jobs continuously, respecting rate limits and updating statistics as work completes.
+Both loops operate concurrently and handle context cancellation to enable clean shutdown. The worker pool processes jobs continuously, respecting rate limits and updating statistics as work completes. The SSE hub maintains connections to MCP servers, delivering notifications and keepalive messages independently of the main processing loops.
 
 ### Shutdown Sequence
 
-Graceful shutdown is triggered by receiving SIGINT or SIGTERM signals. The daemon cancels its context to signal all goroutines to exit, stops the file watcher to prevent new events from being generated, and waits for all worker goroutines to complete their current jobs using a WaitGroup.
+Graceful shutdown is triggered by receiving SIGINT or SIGTERM signals. The daemon cancels its context to signal all goroutines to exit, stops the file watcher to prevent new events from being generated, stops the SSE notification hub (if enabled) to disconnect MCP servers gracefully, and waits for all worker goroutines to complete their current jobs using a WaitGroup.
 
-After all background work completes, the daemon removes its PID file to indicate it is no longer running, logs the shutdown completion, and exits. This sequence ensures no work is lost, resources are properly released, and the system is left in a clean state.
+After all background work completes, the daemon stops the health check HTTP server and removes its PID file to indicate it is no longer running. The daemon logs the shutdown completion and exits. This sequence ensures no work is lost, all network connections are closed properly, resources are released, and the system is left in a clean state.
 
 ## Future Enhancements
 

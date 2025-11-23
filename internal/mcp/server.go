@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
@@ -21,9 +22,19 @@ import (
 type Server struct {
 	transport    transport.Transport
 	index        *types.Index
+	indexMu      sync.RWMutex // Protects index access and reloading
 	initialized  bool
 	capabilities protocol.ServerCapabilities
 	logger       *slog.Logger
+
+	// Subscription management
+	subscriptions *SubscriptionManager
+
+	// SSE client for daemon notifications
+	sseClient *SSEClient
+
+	// Prompt registry for MCP prompts
+	promptRegistry *PromptRegistry
 
 	// Handler registries (for Phase 2+)
 	resourceHandlers map[string]ResourceHandler
@@ -35,11 +46,13 @@ type ResourceHandler func(ctx context.Context, uri string) (any, error)
 type ToolHandler func(ctx context.Context, params json.RawMessage) (any, error)
 type PromptHandler func(ctx context.Context, params json.RawMessage) (any, error)
 
-func NewServer(index *types.Index, logger *slog.Logger) *Server {
+func NewServer(index *types.Index, logger *slog.Logger, daemonURL string) *Server {
 	s := &Server{
 		transport:        transport.NewStdioTransport(),
 		index:            index,
 		logger:           logger,
+		subscriptions:    NewSubscriptionManager(),
+		promptRegistry:   NewPromptRegistry(),
 		resourceHandlers: make(map[string]ResourceHandler),
 		toolHandlers:     make(map[string]ToolHandler),
 		promptHandlers:   make(map[string]PromptHandler),
@@ -50,12 +63,27 @@ func NewServer(index *types.Index, logger *slog.Logger) *Server {
 	s.toolHandlers["get_file_metadata"] = s.handleGetFileMetadata
 	s.toolHandlers["list_recent_files"] = s.handleListRecentFiles
 
+	// Start SSE client if daemon URL provided
+	if daemonURL != "" {
+		s.sseClient = NewSSEClient(daemonURL, s, logger)
+		s.sseClient.Start()
+		logger.Info("SSE client started", "daemon_url", daemonURL)
+	}
+
 	return s
 }
 
 // Run starts the MCP server loop
 func (s *Server) Run(ctx context.Context) error {
 	s.logger.Info("MCP server starting")
+
+	// Stop SSE client on shutdown
+	defer func() {
+		if s.sseClient != nil {
+			s.sseClient.Stop()
+			s.logger.Info("SSE client stopped")
+		}
+	}()
 
 	for {
 		select {
@@ -122,6 +150,10 @@ func (s *Server) handleMessage(ctx context.Context, data []byte) error {
 		return s.handleResourcesList(ctx, msg.ID, msg.Params)
 	case "resources/read":
 		return s.handleResourcesRead(ctx, msg.ID, msg.Params)
+	case "resources/subscribe":
+		return s.handleResourcesSubscribe(ctx, msg.ID, msg.Params)
+	case "resources/unsubscribe":
+		return s.handleResourcesUnsubscribe(ctx, msg.ID, msg.Params)
 	case "tools/list":
 		return s.handleToolsList(ctx, msg.ID, msg.Params)
 	case "tools/call":
@@ -179,8 +211,8 @@ func (s *Server) handleInitialize(ctx context.Context, id any, params json.RawMe
 		},
 		Capabilities: protocol.ServerCapabilities{
 			Resources: &protocol.ResourcesCapability{
-				Subscribe:   false, // Phase 5
-				ListChanged: false, // Phase 5
+				Subscribe:   true,
+				ListChanged: true,
 			},
 			Tools: &protocol.ToolsCapability{
 				ListChanged: false, // Phase 5
@@ -291,6 +323,62 @@ func (s *Server) handleResourcesRead(ctx context.Context, id any, params json.Ra
 		},
 	}
 
+	return s.sendResponse(id, resp)
+}
+
+// handleResourcesSubscribe handles resources/subscribe requests
+func (s *Server) handleResourcesSubscribe(ctx context.Context, id any, params json.RawMessage) error {
+	if !s.initialized {
+		return s.sendError(id, protocol.ServerNotReady, "Server not initialized", nil)
+	}
+
+	var req protocol.ResourcesSubscribeRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return s.sendError(id, protocol.InvalidParams, "Invalid subscribe params", nil)
+	}
+
+	s.logger.Info("Subscribing to resource", "uri", req.URI)
+
+	// Validate URI - only allow memorizer:// URIs
+	validURIs := map[string]bool{
+		"memorizer://index":          true,
+		"memorizer://index/markdown": true,
+		"memorizer://index/json":     true,
+	}
+
+	if !validURIs[req.URI] {
+		return s.sendError(id, -32002, // Custom error code for invalid resource
+			fmt.Sprintf("Invalid resource URI: %s", req.URI),
+			nil,
+		)
+	}
+
+	// Add subscription
+	s.subscriptions.Subscribe(req.URI)
+
+	// Return empty success response
+	resp := protocol.ResourcesSubscribeResponse{}
+	return s.sendResponse(id, resp)
+}
+
+// handleResourcesUnsubscribe handles resources/unsubscribe requests
+func (s *Server) handleResourcesUnsubscribe(ctx context.Context, id any, params json.RawMessage) error {
+	if !s.initialized {
+		return s.sendError(id, protocol.ServerNotReady, "Server not initialized", nil)
+	}
+
+	var req protocol.ResourcesUnsubscribeRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return s.sendError(id, protocol.InvalidParams, "Invalid unsubscribe params", nil)
+	}
+
+	s.logger.Info("Unsubscribing from resource", "uri", req.URI)
+
+	// Remove subscription (no error if not subscribed)
+	s.subscriptions.Unsubscribe(req.URI)
+
+	// Return empty success response
+	resp := protocol.ResourcesUnsubscribeResponse{}
 	return s.sendResponse(id, resp)
 }
 
@@ -620,11 +708,44 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, params json.RawMes
 }
 
 func (s *Server) handlePromptsList(ctx context.Context, id any, params json.RawMessage) error {
-	return s.sendError(id, protocol.MethodNotFound, "prompts/list not yet implemented", nil)
+	s.logger.Debug("Processing prompts/list request")
+
+	// Get all prompts from registry
+	prompts := s.promptRegistry.ListPrompts()
+
+	resp := protocol.PromptsListResponse{
+		Prompts: prompts,
+	}
+
+	return s.sendResponse(id, resp)
 }
 
 func (s *Server) handlePromptsGet(ctx context.Context, id any, params json.RawMessage) error {
-	return s.sendError(id, protocol.MethodNotFound, "prompts/get not yet implemented", nil)
+	var req protocol.PromptsGetRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return s.sendError(id, protocol.InvalidParams, "Invalid prompts/get params", nil)
+	}
+
+	s.logger.Debug("Processing prompts/get request", "name", req.Name)
+
+	// Generate messages for the requested prompt
+	messages, err := s.promptRegistry.GeneratePromptMessages(req.Name, req.Arguments, s)
+	if err != nil {
+		return s.sendError(id, protocol.InvalidParams, err.Error(), nil)
+	}
+
+	// Get prompt description from registry
+	prompt, err := s.promptRegistry.GetPrompt(req.Name)
+	if err != nil {
+		return s.sendError(id, protocol.InvalidParams, err.Error(), nil)
+	}
+
+	resp := protocol.PromptsGetResponse{
+		Description: prompt.Description,
+		Messages:    messages,
+	}
+
+	return s.sendResponse(id, resp)
 }
 
 // sendResponse sends a JSON-RPC response
@@ -675,6 +796,21 @@ func (s *Server) sendError(id any, code int, message string, data any) error {
 
 	s.logger.Debug("Sending error", "raw_data", string(responseData))
 	return s.transport.Write(responseData)
+}
+
+// GetIndex returns the current index (thread-safe)
+func (s *Server) GetIndex() *types.Index {
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
+	return s.index
+}
+
+// ReloadIndex atomically updates the server's index (thread-safe)
+func (s *Server) ReloadIndex(newIndex *types.Index) {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+	s.index = newIndex
+	s.logger.Info("Index reloaded", "files", len(newIndex.Entries))
 }
 
 // Shutdown gracefully shuts down the server

@@ -87,8 +87,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 		"cached", computed.Index.Stats.CachedFiles,
 	)
 
-	// Create MCP server
-	server := mcp.NewServer(computed.Index, logger)
+	// Create MCP server with optional SSE client
+	server := mcp.NewServer(computed.Index, logger, cfg.MCP.DaemonSSEURL)
+	if cfg.MCP.DaemonSSEURL != "" {
+		logger.Info("SSE client enabled", "daemon_url", cfg.MCP.DaemonSSEURL)
+	}
 
 	// Setup signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

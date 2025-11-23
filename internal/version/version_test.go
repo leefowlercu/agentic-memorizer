@@ -134,7 +134,7 @@ func TestGetShortVersion(t *testing.T) {
 		{
 			name:    "empty version falls back to embedded",
 			version: "",
-			want:    "0.10.0", // Falls back to embedded VERSION file
+			want:    "0.11.0", // Falls back to embedded VERSION file
 		},
 	}
 

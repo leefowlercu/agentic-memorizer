@@ -129,7 +129,7 @@ func TestServer_Initialize(t *testing.T) {
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-			server := NewServer(index, logger)
+			server := NewServer(index, logger, "")
 
 			// Replace transport with mock
 			readBuf := bytes.NewBuffer(nil)
@@ -230,7 +230,7 @@ func TestServer_Initialized(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -276,7 +276,7 @@ func TestServer_MethodNotFound(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -348,7 +348,7 @@ func TestServer_ResourcesList(t *testing.T) {
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-			server := NewServer(index, logger)
+			server := NewServer(index, logger, "")
 			server.initialized = tt.initialized
 
 			// Replace transport with mock
@@ -492,7 +492,7 @@ func TestServer_ResourcesRead(t *testing.T) {
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-			server := NewServer(index, logger)
+			server := NewServer(index, logger, "")
 			server.initialized = tt.initialized
 
 			// Replace transport with mock
@@ -597,7 +597,7 @@ func TestServer_ToolsList(t *testing.T) {
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-			server := NewServer(index, logger)
+			server := NewServer(index, logger, "")
 			server.initialized = tt.initialized
 
 			// Replace transport with mock
@@ -702,7 +702,7 @@ func TestServer_ToolsCall_SearchFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 	server.initialized = true
 
 	writeBuf := bytes.NewBuffer(nil)
@@ -795,7 +795,7 @@ func TestServer_ToolsCall_GetFileMetadata(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 	server.initialized = true
 
 	writeBuf := bytes.NewBuffer(nil)
@@ -871,7 +871,7 @@ func TestServer_ToolsCall_ListRecentFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 	server.initialized = true
 
 	writeBuf := bytes.NewBuffer(nil)
@@ -931,7 +931,7 @@ func TestServer_ToolsCall_ListRecentFiles(t *testing.T) {
 func TestServer_ToolsCall_InvalidTool(t *testing.T) {
 	index := &types.Index{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 	server.initialized = true
 
 	writeBuf := bytes.NewBuffer(nil)
@@ -977,7 +977,7 @@ func TestServer_ToolsCall_InvalidTool(t *testing.T) {
 func TestServer_ToolsCall_InvalidArguments(t *testing.T) {
 	index := &types.Index{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger)
+	server := NewServer(index, logger, "")
 	server.initialized = true
 
 	writeBuf := bytes.NewBuffer(nil)
@@ -1021,6 +1021,380 @@ func TestServer_ToolsCall_InvalidArguments(t *testing.T) {
 
 	if !callResp.IsError {
 		t.Error("Expected isError=true for invalid arguments")
+	}
+}
+
+func TestServer_ResourcesSubscribe(t *testing.T) {
+	tests := []struct {
+		name          string
+		uri           string
+		initialized   bool
+		wantError     bool
+		wantErrorCode int
+	}{
+		{
+			name:        "subscribe to index",
+			uri:         "memorizer://index",
+			initialized: true,
+			wantError:   false,
+		},
+		{
+			name:        "subscribe to markdown index",
+			uri:         "memorizer://index/markdown",
+			initialized: true,
+			wantError:   false,
+		},
+		{
+			name:        "subscribe to json index",
+			uri:         "memorizer://index/json",
+			initialized: true,
+			wantError:   false,
+		},
+		{
+			name:          "subscribe to invalid URI",
+			uri:           "memorizer://invalid",
+			initialized:   true,
+			wantError:     true,
+			wantErrorCode: -32002,
+		},
+		{
+			name:          "subscribe before initialization",
+			uri:           "memorizer://index",
+			initialized:   false,
+			wantError:     true,
+			wantErrorCode: protocol.ServerNotReady,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			index := &types.Index{
+				Generated: time.Now(),
+				Root:      "/test",
+				Entries:   []types.IndexEntry{},
+				Stats:     types.IndexStats{},
+			}
+
+			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+			server := NewServer(index, logger, "")
+			server.initialized = tt.initialized
+
+			// Replace transport with mock
+			writeBuf := bytes.NewBuffer(nil)
+			server.transport = &mockTransport{
+				readBuf:  bytes.NewBuffer(nil),
+				writeBuf: writeBuf,
+			}
+
+			// Send resources/subscribe request
+			request := protocol.JSONRPCRequest{
+				JSONRPC: "2.0",
+				ID:      1,
+				Method:  "resources/subscribe",
+				Params: mustMarshal(protocol.ResourcesSubscribeRequest{
+					URI: tt.uri,
+				}),
+			}
+
+			reqData, _ := json.Marshal(request)
+			ctx := context.Background()
+
+			if err := server.handleMessage(ctx, reqData); err != nil {
+				t.Fatalf("handleMessage() error = %v", err)
+			}
+
+			// Parse response
+			var resp protocol.JSONRPCResponse
+			if err := json.Unmarshal(writeBuf.Bytes(), &resp); err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+
+			if tt.wantError {
+				if resp.Error == nil {
+					t.Fatal("Expected error response, got success")
+				}
+				if resp.Error.Code != tt.wantErrorCode {
+					t.Errorf("Error code = %d, want %d", resp.Error.Code, tt.wantErrorCode)
+				}
+			} else {
+				if resp.Error != nil {
+					t.Fatalf("Got error response: %s", resp.Error.Message)
+				}
+
+				// Verify subscription was added
+				if !server.subscriptions.IsSubscribed(tt.uri) {
+					t.Errorf("Expected %q to be subscribed after successful subscribe", tt.uri)
+				}
+			}
+		})
+	}
+}
+
+func TestServer_ResourcesUnsubscribe(t *testing.T) {
+	tests := []struct {
+		name          string
+		uri           string
+		preSubscribe  bool
+		initialized   bool
+		wantError     bool
+		wantErrorCode int
+	}{
+		{
+			name:         "unsubscribe from subscribed URI",
+			uri:          "memorizer://index",
+			preSubscribe: true,
+			initialized:  true,
+			wantError:    false,
+		},
+		{
+			name:         "unsubscribe from non-subscribed URI",
+			uri:          "memorizer://index",
+			preSubscribe: false,
+			initialized:  true,
+			wantError:    false, // Unsubscribing non-subscribed URI is not an error
+		},
+		{
+			name:          "unsubscribe before initialization",
+			uri:           "memorizer://index",
+			preSubscribe:  false,
+			initialized:   false,
+			wantError:     true,
+			wantErrorCode: protocol.ServerNotReady,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			index := &types.Index{
+				Generated: time.Now(),
+				Root:      "/test",
+				Entries:   []types.IndexEntry{},
+				Stats:     types.IndexStats{},
+			}
+
+			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+			server := NewServer(index, logger, "")
+			server.initialized = tt.initialized
+
+			// Pre-subscribe if requested
+			if tt.preSubscribe {
+				server.subscriptions.Subscribe(tt.uri)
+			}
+
+			// Replace transport with mock
+			writeBuf := bytes.NewBuffer(nil)
+			server.transport = &mockTransport{
+				readBuf:  bytes.NewBuffer(nil),
+				writeBuf: writeBuf,
+			}
+
+			// Send resources/unsubscribe request
+			request := protocol.JSONRPCRequest{
+				JSONRPC: "2.0",
+				ID:      1,
+				Method:  "resources/unsubscribe",
+				Params: mustMarshal(protocol.ResourcesUnsubscribeRequest{
+					URI: tt.uri,
+				}),
+			}
+
+			reqData, _ := json.Marshal(request)
+			ctx := context.Background()
+
+			if err := server.handleMessage(ctx, reqData); err != nil {
+				t.Fatalf("handleMessage() error = %v", err)
+			}
+
+			// Parse response
+			var resp protocol.JSONRPCResponse
+			if err := json.Unmarshal(writeBuf.Bytes(), &resp); err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+
+			if tt.wantError {
+				if resp.Error == nil {
+					t.Fatal("Expected error response, got success")
+				}
+				if resp.Error.Code != tt.wantErrorCode {
+					t.Errorf("Error code = %d, want %d", resp.Error.Code, tt.wantErrorCode)
+				}
+			} else {
+				if resp.Error != nil {
+					t.Fatalf("Got error response: %s", resp.Error.Message)
+				}
+
+				// Verify subscription was removed
+				if server.subscriptions.IsSubscribed(tt.uri) {
+					t.Errorf("Expected %q to be unsubscribed after successful unsubscribe", tt.uri)
+				}
+			}
+		})
+	}
+}
+
+func TestServer_ReloadIndex(t *testing.T) {
+	originalIndex := &types.Index{
+		Generated: time.Now(),
+		Root:      "/test",
+		Entries: []types.IndexEntry{
+			{
+				Metadata: types.FileMetadata{
+					FileInfo: types.FileInfo{
+						Path: "/test/original.txt",
+					},
+				},
+			},
+		},
+		Stats: types.IndexStats{TotalFiles: 1},
+	}
+
+	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+	server := NewServer(originalIndex, logger, "")
+
+	// Verify original index
+	idx := server.GetIndex()
+	if len(idx.Entries) != 1 {
+		t.Fatalf("Original index should have 1 entry, got %d", len(idx.Entries))
+	}
+	if idx.Entries[0].Metadata.Path != "/test/original.txt" {
+		t.Errorf("Original index path = %s, want /test/original.txt", idx.Entries[0].Metadata.Path)
+	}
+
+	// Create new index
+	newIndex := &types.Index{
+		Generated: time.Now(),
+		Root:      "/test",
+		Entries: []types.IndexEntry{
+			{
+				Metadata: types.FileMetadata{
+					FileInfo: types.FileInfo{
+						Path: "/test/new1.txt",
+					},
+				},
+			},
+			{
+				Metadata: types.FileMetadata{
+					FileInfo: types.FileInfo{
+						Path: "/test/new2.txt",
+					},
+				},
+			},
+		},
+		Stats: types.IndexStats{TotalFiles: 2},
+	}
+
+	// Reload index
+	server.ReloadIndex(newIndex)
+
+	// Verify new index
+	idx = server.GetIndex()
+	if len(idx.Entries) != 2 {
+		t.Fatalf("Reloaded index should have 2 entries, got %d", len(idx.Entries))
+	}
+	if idx.Entries[0].Metadata.Path != "/test/new1.txt" {
+		t.Errorf("Reloaded index path[0] = %s, want /test/new1.txt", idx.Entries[0].Metadata.Path)
+	}
+	if idx.Entries[1].Metadata.Path != "/test/new2.txt" {
+		t.Errorf("Reloaded index path[1] = %s, want /test/new2.txt", idx.Entries[1].Metadata.Path)
+	}
+}
+
+func TestServer_GetIndex(t *testing.T) {
+	index := &types.Index{
+		Generated: time.Now(),
+		Root:      "/test",
+		Entries: []types.IndexEntry{
+			{
+				Metadata: types.FileMetadata{
+					FileInfo: types.FileInfo{
+						Path: "/test/file.txt",
+					},
+				},
+			},
+		},
+		Stats: types.IndexStats{TotalFiles: 1},
+	}
+
+	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+	server := NewServer(index, logger, "")
+
+	// Get index
+	idx := server.GetIndex()
+
+	if idx == nil {
+		t.Fatal("GetIndex() returned nil")
+	}
+
+	if len(idx.Entries) != 1 {
+		t.Errorf("GetIndex() entries count = %d, want 1", len(idx.Entries))
+	}
+
+	if idx.Entries[0].Metadata.Path != "/test/file.txt" {
+		t.Errorf("GetIndex() path = %s, want /test/file.txt", idx.Entries[0].Metadata.Path)
+	}
+}
+
+func TestServer_CapabilitiesIncludeSubscribe(t *testing.T) {
+	index := &types.Index{}
+	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+	server := NewServer(index, logger, "")
+
+	// Replace transport with mock
+	writeBuf := bytes.NewBuffer(nil)
+	server.transport = &mockTransport{
+		readBuf:  bytes.NewBuffer(nil),
+		writeBuf: writeBuf,
+	}
+
+	// Send initialize request
+	request := protocol.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "initialize",
+		Params: mustMarshal(protocol.InitializeRequest{
+			ProtocolVersion: "2024-11-05",
+			Capabilities:    protocol.ClientCapabilities{},
+			ClientInfo: protocol.ClientInfo{
+				Name:    "test-client",
+				Version: "1.0.0",
+			},
+		}),
+	}
+
+	reqData, _ := json.Marshal(request)
+	ctx := context.Background()
+
+	if err := server.handleMessage(ctx, reqData); err != nil {
+		t.Fatalf("handleMessage() error = %v", err)
+	}
+
+	// Parse response
+	var resp protocol.JSONRPCResponse
+	if err := json.Unmarshal(writeBuf.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.Error != nil {
+		t.Fatalf("Got error response: %s", resp.Error.Message)
+	}
+
+	// Parse initialize response
+	var initResp protocol.InitializeResponse
+	if err := json.Unmarshal(resp.Result, &initResp); err != nil {
+		t.Fatalf("Failed to unmarshal initialize response: %v", err)
+	}
+
+	// Verify resources capability has subscribe and listChanged
+	if initResp.Capabilities.Resources == nil {
+		t.Fatal("Resources capability should not be nil")
+	}
+
+	if !initResp.Capabilities.Resources.Subscribe {
+		t.Error("Resources capability should have Subscribe=true")
+	}
+
+	if !initResp.Capabilities.Resources.ListChanged {
+		t.Error("Resources capability should have ListChanged=true")
 	}
 }
 

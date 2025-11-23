@@ -43,6 +43,11 @@ type Daemon struct {
 	healthServer   *http.Server
 	healthServerMu sync.Mutex
 
+	// SSE notification hub (lifecycle management)
+	sseHub      *SSEHub
+	sseServer   *http.Server
+	sseServerMu sync.Mutex
+
 	// Reload signaling channels
 	rebuildIntervalCh chan time.Duration // Signal rebuild interval change
 
@@ -158,6 +163,9 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	// Create health metrics tracker
 	healthMetrics := NewHealthMetrics()
 
+	// Create SSE notification hub
+	sseHub := NewSSEHub(logger)
+
 	// Create context after all fallible operations to avoid leaks on early returns
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -168,6 +176,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		metadataExtractor: metadataExtractor,
 		fileWatcher:       fileWatcher,
 		healthMetrics:     healthMetrics,
+		sseHub:            sseHub,
 		logger:            logger,
 		logWriter:         logWriter,
 		ctx:               ctx,
@@ -248,6 +257,15 @@ func (d *Daemon) Start() error {
 		}
 	}
 
+	// Start SSE notification hub if configured
+	if cfg.Daemon.SSENotifyPort > 0 {
+		if err := d.startSSEHub(cfg.Daemon.SSENotifyPort); err != nil {
+			logger.Warn("failed to start SSE hub", "error", err)
+		} else {
+			logger.Info("SSE notification hub started", "port", cfg.Daemon.SSENotifyPort)
+		}
+	}
+
 	// Notify systemd we're ready (if running under systemd)
 	if supported, err := daemon.SdNotify(false, daemon.SdNotifyReady); err != nil {
 		logger.Warn("failed to notify systemd", "error", err)
@@ -261,6 +279,18 @@ func (d *Daemon) Start() error {
 	<-d.ctx.Done()
 
 	logger.Info("daemon shutting down")
+
+	// Shutdown order:
+	// 1. SSE Hub (stop notifications to external clients)
+	// 2. Health Server (stop health checks)
+	// 3. File Watcher (stop file system monitoring)
+	// 4. Wait for goroutines (let workers finish)
+	// 5. PID file cleanup (final cleanup)
+
+	// Stop SSE hub
+	if err := d.stopSSEHub(); err != nil {
+		logger.Warn("error stopping SSE hub", "error", err)
+	}
 
 	// Stop health server
 	if err := d.stopHealthServer(); err != nil {
@@ -444,6 +474,11 @@ func (d *Daemon) rebuildIndex() error {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
+	// Broadcast SSE notification
+	if d.sseHub != nil {
+		d.sseHub.BroadcastIndexUpdate()
+	}
+
 	// Record successful build metrics
 	d.healthMetrics.RecordBuild(idx.Stats.TotalFiles, idx.Stats.AnalyzedFiles, idx.Stats.CachedFiles, idx.Stats.ErrorFiles, true)
 	d.healthMetrics.SetIndexFileCount(idx.Stats.TotalFiles)
@@ -580,6 +615,10 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 		if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
 			logger.Error("failed to write index", "error", err)
 		} else {
+			// Broadcast SSE notification
+			if d.sseHub != nil {
+				d.sseHub.BroadcastIndexUpdate()
+			}
 			logger.Debug("index updated", "path", relPath)
 		}
 
@@ -602,6 +641,10 @@ func (d *Daemon) handleFileDelete(path string, relPath string) {
 	if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
 		logger.Error("failed to write index", "error", err)
 	} else {
+		// Broadcast SSE notification
+		if d.sseHub != nil {
+			d.sseHub.BroadcastIndexUpdate()
+		}
 		logger.Debug("index updated after deletion", "path", relPath)
 	}
 }

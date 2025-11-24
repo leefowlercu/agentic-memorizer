@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -58,6 +59,7 @@ func init() {
 	InitializeCmd.Flags().Bool("force", false, "Overwrite existing config")
 	InitializeCmd.Flags().Bool("setup-integrations", false, "Configure agent framework integrations")
 	InitializeCmd.Flags().Bool("skip-integrations", false, "Skip integration setup prompt")
+	InitializeCmd.Flags().Int("http-port", -1, "HTTP API port (0 to disable, -1 for interactive prompt)")
 
 	InitializeCmd.Flags().SortFlags = false
 }
@@ -68,6 +70,15 @@ func validateInit(cmd *cobra.Command, args []string) error {
 	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
 	if setupIntegrations && skipIntegrations {
 		return fmt.Errorf("--setup-integrations and --skip-integrations are mutually exclusive")
+	}
+
+	// Validate http-port flag if provided
+	httpPort, _ := cmd.Flags().GetInt("http-port")
+	if httpPort < -1 || httpPort > 65535 {
+		return fmt.Errorf("--http-port must be -1 (interactive), 0 (disabled), or 1-65535")
+	}
+	if httpPort > 0 && httpPort < 1024 {
+		fmt.Printf("Warning: port %d is in the well-known ports range (requires elevated privileges)\n", httpPort)
 	}
 
 	// All validation passed - errors after this are runtime errors
@@ -137,6 +148,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.Claude.APIKey = apiKey
 	}
 
+	// Get HTTP port from flag or prompt
+	httpPortFlag, _ := cmd.Flags().GetInt("http-port")
+	var httpPort int
+	if httpPortFlag >= 0 {
+		// Flag was explicitly set
+		httpPort = httpPortFlag
+	} else {
+		// Interactive prompt
+		httpPort, err = promptForHTTPPort()
+		if err != nil {
+			return fmt.Errorf("failed to prompt for HTTP port; %w", err)
+		}
+	}
+	cfg.Daemon.HTTPPort = httpPort
+
 	if err := config.WriteConfig(configPath, &cfg); err != nil {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
@@ -185,6 +211,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   # Option C: System service (background, recommended)\n")
 	fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
 	fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
+
+	if httpPort > 0 {
+		fmt.Printf("\nHTTP API will be available at http://localhost:%d\n", httpPort)
+		fmt.Printf("  - Health check: curl http://localhost:%d/health\n", httpPort)
+		fmt.Printf("  - MCP notifications: /notifications/stream\n")
+	}
 
 	return nil
 }
@@ -268,6 +300,69 @@ func promptForAPIKey() (string, error) {
 	default:
 		fmt.Printf("Invalid choice. Skipping API key configuration.\n\n")
 		return "", nil
+	}
+}
+
+// promptForHTTPPort prompts the user for HTTP API configuration
+// Returns the port number (0 = disabled)
+func promptForHTTPPort() (int, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Printf("\nEnable HTTP API for health checks and real-time MCP notifications?\n\n")
+	fmt.Printf("The HTTP API provides:\n")
+	fmt.Printf("  - /health endpoint for monitoring daemon status\n")
+	fmt.Printf("  - /notifications/stream for real-time index updates to MCP servers\n\n")
+	fmt.Printf("1. Enable (recommended port: 7600)\n")
+	fmt.Printf("2. Enable with custom port\n")
+	fmt.Printf("3. Disable (default)\n")
+	fmt.Printf("\nEnter your choice [1/2/3]: ")
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return 0, fmt.Errorf("failed to read input; %w", err)
+	}
+
+	response = strings.TrimSpace(response)
+
+	switch response {
+	case "1":
+		fmt.Printf("\nHTTP API will be enabled on port 7600.\n\n")
+		return 7600, nil
+
+	case "2":
+		fmt.Printf("\nEnter custom port (1024-65535): ")
+		portStr, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, fmt.Errorf("failed to read port; %w", err)
+		}
+
+		portStr = strings.TrimSpace(portStr)
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			fmt.Printf("Invalid port number. Falling back to disabled.\n\n")
+			return 0, nil
+		}
+
+		if port < 1 || port > 65535 {
+			fmt.Printf("Port must be between 1 and 65535. Falling back to disabled.\n\n")
+			return 0, nil
+		}
+
+		if port < 1024 {
+			fmt.Printf("Warning: port %d is in the well-known ports range (may require elevated privileges).\n", port)
+		}
+
+		fmt.Printf("HTTP API will be enabled on port %d.\n\n", port)
+		return port, nil
+
+	case "3", "":
+		fmt.Printf("\nHTTP API disabled.\n")
+		fmt.Printf("You can enable it later by editing config.yaml and setting daemon.http_port\n\n")
+		return 0, nil
+
+	default:
+		fmt.Printf("Invalid choice. HTTP API disabled.\n\n")
+		return 0, nil
 	}
 }
 

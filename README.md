@@ -1538,13 +1538,17 @@ agentic-memorizer config --help
 --force                             # Overwrite existing config
 --setup-integrations                # Configure agent framework integrations
 --skip-integrations                 # Skip integration setup prompt
+--http-port <port>                  # HTTP API port (0=disable, -1=interactive prompt)
 ```
 
 **Examples:**
 
 ```bash
-# Initialize
+# Initialize (interactive prompts for API key, HTTP port, integrations)
 agentic-memorizer initialize
+
+# Initialize with HTTP API enabled on port 7600 (scripted, no prompt)
+agentic-memorizer initialize --http-port 7600 --setup-integrations
 
 # Read index (XML format)
 agentic-memorizer read

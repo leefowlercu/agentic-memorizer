@@ -365,7 +365,15 @@ The daemon implements token bucket rate limiting (default 20 calls/minute) to re
 
 ### Configuration Hot-Reload
 
-The daemon supports hot-reloading non-structural configuration changes via `config reload` command without requiring a restart. Use the daemon's health check endpoint to trigger reloads. Settings requiring daemon restart: `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file`.
+The daemon supports hot-reloading non-structural configuration changes via `config reload` command without requiring a restart. The `config reload` command sends SIGHUP to the daemon process, which detects changes and updates affected components.
+
+**Important:** The daemon and MCP server are separate processes. Hot-reload only affects the daemon. MCP settings (`mcp.*`) require the MCP client to disconnect and reconnect to spawn a new MCP server instance.
+
+**Settings requiring daemon restart:** `memory_root`, `analysis.cache_dir`, `daemon.log_file`
+
+**Settings requiring MCP server restart:** `mcp.log_file`, `mcp.log_level`, `mcp.daemon_sse_url`
+
+**Hot-reloadable daemon settings:** Claude API settings, `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`, `daemon.log_level`, `daemon.http_port`, `daemon.full_rebuild_interval_minutes`, `analysis.skip_extensions`, `analysis.skip_files`
 
 ### Binary Path in Integrations
 

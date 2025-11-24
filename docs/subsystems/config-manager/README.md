@@ -180,6 +180,9 @@ Note that `MEMORIZER_APP_DIR` only affects the application's own files. The memo
 **Configuration Hot-Reload:**
 The subsystem supports hot-reloading configuration changes without requiring a daemon restart, enabling dynamic operational adjustments for running deployments.
 
+**Important: Daemon vs MCP Server:**
+The daemon and MCP server are separate processes. The hot-reload mechanism (via `config reload` command) only affects the running daemon process. MCP server settings (`mcp.*`) take effect when the MCP server is spawned by an MCP client (e.g., Claude Code). To apply MCP configuration changes, the MCP client must disconnect and reconnect to spawn a new MCP server instance.
+
 **Reload Mechanism:**
 Configuration reload is triggered via the `config reload` CLI command, which:
 1. Loads the new configuration from file and environment variables
@@ -188,21 +191,26 @@ Configuration reload is triggered via the `config reload` CLI command, which:
 4. Sends a SIGHUP signal to the running daemon process
 5. Daemon's signal handler executes `ReloadConfig()` to apply changes
 
-**Immutable Settings (Require Daemon Restart):**
-These settings cannot be hot-reloaded and require stopping and starting the daemon:
+**Immutable Settings (Require Restart):**
+
+*Daemon Process (require `daemon stop` + `daemon start`):*
 - `memory_root` - Changing the watched directory requires full restart
 - `analysis.cache_dir` - Cache storage location is initialized at startup
 - `daemon.log_file` - Log file handle is opened at startup
-- `mcp.log_file` - MCP log file handle is opened at startup
 
-**Hot-Reloadable Settings:**
+*MCP Server Process (require MCP client reconnection):*
+- `mcp.log_file` - MCP log file handle is opened at startup
+- `mcp.daemon_sse_url` - SSE connection URL established at startup
+- `mcp.log_level` - Log level configured at startup
+
+**Hot-Reloadable Settings (Daemon):**
 These settings can be changed dynamically while the daemon is running:
 - **Claude API Settings**: `api_key`, `model`, `max_tokens`, `enable_vision`, `timeout_seconds`
 - **Worker Configuration**: `daemon.workers` (concurrent processing capacity)
 - **Rate Limiting**: `daemon.rate_limit_per_min` (API call throttling)
 - **Debounce Timing**: `daemon.debounce_ms` (file change batching delay)
-- **Logging**: `daemon.log_level`, `mcp.log_level` (verbosity control)
-- **Health Monitoring**: `daemon.health_check_port` (enables/disables HTTP endpoint)
+- **Logging**: `daemon.log_level` (verbosity control)
+- **HTTP Server**: `daemon.http_port` (enables/disables health check and SSE endpoints)
 - **Rebuild Timing**: `daemon.full_rebuild_interval_minutes` (periodic rebuild schedule)
 - **Skip Patterns**: `analysis.skip_extensions`, `analysis.skip_files` (file filtering)
 
@@ -212,7 +220,7 @@ When reload is triggered, the daemon detects which settings changed and updates 
 - **Worker/rate limit changes**: Signals worker pool to adjust concurrency
 - **Debounce changes**: Updates file watcher debounce interval
 - **Log level changes**: Reconfigures logger verbosity
-- **Health port changes**: Restarts health check server on new port
+- **HTTP port changes**: Restarts HTTP server on new port (SSE clients auto-reconnect)
 - **Rebuild interval changes**: Adjusts rebuild timer
 - **Skip pattern changes**: Updates walker file filters
 
@@ -272,18 +280,19 @@ Configures background daemon operation:
 - `Workers` - Number of concurrent processing workers (default: 3)
 - `RateLimitPerMin` - Maximum API calls per minute (default: 20)
 - `FullRebuildIntervalMinutes` - Periodic complete rebuild interval (default: 60)
-- `HealthCheckPort` - HTTP health endpoint port (default: 0 for disabled)
+- `HTTPPort` - Unified HTTP server port for health check and SSE endpoints (default: 0 for disabled)
 - `LogFile` - Daemon log file path (default: `~/.agentic-memorizer/daemon.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
 
 Note: Daemon operation is controlled via CLI commands (`daemon start`, `daemon stop`) or service managers, not through configuration.
 
 **MCPConfig Structure:**
-Configures Model Context Protocol server logging:
+Configures Model Context Protocol server:
 - `LogFile` - MCP server log file path (default: `~/.agentic-memorizer/mcp.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
+- `DaemonSSEURL` - URL for daemon's SSE notification stream (default: empty for disabled)
 
-The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized.
+The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized. When `DaemonSSEURL` is configured, the MCP server subscribes to real-time index update notifications from the daemon.
 
 **IntegrationsConfig Structure:**
 Manages integration framework settings:
@@ -344,10 +353,12 @@ A complete `Config` instance with all fields populated with production-ready def
 - Rate limit: 20 calls/minute
 - Rebuild interval: 60 minutes
 - Health check port: 0 (disabled)
+- SSE notify port: 0 (disabled)
 - Daemon log file: `~/.agentic-memorizer/daemon.log`
 - Daemon log level: info
 - MCP log file: `~/.agentic-memorizer/mcp.log`
 - MCP log level: info
+- MCP daemon SSE URL: empty (disabled)
 
 ### Validation System
 
@@ -430,7 +441,7 @@ The daemon reads its configuration during startup via `config.GetConfig()`, rece
 - **Debounce Timing**: `cfg.Daemon.DebounceMs` controls file change batching
 - **Rate Limiting**: `cfg.Daemon.RateLimitPerMin` configures API call throttling
 - **Rebuild Interval**: `cfg.Daemon.FullRebuildIntervalMinutes` schedules periodic complete rebuilds
-- **Health Monitoring**: `cfg.Daemon.HealthCheckPort` enables optional HTTP health endpoint
+- **HTTP Server**: `cfg.Daemon.HTTPPort` enables optional HTTP server for health check and SSE endpoints
 - **Logging**: `cfg.Daemon.LogFile` and `cfg.Daemon.LogLevel` control log output
 
 **Path Resolution:**

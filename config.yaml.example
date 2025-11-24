@@ -76,14 +76,9 @@ daemon:
   # Periodic full scan even if no changes detected
   full_rebuild_interval_minutes: 60
 
-  # Health check HTTP server port (0 to disable)
-  # Useful for monitoring daemon status
-  health_check_port: 0
-
-  # SSE notification stream port (0 to disable)
-  # Enables real-time index update notifications to MCP servers
-  # When enabled, MCP servers can subscribe to index changes
-  sse_notify_port: 8081
+  # HTTP server port for health check and SSE endpoints (0 to disable)
+  # Provides /health endpoint for monitoring and /notifications/stream for MCP servers
+  http_port: 0
 
   # Log file location
   log_file: ~/.agentic-memorizer/daemon.log
@@ -101,8 +96,8 @@ mcp:
 
   # Daemon SSE notification stream URL (empty to disable)
   # When set, MCP server receives real-time index update notifications
-  # Must match daemon sse_notify_port setting above
-  daemon_sse_url: "http://localhost:8081/notifications/stream"
+  # Must match daemon http_port setting above (e.g., http://localhost:{http_port}/notifications/stream)
+  daemon_sse_url: ""
 
 # Integration Configuration
 # Tracks which AI agent framework integrations are configured

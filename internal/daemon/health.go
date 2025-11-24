@@ -1,9 +1,7 @@
 package daemon
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -117,60 +115,3 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", seconds)
 }
 
-// HealthCheckHandler provides an HTTP health check endpoint
-type HealthCheckHandler struct {
-	metrics *HealthMetrics
-}
-
-// NewHealthCheckHandler creates a new health check HTTP handler
-func NewHealthCheckHandler(metrics *HealthMetrics) *HealthCheckHandler {
-	return &HealthCheckHandler{
-		metrics: metrics,
-	}
-}
-
-// ServeHTTP handles health check requests
-func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	snapshot := h.metrics.GetSnapshot()
-
-	// Determine overall health status
-	status := "healthy"
-	if !snapshot.LastBuildSuccess {
-		status = "degraded"
-	}
-	if snapshot.Errors > 10 {
-		status = "unhealthy"
-	}
-
-	response := map[string]any{
-		"status":  status,
-		"metrics": snapshot,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// StartHealthCheckServer starts an HTTP server for health checks
-func StartHealthCheckServer(port int, metrics *HealthMetrics) error {
-	if port <= 0 {
-		return nil // Health check disabled
-	}
-
-	handler := NewHealthCheckHandler(metrics)
-	addr := fmt.Sprintf(":%d", port)
-
-	go func() {
-		if err := http.ListenAndServe(addr, handler); err != nil {
-			// Log error but don't crash daemon
-			fmt.Printf("Health check server error: %v\n", err)
-		}
-	}()
-
-	return nil
-}

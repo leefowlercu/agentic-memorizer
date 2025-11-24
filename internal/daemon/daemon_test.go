@@ -40,6 +40,10 @@ func newTestDaemon() *Daemon {
 		Filename: "/dev/null",
 	}
 
+	healthMetrics := NewHealthMetrics()
+	sseHub := NewSSEHub(logger)
+	httpServer := NewHTTPServer(sseHub, healthMetrics, logger)
+
 	d := &Daemon{
 		cfg:               cfg,
 		logger:            logger,
@@ -47,7 +51,9 @@ func newTestDaemon() *Daemon {
 		ctx:               ctx,
 		cancel:            cancel,
 		rebuildIntervalCh: make(chan time.Duration, 1),
-		healthMetrics:     &HealthMetrics{},
+		healthMetrics:     healthMetrics,
+		sseHub:            sseHub,
+		httpServer:        httpServer,
 	}
 
 	// Don't set semantic analyzer to test nil handling
@@ -394,26 +400,26 @@ func TestDaemon_LoggerReplacement(t *testing.T) {
 	})
 }
 
-// TestDaemon_HealthServerLifecycle tests health server management
-func TestDaemon_HealthServerLifecycle(t *testing.T) {
+// TestDaemon_HTTPServerLifecycle tests HTTP server management
+func TestDaemon_HTTPServerLifecycle(t *testing.T) {
 	t.Run("start on port", func(t *testing.T) {
 		d := newTestDaemon()
 		defer d.cancel()
 
 		port := 18080 // Use high port to avoid conflicts
-		err := d.startHealthServer(port)
+		err := d.httpServer.Start(port)
 		if err != nil {
-			t.Fatalf("Failed to start health server: %v", err)
+			t.Fatalf("Failed to start HTTP server: %v", err)
 		}
-		defer d.stopHealthServer()
+		defer d.httpServer.Stop()
 
 		// Give server time to start
 		time.Sleep(100 * time.Millisecond)
 
 		// Verify server is listening
-		resp, err := http.Get(fmt.Sprintf("http://localhost:%d", port))
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
 		if err != nil {
-			t.Fatalf("Health server not responding: %v", err)
+			t.Fatalf("HTTP server not responding: %v", err)
 		}
 		defer resp.Body.Close()
 
@@ -428,29 +434,29 @@ func TestDaemon_HealthServerLifecycle(t *testing.T) {
 
 		// Start on first port
 		port1 := 18081
-		err := d.startHealthServer(port1)
+		err := d.httpServer.Start(port1)
 		if err != nil {
-			t.Fatalf("Failed to start health server: %v", err)
+			t.Fatalf("Failed to start HTTP server: %v", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 
 		// Restart on second port
 		port2 := 18082
-		err = d.startHealthServer(port2)
+		err = d.httpServer.Start(port2)
 		if err != nil {
-			t.Fatalf("Failed to restart health server: %v", err)
+			t.Fatalf("Failed to restart HTTP server: %v", err)
 		}
-		defer d.stopHealthServer()
+		defer d.httpServer.Stop()
 		time.Sleep(100 * time.Millisecond)
 
 		// Old port should not respond
-		_, err = http.Get(fmt.Sprintf("http://localhost:%d", port1))
+		_, err = http.Get(fmt.Sprintf("http://localhost:%d/health", port1))
 		if err == nil {
 			t.Error("Old port should not be listening")
 		}
 
 		// New port should respond
-		resp, err := http.Get(fmt.Sprintf("http://localhost:%d", port2))
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port2))
 		if err != nil {
 			t.Fatalf("New port not responding: %v", err)
 		}
@@ -467,21 +473,21 @@ func TestDaemon_HealthServerLifecycle(t *testing.T) {
 
 		// Start server
 		port := 18083
-		err := d.startHealthServer(port)
+		err := d.httpServer.Start(port)
 		if err != nil {
-			t.Fatalf("Failed to start health server: %v", err)
+			t.Fatalf("Failed to start HTTP server: %v", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 
 		// Disable by using port 0
-		err = d.startHealthServer(0)
+		err = d.httpServer.Start(0)
 		if err != nil {
-			t.Fatalf("Failed to disable health server: %v", err)
+			t.Fatalf("Failed to disable HTTP server: %v", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 
 		// Server should not be listening
-		_, err = http.Get(fmt.Sprintf("http://localhost:%d", port))
+		_, err = http.Get(fmt.Sprintf("http://localhost:%d/health", port))
 		if err == nil {
 			t.Error("Server should be disabled")
 		}
@@ -492,21 +498,21 @@ func TestDaemon_HealthServerLifecycle(t *testing.T) {
 		defer d.cancel()
 
 		port := 18084
-		err := d.startHealthServer(port)
+		err := d.httpServer.Start(port)
 		if err != nil {
-			t.Fatalf("Failed to start health server: %v", err)
+			t.Fatalf("Failed to start HTTP server: %v", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 
 		// Stop server
-		err = d.stopHealthServer()
+		err = d.httpServer.Stop()
 		if err != nil {
-			t.Fatalf("Failed to stop health server: %v", err)
+			t.Fatalf("Failed to stop HTTP server: %v", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 
 		// Server should not respond
-		_, err = http.Get(fmt.Sprintf("http://localhost:%d", port))
+		_, err = http.Get(fmt.Sprintf("http://localhost:%d/health", port))
 		if err == nil {
 			t.Error("Server should be stopped")
 		}

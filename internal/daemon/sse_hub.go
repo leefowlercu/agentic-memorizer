@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -51,6 +50,13 @@ func (h *SSEHub) unregister(clientID string) {
 		delete(h.clients, clientID)
 		h.logger.Info("SSE client disconnected", "client_id", clientID, "total_clients", len(h.clients))
 	}
+}
+
+// ClientCount returns the number of connected SSE clients
+func (h *SSEHub) ClientCount() int {
+	h.clientsMu.RLock()
+	defer h.clientsMu.RUnlock()
+	return len(h.clients)
 }
 
 // BroadcastIndexUpdate sends index update notification to all connected clients
@@ -146,83 +152,3 @@ func (h *SSEHub) handleSSEStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleHealth handles health check requests for SSE hub
-func (h *SSEHub) handleHealth(w http.ResponseWriter, r *http.Request) {
-	h.clientsMu.RLock()
-	clientCount := len(h.clients)
-	h.clientsMu.RUnlock()
-
-	response := map[string]any{
-		"status":  "healthy",
-		"clients": clientCount,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// startSSEHub starts or restarts the SSE notification hub
-// Pattern follows daemon health server (internal/daemon/health.go) for consistency
-func (d *Daemon) startSSEHub(port int) error {
-	d.sseServerMu.Lock()
-	defer d.sseServerMu.Unlock()
-
-	logger := d.GetLogger()
-
-	// Stop existing server if running (supports hot-reload)
-	if d.sseServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := d.sseServer.Shutdown(ctx); err != nil {
-			logger.Warn("SSE hub shutdown failed during restart", "error", err)
-		}
-		d.sseServer = nil
-	}
-
-	// Don't start if disabled (port 0)
-	if port == 0 {
-		logger.Info("SSE notification hub disabled")
-		return nil
-	}
-
-	// Create new server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", d.sseHub.handleSSEStream)
-	mux.HandleFunc("/health", d.sseHub.handleHealth)
-
-	d.sseServer = &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      mux,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-	}
-
-	logger.Info("starting SSE notification hub", "port", port)
-
-	go func() {
-		if err := d.sseServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			d.GetLogger().Error("SSE hub failed", "error", err)
-		}
-	}()
-
-	return nil
-}
-
-// stopSSEHub gracefully stops the SSE notification hub
-func (d *Daemon) stopSSEHub() error {
-	d.sseServerMu.Lock()
-	defer d.sseServerMu.Unlock()
-
-	if d.sseServer == nil {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := d.sseServer.Shutdown(ctx)
-	d.sseServer = nil
-
-	return err
-}

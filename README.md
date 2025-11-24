@@ -1055,14 +1055,14 @@ daemon:
   workers: 3                             # Parallel worker count
   rate_limit_per_min: 20                 # API rate limit
   full_rebuild_interval_minutes: 60      # Periodic full rebuild interval
-  health_check_port: 0                   # HTTP health check (0 = disabled)
+  http_port: 0                           # HTTP server for health + SSE (0 = disabled)
   log_file: ~/.agentic-memorizer/daemon.log
   log_level: info                        # debug, info, warn, error
 ```
 
 **Hot-Reloading**: Most settings can be hot-reloaded using `agentic-memorizer config reload` without restarting the daemon:
 - ✓ `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`
-- ✓ `daemon.full_rebuild_interval_minutes`, `daemon.health_check_port`
+- ✓ `daemon.full_rebuild_interval_minutes`, `daemon.http_port`
 - ✓ `analysis.*` settings, `claude.*` settings
 - ✗ `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file` (require restart)
 
@@ -1392,14 +1392,14 @@ The service manager automatically uses whatever binary exists at that path after
 
 #### Health Monitoring
 
-Enable health checks for monitoring:
+Enable HTTP server for health checks and SSE notifications:
 
 ```yaml
 daemon:
-  health_check_port: 8080
+  http_port: 8080
 ```
 
-Then check health at: `http://localhost:8080`
+Then check health at: `http://localhost:8080/health`
 
 Response includes uptime, files processed, API calls, errors, and build status.
 

@@ -39,8 +39,7 @@ var DefaultConfig = Config{
 		Workers:                    3,
 		RateLimitPerMin:            20,
 		FullRebuildIntervalMinutes: 60,
-		HealthCheckPort:            0, // Disabled by default
-		SSENotifyPort:              0, // Disabled by default
+		HTTPPort:                   0, // Disabled by default
 		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,
 		LogLevel:                   "info",
 	},

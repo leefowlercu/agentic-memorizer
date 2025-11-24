@@ -37,8 +37,7 @@ type DaemonConfig struct {
 	Workers                    int    `mapstructure:"workers" yaml:"workers"`
 	RateLimitPerMin            int    `mapstructure:"rate_limit_per_min" yaml:"rate_limit_per_min"`
 	FullRebuildIntervalMinutes int    `mapstructure:"full_rebuild_interval_minutes" yaml:"full_rebuild_interval_minutes"`
-	HealthCheckPort            int    `mapstructure:"health_check_port" yaml:"health_check_port"`
-	SSENotifyPort              int    `mapstructure:"sse_notify_port" yaml:"sse_notify_port"`
+	HTTPPort                   int    `mapstructure:"http_port" yaml:"http_port"`
 	LogFile                    string `mapstructure:"log_file" yaml:"log_file"`
 	LogLevel                   string `mapstructure:"log_level" yaml:"log_level"`
 }

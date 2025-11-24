@@ -142,9 +142,9 @@ The hub supports unlimited concurrent MCP server connections. Each connection re
 
 Keepalive comments are sent every 30 seconds to prevent connection timeouts and enable detection of disconnected clients. The hub uses a non-blocking broadcast strategy where slow clients that cannot keep up with the notification rate will have notifications dropped rather than blocking other clients.
 
-Configuration is controlled by the `sse_notify_port` setting in daemon configuration. Setting the port to 0 disables the SSE hub entirely. The hub supports hot-reload: when the port changes during configuration reload, the existing hub shuts down gracefully and a new hub starts on the updated port.
+The SSE hub is exposed via the daemon's unified HTTP server, controlled by the `http_port` setting. Setting the port to 0 disables the HTTP server entirely. The server supports hot-reload: when the port changes during configuration reload, the server shuts down gracefully and restarts on the updated port.
 
-Lifecycle management follows a strict ordering to ensure clean startup and shutdown. The SSE hub starts after the health server during daemon initialization (if enabled), ensuring the health endpoint is available before external connections begin. During shutdown, the hub stops before the health server, allowing graceful disconnection of MCP clients before the monitoring endpoint becomes unavailable.
+Lifecycle management follows a unified approach. The HTTP server (which provides both health check and SSE endpoints) starts during daemon initialization if enabled. During shutdown, the server stops gracefully, allowing clients to disconnect cleanly.
 
 Notifications are broadcast by the daemon after successful index writes. The `BroadcastIndexUpdate()` method is called immediately following `WriteAtomic()` in both the event processing loop (single file updates) and periodic rebuild loop (full rebuilds). This ensures MCP servers receive notifications for all index changes, enabling real-time synchronization.
 
@@ -214,13 +214,13 @@ Critically, the read command is daemon-independent. It directly reads the index 
 
 The daemon integrates with MCP server instances through the SSE notification hub, enabling real-time index synchronization for MCP-enabled AI tools. MCP servers connect to the daemon's SSE stream endpoint and receive notifications whenever the index changes.
 
-When an MCP server starts, it connects to `http://localhost:{sse_notify_port}/notifications/stream` if the SSE hub is enabled. The connection uses standard HTTP with `Accept: text/event-stream` header and remains open for the duration of the MCP server's lifecycle. Multiple MCP servers can connect simultaneously, each maintaining its own independent stream.
+When an MCP server starts, it connects to `http://localhost:{http_port}/notifications/stream` if the HTTP server is enabled. The connection uses standard HTTP with `Accept: text/event-stream` header and remains open for the duration of the MCP server's lifecycle. Multiple MCP servers can connect simultaneously, each maintaining its own independent stream.
 
 The daemon broadcasts notifications to all connected MCP servers immediately after successful index writes. After processing a file event through the worker pool, the daemon calls `index.Manager.WriteAtomic()` to persist the updated index, then calls `sseHub.BroadcastIndexUpdate()` with notification type `index_updated` and the affected file path. Similarly, after completing a full rebuild, the daemon broadcasts type `index_rebuilt` with the total file count.
 
 MCP servers receive these notifications as SSE events with JSON payloads containing `type`, `timestamp`, and optional metadata fields. Upon receiving a notification, an MCP server reloads its in-memory index from disk via `index.Manager.LoadComputed()`, then sends JSON-RPC notifications to its connected clients (e.g., Claude Code) informing them that resources have changed. This cascading notification chain ensures AI tools can react immediately to index changes.
 
-The integration supports configuration hot-reload. When the `sse_notify_port` setting changes during daemon configuration reload, the existing SSE hub shuts down gracefully (disconnecting all MCP servers), and a new hub starts on the updated port. MCP servers detect the disconnection, wait with exponential backoff, and automatically reconnect when the hub becomes available again.
+The integration supports configuration hot-reload. When the `http_port` setting changes during daemon configuration reload, the HTTP server shuts down gracefully (disconnecting all MCP servers from the SSE stream), and restarts on the updated port. MCP servers detect the disconnection, wait with exponential backoff, and automatically reconnect when the server becomes available again.
 
 Error handling follows a resilient design. If no MCP servers are connected, broadcasts are no-ops with no performance impact. If a broadcast fails to a specific client (slow consumer, network issue), that client is removed from the active connection pool without affecting other clients. The daemon continues operating normally whether MCP servers are connected or not, maintaining the principle that MCP integration is an optional enhancement rather than a core dependency.
 
@@ -234,7 +234,7 @@ Daemon startup follows a carefully orchestrated sequence to ensure proper initia
 
 Process management begins with checking for an existing daemon through PID file validation. If no daemon is running, a new PID file is written. Signal handlers are registered for graceful shutdown and operational commands. Crash recovery is attempted by loading any existing index file.
 
-The daemon then performs an initial full rebuild to ensure the index is current, starts the file watcher to begin monitoring for changes, launches background goroutines for event processing and periodic rebuilds, optionally starts the health check HTTP server, and optionally starts the SSE notification hub (if `sse_notify_port > 0`). Finally, it logs successful startup and blocks waiting for the context to be cancelled.
+The daemon then performs an initial full rebuild to ensure the index is current, starts the file watcher to begin monitoring for changes, launches background goroutines for event processing and periodic rebuilds, and optionally starts the HTTP server (if `http_port > 0`) which provides both health check and SSE notification endpoints. Finally, it logs successful startup and blocks waiting for the context to be cancelled.
 
 ### Runtime Operations
 

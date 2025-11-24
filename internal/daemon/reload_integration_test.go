@@ -80,7 +80,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			RateLimitPerMin:            20,
 			DebounceMs:                 200,
 			FullRebuildIntervalMinutes: 60,
-			HealthCheckPort:            0, // Random port
+			HTTPPort:                   0, // Disabled
 			LogFile:                    logPath,
 			LogLevel:                   "info",
 		},
@@ -450,13 +450,13 @@ func TestDaemon_ReloadConfig_DebounceIntervalChange(t *testing.T) {
 	}
 }
 
-// TestDaemon_ReloadConfig_HealthPortChange tests health check server restart
-func TestDaemon_ReloadConfig_HealthPortChange(t *testing.T) {
+// TestDaemon_ReloadConfig_HTTPPortChange tests HTTP server restart
+func TestDaemon_ReloadConfig_HTTPPortChange(t *testing.T) {
 	env := NewTestEnv(t)
 
-	// Set initial health port
+	// Set initial HTTP port
 	if err := env.UpdateConfig(func(cfg *config.Config) {
-		cfg.Daemon.HealthCheckPort = 0 // Let OS assign port
+		cfg.Daemon.HTTPPort = 0 // Disabled
 	}); err != nil {
 		t.Fatalf("failed to set initial config: %v", err)
 	}
@@ -466,15 +466,15 @@ func TestDaemon_ReloadConfig_HealthPortChange(t *testing.T) {
 		t.Fatalf("failed to create daemon: %v", err)
 	}
 
-	// Start health server on initial port
-	if err := d.startHealthServer(d.GetConfig().Daemon.HealthCheckPort); err != nil {
-		t.Fatalf("failed to start health server: %v", err)
+	// Start HTTP server
+	if err := d.httpServer.Start(d.GetConfig().Daemon.HTTPPort); err != nil {
+		t.Fatalf("failed to start HTTP server: %v", err)
 	}
-	defer d.stopHealthServer()
+	defer d.httpServer.Stop()
 
-	// Change health port
+	// Change HTTP port
 	if err := env.UpdateConfig(func(cfg *config.Config) {
-		cfg.Daemon.HealthCheckPort = 0 // New random port
+		cfg.Daemon.HTTPPort = 0 // Keep disabled
 	}); err != nil {
 		t.Fatalf("failed to update config: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestDaemon_ReloadConfig_HealthPortChange(t *testing.T) {
 		t.Fatalf("ReloadConfig() failed: %v", err)
 	}
 
-	// Health server should have restarted on new port
+	// HTTP server should have restarted
 	// This is verified by the reload not failing
 }
 

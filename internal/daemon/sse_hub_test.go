@@ -25,7 +25,6 @@ func TestSSEHub_MultipleClients(t *testing.T) {
 	// Start SSE server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/notifications/stream", hub.handleSSEStream)
-	mux.HandleFunc("/health", hub.handleHealth)
 
 	server := &http.Server{
 		Handler: mux,
@@ -68,40 +67,19 @@ func TestSSEHub_MultipleClients(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// Poll health endpoint until all clients are connected
+	// Poll client count until all clients are connected
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(baseURL + "/health")
-		if err == nil {
-			var healthData map[string]any
-			json.NewDecoder(resp.Body).Decode(&healthData)
-			resp.Body.Close()
-			if clients, ok := healthData["clients"].(float64); ok && int(clients) == numClients {
-				break
-			}
+		if hub.ClientCount() == numClients {
+			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Check health endpoint shows 3 clients
-	resp, err := http.Get(baseURL + "/health")
-	if err != nil {
-		t.Fatalf("Failed to get health: %v", err)
-	}
-	defer resp.Body.Close()
-
-	var healthData map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&healthData); err != nil {
-		t.Fatalf("Failed to decode health response: %v", err)
-	}
-
-	clientCount, ok := healthData["clients"].(float64)
-	if !ok {
-		t.Fatalf("Health response missing clients field: %+v", healthData)
-	}
-
-	if int(clientCount) != numClients {
-		t.Fatalf("Expected %d clients, got %d", numClients, int(clientCount))
+	// Verify client count
+	clientCount := hub.ClientCount()
+	if clientCount != numClients {
+		t.Fatalf("Expected %d clients, got %d", numClients, clientCount)
 	}
 
 	t.Logf("Successfully connected %d SSE clients", numClients)
@@ -326,32 +304,22 @@ func TestSSEHub_GracefulShutdown(t *testing.T) {
 	listener.Close()
 }
 
-// TestSSEHub_HealthEndpoint tests the health endpoint
-func TestSSEHub_HealthEndpoint(t *testing.T) {
+// TestHTTPServer_HealthEndpoint tests the health endpoint via HTTPServer
+func TestHTTPServer_HealthEndpoint(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	hub := NewSSEHub(logger)
+	metrics := NewHealthMetrics()
+	httpServer := NewHTTPServer(hub, metrics, logger)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", hub.handleHealth)
-
-	server := &http.Server{
-		Handler: mux,
+	port := findAvailablePort(t)
+	if err := httpServer.Start(port); err != nil {
+		t.Fatalf("Failed to start HTTP server: %v", err)
 	}
+	defer httpServer.Stop()
 
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("Failed to start listener: %v", err)
-	}
-	defer listener.Close()
+	// Give server time to start
+	time.Sleep(100 * time.Millisecond)
 
-	go server.Serve(listener)
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	port := listener.Addr().(*net.TCPAddr).Port
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
 
 	// Check health with no clients
@@ -374,13 +342,19 @@ func TestSSEHub_HealthEndpoint(t *testing.T) {
 		t.Errorf("Expected status=healthy, got %v", healthData["status"])
 	}
 
-	if clients, ok := healthData["clients"].(float64); !ok || int(clients) != 0 {
-		t.Errorf("Expected 0 clients, got %v", healthData["clients"])
+	// Check that metrics contains sse_clients field
+	metricsData, ok := healthData["metrics"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected metrics to be a map, got %T", healthData["metrics"])
+	}
+
+	if _, ok := metricsData["sse_clients"]; !ok {
+		t.Error("Expected sse_clients field in metrics")
 	}
 }
 
-// TestDaemon_SSEHubIntegration tests SSE hub integration with daemon
-func TestDaemon_SSEHubIntegration(t *testing.T) {
+// TestDaemon_HTTPServerIntegration tests HTTP server integration with daemon
+func TestDaemon_HTTPServerIntegration(t *testing.T) {
 	// Create minimal config
 	cfg := &config.Config{
 		MemoryRoot: t.TempDir(),
@@ -392,7 +366,7 @@ func TestDaemon_SSEHubIntegration(t *testing.T) {
 			DebounceMs:      100,
 			Workers:         1,
 			RateLimitPerMin: 60,
-			SSENotifyPort:   0, // Test with port 0 (disabled)
+			HTTPPort:        0, // Test with port 0 (disabled)
 			LogFile:         "",
 			LogLevel:        "error",
 		},
@@ -411,42 +385,43 @@ func TestDaemon_SSEHubIntegration(t *testing.T) {
 		t.Error("SSE hub was not initialized")
 	}
 
-	// Test starting SSE hub with port 0 (disabled)
-	if err := d.startSSEHub(0); err != nil {
-		t.Errorf("startSSEHub(0) should not return error: %v", err)
+	// Verify HTTP server was created
+	if d.httpServer == nil {
+		t.Error("HTTP server was not initialized")
 	}
 
-	if d.sseServer != nil {
-		t.Error("SSE server should be nil when port is 0")
+	// Test starting HTTP server with port 0 (disabled)
+	if err := d.httpServer.Start(0); err != nil {
+		t.Errorf("httpServer.Start(0) should not return error: %v", err)
 	}
 
-	// Test starting SSE hub with real port
+	// Test starting HTTP server with real port
 	port := findAvailablePort(t)
-	if err := d.startSSEHub(port); err != nil {
-		t.Fatalf("Failed to start SSE hub: %v", err)
-	}
-
-	if d.sseServer == nil {
-		t.Error("SSE server should not be nil after starting")
+	if err := d.httpServer.Start(port); err != nil {
+		t.Fatalf("Failed to start HTTP server: %v", err)
 	}
 
 	// Give server time to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Test that we can connect
+	// Test that we can connect to health endpoint
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
 	if err != nil {
-		t.Fatalf("Failed to connect to SSE hub: %v", err)
+		t.Fatalf("Failed to connect to HTTP server health endpoint: %v", err)
 	}
 	resp.Body.Close()
 
-	// Test stopping SSE hub
-	if err := d.stopSSEHub(); err != nil {
-		t.Errorf("Failed to stop SSE hub: %v", err)
+	// Test that we can connect to SSE stream endpoint
+	client := &http.Client{Timeout: 100 * time.Millisecond}
+	resp, err = client.Get(fmt.Sprintf("http://localhost:%d/notifications/stream", port))
+	if err == nil {
+		resp.Body.Close()
 	}
+	// Timeout is expected for SSE stream, so we just verify the endpoint exists
 
-	if d.sseServer != nil {
-		t.Error("SSE server should be nil after stopping")
+	// Test stopping HTTP server
+	if err := d.httpServer.Stop(); err != nil {
+		t.Errorf("Failed to stop HTTP server: %v", err)
 	}
 }
 

@@ -214,21 +214,21 @@ func TestValidateReload(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name: "health check port changed (hot-reloadable)",
+			name: "http port changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
 				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
-					LogFile:         "/test/daemon.log",
-					HealthCheckPort: 8080,
+					LogFile:  "/test/daemon.log",
+					HTTPPort: 8080,
 				},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
 				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
-					LogFile:         "/test/daemon.log",
-					HealthCheckPort: 8081,
+					LogFile:  "/test/daemon.log",
+					HTTPPort: 8081,
 				},
 			},
 			wantError: false,

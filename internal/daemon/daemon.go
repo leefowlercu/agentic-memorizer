@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -39,14 +38,11 @@ type Daemon struct {
 	logger    *slog.Logger
 	logWriter *lumberjack.Logger // Reuse for log level changes
 
-	// Health server (lifecycle management)
-	healthServer   *http.Server
-	healthServerMu sync.Mutex
+	// HTTP server (unified health + SSE endpoints)
+	httpServer *HTTPServer
 
-	// SSE notification hub (lifecycle management)
-	sseHub      *SSEHub
-	sseServer   *http.Server
-	sseServerMu sync.Mutex
+	// SSE notification hub
+	sseHub *SSEHub
 
 	// Reload signaling channels
 	rebuildIntervalCh chan time.Duration // Signal rebuild interval change
@@ -166,6 +162,9 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	// Create SSE notification hub
 	sseHub := NewSSEHub(logger)
 
+	// Create unified HTTP server
+	httpServer := NewHTTPServer(sseHub, healthMetrics, logger)
+
 	// Create context after all fallible operations to avoid leaks on early returns
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -177,6 +176,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		fileWatcher:       fileWatcher,
 		healthMetrics:     healthMetrics,
 		sseHub:            sseHub,
+		httpServer:        httpServer,
 		logger:            logger,
 		logWriter:         logWriter,
 		ctx:               ctx,
@@ -247,22 +247,13 @@ func (d *Daemon) Start() error {
 	d.wg.Add(1)
 	go d.periodicRebuild()
 
-	// Start health check server if configured
+	// Start HTTP server if configured (provides health check and SSE endpoints)
 	cfg := d.GetConfig()
-	if cfg.Daemon.HealthCheckPort > 0 {
-		if err := d.startHealthServer(cfg.Daemon.HealthCheckPort); err != nil {
-			logger.Warn("failed to start health check server", "error", err)
+	if cfg.Daemon.HTTPPort > 0 {
+		if err := d.httpServer.Start(cfg.Daemon.HTTPPort); err != nil {
+			logger.Warn("failed to start HTTP server", "error", err)
 		} else {
-			logger.Info("health check server started", "port", cfg.Daemon.HealthCheckPort)
-		}
-	}
-
-	// Start SSE notification hub if configured
-	if cfg.Daemon.SSENotifyPort > 0 {
-		if err := d.startSSEHub(cfg.Daemon.SSENotifyPort); err != nil {
-			logger.Warn("failed to start SSE hub", "error", err)
-		} else {
-			logger.Info("SSE notification hub started", "port", cfg.Daemon.SSENotifyPort)
+			logger.Info("HTTP server started", "port", cfg.Daemon.HTTPPort)
 		}
 	}
 
@@ -281,20 +272,14 @@ func (d *Daemon) Start() error {
 	logger.Info("daemon shutting down")
 
 	// Shutdown order:
-	// 1. SSE Hub (stop notifications to external clients)
-	// 2. Health Server (stop health checks)
-	// 3. File Watcher (stop file system monitoring)
-	// 4. Wait for goroutines (let workers finish)
-	// 5. PID file cleanup (final cleanup)
+	// 1. HTTP Server (stop health check and SSE endpoints)
+	// 2. File Watcher (stop file system monitoring)
+	// 3. Wait for goroutines (let workers finish)
+	// 4. PID file cleanup (final cleanup)
 
-	// Stop SSE hub
-	if err := d.stopSSEHub(); err != nil {
-		logger.Warn("error stopping SSE hub", "error", err)
-	}
-
-	// Stop health server
-	if err := d.stopHealthServer(); err != nil {
-		logger.Warn("error stopping health server", "error", err)
+	// Stop HTTP server
+	if err := d.httpServer.Stop(); err != nil {
+		logger.Warn("error stopping HTTP server", "error", err)
 	}
 
 	// Stop file watcher
@@ -649,66 +634,6 @@ func (d *Daemon) handleFileDelete(path string, relPath string) {
 	}
 }
 
-// startHealthServer starts or restarts the health check HTTP server
-func (d *Daemon) startHealthServer(port int) error {
-	d.healthServerMu.Lock()
-	defer d.healthServerMu.Unlock()
-
-	logger := d.GetLogger()
-
-	// Stop existing server if running
-	if d.healthServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := d.healthServer.Shutdown(ctx); err != nil {
-			logger.Warn("health server shutdown failed", "error", err)
-		}
-		d.healthServer = nil
-	}
-
-	// Don't start if disabled (port 0)
-	if port == 0 {
-		logger.Info("health check server disabled")
-		return nil
-	}
-
-	// Create new server
-	handler := NewHealthCheckHandler(d.healthMetrics)
-	d.healthServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: handler,
-	}
-
-	logger.Info("starting health check server", "port", port)
-
-	go func() {
-		if err := d.healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			d.GetLogger().Error("health server failed", "error", err)
-		}
-	}()
-
-	return nil
-}
-
-// stopHealthServer gracefully stops the health check HTTP server
-func (d *Daemon) stopHealthServer() error {
-	d.healthServerMu.Lock()
-	defer d.healthServerMu.Unlock()
-
-	if d.healthServer == nil {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := d.healthServer.Shutdown(ctx)
-	d.healthServer = nil
-
-	return err
-}
-
 // ReloadConfig reloads configuration and applies changes
 func (d *Daemon) ReloadConfig() error {
 	logger := d.GetLogger()
@@ -758,7 +683,7 @@ func (d *Daemon) detectChanges(oldCfg, newCfg *config.Config) map[string]bool {
 		"log_level":        newCfg.Daemon.LogLevel != oldCfg.Daemon.LogLevel,
 		"debounce":         newCfg.Daemon.DebounceMs != oldCfg.Daemon.DebounceMs,
 		"rebuild_interval": newCfg.Daemon.FullRebuildIntervalMinutes != oldCfg.Daemon.FullRebuildIntervalMinutes,
-		"health_port":      newCfg.Daemon.HealthCheckPort != oldCfg.Daemon.HealthCheckPort,
+		"http_port":        newCfg.Daemon.HTTPPort != oldCfg.Daemon.HTTPPort,
 		"workers":          newCfg.Daemon.Workers != oldCfg.Daemon.Workers,
 		"rate_limit":       newCfg.Daemon.RateLimitPerMin != oldCfg.Daemon.RateLimitPerMin,
 		"skip_patterns": !reflect.DeepEqual(newCfg.Analysis.SkipFiles, oldCfg.Analysis.SkipFiles) ||
@@ -801,11 +726,15 @@ func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.C
 		}
 	}
 
-	if changes["health_port"] {
-		if err := d.startHealthServer(newCfg.Daemon.HealthCheckPort); err != nil {
-			logger.Warn("failed to restart health server", "error", err)
+	if changes["http_port"] {
+		if err := d.httpServer.Start(newCfg.Daemon.HTTPPort); err != nil {
+			logger.Warn("failed to restart HTTP server", "error", err)
 		} else {
-			logger.Info("health server restarted", "port", newCfg.Daemon.HealthCheckPort)
+			if newCfg.Daemon.HTTPPort == 0 {
+				logger.Info("HTTP server disabled")
+			} else {
+				logger.Info("HTTP server restarted", "port", newCfg.Daemon.HTTPPort)
+			}
 		}
 	}
 

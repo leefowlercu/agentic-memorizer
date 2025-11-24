@@ -114,8 +114,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Rebuild Interval: %d minutes\n", cfg.Daemon.FullRebuildIntervalMinutes)
 	fmt.Printf("Workers: %d\n", cfg.Daemon.Workers)
 	fmt.Printf("Rate Limit: %d/min\n", cfg.Daemon.RateLimitPerMin)
-	if cfg.Daemon.HealthCheckPort > 0 {
-		fmt.Printf("Health Check: http://localhost:%d\n", cfg.Daemon.HealthCheckPort)
+	if cfg.Daemon.HTTPPort > 0 {
+		fmt.Printf("HTTP Server: http://localhost:%d\n", cfg.Daemon.HTTPPort)
 	}
 
 	// Service Management

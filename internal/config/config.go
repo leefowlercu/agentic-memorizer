@@ -52,7 +52,7 @@ func InitConfig() error {
 	viper.SetDefault("daemon.workers", DefaultConfig.Daemon.Workers)
 	viper.SetDefault("daemon.rate_limit_per_min", DefaultConfig.Daemon.RateLimitPerMin)
 	viper.SetDefault("daemon.full_rebuild_interval_minutes", DefaultConfig.Daemon.FullRebuildIntervalMinutes)
-	viper.SetDefault("daemon.health_check_port", DefaultConfig.Daemon.HealthCheckPort)
+	viper.SetDefault("daemon.http_port", DefaultConfig.Daemon.HTTPPort)
 	viper.SetDefault("daemon.log_file", DefaultConfig.Daemon.LogFile)
 	viper.SetDefault("daemon.log_level", DefaultConfig.Daemon.LogLevel)
 	viper.SetDefault("mcp.log_file", DefaultConfig.MCP.LogFile)

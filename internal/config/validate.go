@@ -209,9 +209,9 @@ func validateDaemon(v *Validator, cfg *Config) {
 		v.AddError("daemon.full_rebuild_interval_minutes", "range", "full_rebuild_interval_minutes cannot be negative", "Set to 0 to disable or a positive number of minutes", cfg.Daemon.FullRebuildIntervalMinutes)
 	}
 
-	// Validate health check port
-	if cfg.Daemon.HealthCheckPort < 0 || cfg.Daemon.HealthCheckPort > 65535 {
-		v.AddError("daemon.health_check_port", "range", fmt.Sprintf("health_check_port %d is out of valid range (0-65535)", cfg.Daemon.HealthCheckPort), "Set to 0 to disable or a valid port number (1-65535)", cfg.Daemon.HealthCheckPort)
+	// Validate HTTP port
+	if cfg.Daemon.HTTPPort < 0 || cfg.Daemon.HTTPPort > 65535 {
+		v.AddError("daemon.http_port", "range", fmt.Sprintf("http_port %d is out of valid range (0-65535)", cfg.Daemon.HTTPPort), "Set to 0 to disable or a valid port number (1-65535)", cfg.Daemon.HTTPPort)
 	}
 
 	// Validate log level

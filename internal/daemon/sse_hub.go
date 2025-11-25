@@ -151,4 +151,3 @@ func (h *SSEHub) handleSSEStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-

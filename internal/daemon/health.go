@@ -65,6 +65,43 @@ func (h *HealthMetrics) RecordError() {
 	h.Errors++
 }
 
+// RecordFileProcessed increments the files processed counter
+func (h *HealthMetrics) RecordFileProcessed() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.FilesProcessed++
+}
+
+// RecordAPICall increments the API calls counter
+func (h *HealthMetrics) RecordAPICall() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.APICalls++
+}
+
+// RecordCacheHit increments the cache hits counter
+func (h *HealthMetrics) RecordCacheHit() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.CacheHits++
+}
+
+// IncrementIndexFileCount increments the index file count by 1
+func (h *HealthMetrics) IncrementIndexFileCount() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.IndexFileCount++
+}
+
+// DecrementIndexFileCount decrements the index file count by 1
+func (h *HealthMetrics) DecrementIndexFileCount() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.IndexFileCount > 0 {
+		h.IndexFileCount--
+	}
+}
+
 // SetIndexFileCount updates the current index file count
 func (h *HealthMetrics) SetIndexFileCount(count int) {
 	h.mu.Lock()

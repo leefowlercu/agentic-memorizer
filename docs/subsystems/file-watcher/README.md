@@ -125,10 +125,10 @@ The Daemon subsystem creates and manages the File Watcher lifecycle. During daem
 
 The daemon runs a dedicated goroutine (`processWatcherEvents()`) that consumes events from the watcher's channel and delegates to `handleFileEvent()` for processing. Event handling differs by type:
 
-- **Create/Modify**: Extracts metadata, computes file hash, checks cache to avoid redundant analysis, performs semantic analysis if needed, and updates the index
-- **Delete**: Removes the entry from the index
+- **Create/Modify**: Extracts metadata, computes file hash, checks cache (recording cache hit metric via `RecordCacheHit()` if found), performs semantic analysis if needed (recording API call metric via `RecordAPICall()`), updates the index, records file processed metric via `RecordFileProcessed()`, and increments index file count via `IncrementIndexFileCount()` when a new file is added
+- **Delete**: Removes the entry from the index and decrements index file count via `DecrementIndexFileCount()` if removal was successful
 
-All changes are immediately persisted via atomic write operations to ensure index consistency.
+All changes are immediately persisted via atomic write operations to ensure index consistency. Health metrics are recorded throughout the event processing flow to accurately track cache hits, API calls, files processed, and index file count changes during incremental updates.
 
 The daemon also tracks watcher health via `HealthMetrics.WatcherActive`, which is exposed through an optional HTTP health check endpoint.
 
@@ -141,9 +141,12 @@ The File Watcher indirectly integrates with the Index Manager through the daemon
 
 1. Watcher emits events
 2. Daemon processes events and performs semantic analysis
-3. Daemon calls Index Manager methods (`UpdateSingle()` or `RemoveFile()`)
-4. Index Manager updates the in-memory index
-5. Daemon persists the updated index to disk
+3. Daemon calls Index Manager methods with tracking information:
+   - `UpdateSingle(entry types.IndexEntry, info UpdateInfo) (UpdateResult, error)` - For creates/modifies, passing UpdateInfo to track what happened during processing (cache hit, API call, error)
+   - `RemoveFile(path string) (RemoveResult, error)` - For deletes, returning RemoveResult with removal status and file size
+4. Index Manager updates the in-memory index and relevant statistics
+5. Daemon uses the result to update health metrics (increment/decrement file count)
+6. Daemon persists the updated index to disk
 
 This separation of concerns allows the watcher to focus solely on file system monitoring while the daemon orchestrates the complete update workflow.
 

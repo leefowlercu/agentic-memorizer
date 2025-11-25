@@ -10,6 +10,25 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
+// UpdateInfo provides context about the entry being updated
+type UpdateInfo struct {
+	WasAnalyzed bool // true if semantic analysis was performed (API call)
+	WasCached   bool // true if cached analysis was used
+	HadError    bool // true if there was an error processing this file
+}
+
+// UpdateResult contains information about what the update operation did
+type UpdateResult struct {
+	Added   bool // true if new entry was added (vs updated)
+	Updated bool // true if existing entry was modified
+}
+
+// RemoveResult contains information about what was removed
+type RemoveResult struct {
+	Removed bool  // true if an entry was actually removed
+	Size    int64 // size of the removed file
+}
+
 // Manager handles loading, saving, and updating the computed index
 type Manager struct {
 	currentIndex  *types.Index
@@ -120,57 +139,84 @@ func (m *Manager) GetCurrent() *types.Index {
 	return m.currentIndex
 }
 
-// UpdateSingle updates a single entry in the index (for Phase 2)
-// This is a placeholder for incremental updates
-func (m *Manager) UpdateSingle(entry types.IndexEntry) error {
+// UpdateSingle updates a single entry in the index with tracking info
+func (m *Manager) UpdateSingle(entry types.IndexEntry, info UpdateInfo) (UpdateResult, error) {
 	m.indexLock.Lock()
 	defer m.indexLock.Unlock()
 
+	result := UpdateResult{}
+
 	if m.currentIndex == nil {
-		return fmt.Errorf("no index loaded")
+		return result, fmt.Errorf("no index loaded")
 	}
 
-	// Find and update existing entry or append new one
-	updated := false
+	// Find existing entry
 	for i, e := range m.currentIndex.Entries {
 		if e.Metadata.Path == entry.Metadata.Path {
+			// Update stats: remove old contribution, add new
+			oldSize := e.Metadata.Size
+			m.currentIndex.Stats.TotalSize -= oldSize
+			m.currentIndex.Stats.TotalSize += entry.Metadata.Size
+
 			m.currentIndex.Entries[i] = entry
-			updated = true
-			break
+			result.Updated = true
+			m.currentIndex.Generated = time.Now()
+			return result, nil
 		}
 	}
 
-	if !updated {
-		m.currentIndex.Entries = append(m.currentIndex.Entries, entry)
-		m.currentIndex.Stats.TotalFiles++
+	// New entry - update all relevant stats
+	m.currentIndex.Entries = append(m.currentIndex.Entries, entry)
+	m.currentIndex.Stats.TotalFiles++
+	m.currentIndex.Stats.TotalSize += entry.Metadata.Size
+
+	if info.WasAnalyzed {
+		m.currentIndex.Stats.AnalyzedFiles++
+	}
+	if info.WasCached {
+		m.currentIndex.Stats.CachedFiles++
+	}
+	if info.HadError {
+		m.currentIndex.Stats.ErrorFiles++
 	}
 
+	result.Added = true
 	m.currentIndex.Generated = time.Now()
-	return nil
+	return result, nil
 }
 
-// RemoveFile removes a file entry from the index (for Phase 2)
-func (m *Manager) RemoveFile(path string) error {
+// RemoveFile removes a file entry from the index with result tracking
+func (m *Manager) RemoveFile(path string) (RemoveResult, error) {
 	m.indexLock.Lock()
 	defer m.indexLock.Unlock()
 
+	result := RemoveResult{}
+
 	if m.currentIndex == nil {
-		return fmt.Errorf("no index loaded")
+		return result, fmt.Errorf("no index loaded")
 	}
 
 	// Find and remove the entry
 	for i, e := range m.currentIndex.Entries {
 		if e.Metadata.Path == path {
+			result.Removed = true
+			result.Size = e.Metadata.Size
+
+			// Update stats
+			m.currentIndex.Stats.TotalFiles--
+			m.currentIndex.Stats.TotalSize -= e.Metadata.Size
+			// Note: We don't decrement AnalyzedFiles/CachedFiles because
+			// those represent historical counts, not current state
+
 			// Remove entry by slicing
 			m.currentIndex.Entries = append(
 				m.currentIndex.Entries[:i],
 				m.currentIndex.Entries[i+1:]...,
 			)
-			m.currentIndex.Stats.TotalFiles--
 			m.currentIndex.Generated = time.Now()
-			return nil
+			return result, nil
 		}
 	}
 
-	return fmt.Errorf("file not found in index: %s", path)
+	return result, fmt.Errorf("file not found in index: %s", path)
 }

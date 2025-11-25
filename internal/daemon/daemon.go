@@ -521,6 +521,9 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 	case watcher.EventCreate, watcher.EventModify:
 		logger.Info("file changed", "path", relPath, "type", event.Type)
 
+		// Track what happened during processing
+		var wasAnalyzed, wasCached, hadError bool
+
 		// Check if file still exists (it might have been deleted quickly)
 		info, err := os.Stat(event.Path)
 		if err != nil {
@@ -562,6 +565,8 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 			cached, err := d.cacheManager.Get(fileHash)
 			if err == nil && cached != nil && !d.cacheManager.IsStale(cached, fileHash) {
 				semanticAnalysis = cached.Semantic
+				wasCached = true
+				d.healthMetrics.RecordCacheHit()
 				logger.Debug("using cached analysis", "path", relPath)
 			} else {
 				// Analyze file
@@ -569,8 +574,12 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 				analysis, err := analyzer.Analyze(fileMetadata)
 				if err != nil {
 					logger.Warn("analysis failed", "path", event.Path, "error", err)
+					hadError = true
+					d.healthMetrics.RecordError()
 				} else {
 					semanticAnalysis = analysis
+					wasAnalyzed = true
+					d.healthMetrics.RecordAPICall()
 
 					// Cache result
 					cachedAnalysis := &types.CachedAnalysis{
@@ -587,15 +596,29 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 			}
 		}
 
-		// Update index
+		// Update index with tracking info
 		entry := types.IndexEntry{
 			Metadata: *fileMetadata,
 			Semantic: semanticAnalysis,
 		}
 
-		if err := d.indexManager.UpdateSingle(entry); err != nil {
+		updateInfo := index.UpdateInfo{
+			WasAnalyzed: wasAnalyzed,
+			WasCached:   wasCached,
+			HadError:    hadError,
+		}
+
+		result, err := d.indexManager.UpdateSingle(entry, updateInfo)
+		if err != nil {
 			logger.Error("failed to update index", "path", event.Path, "error", err)
+			d.healthMetrics.RecordError()
 			return
+		}
+
+		// Update health metrics based on result
+		d.healthMetrics.RecordFileProcessed()
+		if result.Added {
+			d.healthMetrics.IncrementIndexFileCount()
 		}
 
 		// Write updated index
@@ -619,9 +642,14 @@ func (d *Daemon) handleFileDelete(path string, relPath string) {
 	logger := d.GetLogger()
 	logger.Info("file deleted", "path", relPath)
 
-	if err := d.indexManager.RemoveFile(path); err != nil {
+	result, err := d.indexManager.RemoveFile(path)
+	if err != nil {
 		logger.Error("failed to remove from index", "path", path, "error", err)
 		return
+	}
+
+	if result.Removed {
+		d.healthMetrics.DecrementIndexFileCount()
 	}
 
 	// Write updated index

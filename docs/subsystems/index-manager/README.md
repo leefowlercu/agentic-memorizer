@@ -90,11 +90,11 @@ The Manager type provides the primary interface for index operations. It maintai
 **Core Operations:**
 The Manager exposes several key operations:
 - `LoadComputed()` - Reads and validates an existing index file from disk
-- `SetIndex(*types.Index)` - Updates the in-memory index from a full rebuild
+- `SetIndex(*types.Index, BuildMetadata)` - Updates the in-memory index from a full rebuild
 - `WriteAtomic(daemonVersion string)` - Persists the current index atomically to disk
 - `GetCurrent() *types.Index` - Returns a thread-safe read of the current index (**Returns pointer, not copy - callers must not mutate**)
-- `UpdateSingle(*types.IndexEntry)` - Modifies a single entry incrementally (**O(n) linear search** through entries)
-- `RemoveFile(path string)` - Deletes an entry from the index (**O(n) linear search** through entries)
+- `UpdateSingle(entry types.IndexEntry, info UpdateInfo) (UpdateResult, error)` - Modifies a single entry with tracking info (**O(n) linear search** through entries)
+- `RemoveFile(path string) (RemoveResult, error)` - Deletes an entry from the index with result tracking (**O(n) linear search** through entries)
 
 Each operation is designed to be composable and safe. The daemon can call SetIndex followed by WriteAtomic to persist a full rebuild, or call UpdateSingle followed by WriteAtomic to persist an incremental change. Thread safety is maintained regardless of the operation sequence.
 
@@ -120,6 +120,29 @@ This metadata enables operational visibility into daemon performance. Operators 
 The Index Manager relies on type definitions from the pkg/types package including Index as the core structure containing entries and statistics, IndexEntry representing a single file with metadata and optional semantic analysis, FileMetadata containing file-specific properties, and IndexStats providing aggregate statistics.
 
 These types are defined separately from the Index Manager to enable reuse across subsystems. The daemon, cache system, metadata extractor, and output formatters all work with the same type definitions, ensuring consistency and enabling composition.
+
+### Type Definitions for Incremental Operations
+
+The Index Manager defines several types specifically for tracking incremental update operations:
+
+**UpdateInfo** - Provides context about what happened during file processing:
+- `WasAnalyzed bool` - True if semantic analysis was performed via Claude API (cache miss)
+- `WasCached bool` - True if cached analysis was reused (cache hit)
+- `HadError bool` - True if an error occurred during processing
+
+The daemon populates UpdateInfo when calling UpdateSingle to communicate what happened during file processing. This enables the Index Manager to properly update index statistics (AnalyzedFiles, CachedFiles, ErrorFiles) during incremental operations.
+
+**UpdateResult** - Returns information about what the update operation did:
+- `Added bool` - True if a new entry was added to the index
+- `Updated bool` - True if an existing entry was modified
+
+UpdateSingle returns UpdateResult to inform the caller whether this was a new file addition or an existing file modification. The daemon uses this to determine whether to increment the index file count metric.
+
+**RemoveResult** - Returns information about what was removed:
+- `Removed bool` - True if an entry was actually removed (false if file wasn't in index)
+- `Size int64` - Size in bytes of the removed file
+
+RemoveFile returns RemoveResult to provide feedback about the operation. The daemon uses the Removed flag to determine whether to decrement the index file count metric.
 
 ## Integration Points
 
@@ -165,13 +188,19 @@ Full rebuilds occur during daemon startup to ensure the index is current and per
 
 ### Incremental Updates
 
-Incremental updates optimize common cases where only one or a few files change. When the file watcher detects a file modification or creation, the daemon processes that single file through the worker pool and calls UpdateSingle with the resulting IndexEntry.
+Incremental updates optimize common cases where only one or a few files change. When the file watcher detects a file modification or creation, the daemon processes that single file through the worker pool and calls UpdateSingle with the resulting IndexEntry and an UpdateInfo struct describing what happened during processing.
 
-UpdateSingle acquires a write lock, searches for an existing entry with the same file path, and either updates the existing entry in place or appends a new entry to the entries slice. It updates the generation timestamp to reflect that the index has changed and increments the total files count if this is a new file.
+UpdateSingle accepts an UpdateInfo parameter that tracks whether semantic analysis was performed (WasAnalyzed), cached analysis was used (WasCached), or an error occurred (HadError). This information enables proper index statistics updates during incremental operations.
+
+UpdateSingle acquires a write lock, searches for an existing entry with the same file path, and either updates the existing entry in place or appends a new entry to the entries slice. It updates the generation timestamp to reflect that the index has changed. For new files, it increments the total files count and updates AnalyzedFiles, CachedFiles, or ErrorFiles counts based on the UpdateInfo flags. For existing file updates, it recalculates TotalSize by removing the old file's size contribution and adding the new size.
+
+UpdateSingle returns an UpdateResult indicating whether the operation added a new entry or updated an existing one. The daemon uses this result to determine whether to increment the index file count health metric.
 
 After UpdateSingle completes, the daemon calls WriteAtomic to persist the updated index immediately. This ensures that the on-disk index reflects the file system state as quickly as possible.
 
-For file deletions, the daemon calls RemoveFile which locates the entry by path, removes it from the entries slice, decrements the total files count, and updates the generation timestamp. The updated index is then persisted via WriteAtomic.
+For file deletions, the daemon calls RemoveFile which locates the entry by path, removes it from the entries slice, decrements TotalFiles and updates TotalSize, and updates the generation timestamp. RemoveFile returns a RemoveResult indicating whether an entry was actually removed and the size of the removed file. The daemon uses this to determine whether to decrement the index file count health metric. The updated index is then persisted via WriteAtomic.
+
+Note that AnalyzedFiles and CachedFiles counts are not decremented during file removal, as these represent historical counts of analysis operations performed rather than current index state.
 
 ### Concurrent Access
 

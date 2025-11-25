@@ -128,6 +128,15 @@ After validation succeeds, the daemon applies hot-reloadable settings including 
 
 Health monitoring provides operational visibility through metrics tracking and optional HTTP endpoints. The daemon tracks uptime, files processed, API calls made, cache hit rates, error counts, last build time and success status, index file count, and watcher active status.
 
+Metrics are recorded during both full index rebuilds and incremental file operations. The HealthMetrics component provides thread-safe granular recording methods that are called throughout the daemon's runtime:
+
+- `RecordFileProcessed()` - Increments the files processed counter. Called after successfully updating the index with a file entry (both new files and modifications).
+- `RecordAPICall()` - Increments the API calls counter. Called after performing semantic analysis via the Claude API (cache miss).
+- `RecordCacheHit()` - Increments the cache hits counter. Called when cached analysis is reused instead of making an API call (cache hit).
+- `RecordError()` - Increments the error counter. Called when file processing or analysis fails.
+- `IncrementIndexFileCount()` - Increments the index file count by 1. Called when a new file is added to the index (not when updating existing entries).
+- `DecrementIndexFileCount()` - Decrements the index file count by 1. Called when a file is removed from the index, with protection against underflow (won't decrement below 0).
+
 An optional HTTP health check endpoint serves this information in JSON format, enabling integration with monitoring systems. The health status is computed based on recent build success and error rates, allowing automated detection of degraded daemon operation.
 
 The health server can be disabled by setting the health check port to 0 in configuration. When the port changes during configuration reload, the daemon automatically stops the existing health server and starts a new one on the updated port. This hot-restart capability allows operational teams to reconfigure monitoring endpoints without full daemon restarts.
@@ -239,6 +248,8 @@ The daemon then performs an initial full rebuild to ensure the index is current,
 ### Runtime Operations
 
 During normal operation, the daemon runs several concurrent processes. The event processing loop receives events from the file watcher, submits them to the worker pool, collects results, updates the in-memory index, atomically writes the updated index to disk, and broadcasts an `index_updated` notification to connected MCP servers via the SSE hub (if enabled).
+
+Throughout event processing, health metrics are recorded to track operational activity. When a file is processed, the daemon records cache hits (`RecordCacheHit()`) when cached analysis is reused, API calls (`RecordAPICall()`) when semantic analysis is performed, file processing (`RecordFileProcessed()`) after successful index update, and index file count changes (`IncrementIndexFileCount()` for new files, `DecrementIndexFileCount()` for deletions). This granular tracking ensures metrics accurately reflect both full rebuilds and incremental updates.
 
 The periodic rebuild loop triggers full directory walks at configured intervals, submits all discovered files to the worker pool with priority sorting, collects results, builds a complete index structure, calculates statistics, atomically replaces the index file, and broadcasts an `index_rebuilt` notification to connected MCP servers.
 

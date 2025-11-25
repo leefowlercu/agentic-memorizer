@@ -177,7 +177,12 @@ func TestManager_UpdateSingle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := mgr.UpdateSingle(tt.entry)
+			updateInfo := UpdateInfo{
+				WasAnalyzed: false,
+				WasCached:   false,
+				HadError:    false,
+			}
+			_, err := mgr.UpdateSingle(tt.entry, updateInfo)
 			if err != nil {
 				t.Fatalf("UpdateSingle failed: %v", err)
 			}
@@ -232,9 +237,12 @@ func TestManager_RemoveFile(t *testing.T) {
 	mgr.SetIndex(initialIndex, BuildMetadata{})
 
 	// Remove first file
-	err := mgr.RemoveFile("/test/file1.txt")
+	result, err := mgr.RemoveFile("/test/file1.txt")
 	if err != nil {
 		t.Fatalf("RemoveFile failed: %v", err)
+	}
+	if !result.Removed {
+		t.Error("Expected Removed to be true")
 	}
 
 	current := mgr.GetCurrent()
@@ -251,9 +259,12 @@ func TestManager_RemoveFile(t *testing.T) {
 	}
 
 	// Try to remove non-existent file
-	err = mgr.RemoveFile("/test/nonexistent.txt")
+	result, err = mgr.RemoveFile("/test/nonexistent.txt")
 	if err == nil {
 		t.Error("Expected error when removing non-existent file")
+	}
+	if result.Removed {
+		t.Error("Expected Removed to be false for non-existent file")
 	}
 }
 
@@ -305,7 +316,12 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 						},
 					},
 				}
-				_ = mgr.UpdateSingle(entry)
+				updateInfo := UpdateInfo{
+					WasAnalyzed: false,
+					WasCached:   false,
+					HadError:    false,
+				}
+				_, _ = mgr.UpdateSingle(entry, updateInfo)
 			}
 		}(i)
 	}

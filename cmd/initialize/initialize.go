@@ -212,12 +212,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
 	fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
 
-	if httpPort > 0 {
-		fmt.Printf("\nHTTP API will be available at http://localhost:%d\n", httpPort)
-		fmt.Printf("  - Health check: curl http://localhost:%d/health\n", httpPort)
-		fmt.Printf("  - MCP notifications: /notifications/stream\n")
-	}
-
 	return nil
 }
 
@@ -239,7 +233,7 @@ func promptForAPIKey() (string, error) {
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "n" && response != "no" {
 			// User wants to use the existing env var
-			fmt.Printf("\nUsing ANTHROPIC_API_KEY from environment.\n\n")
+			fmt.Printf("\nUsing ANTHROPIC_API_KEY from environment.\n")
 			return existingKey, nil
 		}
 	}
@@ -312,8 +306,8 @@ func promptForHTTPPort() (int, error) {
 	fmt.Printf("The HTTP API provides:\n")
 	fmt.Printf("  - /health endpoint for monitoring daemon status\n")
 	fmt.Printf("  - /notifications/stream for real-time index updates to MCP servers\n\n")
-	fmt.Printf("1. Enable (recommended port: 7600)\n")
-	fmt.Printf("2. Enable with custom port\n")
+	fmt.Printf("1. Enable (port: 7600)\n")
+	fmt.Printf("2. Enable (custom port)\n")
 	fmt.Printf("3. Disable (default)\n")
 	fmt.Printf("\nEnter your choice [1/2/3]: ")
 

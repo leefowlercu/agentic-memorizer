@@ -159,6 +159,11 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create health metrics and SSE hub
+	healthMetrics := NewHealthMetrics()
+	sseHub := NewSSEHub(logger)
+	httpServer := NewHTTPServer(sseHub, healthMetrics, logger)
+
 	d := &Daemon{
 		cfg:               e.Config,
 		logger:            logger,
@@ -171,7 +176,9 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		cancel:            cancel,
 		pidFile:           e.PIDPath,
 		rebuildIntervalCh: make(chan time.Duration, 1),
-		healthMetrics:     &HealthMetrics{},
+		healthMetrics:     healthMetrics,
+		sseHub:            sseHub,
+		httpServer:        httpServer,
 	}
 
 	// Set semantic analyzer to nil (analysis disabled for tests)

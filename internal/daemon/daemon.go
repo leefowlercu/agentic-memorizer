@@ -278,8 +278,10 @@ func (d *Daemon) Start() error {
 	// 4. PID file cleanup (final cleanup)
 
 	// Stop HTTP server
-	if err := d.httpServer.Stop(); err != nil {
-		logger.Warn("error stopping HTTP server", "error", err)
+	if d.httpServer != nil {
+		if err := d.httpServer.Stop(); err != nil {
+			logger.Warn("error stopping HTTP server", "error", err)
+		}
 	}
 
 	// Stop file watcher

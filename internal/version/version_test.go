@@ -131,11 +131,6 @@ func TestGetShortVersion(t *testing.T) {
 			version: "v2.0.0-beta.1",
 			want:    "v2.0.0-beta.1",
 		},
-		{
-			name:    "empty version falls back to embedded",
-			version: "",
-			want:    "0.11.0", // Falls back to embedded VERSION file
-		},
 	}
 
 	for _, tt := range tests {

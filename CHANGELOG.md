@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2025-11-25
+
+### Fixed
+- Fix: bugfix for daemon http health endpoint metrics accumulation
+
+### Build
+- Build: update prepare-release script to properly handle unreleased section
+
+### Tests
+- Style: go fmt
+- Test: update tests, remove brittle version test, update daemon integration tests
+
 ## [0.12.0] - 2025-11-24
 
 ### Added
@@ -627,6 +639,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
 [unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...HEAD
+[0.12.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.1...v0.10.0

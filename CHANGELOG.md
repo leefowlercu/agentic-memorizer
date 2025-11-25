@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2025-11-24
+
+### Added
+- Feat: add http api configuration to initialize command
+- Feat: update mcp server functionality with prompts and resource change subscription, update daemon to run sse server that informs mcp servers of index updates
+
+### Fixed
+- Fix: update styling of initialize command text
+
+### Changed
+- Refactor: consolidate health and sse endpoints into unified http server
+
+### Documentation
+- Docs: comprehensive update to subsystem documentation
+- Docs: update inaccuracy in readme
+- Docs: update project structure diagram in readme
+- Docs: update readme.md and claude.md for accuracy
+
+### Build
+- Build: automate version reference updates in release workflow
+
 ## [0.11.0] - 2025-11-22
 
 ### Added
@@ -606,6 +627,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
 [unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...HEAD
+[0.12.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.9.0...v0.9.1

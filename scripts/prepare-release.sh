@@ -103,9 +103,9 @@ merge_changelog() {
     local new_version_block="${new_section}"$'\n'$'\n'
     new_version_block+="${all_content}"
 
-    # Find insertion point (first version section)
+    # Find insertion point (first numbered version section, skipping [Unreleased])
     local first_version_line
-    first_version_line=$(grep -n '^## \[' "$root_changelog" | head -1 | cut -d: -f1)
+    first_version_line=$(grep -n '^## \[[0-9]' "$root_changelog" | head -1 | cut -d: -f1)
 
     if [ -z "$first_version_line" ]; then
         echo -e "${RED}Error: Could not find version sections in $root_changelog${NC}"

@@ -255,7 +255,7 @@ SemanticAnalysis → summary, tags, key_topics, document_type, confidence
 
 The Integration Registry (`internal/integrations/`) provides framework-agnostic integration through:
 
-- **Adapter Pattern** - Common Integration interface with specialized (Claude Code, Gemini CLI) and generic (Continue, Cline, Aider, Cursor) implementations
+- **Adapter Pattern** - Common Integration interface with specialized (Claude Code, Gemini CLI, Codex CLI) and generic (Continue, Cline, Aider, Cursor) implementations
 - **Registry Pattern** - Thread-safe singleton managing adapter registration and lookup
 - **Output Processors** - Independent formatters (XML, Markdown, JSON) separate from integration wrapping
 - **Auto-registration** - Adapters register via init() functions
@@ -267,7 +267,14 @@ Claude Code integration uses two methods:
 Gemini CLI integration uses:
 - **MCP server** (`gemini-cli-mcp`) - Provide on-demand tools via stdio transport configured in `~/.gemini/settings.json`
 
+Codex CLI integration uses:
+- **MCP server** (`codex-cli-mcp`) - Provide on-demand tools via stdio transport configured in `~/.codex/config.toml` (TOML format)
+
 All integrations wrap output appropriately: SessionStart hooks use JSON envelope with systemMessage and additionalContext fields; MCP uses JSON-RPC 2.0 protocol responses.
+
+**Configuration Formats:**
+- Claude Code & Gemini CLI use JSON configuration files
+- Codex CLI uses TOML configuration (`github.com/pelletier/go-toml/v2` library)
 
 ### MCP Server
 

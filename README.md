@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/leefowlercu/agentic-memorizer)](https://goreportcard.com/report/github.com/leefowlercu/agentic-memorizer)
 [![GitHub Release](https://img.shields.io/github/v/release/leefowlercu/agentic-memorizer)](https://github.com/leefowlercu/agentic-memorizer/releases)
 
-A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code and manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
+A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code, Gemini CLI, and OpenAI Codex CLI, plus manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
 **Current Version**: v0.11.0 ([CHANGELOG.md](CHANGELOG.md))
 
@@ -31,6 +31,7 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
 - [Integration Setup](#integration-setup)
   - [Claude Code Integration (Automatic)](#claude-code-integration-automatic)
   - [Claude Code MCP Integration (Automatic)](#claude-code-mcp-integration-automatic)
+  - [OpenAI Codex CLI Integration (Automatic)](#openai-codex-cli-integration-automatic)
   - [Cursor AI Integration (Manual)](#cursor-ai-integration-manual)
   - [Continue.dev Integration (Manual)](#continuedev-integration-manual)
   - [Aider Integration (Manual)](#aider-integration-manual)
@@ -148,6 +149,14 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing either
 - Full lifecycle management (setup, update, remove, validate)
 - Works with both user and project-level Gemini CLI configurations
 
+**OpenAI Codex CLI** - MCP server integration with automatic setup
+- Automatic framework detection and configuration
+- One-command setup: `agentic-memorizer integrations setup codex-cli-mcp`
+- MCP server configuration in `~/.codex/config.toml` (TOML format)
+- Provides three on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`
+- Full lifecycle management (setup, update, remove, validate)
+- Verification via `/mcp` command in Codex TUI
+
 ### Manual Integration (Configuration Required)
 
 The following frameworks require manual configuration file editing. The `integrations setup` command provides detailed, framework-specific instructions:
@@ -179,13 +188,13 @@ The following frameworks require manual configuration file editing. The `integra
 
 ### Framework Comparison
 
-| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (MCP) | Other Frameworks |
-|---------|-------------------|-------------------|------------------|------------------|
-| **Setup Type** | Automatic | Automatic | Automatic | Manual |
-| **Delivery** | SessionStart injection | On-demand tools | On-demand tools | User-configured |
-| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) | Markdown |
-| **Best For** | Complete awareness | Large directories | Large directories | Flexibility |
-| **Validation** | Automatic | Automatic | Automatic | Manual |
+| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (MCP) | Codex CLI (MCP) | Other Frameworks |
+|---------|-------------------|-------------------|------------------|-----------------|------------------|
+| **Setup Type** | Automatic | Automatic | Automatic | Automatic | Manual |
+| **Delivery** | SessionStart injection | On-demand tools | On-demand tools | On-demand tools | User-configured |
+| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) | N/A (tool-based) | Markdown |
+| **Best For** | Complete awareness | Large directories | Large directories | Large directories | Flexibility |
+| **Validation** | Automatic | Automatic | Automatic | Automatic | Manual |
 
 ## Architecture
 
@@ -587,6 +596,84 @@ Remove the MCP integration:
 
 ```bash
 agentic-memorizer integrations remove claude-code-mcp
+```
+
+### OpenAI Codex CLI Integration (Automatic)
+
+OpenAI Codex CLI supports integration via the Model Context Protocol (MCP), providing semantic search and metadata retrieval tools.
+
+#### Setup
+
+One-command automatic setup:
+
+```bash
+agentic-memorizer integrations setup codex-cli-mcp
+```
+
+**What it does:**
+
+1. Detects your Codex CLI installation (`~/.codex/` directory)
+2. Creates/updates `~/.codex/config.toml` with MCP server configuration
+3. Configures the binary path and memory root environment variable
+4. Enables the MCP server by default
+
+**Configuration:**
+
+The setup command adds an MCP server entry to your Codex CLI configuration:
+
+```toml
+[mcp_servers.agentic-memorizer]
+command = "/path/to/agentic-memorizer"
+args = ["mcp", "start"]
+enabled = true
+
+[mcp_servers.agentic-memorizer.env]
+MEMORIZER_MEMORY_ROOT = "/path/to/memory"
+```
+
+**MCP Tools:**
+
+The MCP server exposes three tools to Codex CLI:
+
+- **`search_files`**: Semantic search across indexed files
+  - Query by filename, tags, topics, or summary content
+  - Returns ranked results with relevance scores
+  - Optional category filtering
+
+- **`get_file_metadata`**: Retrieve complete metadata for specific files
+  - Full semantic analysis (summary, tags, topics, document type)
+  - File metadata (size, type, category, modification date)
+  - Confidence scores and analysis results
+
+- **`list_recent_files`**: List recently modified files
+  - Configurable time window (1-365 days)
+  - Sorted by modification date
+  - Optional result limit
+
+**Verification:**
+
+Run Codex CLI and use the `/mcp` command to verify the integration:
+
+```bash
+codex
+# In Codex TUI, type:
+/mcp
+```
+
+You should see `agentic-memorizer` listed as an active MCP server.
+
+Alternatively, validate via CLI:
+
+```bash
+agentic-memorizer integrations validate
+```
+
+**Removal:**
+
+Remove the MCP integration:
+
+```bash
+agentic-memorizer integrations remove codex-cli-mcp
 ```
 
 ### Cursor AI Integration (Manual)

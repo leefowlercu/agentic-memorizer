@@ -29,6 +29,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - [API Rate Limiting](#api-rate-limiting)
   - [Configuration Hot-Reload](#configuration-hot-reload)
   - [Binary Path in Integrations](#binary-path-in-integrations)
+  - [Integration Adapter Versioning](#integration-adapter-versioning)
   - [CLI Error Handling Pattern](#cli-error-handling-pattern)
   - [Error Message Formatting](#error-message-formatting)
   - [Releasing](#releasing)
@@ -381,6 +382,37 @@ The daemon supports hot-reloading non-structural configuration changes via `conf
 ### Binary Path in Integrations
 
 Integration setup commands automatically detect and configure the correct binary path. When modifying integration setup logic, ensure binary path detection works for both `go install` (in $GOPATH/bin) and `make install` (in ~/.local/bin) installations.
+
+### Integration Adapter Versioning
+
+Integration adapters use semantic versioning (MAJOR.MINOR.PATCH) to track changes. When modifying adapter code, update the version constant appropriately.
+
+**Version Constants Location:**
+- Claude Code Hook: `internal/integrations/adapters/claude/hook_adapter.go` → `IntegrationVersion`
+- Claude Code MCP: `internal/integrations/adapters/claude/mcp_adapter.go` → `MCPIntegrationVersion`
+- Gemini CLI MCP: `internal/integrations/adapters/gemini/mcp_adapter.go` → `MCPIntegrationVersion`
+
+**When to Bump Versions:**
+
+- **PATCH** (0.0.X): Bug fixes, internal refactoring, documentation updates
+  - Fix incorrect config file parsing
+  - Improve error messages
+  - Refactor internal helper functions
+
+- **MINOR** (0.X.0): New features, backward-compatible changes
+  - Add new optional configuration options
+  - Support additional matchers or settings
+  - Add new validation checks
+
+- **MAJOR** (X.0.0): Breaking changes affecting user configuration
+  - Change config file format or location
+  - Rename or remove existing settings
+  - Change default behavior in incompatible ways
+
+**When modifying adapter code:**
+1. Identify the scope of changes (bug fix, new feature, or breaking change)
+2. Update the appropriate version constant in the adapter file
+3. Mention the version bump in the commit message (e.g., `fix(integrations): improve error handling in claude-code-hook adapter (v1.0.2)`)
 
 ### CLI Error Handling Pattern
 

@@ -12,6 +12,10 @@
    - [Integration Interface](#integration-interface)
    - [Registry Component](#registry-component)
    - [Adapter Implementations](#adapter-implementations)
+      - [Claude Code Hook Adapter](#claude-code-hook-adapter)
+      - [Claude Code MCP Adapter](#claude-code-mcp-adapter)
+      - [Gemini CLI MCP Adapter](#gemini-cli-mcp-adapter)
+      - [Generic Adapters](#generic-adapters)
    - [Output Processors](#output-processors)
 4. [Integration Points](#integration-points)
    - [CLI Commands](#cli-commands)
@@ -220,6 +224,37 @@ The MCP adapter **does not use `FormatOutput()`**. Instead of formatting the ent
 
 Many users enable both integrations for maximum flexibility.
 
+#### Gemini CLI MCP Adapter
+
+The Gemini CLI MCP adapter (`internal/integrations/adapters/gemini/mcp_adapter.go`) provides integration with Google's Gemini CLI through the Model Context Protocol, exposing on-demand tools for semantic search.
+
+**Integration Name:** `gemini-cli-mcp`
+
+**Detection:**
+Checks for TWO requirements:
+1. Existence of the `~/.gemini/` directory
+2. Availability of the `gemini` CLI command via PATH
+
+Both must be present for successful detection.
+
+**Setup Process:**
+1. Locates or creates `~/.gemini/settings.json` file
+2. Reads existing MCP server configurations
+3. Registers the `agentic-memorizer` MCP server with:
+   - Command: `agentic-memorizer mcp start`
+   - Environment variables: `MEMORIZER_MEMORY_ROOT` (path to memory directory)
+   - Note: No explicit `type` field needed (Gemini defaults to stdio transport)
+4. Writes modified configuration atomically with temporary backup creation
+
+**Output Behavior:**
+Like the Claude Code MCP adapter, the Gemini CLI MCP adapter **does not use `FormatOutput()`**. It exposes the same three MCP tools that Gemini CLI can invoke on-demand:
+- `search_files` - Semantic search across indexed files
+- `get_file_metadata` - Retrieve complete metadata for specific files
+- `list_recent_files` - List recently modified files
+
+**When to Use:**
+The Gemini CLI MCP adapter is the only integration option for Gemini CLI users. It provides on-demand file discovery and metadata retrieval through MCP tools during Gemini CLI chat sessions.
+
 #### Generic Adapters
 
 Generic adapters (`internal/integrations/adapters/generic/`) provide basic integration support for frameworks without specialized implementation, returning manual setup instructions rather than performing automatic configuration.
@@ -239,6 +274,16 @@ Generic adapters (`internal/integrations/adapters/generic/`) provide basic integ
 
 **Manual Setup Instructions:**
 Each generic adapter provides tailored instructions for configuring its target framework. These instructions guide users through adding the memory index command to their framework's configuration, typically in settings files or command palettes.
+
+**Configuration Files Modified by Integrations:**
+
+| Integration | Config File | Section |
+|-------------|-------------|---------|
+| `claude-code-hook` | `~/.claude/settings.json` | `hooks.SessionStart` |
+| `claude-code-mcp` | `~/.claude.json` | `mcpServers.agentic-memorizer` |
+| `gemini-cli-mcp` | `~/.gemini/settings.json` | `mcpServers.agentic-memorizer` |
+
+All config file operations use atomic writes with backup pattern for safety.
 
 ### Output Processors
 
@@ -407,7 +452,9 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Generic Adapter**: Fallback adapter implementation for frameworks without specialized support, providing manual setup instructions instead of automatic configuration.
 
-**Specialized Adapter**: Full-featured adapter implementation with automatic detection, setup, and framework-specific output wrapping (e.g., Claude Code adapter).
+**Gemini CLI Integration**: MCP-based integration with Google's Gemini CLI tool through stdio transport configuration in `~/.gemini/settings.json`, providing on-demand file search and metadata retrieval via MCP tools.
+
+**Specialized Adapter**: Full-featured adapter implementation with automatic detection, setup, and framework-specific output wrapping (e.g., Claude Code adapter, Gemini CLI adapter).
 
 **Auto-Registration**: Pattern where adapters register themselves with the global registry through init() functions during package initialization.
 

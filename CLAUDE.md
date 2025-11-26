@@ -254,7 +254,7 @@ SemanticAnalysis → summary, tags, key_topics, document_type, confidence
 
 The Integration Registry (`internal/integrations/`) provides framework-agnostic integration through:
 
-- **Adapter Pattern** - Common Integration interface with specialized (Claude Code) and generic (Continue, Cline, Aider, Cursor) implementations
+- **Adapter Pattern** - Common Integration interface with specialized (Claude Code, Gemini CLI) and generic (Continue, Cline, Aider, Cursor) implementations
 - **Registry Pattern** - Thread-safe singleton managing adapter registration and lookup
 - **Output Processors** - Independent formatters (XML, Markdown, JSON) separate from integration wrapping
 - **Auto-registration** - Adapters register via init() functions
@@ -263,7 +263,10 @@ Claude Code integration uses two methods:
 1. **SessionStart hooks** (`claude-code-hook`) - Inject full index at session start via hooks with matchers (startup, resume, clear, compact)
 2. **MCP server** (`claude-code-mcp`) - Provide on-demand tools for semantic search and metadata retrieval
 
-Both wrap output appropriately: SessionStart hooks use JSON envelope with systemMessage and additionalContext fields; MCP uses JSON-RPC 2.0 protocol responses.
+Gemini CLI integration uses:
+- **MCP server** (`gemini-cli-mcp`) - Provide on-demand tools via stdio transport configured in `~/.gemini/settings.json`
+
+All integrations wrap output appropriately: SessionStart hooks use JSON envelope with systemMessage and additionalContext fields; MCP uses JSON-RPC 2.0 protocol responses.
 
 ### MCP Server
 

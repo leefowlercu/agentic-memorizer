@@ -140,6 +140,14 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing either
 - Default XML output with JSON envelope wrapping for proper hook formatting
 - Full lifecycle management (setup, update, remove, validate)
 
+**Gemini CLI** - MCP server integration with automatic setup
+- Automatic framework detection and configuration
+- One-command setup: `agentic-memorizer integrations setup gemini-cli-mcp`
+- MCP server configuration in `~/.gemini/settings.json`
+- Provides three on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`
+- Full lifecycle management (setup, update, remove, validate)
+- Works with both user and project-level Gemini CLI configurations
+
 ### Manual Integration (Configuration Required)
 
 The following frameworks require manual configuration file editing. The `integrations setup` command provides detailed, framework-specific instructions:
@@ -171,13 +179,13 @@ The following frameworks require manual configuration file editing. The `integra
 
 ### Framework Comparison
 
-| Feature | Claude Code (Hook) | Claude Code (MCP) | Other Frameworks |
-|---------|-------------------|-------------------|------------------|
-| **Setup Type** | Automatic | Automatic | Manual |
-| **Delivery** | SessionStart injection | On-demand tools | User-configured |
-| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | Markdown |
-| **Best For** | Complete awareness | Large directories | Flexibility |
-| **Validation** | Automatic | Automatic | Manual |
+| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (MCP) | Other Frameworks |
+|---------|-------------------|-------------------|------------------|------------------|
+| **Setup Type** | Automatic | Automatic | Automatic | Manual |
+| **Delivery** | SessionStart injection | On-demand tools | On-demand tools | User-configured |
+| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) | Markdown |
+| **Best For** | Complete awareness | Large directories | Large directories | Flexibility |
+| **Validation** | Automatic | Automatic | Automatic | Manual |
 
 ## Architecture
 

@@ -15,6 +15,7 @@
       - [Claude Code Hook Adapter](#claude-code-hook-adapter)
       - [Claude Code MCP Adapter](#claude-code-mcp-adapter)
       - [Gemini CLI MCP Adapter](#gemini-cli-mcp-adapter)
+      - [Codex CLI MCP Adapter](#codex-cli-mcp-adapter)
       - [Generic Adapters](#generic-adapters)
    - [Output Processors](#output-processors)
 4. [Integration Points](#integration-points)
@@ -255,6 +256,41 @@ Like the Claude Code MCP adapter, the Gemini CLI MCP adapter **does not use `For
 **When to Use:**
 The Gemini CLI MCP adapter is the only integration option for Gemini CLI users. It provides on-demand file discovery and metadata retrieval through MCP tools during Gemini CLI chat sessions.
 
+#### Codex CLI MCP Adapter
+
+The Codex CLI MCP adapter (`internal/integrations/adapters/codex/mcp_adapter.go`) provides integration with OpenAI's Codex CLI through the Model Context Protocol, exposing on-demand tools for semantic search.
+
+**Integration Name:** `codex-cli-mcp`
+
+**Detection:**
+Checks for TWO requirements:
+1. Existence of the `~/.codex/` directory
+2. Availability of the `codex` CLI command via PATH
+
+Both must be present for successful detection.
+
+**Setup Process:**
+1. Locates or creates `~/.codex/config.toml` file
+2. Reads existing MCP server configurations (TOML format)
+3. Registers the `agentic-memorizer` MCP server with:
+   - Command: `agentic-memorizer mcp start`
+   - Args: `["mcp", "start"]`
+   - Environment variables: `MEMORIZER_MEMORY_ROOT` (path to memory directory)
+   - Enabled: `true` (explicit flag to activate the server)
+4. Writes modified configuration atomically with temporary backup creation
+
+**Output Behavior:**
+Like other MCP adapters, the Codex CLI MCP adapter **does not use `FormatOutput()`**. It exposes the same three MCP tools that Codex CLI can invoke on-demand:
+- `search_files` - Semantic search across indexed files
+- `get_file_metadata` - Retrieve complete metadata for specific files
+- `list_recent_files` - List recently modified files
+
+**Configuration Format:**
+Unlike Claude Code and Gemini CLI which use JSON, Codex CLI uses TOML format (`~/.codex/config.toml`). The adapter uses `github.com/pelletier/go-toml/v2` for TOML parsing and generation, handling optional fields with pointer types (`*bool`, `*int`) and preserving non-MCP configuration sections during updates.
+
+**When to Use:**
+The Codex CLI MCP adapter is the only integration option for Codex CLI users. It provides on-demand file discovery and metadata retrieval through MCP tools during Codex CLI chat sessions.
+
 #### Generic Adapters
 
 Generic adapters (`internal/integrations/adapters/generic/`) provide basic integration support for frameworks without specialized implementation, returning manual setup instructions rather than performing automatic configuration.
@@ -282,6 +318,7 @@ Each generic adapter provides tailored instructions for configuring its target f
 | `claude-code-hook` | `~/.claude/settings.json` | `hooks.SessionStart` |
 | `claude-code-mcp` | `~/.claude.json` | `mcpServers.agentic-memorizer` |
 | `gemini-cli-mcp` | `~/.gemini/settings.json` | `mcpServers.agentic-memorizer` |
+| `codex-cli-mcp` | `~/.codex/config.toml` | `mcp_servers.agentic-memorizer` |
 
 All config file operations use atomic writes with backup pattern for safety.
 
@@ -454,7 +491,9 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Gemini CLI Integration**: MCP-based integration with Google's Gemini CLI tool through stdio transport configuration in `~/.gemini/settings.json`, providing on-demand file search and metadata retrieval via MCP tools.
 
-**Specialized Adapter**: Full-featured adapter implementation with automatic detection, setup, and framework-specific output wrapping (e.g., Claude Code adapter, Gemini CLI adapter).
+**Codex CLI Integration**: MCP-based integration with OpenAI's Codex CLI tool through stdio transport configuration in `~/.codex/config.toml` (TOML format), providing on-demand file search and metadata retrieval via MCP tools.
+
+**Specialized Adapter**: Full-featured adapter implementation with automatic detection, setup, and framework-specific output wrapping (e.g., Claude Code adapter, Gemini CLI adapter, Codex CLI adapter).
 
 **Auto-Registration**: Pattern where adapters register themselves with the global registry through init() functions during package initialization.
 

@@ -3,6 +3,7 @@ package integrations
 import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations/subcommands"
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude"  // Register Claude adapter
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/codex"   // Register Codex adapter
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/gemini"  // Register Gemini adapter
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/generic" // Register generic adapters
 	"github.com/spf13/cobra"

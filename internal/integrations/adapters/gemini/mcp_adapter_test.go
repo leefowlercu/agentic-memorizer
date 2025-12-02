@@ -385,7 +385,7 @@ func TestGeminiCLIMCPAdapter_FormatOutput_ReturnsError(t *testing.T) {
 	adapter := NewGeminiCLIMCPAdapter()
 
 	// FormatOutput should return an error for MCP integrations
-	_, err := adapter.FormatOutput(&types.Index{}, integrations.FormatXML)
+	_, err := adapter.FormatOutput(&types.GraphIndex{}, integrations.FormatXML)
 	if err == nil {
 		t.Error("Expected error from FormatOutput, got nil")
 	}

@@ -24,19 +24,19 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// getRecentEntries returns entries modified within the specified number of days
-func getRecentEntries(entries []types.IndexEntry, days int) []types.IndexEntry {
+// getRecentFileEntries returns file entries modified within the specified number of days
+func getRecentFileEntries(files []types.FileEntry, days int) []types.FileEntry {
 	cutoff := time.Now().AddDate(0, 0, -days)
-	recent := []types.IndexEntry{}
+	recent := []types.FileEntry{}
 
-	for _, entry := range entries {
-		if entry.Metadata.Modified.After(cutoff) {
-			recent = append(recent, entry)
+	for _, file := range files {
+		if file.Modified.After(cutoff) {
+			recent = append(recent, file)
 		}
 	}
 
 	sort.Slice(recent, func(i, j int) bool {
-		return recent[i].Metadata.Modified.After(recent[j].Metadata.Modified)
+		return recent[i].Modified.After(recent[j].Modified)
 	})
 
 	if len(recent) > 10 {
@@ -46,13 +46,12 @@ func getRecentEntries(entries []types.IndexEntry, days int) []types.IndexEntry {
 	return recent
 }
 
-// groupByCategory groups index entries by their category
-func groupByCategory(entries []types.IndexEntry) map[string][]types.IndexEntry {
-	categories := make(map[string][]types.IndexEntry)
+// groupFilesByCategory groups file entries by their category
+func groupFilesByCategory(files []types.FileEntry) map[string][]types.FileEntry {
+	categories := make(map[string][]types.FileEntry)
 
-	for _, entry := range entries {
-		category := entry.Metadata.Category
-		categories[category] = append(categories[category], entry)
+	for _, file := range files {
+		categories[file.Category] = append(categories[file.Category], file)
 	}
 
 	return categories

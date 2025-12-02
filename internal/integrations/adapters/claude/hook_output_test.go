@@ -10,30 +10,24 @@ import (
 )
 
 func TestFormatSessionStartJSON_NoHTMLEscaping(t *testing.T) {
-	// Create a simple index with XML-like content in fields
-	index := &types.Index{
-		Root: "/test/path",
+	// Create a simple graph index with XML-like content in fields
+	index := &types.GraphIndex{
+		MemoryRoot: "/test/path",
 		Stats: types.IndexStats{
 			TotalFiles:    1,
 			TotalSize:     1024,
 			CachedFiles:   1,
 			AnalyzedFiles: 0,
 		},
-		Entries: []types.IndexEntry{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/path/to/test<file>.txt",
-						RelPath:  "test<file>.txt",
-						Category: "documents",
-						Size:     1024,
-						Type:     "txt",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "This is a test <summary> with angle brackets",
-					Tags:    []string{"tag1", "tag<2>"},
-				},
+				Path:     "/path/to/test<file>.txt",
+				Name:     "test<file>.txt",
+				Category: "documents",
+				Size:     1024,
+				Type:     "txt",
+				Summary:  "This is a test <summary> with angle brackets",
+				Tags:     []string{"tag1", "tag<2>"},
 			},
 		},
 	}

@@ -24,28 +24,27 @@ type HookSpecificOutput struct {
 	AdditionalContext string `json:"additionalContext,omitempty"`
 }
 
-// formatSessionStartJSON wraps the formatted index in a Claude Code SessionStart JSON envelope
-func formatSessionStartJSON(index *types.Index, format integrations.OutputFormat) (string, error) {
-	// Step 1: Generate formatted content using the appropriate output processor
+// formatSessionStartJSON wraps the formatted graph index in a Claude Code SessionStart JSON envelope
+func formatSessionStartJSON(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
+	// Step 1: Generate formatted content using the appropriate graph output processor
+	var processor output.GraphOutputProcessor
 	var content string
 	var err error
 
 	switch format {
 	case integrations.FormatXML:
-		processor := output.NewXMLProcessor()
-		content, err = processor.Format(index)
+		processor = output.NewXMLProcessor()
 	case integrations.FormatMarkdown:
-		processor := output.NewMarkdownProcessor()
-		content, err = processor.Format(index)
+		processor = output.NewMarkdownProcessor()
 	case integrations.FormatJSON:
-		processor := output.NewJSONProcessor()
-		content, err = processor.Format(index)
+		processor = output.NewJSONProcessor()
 	default:
 		return "", fmt.Errorf("unsupported output format: %s", format)
 	}
 
+	content, err = processor.FormatGraph(index)
 	if err != nil {
-		return "", fmt.Errorf("failed to format index: %w", err)
+		return "", fmt.Errorf("failed to format index; %w", err)
 	}
 
 	// Step 2: Wrap the formatted content in SessionStart JSON envelope
@@ -62,7 +61,7 @@ func formatSessionStartJSON(index *types.Index, format integrations.OutputFormat
 	// Marshal to JSON with indentation and no HTML escaping
 	jsonBytes, err := marshalIndentNoEscape(wrapper, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal SessionStart JSON: %w", err)
+		return "", fmt.Errorf("failed to marshal SessionStart JSON; %w", err)
 	}
 
 	return string(jsonBytes), nil
@@ -85,8 +84,8 @@ func marshalIndentNoEscape(v any, prefix, indent string) ([]byte, error) {
 }
 
 // generateSystemMessage creates a concise system message for the SessionStart hook
-func generateSystemMessage(index *types.Index) string {
-	categories := groupByCategory(index.Entries)
+func generateSystemMessage(index *types.GraphIndex) string {
+	categories := groupByCategory(index.Files)
 	categoryCount := len(categories)
 
 	msg := fmt.Sprintf("Memory index updated: %d files", index.Stats.TotalFiles)
@@ -95,8 +94,8 @@ func generateSystemMessage(index *types.Index) string {
 		categoryParts := []string{}
 		categoryOrder := []string{"documents", "presentations", "images", "transcripts", "data", "code", "videos", "audio", "archives", "other"}
 		for _, category := range categoryOrder {
-			if entries, ok := categories[category]; ok && len(entries) > 0 {
-				categoryParts = append(categoryParts, fmt.Sprintf("%d %s", len(entries), category))
+			if files, ok := categories[category]; ok && len(files) > 0 {
+				categoryParts = append(categoryParts, fmt.Sprintf("%d %s", len(files), category))
 			}
 		}
 		if len(categoryParts) > 0 {
@@ -113,12 +112,11 @@ func generateSystemMessage(index *types.Index) string {
 	return msg
 }
 
-// groupByCategory groups index entries by their category
-func groupByCategory(entries []types.IndexEntry) map[string][]types.IndexEntry {
-	categories := make(map[string][]types.IndexEntry)
-	for _, entry := range entries {
-		category := entry.Metadata.Category
-		categories[category] = append(categories[category], entry)
+// groupByCategory groups file entries by their category
+func groupByCategory(files []types.FileEntry) map[string][]types.FileEntry {
+	categories := make(map[string][]types.FileEntry)
+	for _, file := range files {
+		categories[file.Category] = append(categories[file.Category], file)
 	}
 	return categories
 }

@@ -53,12 +53,12 @@ type Integration interface {
 
 	// Output formatting
 
-	// FormatOutput formats the index for this specific integration
+	// FormatOutput formats the graph index for this specific integration
 	// Applies integration-specific wrapping (e.g., SessionStart JSON for Claude Code)
-	// index is the memory index to format
+	// index is the graph-native memory index to format
 	// format is the base output format (xml, markdown, json)
 	// Returns formatted string ready for the framework to consume
-	FormatOutput(index *types.Index, format OutputFormat) (string, error)
+	FormatOutput(index *types.GraphIndex, format OutputFormat) (string, error)
 
 	// Validation
 

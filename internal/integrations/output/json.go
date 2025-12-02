@@ -31,23 +31,18 @@ func (p *JSONProcessor) GetFormat() string {
 	return "json"
 }
 
-// Format renders the index as pretty-printed JSON
-func (p *JSONProcessor) Format(index *types.Index) (string, error) {
-	// The index already has JSON tags, so we can use it directly
-	// However, we may want to apply filtering based on options
-
+// FormatGraph renders the graph index as pretty-printed JSON
+func (p *JSONProcessor) FormatGraph(index *types.GraphIndex) (string, error) {
 	var output any = index
 
-	// If ShowRecentDays is set, we could create a filtered view
-	// For now, we'll just return the full index as pretty-printed JSON
+	// If ShowRecentDays is set, create a filtered view with recent files highlighted
 	if p.options.ShowRecentDays > 0 {
-		// Create a filtered view with recent entries highlighted
 		filteredIndex := &struct {
-			*types.Index
-			RecentEntries []types.IndexEntry `json:"recent_entries,omitempty"`
+			*types.GraphIndex
+			RecentFiles []types.FileEntry `json:"recent_files,omitempty"`
 		}{
-			Index:         index,
-			RecentEntries: getRecentEntries(index.Entries, p.options.ShowRecentDays),
+			GraphIndex:  index,
+			RecentFiles: getRecentFileEntries(index.Files, p.options.ShowRecentDays),
 		}
 		output = filteredIndex
 	}

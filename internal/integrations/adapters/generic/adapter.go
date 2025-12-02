@@ -81,10 +81,10 @@ func (a *GenericAdapter) GetCommand(binaryPath string, format integrations.Outpu
 	return fmt.Sprintf("%s read --format %s", binaryPath, format)
 }
 
-// FormatOutput formats the index without any framework-specific wrapping
+// FormatOutput formats the graph index without any framework-specific wrapping
 // Just returns the formatted content (XML, Markdown, or JSON)
-func (a *GenericAdapter) FormatOutput(index *types.Index, format integrations.OutputFormat) (string, error) {
-	var processor output.OutputProcessor
+func (a *GenericAdapter) FormatOutput(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
+	var processor output.GraphOutputProcessor
 
 	switch format {
 	case integrations.FormatXML:
@@ -97,7 +97,7 @@ func (a *GenericAdapter) FormatOutput(index *types.Index, format integrations.Ou
 		return "", fmt.Errorf("unsupported output format: %s", format)
 	}
 
-	return processor.Format(index)
+	return processor.FormatGraph(index)
 }
 
 // Validate always returns an error for generic adapters

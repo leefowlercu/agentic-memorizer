@@ -12,58 +12,46 @@ import (
 func TestJSONProcessor_NoHTMLEscaping(t *testing.T) {
 	// Create index with HTML/XML-like content
 	modTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	index := &types.Index{
-		Generated: modTime,
-		Root:      "/test/path",
+	index := &types.GraphIndex{
+		Generated:  modTime,
+		MemoryRoot: "/test/path",
 		Stats: types.IndexStats{
 			TotalFiles:    2,
 			TotalSize:     2048,
 			CachedFiles:   2,
 			AnalyzedFiles: 0,
 		},
-		Entries: []types.IndexEntry{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/path/to/test<file>.xml",
-						RelPath:  "test<file>.xml",
-						Category: "documents",
-						Size:     1024,
-						Modified: modTime,
-						Type:     "xml",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "This is a test <summary> with angle brackets & ampersands",
-					Tags:         []string{"tag1", "tag<2>", "a&b"},
-					KeyTopics:    []string{"topic<1>", "topic & notes"},
-					DocumentType: "test<type>",
-				},
+				Path:         "/path/to/test<file>.xml",
+				Name:         "test<file>.xml",
+				Category:     "documents",
+				Size:         1024,
+				Modified:     modTime,
+				Type:         "xml",
+				Summary:      "This is a test <summary> with angle brackets & ampersands",
+				Tags:         []string{"tag1", "tag<2>", "a&b"},
+				Topics:       []string{"topic<1>", "topic & notes"},
+				DocumentType: "test<type>",
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/path/to/file2.html",
-						RelPath:  "file2.html",
-						Category: "documents",
-						Size:     1024,
-						Modified: modTime,
-						Type:     "html",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "<html><body>Test</body></html>",
-					Tags:         []string{"html", "web"},
-					DocumentType: "webpage",
-				},
+				Path:         "/path/to/file2.html",
+				Name:         "file2.html",
+				Category:     "documents",
+				Size:         1024,
+				Modified:     modTime,
+				Type:         "html",
+				Summary:      "<html><body>Test</body></html>",
+				Tags:         []string{"html", "web"},
+				DocumentType: "webpage",
 			},
 		},
 	}
 
 	processor := NewJSONProcessor()
-	output, err := processor.Format(index)
+	output, err := processor.FormatGraph(index)
 	if err != nil {
-		t.Fatalf("Format() error = %v", err)
+		t.Fatalf("FormatGraph() error = %v", err)
 	}
 
 	// Check that output doesn't contain escaped angle brackets or ampersands
@@ -95,7 +83,7 @@ func TestJSONProcessor_NoHTMLEscaping(t *testing.T) {
 	}
 
 	// Verify JSON is still valid
-	var decoded types.Index
+	var decoded types.GraphIndex
 	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
 		t.Errorf("Output is not valid JSON: %v", err)
 	}
@@ -104,8 +92,8 @@ func TestJSONProcessor_NoHTMLEscaping(t *testing.T) {
 	if decoded.Stats.TotalFiles != index.Stats.TotalFiles {
 		t.Errorf("TotalFiles = %d, want %d", decoded.Stats.TotalFiles, index.Stats.TotalFiles)
 	}
-	if len(decoded.Entries) != len(index.Entries) {
-		t.Errorf("Entries count = %d, want %d", len(decoded.Entries), len(index.Entries))
+	if len(decoded.Files) != len(index.Files) {
+		t.Errorf("Files count = %d, want %d", len(decoded.Files), len(index.Files))
 	}
 }
 

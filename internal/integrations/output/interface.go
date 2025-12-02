@@ -2,13 +2,13 @@ package output
 
 import "github.com/leefowlercu/agentic-memorizer/pkg/types"
 
-// OutputProcessor defines the interface for formatting memory index output.
+// GraphOutputProcessor defines the interface for formatting graph-native index output.
 // Each processor implements a specific output format (XML, Markdown, JSON)
 // and is independent of integration-specific wrappers.
-type OutputProcessor interface {
-	// Format renders the index in the specific output format
-	// Returns the formatted string representation of the index
-	Format(index *types.Index) (string, error)
+type GraphOutputProcessor interface {
+	// FormatGraph renders the graph index in the specific output format
+	// Returns the formatted string representation of the graph index
+	FormatGraph(index *types.GraphIndex) (string, error)
 
 	// GetFormat returns the output format this processor implements
 	GetFormat() string

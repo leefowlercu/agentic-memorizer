@@ -181,8 +181,8 @@ func (a *ClaudeCodeAdapter) GetCommand(binaryPath string, format integrations.Ou
 	return fmt.Sprintf("%s read --format %s --integration %s", binaryPath, format, IntegrationName)
 }
 
-// FormatOutput formats the index for Claude Code (SessionStart JSON wrapper)
-func (a *ClaudeCodeAdapter) FormatOutput(index *types.Index, format integrations.OutputFormat) (string, error) {
+// FormatOutput formats the graph index for Claude Code (SessionStart JSON wrapper)
+func (a *ClaudeCodeAdapter) FormatOutput(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
 	return formatSessionStartJSON(index, format)
 }
 

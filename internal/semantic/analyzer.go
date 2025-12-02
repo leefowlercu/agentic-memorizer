@@ -101,6 +101,16 @@ Provide a JSON response with:
 2. tags: 3-5 semantic tags (lowercase, hyphenated)
 3. key_topics: 3-5 main subjects or themes in the image
 4. document_type: The type/purpose of this image (e.g., "diagram", "screenshot", "photo", "chart")
+5. entities: Array of named entities visible or referenced in the image, each with:
+   - name: The entity name (e.g., brand names, people, tools shown)
+   - type: One of: technology, person, concept, organization, project
+6. references: Array of topic references if applicable, each with:
+   - topic: The referenced topic or concept
+   - type: One of: requires, extends, related-to, implements
+   - confidence: Float 0.0-1.0 indicating strength of reference
+
+For entities, identify logos, product names, people, or technologies visible in the image.
+For references, identify concepts the image relates to or explains.
 
 Be concise but informative. Respond with ONLY valid JSON.`,
 		filepath.Base(metadata.Path),
@@ -168,6 +178,16 @@ Provide a JSON response with:
 2. tags: 3-5 semantic tags (lowercase, hyphenated)
 3. key_topics: 3-5 main topics or themes covered in the document
 4. document_type: The type/genre of this document (e.g., "technical-presentation", "report", "proposal", "training-material")
+5. entities: Array of named entities found in the document, each with:
+   - name: The entity name (e.g., "Terraform", "AWS", "Docker")
+   - type: One of: technology, person, concept, organization, project
+6. references: Array of topic references/dependencies, each with:
+   - topic: The referenced topic or concept
+   - type: One of: requires, extends, related-to, implements
+   - confidence: Float 0.0-1.0 indicating strength of reference
+
+For entities, focus on specific technologies, tools, people, organizations, and key concepts.
+For references, identify what the document depends on, builds upon, or relates to.
 
 Be concise but informative. Respond with ONLY valid JSON.`
 
@@ -291,6 +311,16 @@ Provide a JSON response with:
 2. tags: 3-5 semantic tags (lowercase, hyphenated)
 3. key_topics: 3-5 main topics or themes covered in the presentation
 4. document_type: The type/genre of this presentation (e.g., "technical-presentation", "training-material", "business-proposal")
+5. entities: Array of named entities found in the presentation, each with:
+   - name: The entity name (e.g., "Terraform", "AWS", "Docker")
+   - type: One of: technology, person, concept, organization, project
+6. references: Array of topic references/dependencies, each with:
+   - topic: The referenced topic or concept
+   - type: One of: requires, extends, related-to, implements
+   - confidence: Float 0.0-1.0 indicating strength of reference
+
+For entities, focus on specific technologies, tools, people, organizations, and key concepts.
+For references, identify what the presentation depends on, builds upon, or relates to.
 
 Be concise but informative. Respond with ONLY valid JSON.`,
 		filepath.Base(metadata.Path),
@@ -412,6 +442,16 @@ Provide a JSON response with:
 2. tags: 3-5 semantic tags (lowercase, hyphenated)
 3. key_topics: 3-5 main topics or themes covered in the document
 4. document_type: The type/genre of this document (e.g., "technical-guide", "report", "article", "proposal")
+5. entities: Array of named entities found in the document, each with:
+   - name: The entity name (e.g., "Terraform", "AWS", "Docker")
+   - type: One of: technology, person, concept, organization, project
+6. references: Array of topic references/dependencies, each with:
+   - topic: The referenced topic or concept
+   - type: One of: requires, extends, related-to, implements
+   - confidence: Float 0.0-1.0 indicating strength of reference
+
+For entities, focus on specific technologies, tools, people, organizations, and key concepts.
+For references, identify what the document depends on, builds upon, or relates to.
 
 Be concise but informative. Respond with ONLY valid JSON.`,
 		filepath.Base(metadata.Path),
@@ -453,6 +493,8 @@ func (a *Analyzer) analyzeBinary(metadata *types.FileMetadata) (*types.SemanticA
 		KeyTopics:    []string{},
 		DocumentType: metadata.Category,
 		Confidence:   0.5, // Lower confidence for metadata-only analysis
+		Entities:     []types.Entity{},
+		References:   []types.Reference{},
 	}, nil
 }
 
@@ -472,6 +514,16 @@ Provide a JSON response with:
 2. tags: 3-5 semantic tags (lowercase, hyphenated)
 3. key_topics: 3-5 main topics or themes
 4. document_type: The purpose/genre of this document
+5. entities: Array of named entities found in the content, each with:
+   - name: The entity name (e.g., "Terraform", "AWS", "Docker")
+   - type: One of: technology, person, concept, organization, project
+6. references: Array of topic references/dependencies, each with:
+   - topic: The referenced topic or concept
+   - type: One of: requires, extends, related-to, implements
+   - confidence: Float 0.0-1.0 indicating strength of reference
+
+For entities, focus on specific technologies, tools, people, organizations, and key concepts.
+For references, identify what the document depends on, builds upon, or relates to.
 
 Be concise but informative. Respond with ONLY valid JSON.`,
 		filepath.Base(metadata.Path),

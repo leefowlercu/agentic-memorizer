@@ -1,22 +1,32 @@
 package subcommands
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"syscall"
+	"net/http"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
 )
 
+var forceRebuild bool
+
 var RebuildCmd = &cobra.Command{
 	Use:   "rebuild",
 	Short: "Force immediate index rebuild",
 	Long: "\nForce the daemon to perform an immediate full index rebuild.\n\n" +
-		"This sends a SIGUSR1 signal to the running daemon. If the daemon is not running, " +
-		"this command will return an error.",
+		"This triggers a rebuild via the daemon's HTTP API. The daemon will re-process " +
+		"all files in the memory directory, extracting metadata, performing semantic " +
+		"analysis, and rebuilding all graph relationships.\n\n" +
+		"Use --force to clear the graph before rebuilding (otherwise, existing entries " +
+		"are updated in place).",
 	PreRunE: validateRebuild,
 	RunE:    runRebuild,
+}
+
+func init() {
+	RebuildCmd.Flags().BoolVarP(&forceRebuild, "force", "f", false, "Clear graph before rebuilding")
 }
 
 func validateRebuild(cmd *cobra.Command, args []string) error {
@@ -30,38 +40,68 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
-	pidFile, err := config.GetPIDPath()
+	cfg, err := config.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get PID path; %w", err)
+		return fmt.Errorf("failed to load config; %w", err)
 	}
 
-	// Read PID file
-	data, err := os.ReadFile(pidFile)
+	// Check if daemon is running by hitting health endpoint
+	daemonURL := fmt.Sprintf("http://localhost:%d", cfg.Daemon.HTTPPort)
+	healthURL := fmt.Sprintf("%s/health", daemonURL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("daemon is not running (PID file not found)")
-		}
-		return fmt.Errorf("failed to read PID file; %w", err)
+		return fmt.Errorf("failed to create request; %w", err)
 	}
 
-	var pid int
-	_, err = fmt.Sscanf(string(data), "%d", &pid)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("invalid PID file; %w", err)
+		return fmt.Errorf("daemon is not running; start with 'agentic-memorizer daemon start'")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon health check failed; status %d", resp.StatusCode)
 	}
 
-	// Find process
-	process, err := os.FindProcess(pid)
+	// Trigger rebuild via daemon API
+	rebuildURL := fmt.Sprintf("%s/api/v1/rebuild", daemonURL)
+	if forceRebuild {
+		rebuildURL += "?force=true"
+	}
+
+	fmt.Printf("Triggering index rebuild via daemon...\n")
+	if forceRebuild {
+		fmt.Printf("Note: --force flag will clear the graph before rebuilding\n")
+	}
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel2()
+
+	req2, err := http.NewRequestWithContext(ctx2, "POST", rebuildURL, nil)
 	if err != nil {
-		return fmt.Errorf("daemon process not found; %w", err)
+		return fmt.Errorf("failed to create rebuild request; %w", err)
 	}
 
-	// Send SIGUSR1 to trigger rebuild
-	if err := process.Signal(syscall.SIGUSR1); err != nil {
-		return fmt.Errorf("failed to signal daemon; %w", err)
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		return fmt.Errorf("failed to trigger rebuild; %w", err)
+	}
+	defer resp2.Body.Close()
+
+	switch resp2.StatusCode {
+	case http.StatusOK, http.StatusAccepted:
+		fmt.Printf("Rebuild started successfully\n")
+		fmt.Printf("\nThe daemon is now rebuilding the index in the background.\n")
+		fmt.Printf("Use 'agentic-memorizer daemon status' to check progress.\n")
+	case http.StatusConflict:
+		fmt.Printf("A rebuild is already in progress\n")
+	default:
+		return fmt.Errorf("rebuild request failed; status %d", resp2.StatusCode)
 	}
 
-	fmt.Printf("Sent rebuild signal to daemon (PID %d)\n", pid)
-	fmt.Println("Check daemon logs for rebuild progress")
 	return nil
 }

@@ -1,15 +1,16 @@
 package subcommands
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 	"syscall"
-	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
-	"github.com/leefowlercu/agentic-memorizer/internal/index"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/spf13/cobra"
 )
 
@@ -41,11 +42,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	pidFile, err := config.GetPIDPath()
 	if err != nil {
 		return fmt.Errorf("failed to get PID path; %w", err)
-	}
-
-	indexPath, err := config.GetIndexPath()
-	if err != nil {
-		return fmt.Errorf("failed to get index path; %w", err)
 	}
 
 	// Check if daemon is running
@@ -88,22 +84,43 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check index status
-	indexManager := index.NewManager(indexPath)
-	computed, err := indexManager.LoadComputed()
-	if err != nil {
-		fmt.Println("\nIndex: Not found")
+	// Check graph status (FalkorDB is required)
+	fmt.Println("\nGraph Database")
+	fmt.Println("--------------")
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	graphConfig := graph.ManagerConfig{
+		Client: graph.ClientConfig{
+			Host:     cfg.Graph.Host,
+			Port:     cfg.Graph.Port,
+			Database: cfg.Graph.Database,
+			Password: cfg.Graph.Password,
+		},
+		Schema:     graph.DefaultSchemaConfig(),
+		MemoryRoot: cfg.MemoryRoot,
+	}
+
+	graphManager := graph.NewManager(graphConfig, logger)
+	if err := graphManager.Initialize(ctx); err != nil {
+		fmt.Printf("Status: Not connected (%s:%d)\n", cfg.Graph.Host, cfg.Graph.Port)
+		fmt.Printf("Error: %v\n", err)
+		fmt.Println("\nTo start FalkorDB: agentic-memorizer graph start")
 	} else {
-		fmt.Println("\nIndex Information")
-		fmt.Println("-----------------")
-		fmt.Printf("Version: %s\n", computed.Version)
-		fmt.Printf("Generated: %s\n", computed.GeneratedAt.Format(time.RFC3339))
-		fmt.Printf("Daemon Version: %s\n", computed.DaemonVersion)
-		fmt.Printf("Files: %d\n", computed.Index.Stats.TotalFiles)
-		fmt.Printf("Analyzed: %d\n", computed.Index.Stats.AnalyzedFiles)
-		fmt.Printf("Cached: %d\n", computed.Index.Stats.CachedFiles)
-		fmt.Printf("Errors: %d\n", computed.Index.Stats.ErrorFiles)
-		fmt.Printf("Build Duration: %dms\n", computed.Metadata.BuildDurationMs)
+		defer graphManager.Close()
+
+		stats, err := graphManager.GetStats(ctx)
+		if err != nil {
+			fmt.Println("Status: Connected (failed to get stats)")
+		} else {
+			fmt.Printf("Status: Connected (%s:%d)\n", cfg.Graph.Host, cfg.Graph.Port)
+			fmt.Printf("Database: %s\n", cfg.Graph.Database)
+			fmt.Printf("Files: %d\n", stats.TotalFiles)
+			fmt.Printf("Tags: %d\n", stats.TotalTags)
+			fmt.Printf("Topics: %d\n", stats.TotalTopics)
+			fmt.Printf("Entities: %d\n", stats.TotalEntities)
+			fmt.Printf("Edges: %d\n", stats.TotalEdges)
+		}
 	}
 
 	// Configuration

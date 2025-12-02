@@ -6,6 +6,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/cmd/config"
 	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
+	"github.com/leefowlercu/agentic-memorizer/cmd/graph"
 	"github.com/leefowlercu/agentic-memorizer/cmd/initialize"
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations"
 	"github.com/leefowlercu/agentic-memorizer/cmd/mcp"
@@ -32,6 +33,7 @@ var memorizerCmd = &cobra.Command{
 func init() {
 	memorizerCmd.AddCommand(initialize.InitializeCmd)
 	memorizerCmd.AddCommand(daemon.DaemonCmd)
+	memorizerCmd.AddCommand(graph.GraphCmd)
 	memorizerCmd.AddCommand(read.ReadCmd)
 	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
 	memorizerCmd.AddCommand(config.ConfigCmd)

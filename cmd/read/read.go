@@ -1,12 +1,14 @@
 package read
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/index"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
-	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/spf13/cobra"
@@ -20,7 +22,8 @@ var ReadCmd = &cobra.Command{
 		"This command loads the precomputed index file and formats it for output. The index " +
 		"contains metadata and semantic analysis for all files in your memory directory.\n\n" +
 		"The read command is typically called by agent framework hooks (like Claude Code's " +
-		"SessionStart hooks) to load the memory index into the agent's context.",
+		"SessionStart hooks) to load the memory index into the agent's context.\n\n" +
+		"Uses the graph-native format with flattened FileEntry structures.",
 	Example: `  # Plain XML output (structured format)
   agentic-memorizer read
 
@@ -30,18 +33,19 @@ var ReadCmd = &cobra.Command{
   # Plain JSON output (programmatic access)
   agentic-memorizer read --format json
 
-  # Integration-wrapped output for Claude Code
-  agentic-memorizer read --format xml --integration claude-code-hook
+  # Verbose output with insights and related files
+  agentic-memorizer read -v
 
-  # Verbose output with additional details
-  agentic-memorizer read --verbose`,
+  # Output wrapped for Claude Code SessionStart hook
+  agentic-memorizer read --integration claude-code-hook`,
 	PreRunE: validateRead,
 	RunE:    runRead,
 }
 
 func init() {
 	ReadCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (xml/markdown/json)")
-	ReadCmd.Flags().String("integration", "", "Format output for specific integration (claude-code-hook, etc)")
+	ReadCmd.Flags().BoolP("verbose", "v", false, "Include related files per entry and graph insights")
+	ReadCmd.Flags().String("integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
 
 	viper.BindPFlag("output.format", ReadCmd.Flags().Lookup("format"))
 }
@@ -63,12 +67,17 @@ func validateRead(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate integration flag
+	// Validate integration flag if provided
 	integrationName, _ := cmd.Flags().GetString("integration")
 	if integrationName != "" {
 		registry := integrations.GlobalRegistry()
+		available := registry.List()
 		if _, err := registry.Get(integrationName); err != nil {
-			return fmt.Errorf("invalid integration %q; %w", integrationName, err)
+			var names []string
+			for _, i := range available {
+				names = append(names, i.GetName())
+			}
+			return fmt.Errorf("integration %q not found (available: %s)", integrationName, strings.Join(names, ", "))
 		}
 	}
 
@@ -87,41 +96,58 @@ func runRead(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config; %w", err)
 	}
 
-	indexPath, err := config.GetIndexPath()
-	if err != nil {
-		return fmt.Errorf("failed to get index path; %w", err)
-	}
-	indexManager := index.NewManager(indexPath)
+	// Connect to FalkorDB
+	ctx := context.Background()
+	logger := slog.Default()
 
-	// Try to load the computed index
-	computed, err := indexManager.LoadComputed()
-	if err != nil {
-		// No index exists, show warning with empty index
+	graphConfig := graph.ManagerConfig{
+		Client: graph.ClientConfig{
+			Host:     cfg.Graph.Host,
+			Port:     cfg.Graph.Port,
+			Database: cfg.Graph.Database,
+			Password: cfg.Graph.Password,
+		},
+		Schema:     graph.DefaultSchemaConfig(),
+		MemoryRoot: cfg.MemoryRoot,
+	}
+
+	graphManager := graph.NewManager(graphConfig, logger)
+	if err := graphManager.Initialize(ctx); err != nil {
+		// Graph not available, show warning with empty index
 		return handleEmptyIndex(cmd, cfg)
 	}
+	defer graphManager.Close()
 
-	// Get format and integration from flags
+	// Get flags
 	formatStr, _ := cmd.Flags().GetString("format")
 	if formatStr == "" {
 		formatStr = cfg.Output.Format
 	}
-
+	verbose, _ := cmd.Flags().GetBool("verbose")
 	integrationName, _ := cmd.Flags().GetString("integration")
 
-	// If integration flag is provided, use integration-specific formatting
-	if integrationName != "" {
-		return outputForIntegration(integrationName, computed.Index, formatStr)
+	exporter := graph.NewExporter(graphManager, logger)
+
+	// Export graph-native format
+	// Verbose mode includes related files per entry and graph insights
+	graphIdx, err := exporter.ToGraphIndex(ctx, cfg.MemoryRoot, verbose)
+	if err != nil {
+		return fmt.Errorf("failed to export graph; %w", err)
 	}
 
-	// Default: plain output using new output processors
-	return outputPlain(computed.Index, formatStr)
+	// If integration specified, wrap output in integration-specific envelope
+	if integrationName != "" {
+		return outputForIntegration(graphIdx, integrationName, formatStr)
+	}
+
+	return outputGraph(graphIdx, formatStr)
 }
 
 func handleEmptyIndex(cmd *cobra.Command, cfg *config.Config) error {
-	emptyIndex := &types.Index{
-		Root:    cfg.MemoryRoot,
-		Entries: []types.IndexEntry{},
-		Stats:   types.IndexStats{},
+	emptyIndex := &types.GraphIndex{
+		MemoryRoot: cfg.MemoryRoot,
+		Files:      []types.FileEntry{},
+		Stats:      types.IndexStats{},
 	}
 
 	formatStr, _ := cmd.Flags().GetString("format")
@@ -129,60 +155,53 @@ func handleEmptyIndex(cmd *cobra.Command, cfg *config.Config) error {
 		formatStr = cfg.Output.Format
 	}
 
-	integrationName, _ := cmd.Flags().GetString("integration")
-
 	// Warning message for empty index
-	warningMessage := `Warning: No precomputed index found.
+	warningMessage := `Warning: No data found in FalkorDB graph.
 
-The background daemon has not created an index yet. To enable quick startup:
+The graph database is empty or not connected. Ensure:
 
-1. Start the daemon:
+1. FalkorDB is running (e.g., via Docker):
+   docker run -p 6379:6379 falkordb/falkordb
+
+2. The daemon is started to populate the graph:
    agentic-memorizer daemon start
 
-2. Or enable daemon in config and restart:
-   Edit ~/.agentic-memorizer/config.yaml and set:
-   daemon:
+3. Graph is enabled in config (~/.agentic-memorizer/config.yaml):
+   graph:
      enabled: true
 
 For now, showing empty index.
 
 `
 
-	// If integration-specific output requested
-	if integrationName != "" {
-		// Note: Integration formatters don't include warnings - that's the shell's job
-		return outputForIntegration(integrationName, emptyIndex, formatStr)
-	}
-
-	// Plain output with warning
 	fmt.Print(warningMessage)
-	return outputPlain(emptyIndex, formatStr)
+	return outputGraph(emptyIndex, formatStr)
 }
 
-func outputForIntegration(name string, idx *types.Index, formatStr string) error {
+// outputForIntegration wraps output in integration-specific envelope
+func outputForIntegration(idx *types.GraphIndex, integrationName, formatStr string) error {
 	registry := integrations.GlobalRegistry()
-	integration, err := registry.Get(name)
+	integration, err := registry.Get(integrationName)
 	if err != nil {
-		return fmt.Errorf("integration %q not found; %w", name, err)
+		return fmt.Errorf("integration %q not found; %w", integrationName, err)
 	}
 
-	// Parse output format
 	format, err := integrations.ParseOutputFormat(formatStr)
 	if err != nil {
 		return fmt.Errorf("invalid format; %w", err)
 	}
 
-	// Format output using integration
-	output, err := integration.FormatOutput(idx, format)
+	content, err := integration.FormatOutput(idx, format)
 	if err != nil {
-		return fmt.Errorf("failed to format output; %w", err)
+		return fmt.Errorf("failed to format output for integration; %w", err)
 	}
 
-	fmt.Print(output)
+	fmt.Print(content)
 	return nil
 }
 
-func outputPlain(idx *types.Index, formatStr string) error {
+// outputGraph outputs the GraphIndex format using GraphOutputProcessor interface
+func outputGraph(idx *types.GraphIndex, formatStr string) error {
 	// Parse output format
 	format, err := integrations.ParseOutputFormat(formatStr)
 	if err != nil {
@@ -190,7 +209,7 @@ func outputPlain(idx *types.Index, formatStr string) error {
 	}
 
 	// Create appropriate processor
-	var processor output.OutputProcessor
+	var processor output.GraphOutputProcessor
 	switch format {
 	case integrations.FormatXML:
 		processor = output.NewXMLProcessor()
@@ -202,8 +221,8 @@ func outputPlain(idx *types.Index, formatStr string) error {
 		return fmt.Errorf("unsupported format: %s", format)
 	}
 
-	// Format and output
-	content, err := processor.Format(idx)
+	// Format and output using new GraphIndex format
+	content, err := processor.FormatGraph(idx)
 	if err != nil {
 		return fmt.Errorf("failed to format output; %w", err)
 	}

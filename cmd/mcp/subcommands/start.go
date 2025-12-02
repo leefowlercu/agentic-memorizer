@@ -2,16 +2,19 @@ package subcommands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/index"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp"
+	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/spf13/cobra"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -23,10 +26,10 @@ var StartCmd = &cobra.Command{
 		"like GitHub Copilot CLI and Claude Code.\n\n" +
 		"The server communicates via stdio using JSON-RPC 2.0 protocol and provides:\n" +
 		"- Resources: Semantic file index in multiple formats\n" +
-		"- Tools: Search, metadata lookup, and recent files queries (Phase 3)\n" +
-		"- Prompts: Templated workflows (Phase 5)\n\n" +
-		"The server reads from the precomputed index maintained by the background daemon. " +
-		"Ensure the daemon is running for up-to-date results.",
+		"- Tools: Search, metadata lookup, and recent files queries\n" +
+		"- Prompts: Templated workflows\n\n" +
+		"The server gets data from the daemon HTTP API. Ensure the daemon is running " +
+		"with HTTP port enabled for full functionality.",
 	Example: `  # Start MCP server (typically invoked by AI tool, not manually)
   agentic-memorizer mcp start
 
@@ -69,28 +72,48 @@ func runStart(cmd *cobra.Command, args []string) error {
 		defer logWriter.Close()
 	}
 
-	// Load precomputed index
-	indexPath, err := config.GetIndexPath()
-	if err != nil {
-		return fmt.Errorf("failed to get index path; %w", err)
+	// Determine daemon URL (prefer daemon_url, fall back to daemon_sse_url for backward compatibility)
+	daemonURL := cfg.MCP.DaemonURL
+	if daemonURL == "" && cfg.MCP.DaemonSSEURL != "" {
+		// Try to derive base URL from SSE URL
+		// e.g., http://localhost:8080/notifications/stream -> http://localhost:8080
+		daemonURL = cfg.MCP.DaemonSSEURL
+		for _, suffix := range []string{"/notifications/stream", "/sse", "/"} {
+			if len(daemonURL) > len(suffix) && daemonURL[len(daemonURL)-len(suffix):] == suffix {
+				daemonURL = daemonURL[:len(daemonURL)-len(suffix)]
+				break
+			}
+		}
 	}
 
-	indexManager := index.NewManager(indexPath)
-	computed, err := indexManager.LoadComputed()
-	if err != nil {
-		return fmt.Errorf("failed to load precomputed index; %w\n\nEnsure the daemon is running: %s daemon start", err, os.Args[0])
+	// Try to fetch initial index from daemon if available
+	var initialIndex *types.GraphIndex
+	if daemonURL != "" {
+		logger.Info("Fetching initial index from daemon", "url", daemonURL)
+		idx, err := fetchIndexFromDaemon(daemonURL, logger)
+		if err != nil {
+			logger.Warn("Failed to fetch initial index from daemon; will wait for SSE updates", "error", err)
+		} else {
+			initialIndex = idx
+			logger.Info("Loaded initial index from daemon", "files", len(idx.Files))
+		}
 	}
 
-	logger.Info("Loaded precomputed index",
-		"files", computed.Index.Stats.TotalFiles,
-		"analyzed", computed.Index.Stats.AnalyzedFiles,
-		"cached", computed.Index.Stats.CachedFiles,
-	)
+	// Create empty index if we couldn't fetch from daemon
+	if initialIndex == nil {
+		initialIndex = &types.GraphIndex{
+			Files: []types.FileEntry{},
+			Stats: types.IndexStats{},
+		}
+		logger.Info("Starting with empty index; will populate from SSE stream")
+	}
 
-	// Create MCP server with optional SSE client
-	server := mcp.NewServer(computed.Index, logger, cfg.MCP.DaemonSSEURL)
-	if cfg.MCP.DaemonSSEURL != "" {
-		logger.Info("SSE client enabled", "daemon_url", cfg.MCP.DaemonSSEURL)
+	// Create MCP server
+	server := mcp.NewServer(initialIndex, logger, daemonURL)
+	if daemonURL != "" {
+		logger.Info("Daemon API enabled", "daemon_url", daemonURL)
+	} else {
+		logger.Warn("No daemon URL configured; running in index-only mode without graph features")
 	}
 
 	// Setup signal handling for graceful shutdown
@@ -123,6 +146,33 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	logger.Info("MCP server stopped")
 	return nil
+}
+
+// fetchIndexFromDaemon fetches the current index from the daemon API
+func fetchIndexFromDaemon(daemonURL string, logger *slog.Logger) (*types.GraphIndex, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	resp, err := client.Get(daemonURL + "/api/v1/index")
+	if err != nil {
+		return nil, fmt.Errorf("request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response; %w", err)
+	}
+
+	var idx types.GraphIndex
+	if err := json.Unmarshal(body, &idx); err != nil {
+		return nil, fmt.Errorf("failed to parse index; %w", err)
+	}
+
+	return &idx, nil
 }
 
 // setupLogger creates a logger that writes to both stderr and file

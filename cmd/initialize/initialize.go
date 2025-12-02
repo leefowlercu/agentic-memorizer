@@ -2,6 +2,7 @@ package initialize
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
@@ -163,6 +165,17 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	cfg.Daemon.HTTPPort = httpPort
 
+	// Prompt for FalkorDB configuration
+	falkorDBStarted, err := promptForFalkorDB(&cfg)
+	if err != nil {
+		return fmt.Errorf("failed to configure FalkorDB; %w", err)
+	}
+
+	// Prompt for embeddings configuration
+	if err := promptForEmbeddings(&cfg); err != nil {
+		return fmt.Errorf("failed to configure embeddings; %w", err)
+	}
+
 	if err := config.WriteConfig(configPath, &cfg); err != nil {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
@@ -177,6 +190,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  ✓ Created configuration file: %s\n", configPath)
 	fmt.Printf("  ✓ Created memory directory: %s\n", memoryRoot)
 	fmt.Printf("  ✓ Created cache directory: %s\n", cacheDir)
+	fmt.Printf("  ✓ FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
+	if cfg.Embeddings.Enabled {
+		fmt.Printf("  ✓ Embeddings: %s (%s)\n", cfg.Embeddings.Provider, cfg.Embeddings.Model)
+	} else {
+		fmt.Printf("  - Embeddings: disabled\n")
+	}
 
 	enabledIntegrations, err := handleIntegrationSetup(setupIntegrations, skipIntegrations)
 	if err != nil {
@@ -199,6 +218,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	stepNum := 1
 	if !apiKeyConfigured {
 		fmt.Printf("%d. Set your Claude API key: export ANTHROPIC_API_KEY=\"your-key-here\"\n", stepNum)
+		stepNum++
+	}
+	if cfg.Embeddings.Enabled && os.Getenv("OPENAI_API_KEY") == "" && cfg.Embeddings.APIKey == "" {
+		fmt.Printf("%d. Set your OpenAI API key: export OPENAI_API_KEY=\"your-key-here\"\n", stepNum)
+		stepNum++
+	}
+	if !falkorDBStarted {
+		fmt.Printf("%d. Start FalkorDB (required):\n", stepNum)
+		fmt.Printf("   docker run -d --name falkordb -p %d:6379 falkordb/falkordb\n", cfg.Graph.Port)
 		stepNum++
 	}
 	fmt.Printf("%d. Add files to %s\n", stepNum, memoryRoot)
@@ -455,4 +483,243 @@ func findBinaryPath() (string, error) {
 	}
 
 	return "", fmt.Errorf("could not locate agentic-memorizer binary")
+}
+
+// isDockerAvailable checks if Docker is installed and running
+func isDockerAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "docker", "info")
+	return cmd.Run() == nil
+}
+
+// isFalkorDBRunning checks if a FalkorDB container is running on the specified port
+func isFalkorDBRunning(port int) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Check if we can connect to FalkorDB
+	cmd := exec.CommandContext(ctx, "docker", "ps", "--filter", fmt.Sprintf("publish=%d", port), "--format", "{{.Names}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(output)) != ""
+}
+
+// startFalkorDB starts a FalkorDB Docker container
+func startFalkorDB(port int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Check if container already exists (stopped)
+	checkCmd := exec.CommandContext(ctx, "docker", "ps", "-a", "--filter", "name=falkordb", "--format", "{{.Names}}")
+	output, _ := checkCmd.Output()
+	if strings.TrimSpace(string(output)) == "falkordb" {
+		// Container exists, try to start it
+		startCmd := exec.CommandContext(ctx, "docker", "start", "falkordb")
+		return startCmd.Run()
+	}
+
+	// Create and start new container
+	cmd := exec.CommandContext(ctx, "docker", "run", "-d",
+		"--name", "falkordb",
+		"-p", fmt.Sprintf("%d:6379", port),
+		"falkordb/falkordb")
+	return cmd.Run()
+}
+
+// promptForFalkorDB prompts for FalkorDB configuration
+// Returns true if FalkorDB was started during setup
+func promptForFalkorDB(cfg *config.Config) (bool, error) {
+	reader := bufio.NewReader(os.Stdin)
+	falkorDBStarted := false
+
+	fmt.Printf("\nFalkorDB Configuration:\n")
+	fmt.Printf("FalkorDB is a graph database required for storing the knowledge graph.\n\n")
+
+	// Check if Docker is available
+	dockerAvailable := isDockerAvailable()
+
+	// Check if FalkorDB is already running
+	if isFalkorDBRunning(cfg.Graph.Port) {
+		fmt.Printf("FalkorDB detected running on port %d.\n", cfg.Graph.Port)
+		fmt.Printf("Using existing FalkorDB instance.\n\n")
+		return true, nil
+	}
+
+	// Prompt for configuration
+	fmt.Printf("Current configuration:\n")
+	fmt.Printf("  Host: %s\n", cfg.Graph.Host)
+	fmt.Printf("  Port: %d\n", cfg.Graph.Port)
+	fmt.Printf("  Database: %s\n", cfg.Graph.Database)
+	fmt.Printf("\n1. Use defaults (localhost:%d)\n", cfg.Graph.Port)
+	fmt.Printf("2. Custom configuration\n")
+	if dockerAvailable {
+		fmt.Printf("3. Start FalkorDB in Docker (recommended)\n")
+	}
+	fmt.Printf("\nEnter your choice [1/2%s]: ", func() string {
+		if dockerAvailable {
+			return "/3"
+		}
+		return ""
+	}())
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, fmt.Errorf("failed to read input; %w", err)
+	}
+	response = strings.TrimSpace(response)
+
+	switch response {
+	case "1", "":
+		fmt.Printf("\nUsing default FalkorDB configuration.\n")
+		if !dockerAvailable {
+			fmt.Printf("Note: Docker not detected. Ensure FalkorDB is running before starting the daemon.\n\n")
+		}
+
+	case "2":
+		// Custom configuration
+		fmt.Printf("\nEnter FalkorDB host [%s]: ", cfg.Graph.Host)
+		host, _ := reader.ReadString('\n')
+		host = strings.TrimSpace(host)
+		if host != "" {
+			cfg.Graph.Host = host
+		}
+
+		fmt.Printf("Enter FalkorDB port [%d]: ", cfg.Graph.Port)
+		portStr, _ := reader.ReadString('\n')
+		portStr = strings.TrimSpace(portStr)
+		if portStr != "" {
+			port, err := strconv.Atoi(portStr)
+			if err == nil && port > 0 && port <= 65535 {
+				cfg.Graph.Port = port
+			} else {
+				fmt.Printf("Invalid port, using default %d\n", cfg.Graph.Port)
+			}
+		}
+
+		fmt.Printf("Enter database name [%s]: ", cfg.Graph.Database)
+		database, _ := reader.ReadString('\n')
+		database = strings.TrimSpace(database)
+		if database != "" {
+			cfg.Graph.Database = database
+		}
+
+		fmt.Printf("\nFalkorDB configured: %s:%d (database: %s)\n\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
+
+	case "3":
+		if !dockerAvailable {
+			fmt.Printf("Docker is not available. Please install Docker or choose another option.\n")
+			return false, nil
+		}
+
+		fmt.Printf("\nStarting FalkorDB in Docker...\n")
+		if err := startFalkorDB(cfg.Graph.Port); err != nil {
+			fmt.Printf("Warning: Failed to start FalkorDB: %v\n", err)
+			fmt.Printf("You will need to start FalkorDB manually before running the daemon.\n\n")
+			return false, nil
+		}
+
+		// Wait for FalkorDB to be ready
+		fmt.Printf("Waiting for FalkorDB to be ready...")
+		for i := 0; i < 10; i++ {
+			time.Sleep(time.Second)
+			fmt.Printf(".")
+			if isFalkorDBRunning(cfg.Graph.Port) {
+				break
+			}
+		}
+		fmt.Printf("\n")
+
+		if isFalkorDBRunning(cfg.Graph.Port) {
+			fmt.Printf("FalkorDB started successfully on port %d.\n\n", cfg.Graph.Port)
+			falkorDBStarted = true
+		} else {
+			fmt.Printf("Warning: FalkorDB may not be fully ready. Check 'docker logs falkordb' if issues occur.\n\n")
+		}
+
+	default:
+		fmt.Printf("Invalid choice. Using default configuration.\n\n")
+	}
+
+	return falkorDBStarted, nil
+}
+
+// promptForEmbeddings prompts for embeddings configuration
+func promptForEmbeddings(cfg *config.Config) error {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Printf("Embeddings Configuration:\n")
+	fmt.Printf("Embeddings enable vector-based similarity search for finding related files.\n")
+	fmt.Printf("This requires an OpenAI API key.\n\n")
+
+	// Check if OPENAI_API_KEY is set
+	existingKey := os.Getenv("OPENAI_API_KEY")
+
+	fmt.Printf("1. Enable embeddings%s\n", func() string {
+		if existingKey != "" {
+			return " (OPENAI_API_KEY detected)"
+		}
+		return ""
+	}())
+	fmt.Printf("2. Disable embeddings (default)\n")
+	fmt.Printf("\nEnter your choice [1/2]: ")
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input; %w", err)
+	}
+	response = strings.TrimSpace(response)
+
+	switch response {
+	case "1":
+		cfg.Embeddings.Enabled = true
+
+		if existingKey != "" {
+			fmt.Printf("\nUsing OPENAI_API_KEY from environment.\n")
+		} else {
+			fmt.Printf("\nHow would you like to configure your OpenAI API key?\n")
+			fmt.Printf("1. Use environment variable (OPENAI_API_KEY)\n")
+			fmt.Printf("2. Enter API key directly (will be stored in config file)\n")
+			fmt.Printf("\nEnter your choice [1/2]: ")
+
+			keyResponse, _ := reader.ReadString('\n')
+			keyResponse = strings.TrimSpace(keyResponse)
+
+			if keyResponse == "2" {
+				fmt.Printf("\nEnter your OpenAI API key (input will be hidden): ")
+				bytepw, err := term.ReadPassword(int(syscall.Stdin))
+				fmt.Println()
+				if err != nil {
+					return fmt.Errorf("failed to read API key; %w", err)
+				}
+
+				apiKey := strings.TrimSpace(string(bytepw))
+				if apiKey != "" {
+					cfg.Embeddings.APIKey = apiKey
+					fmt.Printf("OpenAI API key configured.\n")
+				} else {
+					fmt.Printf("No API key entered. Using environment variable reference.\n")
+				}
+			} else {
+				fmt.Printf("\nUsing environment variable reference.\n")
+				fmt.Printf("Remember to set: export OPENAI_API_KEY=\"your-key-here\"\n")
+			}
+		}
+
+		fmt.Printf("\nEmbeddings enabled with %s model (%d dimensions).\n\n",
+			cfg.Embeddings.Model, cfg.Embeddings.Dimensions)
+
+	case "2", "":
+		cfg.Embeddings.Enabled = false
+		fmt.Printf("\nEmbeddings disabled. You can enable them later in config.yaml.\n\n")
+
+	default:
+		cfg.Embeddings.Enabled = false
+		fmt.Printf("Invalid choice. Embeddings disabled.\n\n")
+	}
+
+	return nil
 }

@@ -13,8 +13,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - [High-Level Architecture](#high-level-architecture)
   - [Three-Phase Processing Pipeline](#three-phase-processing-pipeline)
   - [Background Daemon Architecture](#background-daemon-architecture)
-  - [Index Management](#index-management)
+  - [FalkorDB Knowledge Graph](#falkordb-knowledge-graph)
+  - [Semantic Search](#semantic-search)
   - [Integration Framework](#integration-framework)
+  - [MCP Server](#mcp-server)
   - [Configuration System](#configuration-system)
 - [Code Organization Principles](#code-organization-principles)
   - [Subsystem Independence](#subsystem-independence)
@@ -114,6 +116,12 @@ make validate-config
 # Initialize with automated setup
 ./agentic-memorizer initialize --setup-integrations
 
+# Start FalkorDB (required before daemon)
+./agentic-memorizer graph start
+
+# Check graph status
+./agentic-memorizer graph status
+
 # Start the daemon
 ./agentic-memorizer daemon start
 
@@ -122,6 +130,9 @@ make validate-config
 
 # Stop the daemon
 ./agentic-memorizer daemon stop
+
+# Stop FalkorDB
+./agentic-memorizer graph stop
 
 # Read the precomputed index
 ./agentic-memorizer read
@@ -134,6 +145,9 @@ make validate-config
 
 # Start MCP server (for Claude Code integration)
 ./agentic-memorizer mcp start
+
+# Rebuild index (use --force to clear graph first)
+./agentic-memorizer daemon rebuild
 
 # Generate systemd unit file (Linux)
 ./agentic-memorizer daemon systemctl
@@ -208,8 +222,8 @@ systemd-notify --status="Testing notification"
 The system processes files through three distinct phases:
 
 1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction of file-specific metadata (word counts, dimensions, page counts) using a handler pattern with specialized extractors for 9 file type categories
-2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API with content-based routing (text, vision for images, document blocks for PDFs, extraction for Office files)
-3. **Caching** (`internal/cache/`) - Content-hash-based storage of analysis results that achieves >95% hit rates, dramatically reducing API costs
+2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API with content-based routing (text, vision for images, document blocks for PDFs, extraction for Office files) and entity extraction
+3. **Knowledge Graph Storage** (`internal/graph/`) - FalkorDB graph database stores files, tags, topics, entities, and their relationships for semantic search and discovery
 
 ### Background Daemon Architecture
 
@@ -224,17 +238,64 @@ Jobs flow through a worker pool with priority calculation (recent files first) w
 3. Checks cache (if hit, skip analysis)
 4. On cache miss: waits for rate limiter token, performs semantic analysis, stores result
 5. Returns index entry with metadata + semantic analysis
+6. Stores entry in FalkorDB knowledge graph with relationships
+
+### FalkorDB Knowledge Graph
+
+The graph subsystem (`internal/graph/`) provides persistent storage and relationship-based queries:
+
+**Graph Architecture:**
+- **FalkorDB Backend** - Redis-compatible graph database running in Docker container
+- **Manager** (`internal/graph/manager.go`) - Connection pooling, health checks, graceful degradation
+- **Queries** (`internal/graph/queries.go`) - Cypher query execution for CRUD operations
+- **Schema** (`internal/graph/schema.go`) - Node/edge type definitions and constraint management
+
+**Node Types:**
+- `File` - Indexed files with metadata (path, hash, size, category, summary)
+- `Tag` - Semantic tags extracted during analysis
+- `Topic` - Key topics identified from content
+- `Entity` - Named entities (people, organizations, concepts)
+- `Category` - File categories (documents, images, code, data, other)
+
+**Relationship Types:**
+- `HAS_TAG` - File → Tag relationships
+- `COVERS_TOPIC` - File → Topic relationships
+- `MENTIONS` - File → Entity relationships
+- `IN_CATEGORY` - File → Category relationships
+
+**Graph Commands** (`cmd/graph/`):
+- `graph start` - Start FalkorDB Docker container
+- `graph stop` - Stop container
+- `graph status` - Show connection status and node counts
+
+To rebuild the graph, use `daemon rebuild [--force]`.
+
+**HTTP API** (`internal/daemon/api/`):
+- `GET /health` - Daemon health with graph metrics
+- `POST /api/v1/search` - Graph-powered semantic search
+- `GET /api/v1/files/{path}` - File metadata with connections
+- `GET /api/v1/files/recent` - Recently modified files
+- `GET /api/v1/files/related` - Related files by shared tags/topics
+- `GET /api/v1/entities/search` - Files mentioning an entity
+- `POST /api/v1/rebuild` - Trigger index rebuild
+- `GET /sse` - Server-Sent Events for real-time updates
+
+**Graceful Degradation:**
+When FalkorDB is unavailable, the daemon logs warnings but continues operating. Graph queries return empty results rather than errors.
 
 ### Semantic Search
 
-The search engine (`internal/search/`) provides advanced file discovery for MCP tools:
-- **Substring Filename Matching** - Fast substring-based filename searches
-- **Tag-Based Search** - Partial matching against indexed tags
-- **Topic-Based Search** - Search across key topics identified during semantic analysis
-- **Summary Text Search** - Content-based discovery via summary text matching
-- **Relevance Scoring** - Multi-signal ranking algorithm combining match quality across dimensions
+The graph manager (`internal/graph/`) provides graph-powered semantic search via Cypher queries:
+- **Multi-Signal Search** - Queries across filename, tags, topics, and summary using OR logic
+- **Tag-Based Search** - Matches files connected to tags containing search terms
+- **Topic-Based Search** - Matches files connected to topics containing search terms
+- **Summary Text Search** - Full-text search on file summary fields
 - **Category Filtering** - Optional filtering by file category (documents, images, code, etc.)
-- **Result Ranking** - Returns top N results sorted by relevance score
+- **Related Files** - Find files sharing tags/topics with a given file
+- **Entity Search** - Find files mentioning specific entities
+- **Recent Files** - Query by modification time with configurable window
+
+The legacy in-memory search engine (`internal/search/`) remains available for fallback when graph is unavailable.
 
 ### Index Management
 
@@ -245,10 +306,9 @@ The Index Manager (`internal/index/`) maintains the precomputed index with:
 
 Index structure:
 ```
-Index → []IndexEntry
-IndexEntry → FileMetadata + SemanticAnalysis + Error
-FileMetadata → path, type, category, size, hash, type-specific fields
-SemanticAnalysis → summary, tags, key_topics, document_type, confidence
+GraphIndex → []FileEntry
+FileEntry → path, name, hash, type, category, size, modified + semantic fields (summary, tags, topics, entities)
+Internal types (processing pipeline): FileMetadata, SemanticAnalysis, IndexEntry
 ```
 
 ### Integration Framework
@@ -282,9 +342,10 @@ The MCP server (`internal/mcp/`) implements Model Context Protocol for tool-base
 - **Protocol Layer** (`internal/mcp/protocol/`) - JSON-RPC 2.0 message types and handlers
 - **Transport Layer** (`internal/mcp/transport/`) - Stdio transport for MCP communication
 - **Server Lifecycle** - Initialize, initialized, shutdown sequence following MCP spec
-- **Tool Integration** - Exposes three tools integrated with index and search:
-  - `search_files` - Semantic search with substring matching, tag/topic/summary search
-  - `get_file_metadata` - Complete file metadata and semantic analysis retrieval
+- **Daemon Integration** - Connects to daemon HTTP API for graph-powered queries
+- **Tool Integration** - Exposes five tools via daemon API:
+  - `search_files` - Graph-powered semantic search across tags, topics, summary
+  - `get_file_metadata` - File metadata with graph connections (related files, tags, topics)
   - `list_recent_files` - Recently modified files within configurable time window
 - **Logging** - Separate log file and level control via `mcp.log_file` and `mcp.log_level` config
 
@@ -307,7 +368,7 @@ Validation uses error accumulation pattern (collects all errors before failing) 
 
 ### Subsystem Independence
 
-Each major subsystem (`internal/daemon/`, `internal/metadata/`, `internal/semantic/`, `internal/cache/`, `internal/index/`, `internal/config/`, `internal/integrations/`, `internal/watcher/`, `internal/walker/`, `internal/mcp/`, `internal/search/`, `internal/version/`) operates independently with clean boundaries. The daemon orchestrates but doesn't tightly couple to implementation details.
+Each major subsystem (`internal/daemon/`, `internal/metadata/`, `internal/semantic/`, `internal/cache/`, `internal/index/`, `internal/config/`, `internal/integrations/`, `internal/watcher/`, `internal/walker/`, `internal/mcp/`, `internal/search/`, `internal/graph/`, `internal/version/`) operates independently with clean boundaries. The daemon orchestrates but doesn't tightly couple to implementation details.
 
 ### Separation of Metadata and Semantics
 
@@ -342,18 +403,22 @@ When writing tests:
 
 **CLI Commands:**
 - Root command: `cmd/root.go`
-- Command packages: `cmd/{initialize,daemon,integrations,config,read,mcp}/`
+- Command packages: `cmd/{initialize,daemon,integrations,config,read,mcp,graph}/`
 - Daemon commands: `cmd/daemon/daemon.go` (parent) + `cmd/daemon/subcommands/` (6 subcommands)
+- Graph commands: `cmd/graph/graph.go` (parent) + `cmd/graph/subcommands/` (3 subcommands)
 - Integration commands: `cmd/integrations/integrations.go` (parent) + `cmd/integrations/subcommands/` (6 subcommands + helpers)
 - Config commands: `cmd/config/config.go` (parent) + `cmd/config/subcommands/` (2 subcommands)
 
 **Core Subsystems:**
-- Main subsystems: `internal/{daemon,metadata,semantic,cache,index,config,integrations,watcher,walker,mcp,search,version}/`
+- Main subsystems: `internal/{daemon,metadata,semantic,cache,index,config,integrations,watcher,walker,mcp,search,graph,version}/`
+- Graph package: `internal/graph/` - FalkorDB client, queries, schema, exporter
+- Daemon API: `internal/daemon/api/` - HTTP server, SSE hub, request handlers
 - Type definitions: `pkg/types/types.go`
 
 **Documentation & Resources:**
 - Subsystem documentation: `docs/subsystems/` - comprehensive technical documentation
 - Test data: `testdata/` - files for testing metadata extraction
+- Docker Compose: `docker-compose.yml` - FalkorDB container configuration
 
 ## Development Notes
 
@@ -368,7 +433,7 @@ When writing tests:
 
 - Commit messages use conventional commit format, lowercase, single line
 - Do not mention Claude Code coauthoring in commit messages
-- Current version: v0.11.0 (semantic versioning)
+- Current version: v0.12.0 (semantic versioning)
 
 ### API Rate Limiting
 

@@ -35,6 +35,8 @@ This documentation is intended for:
   - [Config Manager](#config-manager)
 - **Integration Framework**
   - [Integration Registry](#integration-registry)
+- **Knowledge Graph**
+  - [FalkorDB Graph](#falkordb-graph)
 - **External Integration**
   - [MCP Server](#mcp-server)
   - [Semantic Search](#semantic-search)
@@ -248,6 +250,46 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 
 ---
 
+### Knowledge Graph
+
+#### [FalkorDB Graph](./falkordb-graph/)
+**Status:** ✅ Documented
+
+FalkorDB-backed knowledge graph for persistent storage and relationship-based queries.
+
+**Key Features:**
+- Graph-based storage for files, tags, topics, entities
+- Cypher query language for semantic search
+- Relationship traversal for related file discovery
+- Docker container management via CLI commands
+- Graceful degradation when graph unavailable
+- HTTP API for graph-powered queries
+
+**Node Types:**
+- File - Indexed files with metadata
+- Tag - Semantic tags from analysis
+- Topic - Key topics from content
+- Entity - Named entities (people, organizations)
+- Category - File categories (documents, code, images)
+
+**Relationship Types:**
+- HAS_TAG - File → Tag
+- COVERS_TOPIC - File → Topic
+- MENTIONS - File → Entity
+- IN_CATEGORY - File → Category
+
+**Primary Components:**
+- `internal/graph/manager.go` - Connection management and health checks
+- `internal/graph/queries.go` - Cypher query execution
+- `internal/graph/schema.go` - Node/edge type definitions
+- `internal/graph/exporter.go` - Index export from graph
+- `internal/daemon/api/` - HTTP API handlers
+- `cmd/graph/subcommands/` - CLI commands (start, stop, status)
+
+**See:** [falkordb-graph/README.md](./falkordb-graph/README.md)
+
+---
+
 ### External Integration
 
 #### [MCP Server](./mcp/)
@@ -333,25 +375,25 @@ Version information management for build-time metadata.
 ## Subsystem Interactions
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      CLI Commands (cmd/)                        │
-│  ┌──────┐ ┌────────┐ ┌──────┐ ┌──────┐ ┌──────────────┐         │
-│  │ init │ │ daemon │ │ read │ │ mcp  │ │ integrations │         │
-│  └───┬──┘ └───┬────┘ └───┬──┘ └───┬──┘ └──────┬───────┘         │
-└──────┼────────┼──────────┼────────┼───────────┼─────────────────┘
-       │        │          │        │           │
-       v        v          v        v           v
-┌──────────────────────────────────────────────────────────────────┐
-│                Configuration (internal/config)                   │
-│           Loads settings, validates, manages paths               │
-└──────────────────────────────┬───────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        CLI Commands (cmd/)                           │
+│  ┌──────┐ ┌────────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────────────┐     │
+│  │ init │ │ daemon │ │ read │ │ mcp  │ │graph │ │ integrations │     │
+│  └───┬──┘ └───┬────┘ └───┬──┘ └───┬──┘ └───┬──┘ └──────┬───────┘     │
+└──────┼────────┼──────────┼────────┼────────┼───────────┼─────────────┘
+       │        │          │        │        │           │
+       v        v          v        v        v           v
+┌──────────────────────────────────────────────────────────────────────┐
+│                 Configuration (internal/config)                      │
+│            Loads settings, validates, manages paths                  │
+└──────────────────────────────┬───────────────────────────────────────┘
                                │
-        ┌──────────────────────┼────────────────────────────┐
-        │                      │                            │
-        v                      v                            v
+        ┌──────────────────────┼─────────────────────────────┐
+        │                      │                             │
+        v                      v                             v
 ┌──────────────┐        ┌──────────────────┐       ┌──────────────────┐
-│   Daemon     │───────>│ Index Manager    │       │   Integration    │
-│  Subsystem   │        │  (atomic I/O)    │       │    Registry      │
+│   Daemon     │───────>│  Index Manager   │       │   Integration    │
+│  Subsystem   │        │   (atomic I/O)   │       │    Registry      │
 └──────┬───────┘        └────────┬─────────┘       └────────┬─────────┘
        │                         │                          │
        │                ┌────────┼───────┐                  │
@@ -366,16 +408,16 @@ Version information management for build-time metadata.
        ┌───────┴───────┐                 │
        │               │                 │
        v               v                 v
-  ┌─────────┐    ┌──────────┐    ┌──────────────┐
-  │Metadata │    │ Semantic │    │   Semantic   │
-  │Extractor│    │ Analyzer │    │    Search    │
-  └────┬────┘    └────┬─────┘    └───────┬──────┘
+  ┌─────────┐    ┌──────────┐    ┌───────────────┐
+  │Metadata │    │ Semantic │    │  Daemon HTTP  │
+  │Extractor│    │ Analyzer │    │     API       │
+  └────┬────┘    └────┬─────┘    └───────┬───────┘
        │              │                  │
-       │              v                  │
-       │         ┌─────────┐             │
-       │         │ Claude  │             │
-       │         │   API   │             │
-       │         └─────────┘             │
+       │              v                  v
+       │         ┌─────────┐      ┌──────────────┐
+       │         │ Claude  │      │   FalkorDB   │
+       │         │   API   │      │    Graph     │
+       │         └─────────┘      └──────┬───────┘
        │              │                  │
        └──────┬───────┘                  │
               v                          v
@@ -449,9 +491,11 @@ If you're looking for specific subsystem information:
 
 ---
 
-**Last Updated:** 2025-11-22
+**Last Updated:** 2025-11-30
 
 **Recent Updates:**
+- Added FalkorDB Graph subsystem documentation (2025-11-30)
+- Updated architecture diagram to include graph subsystem
 - Comprehensive accuracy review of all subsystem documentation (2025-11-22)
 - 47 inaccuracies corrected across 9 subsystems
 - MCP Server documentation completed and verified

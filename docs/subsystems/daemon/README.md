@@ -116,7 +116,7 @@ The PID file mechanism also enables CLI commands to interact with the running da
 
 ### Signal Handling
 
-Signal handling enables graceful shutdown, operational commands, and configuration reloading through UNIX signals. The daemon registers handlers for multiple signals: SIGINT and SIGTERM trigger graceful shutdown, SIGUSR1 triggers an immediate index rebuild, and SIGHUP triggers configuration reload.
+Signal handling enables graceful shutdown and configuration reloading through UNIX signals. The daemon registers handlers for multiple signals: SIGINT and SIGTERM trigger graceful shutdown, and SIGHUP triggers configuration reload. Index rebuilds are triggered via the HTTP API (`POST /api/v1/rebuild`) rather than signals.
 
 When a shutdown signal is received, the daemon cancels its context to trigger goroutine exits, stops the file watcher, waits for all worker goroutines to complete their current work, and performs cleanup including PID file removal. This ensures that no work is lost and resources are properly released.
 
@@ -207,11 +207,11 @@ The walker returns relative paths from the memory directory root, which are then
 
 CLI commands provide the user interface for daemon control. The daemon supports eight subcommands: start, stop, status, restart, rebuild, logs, systemctl, and launchctl.
 
-The start command launches the daemon process. The stop command sends SIGTERM to gracefully shut down. The status command checks daemon state and displays index information. The restart command performs stop followed by start. The rebuild command sends SIGUSR1 to trigger an immediate rebuild. The logs command displays daemon log output with optional follow mode.
+The start command launches the daemon process. The stop command sends SIGTERM to gracefully shut down. The status command checks daemon state and displays index information. The restart command performs stop followed by start. The rebuild command triggers an immediate rebuild via the HTTP API (`POST /api/v1/rebuild`), with an optional `--force` flag to clear the graph before rebuilding. The logs command displays daemon log output with optional follow mode.
 
 The systemctl command generates systemd unit files for Linux service manager integration. The launchctl command generates launchd plist files for macOS service manager integration. Both commands detect the binary path automatically and create user-level and system-level configuration templates.
 
-The config reload command validates and applies configuration changes by sending SIGHUP to the running daemon. Most commands interact with the daemon through the PID file and signal-based communication rather than direct API calls. This design keeps the CLI lightweight and ensures that commands can execute quickly without waiting for the daemon to process requests.
+The config reload command validates and applies configuration changes by sending SIGHUP to the running daemon. Most commands interact with the daemon through the PID file and signal-based communication, while the rebuild command uses the HTTP API for richer feedback and options.
 
 ### Read Command
 

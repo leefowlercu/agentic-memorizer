@@ -7,7 +7,7 @@
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code, Gemini CLI, and OpenAI Codex CLI, plus manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
-**Current Version**: v0.11.0 ([CHANGELOG.md](CHANGELOG.md))
+**Current Version**: v0.12.0 ([CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 
@@ -20,6 +20,7 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
   - [Manual Integration (Configuration Required)](#manual-integration-configuration-required)
   - [Framework Comparison](#framework-comparison)
 - [Architecture](#architecture)
+- [FalkorDB Knowledge Graph](#falkordb-knowledge-graph)
 - [Quick Start](#quick-start)
   - [Installation](#installation)
   - [Integration Setup](#integration-setup)
@@ -201,39 +202,120 @@ The following frameworks require manual configuration file editing. The `integra
 **Three-Phase Processing Pipeline:**
 
 1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 9 file type categories
-2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API
-3. **Caching** (`internal/cache/`) - Content-hash-based storage achieving >95% cache hit rates
+2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API with entity extraction
+3. **Knowledge Graph Storage** (`internal/graph/`) - FalkorDB graph database for relationships and semantic search
 
 **Background Daemon** (`internal/daemon/`):
 - **Walker** (`internal/walker/`) - Full directory scans during rebuilds
 - **File Watcher** (`internal/watcher/`) - Real-time monitoring with fsnotify
 - **Worker Pool** - Parallel processing with rate limiting (default 3 workers, 20 calls/min)
+- **HTTP API** (`internal/daemon/api/`) - RESTful endpoints and SSE for real-time updates
+
+**Knowledge Graph** (`internal/graph/`):
+- FalkorDB (Redis-compatible graph database)
+- Node types: File, Tag, Topic, Entity, Category
+- Relationship types: HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY
+- Vector embeddings for semantic similarity (optional, requires OpenAI API)
 
 **Semantic Search** (`internal/search/`):
-- Substring-based filename matching
-- Tag and topic search
-- Summary text search
-- Relevance-ranked results
-
-**Index Management** (`internal/index/`):
-- Thread-safe operations
-- Atomic writes via temp file + rename
-- Two-level versioning
+- Graph-powered Cypher queries
+- Full-text search on summaries
+- Entity-based file discovery
+- Related file traversal
+- Tag and topic filtering
 
 **Integration Framework** (`internal/integrations/`):
-- Adapter pattern for Claude Code (hook + MCP), Cursor, Continue, Aider, Cline, custom
+- Adapter pattern for Claude Code (hook + MCP), Gemini CLI, Codex CLI, Cursor, Continue, Aider, Cline, custom
 - Independent output processors (XML, Markdown, JSON)
 
 **MCP Server** (`internal/mcp/`):
 - JSON-RPC 2.0 stdio transport
-- Three tools: `search_files`, `get_file_metadata`, `list_recent_files`
-- Integrates with semantic search
+- Five tools: `search_files`, `get_file_metadata`, `list_recent_files`, `get_related_files`, `search_entities`
+- Connects to daemon HTTP API for graph queries
 
 **Configuration** (`internal/config/`):
 - Layered: defaults → YAML → environment variables
 - Hot-reload support via `config reload` command
 
 The daemon handles all processing in the background, so AI agent startup remains quick regardless of file count.
+
+## FalkorDB Knowledge Graph
+
+Agentic Memorizer uses FalkorDB as its storage backend, providing a knowledge graph that captures relationships between files, tags, topics, and entities.
+
+### Why a Knowledge Graph?
+
+Unlike flat file indexes, a knowledge graph enables:
+- **Relationship Discovery**: Find files that share tags, topics, or mention the same entities
+- **Semantic Search**: Query by meaning, not just keywords
+- **Entity-Based Navigation**: "Find all files mentioning Terraform" or "What files reference this API?"
+- **Related File Suggestions**: Discover files connected through shared concepts
+
+### Starting FalkorDB
+
+FalkorDB runs as a Docker container. Start it before the daemon:
+
+```bash
+# Start FalkorDB container (pulls image on first run)
+agentic-memorizer graph start
+
+# Check status
+agentic-memorizer graph status
+
+# Stop when done
+agentic-memorizer graph stop
+```
+
+Or use docker-compose:
+
+```bash
+docker-compose up -d      # Start FalkorDB
+docker-compose down       # Stop FalkorDB
+```
+
+### Graph Commands
+
+```bash
+# Start FalkorDB Docker container
+agentic-memorizer graph start [--detach]
+
+# Stop FalkorDB container
+agentic-memorizer graph stop [--remove]
+
+# Check FalkorDB status and graph statistics
+agentic-memorizer graph status
+```
+
+To rebuild the graph, use `agentic-memorizer daemon rebuild [--force]`.
+
+### Graph Configuration
+
+In `~/.agentic-memorizer/config.yaml`:
+
+```yaml
+graph:
+  enabled: true              # Enable graph storage
+  host: localhost            # FalkorDB host
+  port: 6379                 # FalkorDB port (Redis protocol)
+  database: memorizer        # Graph database name
+```
+
+### Browser UI
+
+FalkorDB includes a browser-based UI for exploring the graph:
+
+```
+http://localhost:3000
+```
+
+### Graceful Degradation
+
+If FalkorDB is unavailable, the daemon will:
+1. Log a warning about the connection failure
+2. Continue running with reduced functionality
+3. Queue file changes for processing when FalkorDB reconnects
+
+The MCP server and read command will still work with cached data when the graph is unavailable.
 
 ## Quick Start
 
@@ -251,7 +333,14 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-### 3. Choose Your Integration Path
+### 3. Start FalkorDB
+
+```bash
+# Start the knowledge graph database (requires Docker)
+agentic-memorizer graph start
+```
+
+### 4. Choose Your Integration Path
 
 #### Path A: Claude Code (Automatic Integration)
 
@@ -274,7 +363,7 @@ agentic-memorizer daemon systemctl  # Linux
 agentic-memorizer daemon launchctl  # macOS
 ```
 
-**Skip to step 4 below.**
+**Skip to step 5 below.**
 
 #### Path B: Other Frameworks (Manual Integration)
 
@@ -298,9 +387,9 @@ agentic-memorizer integrations setup aider       # For Aider
 agentic-memorizer integrations setup cline       # For Cline
 ```
 
-Each command provides detailed instructions on where to add the memory index command in your framework's configuration. **Follow those instructions before proceeding to step 4.**
+Each command provides detailed instructions on where to add the memory index command in your framework's configuration. **Follow those instructions before proceeding to step 5.**
 
-### 4. Add Files to Memory
+### 5. Add Files to Memory
 
 ```bash
 # Add any files you want your AI agent to be aware of
@@ -310,7 +399,7 @@ cp ~/project-docs/*.pdf ~/.agentic-memorizer/memory/documents/
 
 The daemon will automatically detect and index these files.
 
-### 5. Start Your AI Agent
+### 6. Start Your AI Agent
 
 **Claude Code:**
 ```bash
@@ -334,6 +423,7 @@ For detailed installation options, configuration, and advanced usage, see the se
 ### Prerequisites
 
 - Go 1.25.1 or later
+- Docker (for FalkorDB knowledge graph)
 - Claude API key ([get one here](https://console.anthropic.com/))
 - An AI agent framework: Claude Code, Cursor AI, Continue.dev, Aider, or Cline
 
@@ -1116,7 +1206,8 @@ agentic-memorizer daemon stop
 agentic-memorizer daemon restart
 
 # Force immediate rebuild
-agentic-memorizer daemon rebuild
+agentic-memorizer daemon rebuild           # Rebuild index
+agentic-memorizer daemon rebuild --force   # Clear graph first, then rebuild
 
 # View daemon logs
 agentic-memorizer daemon logs              # Last 50 lines
@@ -1593,6 +1684,12 @@ agentic-memorizer daemon status
 agentic-memorizer daemon systemctl      # Generate systemd unit file
 agentic-memorizer daemon launchctl      # Generate launchd plist
 
+# Manage FalkorDB knowledge graph
+agentic-memorizer graph start           # Start FalkorDB container
+agentic-memorizer graph stop            # Stop FalkorDB container
+agentic-memorizer graph status          # Check graph health and stats
+agentic-memorizer daemon rebuild        # Rebuild index/graph (use --force to clear first)
+
 # Read precomputed index (for SessionStart hooks)
 agentic-memorizer read [flags]
 
@@ -1988,6 +2085,12 @@ agentic-memorizer/
 │   │       ├── logs.go
 │   │       ├── systemctl.go  # Generate systemd unit files
 │   │       └── launchctl.go  # Generate launchd plist files
+│   ├── graph/                # FalkorDB graph management commands
+│   │   ├── graph.go          # Parent graph command
+│   │   └── subcommands/      # Graph subcommands (3 total)
+│   │       ├── start.go      # Start FalkorDB container
+│   │       ├── stop.go       # Stop FalkorDB container
+│   │       └── status.go     # Check graph health
 │   ├── mcp/                  # MCP server commands
 │   │   ├── mcp.go            # Parent mcp command
 │   │   └── subcommands/
@@ -2013,21 +2116,30 @@ agentic-memorizer/
 │       └── version.go
 ├── internal/
 │   ├── config/               # Configuration loading, validation, and hot-reload
-│   ├── daemon/               # Background daemon implementation and worker pool
-│   ├── index/                # Index management and atomic writes
+│   ├── daemon/               # Background daemon implementation
+│   │   ├── api/              # HTTP API server, handlers, SSE
+│   │   └── worker/           # Worker pool for file processing
+│   ├── graph/                # FalkorDB knowledge graph
+│   │   ├── client.go         # FalkorDB connection management
+│   │   ├── manager.go        # Graph operations (CRUD, search)
+│   │   ├── queries.go        # Cypher query patterns
+│   │   └── export.go         # Graph to index export
+│   ├── embeddings/           # Vector embeddings (optional)
 │   ├── watcher/              # File system watching (fsnotify)
 │   ├── walker/               # File system traversal with filtering
 │   ├── metadata/             # File metadata extraction (9 category handlers)
 │   ├── semantic/             # Claude API integration for semantic analysis
 │   ├── cache/                # Content-addressable analysis caching
-│   ├── search/               # Semantic search engine (substring, tag, topic, summary)
+│   ├── search/               # Semantic search engine (graph-powered)
 │   ├── mcp/                  # MCP server implementation
 │   │   ├── protocol/         # JSON-RPC 2.0 protocol messages
 │   │   └── transport/        # Stdio transport layer
 │   ├── integrations/         # Integration framework and adapters
 │   │   ├── output/           # Output formatting (XML/Markdown/JSON)
 │   │   └── adapters/         # Framework-specific adapters
-│   │       └── claude/       # Hook and MCP adapters for Claude Code
+│   │       ├── claude/       # Hook and MCP adapters for Claude Code
+│   │       ├── gemini/       # MCP adapter for Gemini CLI
+│   │       └── codex/        # MCP adapter for Codex CLI
 │   └── version/              # Version information and embedding
 │       ├── VERSION           # Semantic version file (embedded)
 │       ├── version.go        # Version getters with buildinfo fallback

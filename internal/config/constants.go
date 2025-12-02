@@ -44,10 +44,9 @@ var DefaultConfig = Config{
 		LogLevel:                   "info",
 	},
 	MCP: MCPConfig{
-		LogFile:      "~/" + AppDirName + "/" + MCPLogFile,
-		LogLevel:     "info",
-		DaemonSSEURL: "", // Deprecated: use DaemonURL instead
-		DaemonURL:    "", // Base URL for Daemon HTTP API - must be explicitly configured
+		LogFile:   "~/" + AppDirName + "/" + MCPLogFile,
+		LogLevel:  "info",
+		DaemonURL: "", // Base URL for Daemon HTTP API - must be explicitly configured
 	},
 	Integrations: IntegrationsConfig{
 		Enabled: []string{}, // Empty by default - populated during init/setup/remove commands

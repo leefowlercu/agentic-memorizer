@@ -45,10 +45,9 @@ type DaemonConfig struct {
 }
 
 type MCPConfig struct {
-	LogFile      string `mapstructure:"log_file" yaml:"log_file"`
-	LogLevel     string `mapstructure:"log_level" yaml:"log_level"`
-	DaemonSSEURL string `mapstructure:"daemon_sse_url" yaml:"daemon_sse_url"`
-	DaemonURL    string `mapstructure:"daemon_url" yaml:"daemon_url"` // Base URL for Daemon HTTP API
+	LogFile   string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel  string `mapstructure:"log_level" yaml:"log_level"`
+	DaemonURL string `mapstructure:"daemon_url" yaml:"daemon_url"` // Base URL for Daemon HTTP API
 }
 
 // IntegrationsConfig represents the complete integrations configuration section.

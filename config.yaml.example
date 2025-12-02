@@ -94,10 +94,62 @@ mcp:
   # Log level for MCP server: debug, info, warn, error
   log_level: info
 
-  # Daemon SSE notification stream URL (empty to disable)
-  # When set, MCP server receives real-time index update notifications
-  # Must match daemon http_port setting above (e.g., http://localhost:{http_port}/notifications/stream)
-  daemon_sse_url: ""
+  # Daemon HTTP API base URL (empty to disable daemon integration)
+  # When set, MCP server uses daemon API for graph-powered queries
+  # Must match daemon http_port setting above (e.g., http://localhost:{http_port})
+  daemon_url: ""
+
+# FalkorDB Knowledge Graph Configuration
+# FalkorDB is the required storage backend for the knowledge graph
+graph:
+  # FalkorDB host (default: localhost)
+  host: localhost
+
+  # FalkorDB port (default: 6379)
+  port: 6379
+
+  # Graph database name
+  database: memorizer
+
+  # Password for FalkorDB authentication (optional)
+  password: ""
+
+  # Environment variable containing password (preferred method)
+  password_env: FALKORDB_PASSWORD
+
+  # Minimum similarity threshold for related file recommendations (0.0-1.0)
+  similarity_threshold: 0.7
+
+  # Maximum number of similar files to return per query
+  max_similar_files: 10
+
+# Embeddings Configuration (Optional)
+# Enable vector embeddings for enhanced semantic similarity search
+embeddings:
+  # Enable embedding generation (requires API key)
+  enabled: false
+
+  # Embedding provider: "openai"
+  provider: openai
+
+  # API key (set directly or via environment variable)
+  api_key: ""
+
+  # Environment variable containing API key (preferred method)
+  # Set with: export OPENAI_API_KEY="your-key-here"
+  api_key_env: OPENAI_API_KEY
+
+  # Embedding model to use
+  model: text-embedding-3-small
+
+  # Vector dimensions (must match model output)
+  dimensions: 1536
+
+  # Enable caching of generated embeddings
+  cache_enabled: true
+
+  # Batch size for embedding generation
+  batch_size: 100
 
 # Integration Configuration
 # Tracks which AI agent framework integrations are configured

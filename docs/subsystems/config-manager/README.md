@@ -200,7 +200,7 @@ Configuration reload is triggered via the `config reload` CLI command, which:
 
 *MCP Server Process (require MCP client reconnection):*
 - `mcp.log_file` - MCP log file handle is opened at startup
-- `mcp.daemon_sse_url` - SSE connection URL established at startup
+- `mcp.daemon_url` - Daemon API URL established at startup
 - `mcp.log_level` - Log level configured at startup
 
 **Hot-Reloadable Settings (Daemon):**
@@ -290,9 +290,9 @@ Note: Daemon operation is controlled via CLI commands (`daemon start`, `daemon s
 Configures Model Context Protocol server:
 - `LogFile` - MCP server log file path (default: `~/.agentic-memorizer/mcp.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
-- `DaemonSSEURL` - URL for daemon's SSE notification stream (default: empty for disabled)
+- `DaemonURL` - Base URL for daemon's HTTP API (default: empty for disabled)
 
-The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized. When `DaemonSSEURL` is configured, the MCP server subscribes to real-time index update notifications from the daemon.
+The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized. When `DaemonURL` is configured, the MCP server uses the daemon's HTTP API for graph-powered queries and real-time index updates.
 
 **IntegrationsConfig Structure:**
 Manages integration framework settings:

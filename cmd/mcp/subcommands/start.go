@@ -72,19 +72,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		defer logWriter.Close()
 	}
 
-	// Determine daemon URL (prefer daemon_url, fall back to daemon_sse_url for backward compatibility)
+	// Get daemon URL for API access
 	daemonURL := cfg.MCP.DaemonURL
-	if daemonURL == "" && cfg.MCP.DaemonSSEURL != "" {
-		// Try to derive base URL from SSE URL
-		// e.g., http://localhost:8080/notifications/stream -> http://localhost:8080
-		daemonURL = cfg.MCP.DaemonSSEURL
-		for _, suffix := range []string{"/notifications/stream", "/sse", "/"} {
-			if len(daemonURL) > len(suffix) && daemonURL[len(daemonURL)-len(suffix):] == suffix {
-				daemonURL = daemonURL[:len(daemonURL)-len(suffix)]
-				break
-			}
-		}
-	}
 
 	// Try to fetch initial index from daemon if available
 	var initialIndex *types.GraphIndex

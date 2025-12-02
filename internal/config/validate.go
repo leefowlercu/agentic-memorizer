@@ -100,6 +100,8 @@ func ValidateConfig(cfg *Config) error {
 	validateAnalysis(v, cfg)
 	validateDaemon(v, cfg)
 	validateMCP(v, cfg)
+	validateGraph(v, cfg)
+	validateEmbeddings(v, cfg)
 
 	if v.HasErrors() {
 		return v
@@ -241,6 +243,69 @@ func validateMCP(v *Validator, cfg *Config) {
 		v.AddError("mcp.log_file", "required", "log_file is required", "Set log_file to a valid file path", nil)
 	} else if strings.Contains(cfg.MCP.LogFile, "..") {
 		v.AddError("mcp.log_file", "security", "log_file contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.MCP.LogFile)
+	}
+}
+
+// validateGraph validates FalkorDB graph configuration.
+// FalkorDB is a required dependency - there is no option to disable it.
+func validateGraph(v *Validator, cfg *Config) {
+	// Validate host
+	if cfg.Graph.Host == "" {
+		v.AddError("graph.host", "required", "graph.host is required", "Set graph.host to FalkorDB hostname (e.g., 'localhost')", nil)
+	}
+
+	// Validate port range
+	if cfg.Graph.Port < 1 || cfg.Graph.Port > 65535 {
+		v.AddError("graph.port", "range", fmt.Sprintf("graph.port %d is out of valid range (1-65535)", cfg.Graph.Port), "Set graph.port to a valid port number (default: 6379)", cfg.Graph.Port)
+	}
+
+	// Validate database name
+	if cfg.Graph.Database == "" {
+		v.AddError("graph.database", "required", "graph.database is required", "Set graph.database to a graph name (e.g., 'memorizer')", nil)
+	}
+
+	// Validate similarity threshold range
+	if cfg.Graph.SimilarityThreshold < 0.0 || cfg.Graph.SimilarityThreshold > 1.0 {
+		v.AddError("graph.similarity_threshold", "range", fmt.Sprintf("similarity_threshold %.2f is out of valid range (0.0-1.0)", cfg.Graph.SimilarityThreshold), "Set similarity_threshold between 0.0 and 1.0", cfg.Graph.SimilarityThreshold)
+	}
+
+	// Validate max similar files
+	if cfg.Graph.MaxSimilarFiles < 1 || cfg.Graph.MaxSimilarFiles > 100 {
+		v.AddError("graph.max_similar_files", "range", fmt.Sprintf("max_similar_files %d is out of valid range (1-100)", cfg.Graph.MaxSimilarFiles), "Set max_similar_files between 1 and 100", cfg.Graph.MaxSimilarFiles)
+	}
+}
+
+// validateEmbeddings validates embeddings provider configuration
+func validateEmbeddings(v *Validator, cfg *Config) {
+	// Skip validation if embeddings is disabled
+	if !cfg.Embeddings.Enabled {
+		return
+	}
+
+	// Validate provider (only "openai" supported for now)
+	validProviders := []string{"openai"}
+	if !contains(validProviders, cfg.Embeddings.Provider) {
+		v.AddError("embeddings.provider", "enum", fmt.Sprintf("invalid provider '%s', must be one of: %v", cfg.Embeddings.Provider, validProviders), "Set provider to 'openai'", cfg.Embeddings.Provider)
+	}
+
+	// Validate API key or env variable is set
+	if cfg.Embeddings.APIKey == "" && cfg.Embeddings.APIKeyEnv == "" {
+		v.AddError("embeddings.api_key_env", "required", "either embeddings.api_key or embeddings.api_key_env must be set when embeddings is enabled", "Set OPENAI_API_KEY environment variable or configure api_key in config", nil)
+	}
+
+	// Validate model is not empty
+	if cfg.Embeddings.Model == "" {
+		v.AddError("embeddings.model", "required", "embeddings.model is required when embeddings is enabled", "Set model to a valid embedding model (e.g., 'text-embedding-3-small')", nil)
+	}
+
+	// Validate dimensions range (OpenAI models support 256-3072)
+	if cfg.Embeddings.Dimensions < 1 || cfg.Embeddings.Dimensions > 4096 {
+		v.AddError("embeddings.dimensions", "range", fmt.Sprintf("dimensions %d is out of valid range (1-4096)", cfg.Embeddings.Dimensions), "Set dimensions to a valid value (default: 1536 for text-embedding-3-small)", cfg.Embeddings.Dimensions)
+	}
+
+	// Validate batch size
+	if cfg.Embeddings.BatchSize < 1 || cfg.Embeddings.BatchSize > 2048 {
+		v.AddError("embeddings.batch_size", "range", fmt.Sprintf("batch_size %d is out of valid range (1-2048)", cfg.Embeddings.BatchSize), "Set batch_size between 1 and 2048 (default: 100)", cfg.Embeddings.BatchSize)
 	}
 }
 

@@ -8,6 +8,8 @@ type Config struct {
 	Daemon       DaemonConfig       `mapstructure:"daemon" yaml:"daemon"`
 	MCP          MCPConfig          `mapstructure:"mcp" yaml:"mcp"`
 	Integrations IntegrationsConfig `mapstructure:"integrations" yaml:"integrations"`
+	Graph        GraphConfig        `mapstructure:"graph" yaml:"graph"`
+	Embeddings   EmbeddingsConfig   `mapstructure:"embeddings" yaml:"embeddings"`
 }
 
 type ClaudeConfig struct {
@@ -46,6 +48,7 @@ type MCPConfig struct {
 	LogFile      string `mapstructure:"log_file" yaml:"log_file"`
 	LogLevel     string `mapstructure:"log_level" yaml:"log_level"`
 	DaemonSSEURL string `mapstructure:"daemon_sse_url" yaml:"daemon_sse_url"`
+	DaemonURL    string `mapstructure:"daemon_url" yaml:"daemon_url"` // Base URL for Daemon HTTP API
 }
 
 // IntegrationsConfig represents the complete integrations configuration section.
@@ -54,4 +57,28 @@ type MCPConfig struct {
 // files (e.g., ~/.claude.json, ~/.claude/settings.json) rather than in this config file.
 type IntegrationsConfig struct {
 	Enabled []string `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// GraphConfig contains FalkorDB knowledge graph configuration.
+// FalkorDB is the required storage backend - there is no option to disable it.
+type GraphConfig struct {
+	Host                string  `mapstructure:"host" yaml:"host"`
+	Port                int     `mapstructure:"port" yaml:"port"`
+	Database            string  `mapstructure:"database" yaml:"database"`
+	Password            string  `mapstructure:"password" yaml:"password"`
+	PasswordEnv         string  `mapstructure:"password_env" yaml:"password_env"`
+	SimilarityThreshold float64 `mapstructure:"similarity_threshold" yaml:"similarity_threshold"`
+	MaxSimilarFiles     int     `mapstructure:"max_similar_files" yaml:"max_similar_files"`
+}
+
+// EmbeddingsConfig contains embedding provider configuration
+type EmbeddingsConfig struct {
+	Enabled       bool   `mapstructure:"enabled" yaml:"enabled"`
+	Provider      string `mapstructure:"provider" yaml:"provider"`
+	APIKey        string `mapstructure:"api_key" yaml:"api_key"`
+	APIKeyEnv     string `mapstructure:"api_key_env" yaml:"api_key_env"`
+	Model         string `mapstructure:"model" yaml:"model"`
+	Dimensions    int    `mapstructure:"dimensions" yaml:"dimensions"`
+	CacheEnabled  bool   `mapstructure:"cache_enabled" yaml:"cache_enabled"`
+	BatchSize     int    `mapstructure:"batch_size" yaml:"batch_size"`
 }

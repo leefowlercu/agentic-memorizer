@@ -46,9 +46,29 @@ var DefaultConfig = Config{
 	MCP: MCPConfig{
 		LogFile:      "~/" + AppDirName + "/" + MCPLogFile,
 		LogLevel:     "info",
-		DaemonSSEURL: "", // No automatic connection - must be explicitly configured
+		DaemonSSEURL: "", // Deprecated: use DaemonURL instead
+		DaemonURL:    "", // Base URL for Daemon HTTP API - must be explicitly configured
 	},
 	Integrations: IntegrationsConfig{
 		Enabled: []string{}, // Empty by default - populated during init/setup/remove commands
+	},
+	Graph: GraphConfig{
+		Host:                "localhost",
+		Port:                6379,
+		Database:            "memorizer",
+		Password:            "",
+		PasswordEnv:         "FALKORDB_PASSWORD",
+		SimilarityThreshold: 0.7,
+		MaxSimilarFiles:     10,
+	},
+	Embeddings: EmbeddingsConfig{
+		Enabled:      false, // Disabled by default until API key is configured
+		Provider:     "openai",
+		APIKey:       "",
+		APIKeyEnv:    "OPENAI_API_KEY",
+		Model:        "text-embedding-3-small",
+		Dimensions:   1536,
+		CacheEnabled: true,
+		BatchSize:    100,
 	},
 }

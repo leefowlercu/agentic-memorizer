@@ -5,6 +5,167 @@ import (
 	"testing"
 )
 
+func TestValidateGraph(t *testing.T) {
+	tests := []struct {
+		name        string
+		graph       GraphConfig
+		wantErrors  bool
+		errorFields []string
+	}{
+		{
+			name: "valid graph config",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                6379,
+				Database:            "memorizer",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors: false,
+		},
+		{
+			name: "empty host",
+			graph: GraphConfig{
+				Host:                "",
+				Port:                6379,
+				Database:            "memorizer",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.host"},
+		},
+		{
+			name: "port zero",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                0,
+				Database:            "memorizer",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.port"},
+		},
+		{
+			name: "port too high",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                70000,
+				Database:            "memorizer",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.port"},
+		},
+		{
+			name: "empty database",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                6379,
+				Database:            "",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.database"},
+		},
+		{
+			name: "similarity threshold negative",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                6379,
+				Database:            "memorizer",
+				SimilarityThreshold: -0.5,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.similarity_threshold"},
+		},
+		{
+			name: "similarity threshold too high",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                6379,
+				Database:            "memorizer",
+				SimilarityThreshold: 1.5,
+				MaxSimilarFiles:     10,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.similarity_threshold"},
+		},
+		{
+			name: "max similar files zero",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                6379,
+				Database:            "memorizer",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     0,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.max_similar_files"},
+		},
+		{
+			name: "max similar files too high",
+			graph: GraphConfig{
+				Host:                "localhost",
+				Port:                6379,
+				Database:            "memorizer",
+				SimilarityThreshold: 0.7,
+				MaxSimilarFiles:     200,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.max_similar_files"},
+		},
+		{
+			name: "multiple errors",
+			graph: GraphConfig{
+				Host:                "",
+				Port:                0,
+				Database:            "",
+				SimilarityThreshold: 2.0,
+				MaxSimilarFiles:     0,
+			},
+			wantErrors:  true,
+			errorFields: []string{"graph.host", "graph.port", "graph.database", "graph.similarity_threshold", "graph.max_similar_files"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Validator{}
+			cfg := &Config{Graph: tt.graph}
+			validateGraph(v, cfg)
+
+			if tt.wantErrors && !v.HasErrors() {
+				t.Errorf("expected validation errors, got none")
+			}
+
+			if !tt.wantErrors && v.HasErrors() {
+				t.Errorf("expected no validation errors, got: %v", v.Error())
+			}
+
+			if tt.wantErrors {
+				// Check that expected error fields are present
+				for _, field := range tt.errorFields {
+					found := false
+					for _, err := range v.Errors {
+						if err.Field == field {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("expected error for field %s, but not found in errors: %v", field, v.Errors)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestValidateMCP(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -149,6 +310,13 @@ func TestValidateConfig_MCP(t *testing.T) {
 					LogFile:  "~/.agentic-memorizer/mcp.log",
 					LogLevel: "info",
 				},
+				Graph: GraphConfig{
+					Host:                "localhost",
+					Port:                6379,
+					Database:            "memorizer",
+					SimilarityThreshold: 0.7,
+					MaxSimilarFiles:     10,
+				},
 			},
 			wantErr: false,
 		},
@@ -178,6 +346,13 @@ func TestValidateConfig_MCP(t *testing.T) {
 				MCP: MCPConfig{
 					LogFile:  "~/.agentic-memorizer/mcp.log",
 					LogLevel: "verbose",
+				},
+				Graph: GraphConfig{
+					Host:                "localhost",
+					Port:                6379,
+					Database:            "memorizer",
+					SimilarityThreshold: 0.7,
+					MaxSimilarFiles:     10,
 				},
 			},
 			wantErr:     true,
@@ -209,6 +384,13 @@ func TestValidateConfig_MCP(t *testing.T) {
 				MCP: MCPConfig{
 					LogFile:  "~/../tmp/mcp.log",
 					LogLevel: "info",
+				},
+				Graph: GraphConfig{
+					Host:                "localhost",
+					Port:                6379,
+					Database:            "memorizer",
+					SimilarityThreshold: 0.7,
+					MaxSimilarFiles:     10,
 				},
 			},
 			wantErr:     true,

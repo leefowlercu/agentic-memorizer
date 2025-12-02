@@ -57,6 +57,26 @@ func InitConfig() error {
 	viper.SetDefault("daemon.log_level", DefaultConfig.Daemon.LogLevel)
 	viper.SetDefault("mcp.log_file", DefaultConfig.MCP.LogFile)
 	viper.SetDefault("mcp.log_level", DefaultConfig.MCP.LogLevel)
+	viper.SetDefault("mcp.daemon_url", DefaultConfig.MCP.DaemonURL)
+
+	// Graph configuration defaults (FalkorDB is required - no enabled toggle)
+	viper.SetDefault("graph.host", DefaultConfig.Graph.Host)
+	viper.SetDefault("graph.port", DefaultConfig.Graph.Port)
+	viper.SetDefault("graph.database", DefaultConfig.Graph.Database)
+	viper.SetDefault("graph.password", DefaultConfig.Graph.Password)
+	viper.SetDefault("graph.password_env", DefaultConfig.Graph.PasswordEnv)
+	viper.SetDefault("graph.similarity_threshold", DefaultConfig.Graph.SimilarityThreshold)
+	viper.SetDefault("graph.max_similar_files", DefaultConfig.Graph.MaxSimilarFiles)
+
+	// Embeddings configuration defaults
+	viper.SetDefault("embeddings.enabled", DefaultConfig.Embeddings.Enabled)
+	viper.SetDefault("embeddings.provider", DefaultConfig.Embeddings.Provider)
+	viper.SetDefault("embeddings.api_key", DefaultConfig.Embeddings.APIKey)
+	viper.SetDefault("embeddings.api_key_env", DefaultConfig.Embeddings.APIKeyEnv)
+	viper.SetDefault("embeddings.model", DefaultConfig.Embeddings.Model)
+	viper.SetDefault("embeddings.dimensions", DefaultConfig.Embeddings.Dimensions)
+	viper.SetDefault("embeddings.cache_enabled", DefaultConfig.Embeddings.CacheEnabled)
+	viper.SetDefault("embeddings.batch_size", DefaultConfig.Embeddings.BatchSize)
 
 	viper.SetEnvPrefix("MEMORIZER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -99,6 +119,16 @@ func GetConfig() (*Config, error) {
 
 	if cfg.Claude.APIKey == "" && cfg.Claude.APIKeyEnv != "" {
 		cfg.Claude.APIKey = os.Getenv(cfg.Claude.APIKeyEnv)
+	}
+
+	// Resolve graph password from environment variable
+	if cfg.Graph.Password == "" && cfg.Graph.PasswordEnv != "" {
+		cfg.Graph.Password = os.Getenv(cfg.Graph.PasswordEnv)
+	}
+
+	// Resolve embeddings API key from environment variable
+	if cfg.Embeddings.APIKey == "" && cfg.Embeddings.APIKeyEnv != "" {
+		cfg.Embeddings.APIKey = os.Getenv(cfg.Embeddings.APIKeyEnv)
 	}
 
 	return &cfg, nil

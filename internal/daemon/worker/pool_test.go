@@ -1,6 +1,6 @@
 //go:build !integration
 
-package daemon
+package worker
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
 )
 
-func TestWorkerPool_BasicProcessing(t *testing.T) {
+func TestPool_BasicProcessing(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "worker-pool-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -41,8 +41,8 @@ func TestWorkerPool_BasicProcessing(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	ctx := context.Background()
 
-	// Create worker pool (no semantic analyzer for faster tests)
-	pool := NewWorkerPool(2, 60, metadataExtractor, nil, cacheManager, logger, ctx)
+	// Create worker pool (no semantic analyzer or embeddings for faster tests)
+	pool := NewPool(2, 60, metadataExtractor, nil, nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 	defer pool.Stop()
 
@@ -90,7 +90,7 @@ func TestWorkerPool_BasicProcessing(t *testing.T) {
 	}
 }
 
-func TestWorkerPool_Prioritization(t *testing.T) {
+func TestPool_Prioritization(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "worker-pool-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -121,7 +121,7 @@ func TestWorkerPool_Prioritization(t *testing.T) {
 	}
 }
 
-func TestWorkerPool_RateLimiting(t *testing.T) {
+func TestPool_RateLimiting(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "worker-pool-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -139,7 +139,7 @@ func TestWorkerPool_RateLimiting(t *testing.T) {
 	ctx := context.Background()
 
 	// Create pool with very low rate limit (6 per minute = 1 per 10 seconds)
-	pool := NewWorkerPool(1, 6, metadataExtractor, nil, cacheManager, logger, ctx)
+	pool := NewPool(1, 6, metadataExtractor, nil, nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 	defer pool.Stop()
 
@@ -166,7 +166,7 @@ func TestWorkerPool_RateLimiting(t *testing.T) {
 	}
 }
 
-func TestWorkerPool_GracefulShutdown(t *testing.T) {
+func TestPool_GracefulShutdown(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "worker-pool-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -179,7 +179,7 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	ctx := context.Background()
 
-	pool := NewWorkerPool(2, 60, metadataExtractor, nil, cacheManager, logger, ctx)
+	pool := NewPool(2, 60, metadataExtractor, nil, nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 
 	// Submit some jobs
@@ -210,7 +210,7 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 	}
 }
 
-func TestWorkerPool_ContextCancellation(t *testing.T) {
+func TestPool_ContextCancellation(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "worker-pool-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -224,7 +224,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	pool := NewWorkerPool(2, 60, metadataExtractor, nil, cacheManager, logger, ctx)
+	pool := NewPool(2, 60, metadataExtractor, nil, nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 	defer pool.Stop()
 

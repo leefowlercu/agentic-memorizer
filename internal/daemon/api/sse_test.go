@@ -1,4 +1,4 @@
-package daemon
+package api
 
 import (
 	"bufio"
@@ -12,9 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // TestSSEHub_MultipleClients tests that the SSE hub can accept multiple client connections
@@ -24,7 +21,7 @@ func TestSSEHub_MultipleClients(t *testing.T) {
 
 	// Start SSE server
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.handleSSEStream)
+	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -91,7 +88,7 @@ func TestSSEHub_Broadcast(t *testing.T) {
 	hub := NewSSEHub(logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.handleSSEStream)
+	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -181,7 +178,7 @@ func TestSSEHub_Keepalive(t *testing.T) {
 	hub := NewSSEHub(logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.handleSSEStream)
+	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -237,7 +234,7 @@ func TestSSEHub_GracefulShutdown(t *testing.T) {
 	hub := NewSSEHub(logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.handleSSEStream)
+	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -304,12 +301,31 @@ func TestSSEHub_GracefulShutdown(t *testing.T) {
 	listener.Close()
 }
 
+// mockHealthMetrics implements HealthMetricsProvider for testing
+type mockHealthMetrics struct{}
+
+func (m *mockHealthMetrics) GetSnapshot() HealthSnapshot {
+	return HealthSnapshot{
+		StartTime:        time.Now(),
+		Uptime:           "1h 30m",
+		UptimeSeconds:    5400,
+		FilesProcessed:   100,
+		APICalls:         50,
+		CacheHits:        75,
+		Errors:           2,
+		LastBuildTime:    time.Now(),
+		LastBuildSuccess: true,
+		IndexFileCount:   100,
+		WatcherActive:    true,
+	}
+}
+
 // TestHTTPServer_HealthEndpoint tests the health endpoint via HTTPServer
 func TestHTTPServer_HealthEndpoint(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	hub := NewSSEHub(logger)
-	metrics := NewHealthMetrics()
-	httpServer := NewHTTPServer(hub, metrics, logger)
+	metrics := &mockHealthMetrics{}
+	httpServer := NewHTTPServer(hub, metrics, nil, "", logger)
 
 	port := findAvailablePort(t)
 	if err := httpServer.Start(port); err != nil {
@@ -350,78 +366,6 @@ func TestHTTPServer_HealthEndpoint(t *testing.T) {
 
 	if _, ok := metricsData["sse_clients"]; !ok {
 		t.Error("Expected sse_clients field in metrics")
-	}
-}
-
-// TestDaemon_HTTPServerIntegration tests HTTP server integration with daemon
-func TestDaemon_HTTPServerIntegration(t *testing.T) {
-	// Create minimal config
-	cfg := &config.Config{
-		MemoryRoot: t.TempDir(),
-		Analysis: config.AnalysisConfig{
-			Enable:   false,
-			CacheDir: t.TempDir(),
-		},
-		Daemon: config.DaemonConfig{
-			DebounceMs:      100,
-			Workers:         1,
-			RateLimitPerMin: 60,
-			HTTPPort:        0, // Test with port 0 (disabled)
-			LogFile:         "",
-			LogLevel:        "error",
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	logWriter := &lumberjack.Logger{}
-
-	d, err := New(cfg, logger, logWriter)
-	if err != nil {
-		t.Fatalf("Failed to create daemon: %v", err)
-	}
-
-	// Verify SSE hub was created
-	if d.sseHub == nil {
-		t.Error("SSE hub was not initialized")
-	}
-
-	// Verify HTTP server was created
-	if d.httpServer == nil {
-		t.Error("HTTP server was not initialized")
-	}
-
-	// Test starting HTTP server with port 0 (disabled)
-	if err := d.httpServer.Start(0); err != nil {
-		t.Errorf("httpServer.Start(0) should not return error: %v", err)
-	}
-
-	// Test starting HTTP server with real port
-	port := findAvailablePort(t)
-	if err := d.httpServer.Start(port); err != nil {
-		t.Fatalf("Failed to start HTTP server: %v", err)
-	}
-
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
-
-	// Test that we can connect to health endpoint
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
-	if err != nil {
-		t.Fatalf("Failed to connect to HTTP server health endpoint: %v", err)
-	}
-	resp.Body.Close()
-
-	// Test that we can connect to SSE stream endpoint
-	client := &http.Client{Timeout: 100 * time.Millisecond}
-	resp, err = client.Get(fmt.Sprintf("http://localhost:%d/notifications/stream", port))
-	if err == nil {
-		resp.Body.Close()
-	}
-	// Timeout is expected for SSE stream, so we just verify the endpoint exists
-
-	// Test stopping HTTP server
-	if err := d.httpServer.Stop(); err != nil {
-		t.Errorf("Failed to stop HTTP server: %v", err)
 	}
 }
 

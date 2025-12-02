@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -41,8 +42,8 @@ func newTestDaemon() *Daemon {
 	}
 
 	healthMetrics := NewHealthMetrics()
-	sseHub := NewSSEHub(logger)
-	httpServer := NewHTTPServer(sseHub, healthMetrics, logger)
+	sseHub := api.NewSSEHub(logger)
+	httpServer := api.NewHTTPServer(sseHub, healthMetrics, nil, "/test/memory", logger)
 
 	d := &Daemon{
 		cfg:               cfg,

@@ -1,13 +1,21 @@
-package daemon
+package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
+
+// IndexProvider is an interface for getting the current index
+type IndexProvider interface {
+	GetIndex(ctx context.Context) (*types.GraphIndex, error)
+}
 
 // SSEClient represents a connected SSE client
 type SSEClient struct {
@@ -18,9 +26,10 @@ type SSEClient struct {
 
 // SSEHub manages Server-Sent Events broadcasting for index updates
 type SSEHub struct {
-	clients   map[string]*SSEClient
-	clientsMu sync.RWMutex
-	logger    *slog.Logger
+	clients       map[string]*SSEClient
+	clientsMu     sync.RWMutex
+	indexProvider IndexProvider
+	logger        *slog.Logger
 }
 
 // NewSSEHub creates a new SSE broadcast hub
@@ -29,6 +38,11 @@ func NewSSEHub(logger *slog.Logger) *SSEHub {
 		clients: make(map[string]*SSEClient),
 		logger:  logger,
 	}
+}
+
+// SetIndexProvider sets the index provider for including index data in events
+func (h *SSEHub) SetIndexProvider(provider IndexProvider) {
+	h.indexProvider = provider
 }
 
 // register adds a new SSE client to the hub
@@ -68,13 +82,26 @@ func (h *SSEHub) BroadcastIndexUpdate() {
 		return
 	}
 
-	// Create notification payload
-	notification := map[string]any{
-		"type":      "index_updated",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	// Get index data if provider is available
+	var index *types.GraphIndex
+	if h.indexProvider != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var err error
+		index, err = h.indexProvider.GetIndex(ctx)
+		if err != nil {
+			h.logger.Warn("failed to get index for SSE broadcast", "error", err)
+		}
 	}
 
-	data, err := json.Marshal(notification)
+	// Create notification payload
+	event := SSEEvent{
+		Type:      "index_updated",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Data:      index,
+	}
+
+	data, err := json.Marshal(event)
 	if err != nil {
 		h.logger.Error("failed to marshal index update notification", "error", err)
 		return
@@ -82,7 +109,7 @@ func (h *SSEHub) BroadcastIndexUpdate() {
 
 	message := fmt.Sprintf("data: %s\n\n", string(data))
 
-	h.logger.Debug("broadcasting index update", "clients", len(h.clients))
+	h.logger.Debug("broadcasting index update", "clients", len(h.clients), "has_index", index != nil)
 
 	// Broadcast to all clients (non-blocking)
 	for _, client := range h.clients {
@@ -97,8 +124,8 @@ func (h *SSEHub) BroadcastIndexUpdate() {
 	}
 }
 
-// handleSSEStream handles SSE stream requests from MCP servers
-func (h *SSEHub) handleSSEStream(w http.ResponseWriter, r *http.Request) {
+// HandleSSE handles SSE stream requests from MCP servers
+func (h *SSEHub) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	// Verify SSE headers
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -123,9 +150,8 @@ func (h *SSEHub) handleSSEStream(w http.ResponseWriter, r *http.Request) {
 	h.register(client)
 	defer h.unregister(client.id)
 
-	// Send initial connection message
-	fmt.Fprintf(w, "data: {\"type\": \"connected\", \"client_id\": \"%s\"}\n\n", client.id)
-	flusher.Flush()
+	// Send initial index_snapshot with full index data
+	h.sendIndexSnapshot(w, flusher, client.id)
 
 	// Keepalive ticker (send comment every 30 seconds)
 	ticker := time.NewTicker(30 * time.Second)
@@ -150,4 +176,49 @@ func (h *SSEHub) handleSSEStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// sendIndexSnapshot sends the initial index snapshot to a newly connected client
+func (h *SSEHub) sendIndexSnapshot(w http.ResponseWriter, flusher http.Flusher, clientID string) {
+	// Get index data if provider is available
+	var index *types.GraphIndex
+	if h.indexProvider != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		var err error
+		index, err = h.indexProvider.GetIndex(ctx)
+		if err != nil {
+			h.logger.Warn("failed to get index for snapshot", "client_id", clientID, "error", err)
+		}
+	}
+
+	// Create snapshot event
+	event := SSEEvent{
+		Type:      "index_snapshot",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Data:      index,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		h.logger.Error("failed to marshal index snapshot", "error", err)
+		// Send fallback connected message
+		fmt.Fprintf(w, "data: {\"type\": \"connected\", \"client_id\": \"%s\"}\n\n", clientID)
+		flusher.Flush()
+		return
+	}
+
+	fmt.Fprintf(w, "data: %s\n\n", string(data))
+	flusher.Flush()
+
+	h.logger.Info("sent index snapshot to client",
+		"client_id", clientID,
+		"has_index", index != nil,
+		"file_count", func() int {
+			if index != nil {
+				return len(index.Files)
+			}
+			return 0
+		}(),
+	)
 }

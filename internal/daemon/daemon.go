@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -14,7 +15,10 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/index"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon/worker"
+	"github.com/leefowlercu/agentic-memorizer/internal/embeddings"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
 	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
@@ -39,20 +43,23 @@ type Daemon struct {
 	logWriter *lumberjack.Logger // Reuse for log level changes
 
 	// HTTP server (unified health + SSE endpoints)
-	httpServer *HTTPServer
+	httpServer *api.HTTPServer
 
 	// SSE notification hub
-	sseHub *SSEHub
+	sseHub *api.SSEHub
 
 	// Reload signaling channels
 	rebuildIntervalCh chan time.Duration // Signal rebuild interval change
 
 	// Components
-	indexManager      *index.Manager
+	graphManager      *graph.Manager // FalkorDB-based storage (required)
 	cacheManager      *cache.Manager
 	metadataExtractor *metadata.Extractor
 	fileWatcher       *watcher.Watcher
 	healthMetrics     *HealthMetrics
+
+	// Rebuild state
+	rebuilding atomic.Bool
 
 	// Lifecycle
 	ctx     context.Context
@@ -105,12 +112,6 @@ func (d *Daemon) SetLogger(l *slog.Logger) {
 
 // New creates a new daemon instance
 func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) (*Daemon, error) {
-	indexPath, err := config.GetIndexPath()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get index path: %w", err)
-	}
-	indexManager := index.NewManager(indexPath)
-
 	cacheManager, err := cache.NewManager(cfg.Analysis.CacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache manager: %w", err)
@@ -156,21 +157,47 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
+	// Initialize graph manager (required for daemon operation)
+	graphConfig := graph.ManagerConfig{
+		Client: graph.ClientConfig{
+			Host:     cfg.Graph.Host,
+			Port:     cfg.Graph.Port,
+			Database: cfg.Graph.Database,
+			Password: cfg.Graph.Password,
+		},
+		Schema:     graph.DefaultSchemaConfig(),
+		MemoryRoot: cfg.MemoryRoot,
+	}
+
+	graphManager := graph.NewManager(graphConfig, logger)
+	if err := graphManager.Initialize(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to initialize graph; %w", err)
+	}
+
+	logger.Info("FalkorDB graph manager initialized",
+		"host", cfg.Graph.Host,
+		"port", cfg.Graph.Port,
+		"database", cfg.Graph.Database,
+	)
+
 	// Create health metrics tracker
 	healthMetrics := NewHealthMetrics()
 
 	// Create SSE notification hub
-	sseHub := NewSSEHub(logger)
+	sseHub := api.NewSSEHub(logger)
 
-	// Create unified HTTP server
-	httpServer := NewHTTPServer(sseHub, healthMetrics, logger)
+	// Create unified HTTP server with graph manager
+	httpServer := api.NewHTTPServer(sseHub, healthMetrics, graphManager, cfg.MemoryRoot, logger)
+
+	// Set index provider on SSE hub for including index data in events
+	sseHub.SetIndexProvider(httpServer)
 
 	// Create context after all fallible operations to avoid leaks on early returns
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d := &Daemon{
 		cfg:               cfg,
-		indexManager:      indexManager,
+		graphManager:      graphManager,
 		cacheManager:      cacheManager,
 		metadataExtractor: metadataExtractor,
 		fileWatcher:       fileWatcher,
@@ -187,6 +214,9 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 
 	// Set semantic analyzer atomically
 	d.SetSemanticAnalyzer(semanticAnalyzer)
+
+	// Set rebuild handler on HTTP server (Daemon implements api.RebuildHandler)
+	httpServer.SetRebuildHandler(d)
 
 	return d, nil
 }
@@ -210,25 +240,23 @@ func (d *Daemon) Start() error {
 	// Setup signal handling
 	setupSignalHandler(d)
 
-	// Try to load existing index for crash recovery
-	existingIndex, err := d.indexManager.LoadComputed()
-	if err == nil {
-		logger.Info("loaded existing index from disk", "files", existingIndex.Index.Stats.TotalFiles)
-		// Set the loaded index as current
-		d.indexManager.SetIndex(existingIndex.Index, existingIndex.Metadata)
+	// Check if graph has existing data
+	stats, err := d.graphManager.GetStats(d.ctx)
+	if err == nil && stats.TotalFiles > 0 {
+		logger.Info("found existing data in graph", "files", stats.TotalFiles)
 	} else {
-		logger.Info("no existing index found, will perform full build")
+		logger.Info("no existing graph data, will perform full build")
 	}
 
 	// Perform initial full build
 	logger.Info("performing initial index build")
 	if err := d.rebuildIndex(); err != nil {
 		logger.Error("initial build failed", "error", err)
-		// If we have an existing index loaded, continue with it
-		if existingIndex != nil {
-			logger.Warn("continuing with existing index due to build failure")
+		// If graph has existing data, we can continue
+		if stats != nil && stats.TotalFiles > 0 {
+			logger.Warn("continuing with existing graph data due to build failure")
 		} else {
-			return fmt.Errorf("initial build failed and no existing index available: %w", err)
+			return fmt.Errorf("initial build failed and no existing data available; %w", err)
 		}
 	}
 
@@ -275,7 +303,8 @@ func (d *Daemon) Start() error {
 	// 1. HTTP Server (stop health check and SSE endpoints)
 	// 2. File Watcher (stop file system monitoring)
 	// 3. Wait for goroutines (let workers finish)
-	// 4. PID file cleanup (final cleanup)
+	// 4. Graph Manager (close FalkorDB connection)
+	// 5. PID file cleanup (final cleanup)
 
 	// Stop HTTP server
 	if d.httpServer != nil {
@@ -288,6 +317,11 @@ func (d *Daemon) Start() error {
 	d.fileWatcher.Stop()
 
 	d.wg.Wait()
+
+	// Close graph manager
+	if err := d.graphManager.Close(); err != nil {
+		logger.Warn("error closing graph manager", "error", err)
+	}
 
 	// Remove PID file
 	if err := removePIDFile(d.pidFile); err != nil {
@@ -360,6 +394,10 @@ func (d *Daemon) periodicRebuild() {
 
 // rebuildIndex performs a full index rebuild using worker pool
 func (d *Daemon) rebuildIndex() error {
+	// Set rebuilding flag (used by API to report status)
+	d.rebuilding.Store(true)
+	defer d.rebuilding.Store(false)
+
 	startTime := time.Now()
 
 	cfg := d.GetConfig()
@@ -372,12 +410,54 @@ func (d *Daemon) rebuildIndex() error {
 		skipFiles = []string{"agentic-memorizer"}
 	}
 
+	// Create embedding provider and cache if embeddings are enabled
+	var embeddingProvider embeddings.Provider
+	var embeddingCache *embeddings.Cache
+	if cfg.Embeddings.Enabled {
+		// Resolve API key
+		apiKey := cfg.Embeddings.APIKey
+		if apiKey == "" && cfg.Embeddings.APIKeyEnv != "" {
+			apiKey = os.Getenv(cfg.Embeddings.APIKeyEnv)
+		}
+
+		if apiKey != "" {
+			embConfig := embeddings.OpenAIConfig{
+				APIKey:     apiKey,
+				Model:      cfg.Embeddings.Model,
+				Dimensions: cfg.Embeddings.Dimensions,
+			}
+			var err error
+			embeddingProvider, err = embeddings.NewOpenAIProvider(embConfig, logger)
+			if err != nil {
+				logger.Warn("failed to create embedding provider", "error", err)
+			} else {
+				logger.Info("embedding provider initialized",
+					"model", cfg.Embeddings.Model,
+					"dimensions", cfg.Embeddings.Dimensions,
+				)
+			}
+
+			// Create embedding cache
+			embCacheDir := filepath.Join(cfg.Analysis.CacheDir, "embeddings")
+			embeddingCache, err = embeddings.NewCache(embCacheDir, logger)
+			if err != nil {
+				logger.Warn("failed to create embedding cache", "error", err)
+			}
+		} else {
+			logger.Warn("embeddings enabled but no API key found",
+				"api_key_env", cfg.Embeddings.APIKeyEnv,
+			)
+		}
+	}
+
 	// Create worker pool
-	pool := NewWorkerPool(
+	pool := worker.NewPool(
 		cfg.Daemon.Workers,
 		cfg.Daemon.RateLimitPerMin,
 		d.metadataExtractor,
 		analyzer,
+		embeddingProvider,
+		embeddingCache,
 		d.cacheManager,
 		logger,
 		d.ctx,
@@ -387,12 +467,12 @@ func (d *Daemon) rebuildIndex() error {
 	defer pool.Stop()
 
 	// Collect all files to process
-	var jobs []Job
+	var jobs []worker.Job
 	err := walker.Walk(cfg.MemoryRoot, skipDirs, skipFiles, func(path string, info os.FileInfo) error {
-		job := Job{
+		job := worker.Job{
 			Path:     path,
 			Info:     info,
-			Priority: CalculatePriority(info),
+			Priority: worker.CalculatePriority(info),
 		}
 		jobs = append(jobs, job)
 		return nil
@@ -407,59 +487,51 @@ func (d *Daemon) rebuildIndex() error {
 	// Submit all jobs
 	pool.SubmitBatch(jobs)
 
-	// Collect results
-	entries := make([]types.IndexEntry, 0, len(jobs))
+	// Track stats for health metrics
+	var totalFiles, errorFiles int
+	var totalSize int64
+
+	// Collect results and write to graph
+	var embeddingsGenerated int
 	for i := 0; i < len(jobs); i++ {
 		select {
 		case result := <-pool.Results():
 			// Set relative path
 			relPath, _ := walker.GetRelPath(cfg.MemoryRoot, result.Entry.Metadata.Path)
 			result.Entry.Metadata.RelPath = relPath
-			entries = append(entries, result.Entry)
+
+			// Write to graph with embedding if available
+			graphEntry := types.IndexEntry{
+				Metadata: result.Entry.Metadata,
+				Semantic: result.Entry.Semantic,
+			}
+
+			if len(result.Embedding) > 0 {
+				if _, err := d.graphManager.UpdateSingleWithEmbedding(d.ctx, graphEntry, graph.UpdateInfo{}, result.Embedding); err != nil {
+					logger.Warn("failed to update graph with embedding", "path", relPath, "error", err)
+				}
+				embeddingsGenerated++
+			} else {
+				if _, err := d.graphManager.UpdateSingle(d.ctx, graphEntry, graph.UpdateInfo{}); err != nil {
+					logger.Warn("failed to update graph", "path", relPath, "error", err)
+				}
+			}
+
+			// Track stats
+			totalFiles++
+			totalSize += result.Entry.Metadata.Size
+			if result.Entry.Error != nil {
+				errorFiles++
+			}
 
 		case <-d.ctx.Done():
 			return fmt.Errorf("rebuild cancelled")
 		}
 	}
 
-	// Build index
-	idx := &types.Index{
-		Generated: time.Now(),
-		Root:      cfg.MemoryRoot,
-		Entries:   entries,
-		Stats:     types.IndexStats{},
-	}
-
-	// Calculate stats
+	// Get pool stats for cache/API tracking
 	poolStats := pool.GetStats()
-	idx.Stats.TotalFiles = len(entries)
-	idx.Stats.CachedFiles = poolStats.CacheHits
-	idx.Stats.AnalyzedFiles = poolStats.APICalls
-
-	for _, entry := range entries {
-		idx.Stats.TotalSize += entry.Metadata.Size
-		if entry.Error != nil {
-			idx.Stats.ErrorFiles++
-		}
-	}
-
-	// Set index in manager
 	buildDuration := time.Since(startTime)
-	metadata := index.BuildMetadata{
-		BuildDurationMs: int(buildDuration.Milliseconds()),
-		FilesProcessed:  idx.Stats.TotalFiles,
-		CacheHits:       idx.Stats.CachedFiles,
-		APICalls:        idx.Stats.AnalyzedFiles,
-	}
-
-	d.indexManager.SetIndex(idx, metadata)
-
-	// Write to disk atomically
-	if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
-		d.healthMetrics.RecordBuild(idx.Stats.TotalFiles, idx.Stats.AnalyzedFiles, idx.Stats.CachedFiles, idx.Stats.ErrorFiles, false)
-		d.healthMetrics.RecordError()
-		return fmt.Errorf("failed to write index: %w", err)
-	}
 
 	// Broadcast SSE notification
 	if d.sseHub != nil {
@@ -467,15 +539,18 @@ func (d *Daemon) rebuildIndex() error {
 	}
 
 	// Record successful build metrics
-	d.healthMetrics.RecordBuild(idx.Stats.TotalFiles, idx.Stats.AnalyzedFiles, idx.Stats.CachedFiles, idx.Stats.ErrorFiles, true)
-	d.healthMetrics.SetIndexFileCount(idx.Stats.TotalFiles)
+	d.healthMetrics.RecordBuild(totalFiles, poolStats.APICalls, poolStats.CacheHits, errorFiles, true)
+	d.healthMetrics.SetIndexFileCount(totalFiles)
 
 	logger.Info("index rebuilt successfully",
 		"duration_ms", buildDuration.Milliseconds(),
-		"files", idx.Stats.TotalFiles,
-		"analyzed", idx.Stats.AnalyzedFiles,
-		"cached", idx.Stats.CachedFiles,
-		"errors", idx.Stats.ErrorFiles,
+		"files", totalFiles,
+		"analyzed", poolStats.APICalls,
+		"cached", poolStats.CacheHits,
+		"embeddings", embeddingsGenerated,
+		"embedding_api_calls", poolStats.EmbeddingAPICalls,
+		"embedding_cache_hits", poolStats.EmbeddingCacheHits,
+		"errors", errorFiles,
 	)
 
 	return nil
@@ -485,6 +560,17 @@ func (d *Daemon) rebuildIndex() error {
 func (d *Daemon) Rebuild() error {
 	d.GetLogger().Info("manual rebuild requested")
 	return d.rebuildIndex()
+}
+
+// ClearGraph clears all data from the graph (implements api.RebuildHandler)
+func (d *Daemon) ClearGraph() error {
+	d.GetLogger().Info("clearing graph")
+	return d.graphManager.ClearGraph(d.ctx)
+}
+
+// IsRebuilding returns true if a rebuild is in progress (implements api.RebuildHandler)
+func (d *Daemon) IsRebuilding() bool {
+	return d.rebuilding.Load()
 }
 
 // processWatcherEvents processes file system events from the watcher
@@ -596,21 +682,21 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 			}
 		}
 
-		// Update index with tracking info
+		// Update graph with entry
 		entry := types.IndexEntry{
 			Metadata: *fileMetadata,
 			Semantic: semanticAnalysis,
 		}
 
-		updateInfo := index.UpdateInfo{
+		graphInfo := graph.UpdateInfo{
 			WasAnalyzed: wasAnalyzed,
 			WasCached:   wasCached,
 			HadError:    hadError,
 		}
 
-		result, err := d.indexManager.UpdateSingle(entry, updateInfo)
+		result, err := d.graphManager.UpdateSingle(d.ctx, entry, graphInfo)
 		if err != nil {
-			logger.Error("failed to update index", "path", event.Path, "error", err)
+			logger.Error("failed to update graph", "path", event.Path, "error", err)
 			d.healthMetrics.RecordError()
 			return
 		}
@@ -621,16 +707,11 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 			d.healthMetrics.IncrementIndexFileCount()
 		}
 
-		// Write updated index
-		if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
-			logger.Error("failed to write index", "error", err)
-		} else {
-			// Broadcast SSE notification
-			if d.sseHub != nil {
-				d.sseHub.BroadcastIndexUpdate()
-			}
-			logger.Debug("index updated", "path", relPath)
+		// Broadcast SSE notification
+		if d.sseHub != nil {
+			d.sseHub.BroadcastIndexUpdate()
 		}
+		logger.Debug("graph updated", "path", relPath)
 
 	case watcher.EventDelete:
 		d.handleFileDelete(event.Path, relPath)
@@ -642,26 +723,19 @@ func (d *Daemon) handleFileDelete(path string, relPath string) {
 	logger := d.GetLogger()
 	logger.Info("file deleted", "path", relPath)
 
-	result, err := d.indexManager.RemoveFile(path)
-	if err != nil {
-		logger.Error("failed to remove from index", "path", path, "error", err)
+	// Remove from graph
+	if err := d.graphManager.RemoveFile(d.ctx, path); err != nil {
+		logger.Error("failed to remove from graph", "path", path, "error", err)
 		return
 	}
 
-	if result.Removed {
-		d.healthMetrics.DecrementIndexFileCount()
-	}
+	d.healthMetrics.DecrementIndexFileCount()
 
-	// Write updated index
-	if err := d.indexManager.WriteAtomic(version.GetVersion()); err != nil {
-		logger.Error("failed to write index", "error", err)
-	} else {
-		// Broadcast SSE notification
-		if d.sseHub != nil {
-			d.sseHub.BroadcastIndexUpdate()
-		}
-		logger.Debug("index updated after deletion", "path", relPath)
+	// Broadcast SSE notification
+	if d.sseHub != nil {
+		d.sseHub.BroadcastIndexUpdate()
 	}
+	logger.Debug("graph updated after deletion", "path", relPath)
 }
 
 // ReloadConfig reloads configuration and applies changes

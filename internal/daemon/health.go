@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 )
 
 // HealthMetrics tracks daemon health statistics
@@ -20,22 +22,6 @@ type HealthMetrics struct {
 	IndexFileCount   int       `json:"index_file_count"`
 	WatcherActive    bool      `json:"watcher_active"`
 	mu               sync.RWMutex
-}
-
-// HealthSnapshot represents a point-in-time snapshot of health metrics
-// without the mutex, safe for copying and serialization
-type HealthSnapshot struct {
-	StartTime        time.Time `json:"start_time"`
-	Uptime           string    `json:"uptime"`
-	UptimeSeconds    int64     `json:"uptime_seconds"`
-	FilesProcessed   int       `json:"files_processed"`
-	APICalls         int       `json:"api_calls"`
-	CacheHits        int       `json:"cache_hits"`
-	Errors           int       `json:"errors"`
-	LastBuildTime    time.Time `json:"last_build_time"`
-	LastBuildSuccess bool      `json:"last_build_success"`
-	IndexFileCount   int       `json:"index_file_count"`
-	WatcherActive    bool      `json:"watcher_active"`
 }
 
 // NewHealthMetrics creates a new health metrics tracker
@@ -117,15 +103,16 @@ func (h *HealthMetrics) SetWatcherActive(active bool) {
 }
 
 // GetSnapshot returns a snapshot of current metrics
-func (h *HealthMetrics) GetSnapshot() HealthSnapshot {
+// Implements api.HealthMetricsProvider interface
+func (h *HealthMetrics) GetSnapshot() api.HealthSnapshot {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	uptime := time.Since(h.StartTime)
-	return HealthSnapshot{
+	return api.HealthSnapshot{
 		StartTime:        h.StartTime,
 		Uptime:           formatDuration(uptime),
-		UptimeSeconds:    int64(uptime.Seconds()),
+		UptimeSeconds:    uptime.Seconds(),
 		FilesProcessed:   h.FilesProcessed,
 		APICalls:         h.APICalls,
 		CacheHits:        h.CacheHits,

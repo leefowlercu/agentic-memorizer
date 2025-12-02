@@ -15,7 +15,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/index"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -23,15 +23,15 @@ import (
 
 // TestEnv provides isolated test environment for integration tests
 type TestEnv struct {
-	AppDir     string
-	MemoryRoot string
-	CacheDir   string
-	ConfigPath string
-	IndexPath  string
-	PIDPath    string
-	LogPath    string
-	Config     *config.Config
-	t          *testing.T
+	AppDir      string
+	MemoryRoot  string
+	CacheDir    string
+	ConfigPath  string
+	PIDPath     string
+	LogPath     string
+	Config      *config.Config
+	GraphConfig graph.ManagerConfig
+	t           *testing.T
 }
 
 // NewTestEnv creates an isolated test environment
@@ -44,7 +44,6 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	memoryRoot := filepath.Join(appDir, "memory")
 	cacheDir := filepath.Join(memoryRoot, ".cache")
 	configPath := filepath.Join(appDir, "config.yaml")
-	indexPath := filepath.Join(appDir, "index.json")
 	pidPath := filepath.Join(appDir, "daemon.pid")
 	logPath := filepath.Join(appDir, "daemon.log")
 
@@ -54,6 +53,17 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	}
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		t.Fatalf("failed to create cache directory: %v", err)
+	}
+
+	// Graph config for integration tests (requires FalkorDB running)
+	graphConfig := graph.ManagerConfig{
+		Client: graph.ClientConfig{
+			Host:     "localhost",
+			Port:     6379,
+			Database: "memorizer_test",
+		},
+		Schema:     graph.DefaultSchemaConfig(),
+		MemoryRoot: memoryRoot,
 	}
 
 	// Create default config
@@ -84,6 +94,12 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			LogFile:                    logPath,
 			LogLevel:                   "info",
 		},
+		Graph: config.GraphConfig{
+			Enabled:  true,
+			Host:     "localhost",
+			Port:     6379,
+			Database: "memorizer_test",
+		},
 		MCP: config.MCPConfig{
 			LogFile:  filepath.Join(appDir, "mcp.log"),
 			LogLevel: "info",
@@ -99,15 +115,15 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	t.Setenv("MEMORIZER_APP_DIR", appDir)
 
 	return &TestEnv{
-		AppDir:     appDir,
-		MemoryRoot: memoryRoot,
-		CacheDir:   cacheDir,
-		ConfigPath: configPath,
-		IndexPath:  indexPath,
-		PIDPath:    pidPath,
-		LogPath:    logPath,
-		Config:     cfg,
-		t:          t,
+		AppDir:      appDir,
+		MemoryRoot:  memoryRoot,
+		CacheDir:    cacheDir,
+		ConfigPath:  configPath,
+		PIDPath:     pidPath,
+		LogPath:     logPath,
+		Config:      cfg,
+		GraphConfig: graphConfig,
+		t:           t,
 	}
 }
 
@@ -133,11 +149,15 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		Compress:   true,
 	}
 
-	// Create daemon components
-	indexManager := index.NewManager(e.IndexPath)
+	// Create graph manager (requires FalkorDB running)
+	graphManager := graph.NewManager(e.GraphConfig, logger)
+	if err := graphManager.Initialize(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to initialize graph manager (is FalkorDB running?): %w", err)
+	}
 
 	cacheManager, err := cache.NewManager(e.Config.Analysis.CacheDir)
 	if err != nil {
+		graphManager.Close()
 		return nil, fmt.Errorf("failed to create cache manager: %w", err)
 	}
 
@@ -154,6 +174,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		logger,
 	)
 	if err != nil {
+		graphManager.Close()
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
@@ -168,7 +189,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		cfg:               e.Config,
 		logger:            logger,
 		logWriter:         logWriter,
-		indexManager:      indexManager,
+		graphManager:      graphManager,
 		cacheManager:      cacheManager,
 		metadataExtractor: metadataExtractor,
 		fileWatcher:       fileWatcher,

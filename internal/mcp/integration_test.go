@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
@@ -17,45 +18,35 @@ import (
 // TestIntegration_FullResourcesFlow tests the complete initialization and resources flow
 func TestIntegration_FullResourcesFlow(t *testing.T) {
 	// Create a test index with sample data
-	index := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test/memory",
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test/memory",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/memory/document.docx",
-						Category: "documents",
-						Size:     50000,
-						Type:     "docx",
-					},
-					WordCount: ptrInt(1000),
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "Test document about AI",
-					Tags:         []string{"ai", "testing"},
-					KeyTopics:    []string{"artificial intelligence", "testing"},
-					DocumentType: "technical-document",
-					Confidence:   0.95,
-				},
+				Path:         "/test/memory/document.docx",
+				Name:         "document.docx",
+				Category:     "documents",
+				Size:         50000,
+				Type:         "docx",
+				WordCount:    ptrInt(1000),
+				Summary:      "Test document about AI",
+				Tags:         []string{"ai", "testing"},
+				Topics:       []string{"artificial intelligence", "testing"},
+				DocumentType: "technical-document",
+				Confidence:   0.95,
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/memory/image.png",
-						Category: "images",
-						Size:     10000,
-						Type:     "png",
-					},
-					Dimensions: &types.ImageDim{Width: 1920, Height: 1080},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "Architecture diagram",
-					Tags:         []string{"diagram", "architecture"},
-					KeyTopics:    []string{"system design"},
-					DocumentType: "diagram",
-					Confidence:   0.90,
-				},
+				Path:         "/test/memory/image.png",
+				Name:         "image.png",
+				Category:     "images",
+				Size:         10000,
+				Type:         "png",
+				Dimensions:   &types.ImageDim{Width: 1920, Height: 1080},
+				Summary:      "Architecture diagram",
+				Tags:         []string{"diagram", "architecture"},
+				Topics:       []string{"system design"},
+				DocumentType: "diagram",
+				Confidence:   0.90,
 			},
 		},
 		Stats: types.IndexStats{
@@ -66,7 +57,7 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger, "")
+	server := NewServer(index, logger, "", graph.ManagerConfig{}, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -237,12 +228,12 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 			// Verify content contains expected data
 			if format.name == "JSON" {
 				// Parse JSON to verify structure
-				var parsedIndex types.Index
+				var parsedIndex types.GraphIndex
 				if err := json.Unmarshal([]byte(content.Text), &parsedIndex); err != nil {
 					t.Errorf("Invalid JSON content: %v", err)
 				}
-				if len(parsedIndex.Entries) != 2 {
-					t.Errorf("JSON entries count = %d, want 2", len(parsedIndex.Entries))
+				if len(parsedIndex.Files) != 2 {
+					t.Errorf("JSON files count = %d, want 2", len(parsedIndex.Files))
 				}
 			}
 		})
@@ -254,63 +245,48 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 	now := time.Now()
 
 	// Create a test index with sample data for tools
-	index := &types.Index{
-		Generated: now,
-		Root:      "/test/memory",
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Generated:  now,
+		MemoryRoot: "/test/memory",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/memory/terraform-guide.md",
-						Category: "documents",
-						Size:     50000,
-						Type:     "md",
-						Modified: now.AddDate(0, 0, -2), // 2 days ago
-					},
-					WordCount: ptrInt(5000),
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "Comprehensive guide to HashiCorp Terraform",
-					Tags:         []string{"terraform", "iac", "infrastructure"},
-					KeyTopics:    []string{"Terraform fundamentals", "Infrastructure as Code"},
-					DocumentType: "technical-guide",
-					Confidence:   0.95,
-				},
+				Path:         "/test/memory/terraform-guide.md",
+				Name:         "terraform-guide.md",
+				Category:     "documents",
+				Size:         50000,
+				Type:         "md",
+				Modified:     now.AddDate(0, 0, -2), // 2 days ago
+				WordCount:    ptrInt(5000),
+				Summary:      "Comprehensive guide to HashiCorp Terraform",
+				Tags:         []string{"terraform", "iac", "infrastructure"},
+				Topics:       []string{"Terraform fundamentals", "Infrastructure as Code"},
+				DocumentType: "technical-guide",
+				Confidence:   0.95,
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/memory/vault-config.hcl",
-						Category: "code",
-						Size:     2048,
-						Type:     "hcl",
-						Modified: now.AddDate(0, 0, -1), // 1 day ago
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "Vault server configuration",
-					Tags:         []string{"vault", "security", "config"},
-					KeyTopics:    []string{"HashiCorp Vault configuration"},
-					DocumentType: "configuration-file",
-					Confidence:   0.90,
-				},
+				Path:         "/test/memory/vault-config.hcl",
+				Name:         "vault-config.hcl",
+				Category:     "code",
+				Size:         2048,
+				Type:         "hcl",
+				Modified:     now.AddDate(0, 0, -1), // 1 day ago
+				Summary:      "Vault server configuration",
+				Tags:         []string{"vault", "security", "config"},
+				Topics:       []string{"HashiCorp Vault configuration"},
+				DocumentType: "configuration-file",
+				Confidence:   0.90,
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/memory/old-notes.txt",
-						Category: "documents",
-						Size:     1024,
-						Type:     "txt",
-						Modified: now.AddDate(0, 0, -30), // 30 days ago
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "Old meeting notes",
-					Tags:         []string{"notes", "meetings"},
-					DocumentType: "notes",
-					Confidence:   0.80,
-				},
+				Path:         "/test/memory/old-notes.txt",
+				Name:         "old-notes.txt",
+				Category:     "documents",
+				Size:         1024,
+				Type:         "txt",
+				Modified:     now.AddDate(0, 0, -30), // 30 days ago
+				Summary:      "Old meeting notes",
+				Tags:         []string{"notes", "meetings"},
+				DocumentType: "notes",
+				Confidence:   0.80,
 			},
 		},
 		Stats: types.IndexStats{
@@ -321,7 +297,7 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger, "")
+	server := NewServer(index, logger, "", graph.ManagerConfig{}, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -509,13 +485,13 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 		}
 
 		// Parse and verify result contains metadata
-		var entry types.IndexEntry
+		var entry types.FileEntry
 		if err := json.Unmarshal([]byte(callResp.Content[0].Text), &entry); err != nil {
 			t.Fatalf("Failed to parse entry JSON: %v", err)
 		}
 
-		if entry.Semantic == nil {
-			t.Error("Expected semantic analysis in metadata")
+		if entry.Summary == "" {
+			t.Error("Expected summary in metadata")
 		}
 	})
 

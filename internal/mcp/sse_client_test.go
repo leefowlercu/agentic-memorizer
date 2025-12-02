@@ -8,13 +8,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/index"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -63,7 +60,10 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 
 	// Create SSE client
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
-	idx := &types.Index{}
+	idx := &types.GraphIndex{
+		Stats: types.IndexStats{TotalFiles: 0},
+		Files: []types.FileEntry{},
+	}
 	srv := NewServer(idx, logger, "")
 	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
 
@@ -82,45 +82,16 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 
 // TestSSEClient_ReceiveNotification tests that client receives and processes notifications
 func TestSSEClient_ReceiveNotification(t *testing.T) {
-	// Set up temp directory for config
-	tempDir := t.TempDir()
-	os.Setenv("MEMORIZER_APP_DIR", tempDir)
-	defer os.Unsetenv("MEMORIZER_APP_DIR")
-
-	// Create memory directory and index
-	memoryDir := filepath.Join(tempDir, "memory")
-	if err := os.MkdirAll(memoryDir, 0755); err != nil {
-		t.Fatalf("Failed to create memory dir: %v", err)
-	}
-
-	indexPath := filepath.Join(tempDir, "memory-index.json")
-
-	// Write initial index
-	initialIndex := &types.Index{
-		Generated: time.Now(),
-		Root:      memoryDir,
-		Entries: []types.IndexEntry{
+	// Create initial index (graph reload will fail without FalkorDB, but we're testing notification receipt)
+	initialIndex := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test/memory",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/file1.txt",
-					},
-				},
+				Path: "/test/file1.txt",
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 1},
-	}
-
-	indexManager := index.NewManager(indexPath)
-	metadata := index.BuildMetadata{
-		BuildDurationMs: 100,
-		FilesProcessed:  1,
-		CacheHits:       0,
-		APICalls:        1,
-	}
-	indexManager.SetIndex(initialIndex, metadata)
-	if err := indexManager.WriteAtomic("test-version"); err != nil {
-		t.Fatalf("Failed to write initial index: %v", err)
 	}
 
 	// Create mock SSE server
@@ -167,8 +138,8 @@ func TestSSEClient_ReceiveNotification(t *testing.T) {
 	go server.Serve(listener)
 	defer server.Shutdown(context.Background())
 
-	// Create SSE client
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	// Create SSE client (index reload will be processed from SSE event)
+	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
 	srv := NewServer(initialIndex, logger, "")
 	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
 
@@ -234,7 +205,10 @@ func TestSSEClient_AutoReconnect(t *testing.T) {
 
 	// Create SSE client
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
-	idx := &types.Index{}
+	idx := &types.GraphIndex{
+		Stats: types.IndexStats{TotalFiles: 0},
+		Files: []types.FileEntry{},
+	}
 	srv := NewServer(idx, logger, "")
 	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
 
@@ -311,7 +285,10 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 	clients := make([]*SSEClient, 3)
 
 	for i := 0; i < 3; i++ {
-		idx := &types.Index{}
+		idx := &types.GraphIndex{
+			Stats: types.IndexStats{TotalFiles: 0},
+			Files: []types.FileEntry{},
+		}
 		srv := NewServer(idx, logger, "")
 		clients[i] = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
 		clients[i].Start()

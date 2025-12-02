@@ -121,10 +121,10 @@ func (r *PromptRegistry) generateAnalyzeFileMessages(arguments map[string]string
 
 	// Find file in index
 	index := server.GetIndex()
-	var found *types.IndexEntry
-	for i := range index.Entries {
-		if index.Entries[i].Metadata.FileInfo.Path == filePath {
-			found = &index.Entries[i]
+	var found *types.FileEntry
+	for i := range index.Files {
+		if index.Files[i].Path == filePath {
+			found = &index.Files[i]
 			break
 		}
 	}
@@ -133,7 +133,7 @@ func (r *PromptRegistry) generateAnalyzeFileMessages(arguments map[string]string
 		return nil, fmt.Errorf("file not found in index: %s", filePath)
 	}
 
-	if found.Semantic == nil {
+	if found.Summary == "" {
 		return nil, fmt.Errorf("file has no semantic analysis: %s", filePath)
 	}
 
@@ -159,13 +159,13 @@ Please explain:
 2. What are the main concepts or functionality it contains?
 3. How might this file relate to other parts of the project?
 4. Are there any notable patterns or approaches used?`,
-		found.Metadata.Path,
-		found.Metadata.Type,
-		found.Metadata.Category,
-		found.Metadata.Size,
-		found.Semantic.Summary,
-		formatStringSlice(found.Semantic.Tags),
-		formatStringSlice(found.Semantic.KeyTopics),
+		found.Path,
+		found.Type,
+		found.Category,
+		found.Size,
+		found.Summary,
+		formatStringSlice(found.Tags),
+		formatStringSlice(found.Topics),
 	)
 
 	return []protocol.PromptMessage{
@@ -221,10 +221,10 @@ func (r *PromptRegistry) generateExplainSummaryMessages(arguments map[string]str
 
 	// Find file in index
 	index := server.GetIndex()
-	var found *types.IndexEntry
-	for i := range index.Entries {
-		if index.Entries[i].Metadata.FileInfo.Path == filePath {
-			found = &index.Entries[i]
+	var found *types.FileEntry
+	for i := range index.Files {
+		if index.Files[i].Path == filePath {
+			found = &index.Files[i]
 			break
 		}
 	}
@@ -233,7 +233,7 @@ func (r *PromptRegistry) generateExplainSummaryMessages(arguments map[string]str
 		return nil, fmt.Errorf("file not found in index: %s", filePath)
 	}
 
-	if found.Semantic == nil {
+	if found.Summary == "" {
 		return nil, fmt.Errorf("file has no semantic analysis: %s", filePath)
 	}
 
@@ -247,21 +247,18 @@ func (r *PromptRegistry) generateExplainSummaryMessages(arguments map[string]str
 **Tags:** %s
 **Key Topics:** %s
 **Document Type:** %s
-**Confidence:** %.2f
 
 Please explain:
 1. What does this summary tell us about the file's content?
 2. How were these tags and topics determined?
 3. What is the significance of the document type classification?
-4. What does the confidence score indicate about the analysis quality?
-5. How should I interpret and use this information?`,
-		found.Metadata.Path,
-		found.Metadata.Category,
-		found.Semantic.Summary,
-		formatStringSlice(found.Semantic.Tags),
-		formatStringSlice(found.Semantic.KeyTopics),
-		found.Semantic.DocumentType,
-		found.Semantic.Confidence,
+4. How should I interpret and use this information?`,
+		found.Path,
+		found.Category,
+		found.Summary,
+		formatStringSlice(found.Tags),
+		formatStringSlice(found.Topics),
+		found.DocumentType,
 	)
 
 	return []protocol.PromptMessage{

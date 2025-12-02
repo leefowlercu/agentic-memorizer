@@ -1,12 +1,13 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +22,15 @@ import (
 
 type Server struct {
 	transport    transport.Transport
-	index        *types.Index
+	index        *types.GraphIndex
 	indexMu      sync.RWMutex // Protects index access and reloading
 	initialized  bool
 	capabilities protocol.ServerCapabilities
 	logger       *slog.Logger
+
+	// Daemon API client (all data comes from daemon)
+	daemonURL  string
+	httpClient *http.Client
 
 	// Subscription management
 	subscriptions *SubscriptionManager
@@ -46,11 +51,16 @@ type ResourceHandler func(ctx context.Context, uri string) (any, error)
 type ToolHandler func(ctx context.Context, params json.RawMessage) (any, error)
 type PromptHandler func(ctx context.Context, params json.RawMessage) (any, error)
 
-func NewServer(index *types.Index, logger *slog.Logger, daemonURL string) *Server {
+// NewServer creates a new MCP server.
+// daemonURL is the base URL of the daemon HTTP API (e.g., "http://localhost:8080").
+// All data is fetched from the daemon - no direct FalkorDB connection.
+func NewServer(index *types.GraphIndex, logger *slog.Logger, daemonURL string) *Server {
 	s := &Server{
 		transport:        transport.NewStdioTransport(),
 		index:            index,
 		logger:           logger,
+		daemonURL:        strings.TrimSuffix(daemonURL, "/"),
+		httpClient:       &http.Client{Timeout: 30 * time.Second},
 		subscriptions:    NewSubscriptionManager(),
 		promptRegistry:   NewPromptRegistry(),
 		resourceHandlers: make(map[string]ResourceHandler),
@@ -62,12 +72,15 @@ func NewServer(index *types.Index, logger *slog.Logger, daemonURL string) *Serve
 	s.toolHandlers["search_files"] = s.handleSearchFiles
 	s.toolHandlers["get_file_metadata"] = s.handleGetFileMetadata
 	s.toolHandlers["list_recent_files"] = s.handleListRecentFiles
+	s.toolHandlers["get_related_files"] = s.handleGetRelatedFiles
+	s.toolHandlers["search_entities"] = s.handleSearchEntities
 
 	// Start SSE client if daemon URL provided
 	if daemonURL != "" {
-		s.sseClient = NewSSEClient(daemonURL, s, logger)
+		sseURL := s.daemonURL + "/sse"
+		s.sseClient = NewSSEClient(sseURL, s, logger)
 		s.sseClient.Start()
-		logger.Info("SSE client started", "daemon_url", daemonURL)
+		logger.Info("SSE client started", "daemon_url", daemonURL, "sse_url", sseURL)
 	}
 
 	return s
@@ -385,19 +398,19 @@ func (s *Server) handleResourcesUnsubscribe(ctx context.Context, id any, params 
 // formatIndexXML formats the index as XML
 func (s *Server) formatIndexXML() (string, error) {
 	formatter := output.NewXMLProcessor()
-	return formatter.Format(s.index)
+	return formatter.FormatGraph(s.index)
 }
 
 // formatIndexMarkdown formats the index as Markdown
 func (s *Server) formatIndexMarkdown() (string, error) {
 	formatter := output.NewMarkdownProcessor()
-	return formatter.Format(s.index)
+	return formatter.FormatGraph(s.index)
 }
 
 // formatIndexJSON formats the index as JSON
 func (s *Server) formatIndexJSON() (string, error) {
 	formatter := output.NewJSONProcessor()
-	return formatter.Format(s.index)
+	return formatter.FormatGraph(s.index)
 }
 
 // handleSearchFiles performs semantic search across indexed files
@@ -420,7 +433,60 @@ func (s *Server) handleSearchFiles(ctx context.Context, args json.RawMessage) (a
 		params.MaxResults = 10 // default
 	}
 
-	// Perform search
+	// Try daemon API first if available
+	if s.hasDaemonAPI() {
+		// Determine category filter
+		categoryFilter := ""
+		if len(params.Categories) > 0 {
+			categoryFilter = params.Categories[0] // Use first category for filter
+		}
+
+		reqBody := map[string]any{
+			"query":    params.Query,
+			"limit":    params.MaxResults,
+			"category": categoryFilter,
+		}
+
+		respBody, err := s.callDaemonAPI(ctx, "POST", "/api/v1/search", reqBody)
+		if err == nil {
+			var searchResp struct {
+				Results []struct {
+					Path      string  `json:"path"`
+					Name      string  `json:"name"`
+					Category  string  `json:"category"`
+					Score     float64 `json:"score"`
+					MatchType string  `json:"match_type"`
+					Summary   string  `json:"summary"`
+				} `json:"results"`
+				Count int `json:"count"`
+			}
+			if json.Unmarshal(respBody, &searchResp) == nil {
+				// Format API results
+				formattedResults := make([]map[string]any, len(searchResp.Results))
+				for i, result := range searchResp.Results {
+					formattedResults[i] = map[string]any{
+						"path":       result.Path,
+						"name":       result.Name,
+						"category":   result.Category,
+						"score":      result.Score,
+						"match_type": result.MatchType,
+						"summary":    result.Summary,
+					}
+				}
+
+				return map[string]any{
+					"query":        params.Query,
+					"result_count": searchResp.Count,
+					"source":       "daemon",
+					"results":      formattedResults,
+				}, nil
+			}
+		}
+		// Fall through to index-based search on error
+		s.logger.Debug("daemon search failed, falling back to index", "error", err)
+	}
+
+	// Fallback to index-based search
 	searcher := search.NewSearcher(s.index)
 	results := searcher.Search(search.SearchQuery{
 		Query:      params.Query,
@@ -432,25 +498,26 @@ func (s *Server) handleSearchFiles(ctx context.Context, args json.RawMessage) (a
 	formattedResults := make([]map[string]any, len(results))
 	for i, result := range results {
 		formattedResults[i] = map[string]any{
-			"path":       result.Entry.Metadata.Path,
-			"name":       filepath.Base(result.Entry.Metadata.Path),
-			"category":   result.Entry.Metadata.Category,
+			"path":       result.File.Path,
+			"name":       result.File.Name,
+			"category":   result.File.Category,
 			"score":      result.Score,
 			"match_type": result.MatchType,
-			"size_human": formatSize(result.Entry.Metadata.Size),
-			"modified":   result.Entry.Metadata.Modified.Format(time.RFC3339),
+			"size_human": result.File.SizeHuman,
+			"modified":   result.File.Modified.Format(time.RFC3339),
 		}
 
 		// Add semantic fields if available
-		if result.Entry.Semantic != nil {
-			formattedResults[i]["summary"] = result.Entry.Semantic.Summary
-			formattedResults[i]["tags"] = result.Entry.Semantic.Tags
+		if result.File.Summary != "" {
+			formattedResults[i]["summary"] = result.File.Summary
+			formattedResults[i]["tags"] = result.File.Tags
 		}
 	}
 
 	return map[string]any{
 		"query":        params.Query,
 		"result_count": len(results),
+		"source":       "index",
 		"results":      formattedResults,
 	}, nil
 }
@@ -469,13 +536,59 @@ func (s *Server) handleGetFileMetadata(ctx context.Context, args json.RawMessage
 		return nil, fmt.Errorf("path parameter is required")
 	}
 
-	// Search for matching entry
+	// Try daemon API first if available
+	if s.hasDaemonAPI() {
+		// URL-encode the path for the API call
+		encodedPath := strings.ReplaceAll(params.Path, "/", "%2F")
+		respBody, err := s.callDaemonAPI(ctx, "GET", "/api/v1/files/"+encodedPath, nil)
+		if err == nil {
+			var fileResp struct {
+				File json.RawMessage `json:"file"`
+			}
+			if json.Unmarshal(respBody, &fileResp) == nil {
+				result := map[string]any{
+					"source": "daemon",
+				}
+				// Parse file entry
+				var file any
+				if json.Unmarshal(fileResp.File, &file) == nil {
+					result["file"] = file
+				}
+				return result, nil
+			}
+		}
+		// Fall through to index-based lookup
+		s.logger.Debug("daemon file lookup failed, falling back to index", "error", err)
+	}
+
+	// Fallback to index-based search - convert to simplified file format
 	pathLower := strings.ToLower(params.Path)
-	for _, entry := range s.index.Entries {
-		entryPathLower := strings.ToLower(entry.Metadata.Path)
+	for _, file := range s.index.Files {
+		filePathLower := strings.ToLower(file.Path)
 		// Match if path contains the query or vice versa
-		if strings.Contains(entryPathLower, pathLower) || strings.Contains(pathLower, entryPathLower) {
-			return entry, nil
+		if strings.Contains(filePathLower, pathLower) || strings.Contains(pathLower, filePathLower) {
+			// Convert FileEntry to a map for consistency
+			result := map[string]any{
+				"path":        file.Path,
+				"name":        file.Name,
+				"hash":        file.Hash,
+				"type":        file.Type,
+				"category":    file.Category,
+				"size":        file.Size,
+				"size_human":  file.SizeHuman,
+				"modified":    file.Modified.Format(time.RFC3339),
+				"is_readable": file.IsReadable,
+			}
+			if file.Summary != "" {
+				result["summary"] = file.Summary
+				result["document_type"] = file.DocumentType
+				result["tags"] = file.Tags
+				result["topics"] = file.Topics
+			}
+			return map[string]any{
+				"file":   file,
+				"source": "index",
+			}, nil
 		}
 	}
 
@@ -500,53 +613,222 @@ func (s *Server) handleListRecentFiles(ctx context.Context, args json.RawMessage
 		params.Limit = 20 // default
 	}
 
-	// Calculate cutoff time
+	// Try daemon API first if available
+	if s.hasDaemonAPI() {
+		path := fmt.Sprintf("/api/v1/files/recent?days=%d&limit=%d", params.Days, params.Limit)
+		respBody, err := s.callDaemonAPI(ctx, "GET", path, nil)
+		if err == nil {
+			var recentResp struct {
+				Files []struct {
+					Path     string `json:"path"`
+					Name     string `json:"name"`
+					Category string `json:"category"`
+					Summary  string `json:"summary"`
+				} `json:"files"`
+				Count int `json:"count"`
+			}
+			if json.Unmarshal(respBody, &recentResp) == nil {
+				// Format API results
+				formattedResults := make([]map[string]any, len(recentResp.Files))
+				for i, file := range recentResp.Files {
+					formattedResults[i] = map[string]any{
+						"path":     file.Path,
+						"name":     file.Name,
+						"category": file.Category,
+						"summary":  file.Summary,
+					}
+				}
+
+				return map[string]any{
+					"days":         params.Days,
+					"result_count": recentResp.Count,
+					"source":       "daemon",
+					"files":        formattedResults,
+				}, nil
+			}
+		}
+		// Fall through to index-based query
+		s.logger.Debug("daemon recent files query failed, falling back to index", "error", err)
+	}
+
+	// Fallback to index-based query
 	cutoff := time.Now().AddDate(0, 0, -params.Days)
 
-	// Filter recent entries
-	var recentEntries []types.IndexEntry
-	for _, entry := range s.index.Entries {
-		if entry.Metadata.Modified.After(cutoff) {
-			recentEntries = append(recentEntries, entry)
+	// Filter recent files
+	var recentFiles []types.FileEntry
+	for _, file := range s.index.Files {
+		if file.Modified.After(cutoff) {
+			recentFiles = append(recentFiles, file)
 		}
 	}
 
 	// Sort by modified time descending
-	for i := 0; i < len(recentEntries)-1; i++ {
-		for j := i + 1; j < len(recentEntries); j++ {
-			if recentEntries[j].Metadata.Modified.After(recentEntries[i].Metadata.Modified) {
-				recentEntries[i], recentEntries[j] = recentEntries[j], recentEntries[i]
+	for i := 0; i < len(recentFiles)-1; i++ {
+		for j := i + 1; j < len(recentFiles); j++ {
+			if recentFiles[j].Modified.After(recentFiles[i].Modified) {
+				recentFiles[i], recentFiles[j] = recentFiles[j], recentFiles[i]
 			}
 		}
 	}
 
 	// Limit results
-	if len(recentEntries) > params.Limit {
-		recentEntries = recentEntries[:params.Limit]
+	if len(recentFiles) > params.Limit {
+		recentFiles = recentFiles[:params.Limit]
 	}
 
 	// Format results
-	formattedResults := make([]map[string]any, len(recentEntries))
-	for i, entry := range recentEntries {
+	formattedResults := make([]map[string]any, len(recentFiles))
+	for i, file := range recentFiles {
 		formattedResults[i] = map[string]any{
-			"path":       entry.Metadata.Path,
-			"name":       filepath.Base(entry.Metadata.Path),
-			"category":   entry.Metadata.Category,
-			"size_human": formatSize(entry.Metadata.Size),
-			"modified":   entry.Metadata.Modified.Format(time.RFC3339),
+			"path":       file.Path,
+			"name":       file.Name,
+			"category":   file.Category,
+			"size_human": file.SizeHuman,
+			"modified":   file.Modified.Format(time.RFC3339),
 		}
 
 		// Add semantic fields if available
-		if entry.Semantic != nil {
-			formattedResults[i]["summary"] = entry.Semantic.Summary
-			formattedResults[i]["tags"] = entry.Semantic.Tags
+		if file.Summary != "" {
+			formattedResults[i]["summary"] = file.Summary
+			formattedResults[i]["tags"] = file.Tags
 		}
 	}
 
 	return map[string]any{
 		"days":         params.Days,
 		"result_count": len(formattedResults),
+		"source":       "index",
 		"files":        formattedResults,
+	}, nil
+}
+
+// handleGetRelatedFiles finds files related to a given file through graph relationships
+func (s *Server) handleGetRelatedFiles(ctx context.Context, args json.RawMessage) (any, error) {
+	var params struct {
+		Path  string `json:"path"`
+		Limit int    `json:"limit,omitempty"`
+	}
+
+	if err := json.Unmarshal(args, &params); err != nil {
+		return nil, fmt.Errorf("invalid arguments; %w", err)
+	}
+
+	if params.Path == "" {
+		return nil, fmt.Errorf("path parameter is required")
+	}
+
+	if params.Limit == 0 {
+		params.Limit = 10 // default
+	}
+
+	// Check if daemon API is available
+	if !s.hasDaemonAPI() {
+		return nil, fmt.Errorf("daemon API not available; related files search requires daemon connection")
+	}
+
+	// Get related files from daemon API
+	path := fmt.Sprintf("/api/v1/files/related?path=%s&limit=%d", params.Path, params.Limit)
+	respBody, err := s.callDaemonAPI(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get related files; %w", err)
+	}
+
+	var relatedResp struct {
+		Files []struct {
+			Path           string  `json:"path"`
+			Name           string  `json:"name"`
+			Summary        string  `json:"summary"`
+			Strength       float64 `json:"strength"`
+			ConnectionType string  `json:"connection_type"`
+		} `json:"files"`
+		Count int `json:"count"`
+	}
+	if err := json.Unmarshal(respBody, &relatedResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response; %w", err)
+	}
+
+	// Format results
+	formattedResults := make([]map[string]any, len(relatedResp.Files))
+	for i, rel := range relatedResp.Files {
+		formattedResults[i] = map[string]any{
+			"path":            rel.Path,
+			"name":            rel.Name,
+			"summary":         rel.Summary,
+			"strength":        rel.Strength,
+			"connection_type": rel.ConnectionType,
+		}
+	}
+
+	return map[string]any{
+		"source_file":  params.Path,
+		"result_count": len(formattedResults),
+		"related":      formattedResults,
+	}, nil
+}
+
+// handleSearchEntities searches for files by entity name
+func (s *Server) handleSearchEntities(ctx context.Context, args json.RawMessage) (any, error) {
+	var params struct {
+		Entity     string `json:"entity"`
+		EntityType string `json:"entity_type,omitempty"`
+		MaxResults int    `json:"max_results,omitempty"`
+	}
+
+	if err := json.Unmarshal(args, &params); err != nil {
+		return nil, fmt.Errorf("invalid arguments; %w", err)
+	}
+
+	if params.Entity == "" {
+		return nil, fmt.Errorf("entity parameter is required")
+	}
+
+	if params.MaxResults == 0 {
+		params.MaxResults = 10 // default
+	}
+
+	// Check if daemon API is available
+	if !s.hasDaemonAPI() {
+		return nil, fmt.Errorf("daemon API not available; entity search requires daemon connection")
+	}
+
+	// Search by entity via daemon API
+	path := fmt.Sprintf("/api/v1/entities/search?entity=%s&limit=%d", params.Entity, params.MaxResults)
+	respBody, err := s.callDaemonAPI(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search entities; %w", err)
+	}
+
+	var entityResp struct {
+		Results []struct {
+			Path      string `json:"path"`
+			Name      string `json:"name"`
+			Category  string `json:"category"`
+			Summary   string `json:"summary"`
+			MatchType string `json:"match_type"`
+		} `json:"results"`
+		Count int `json:"count"`
+	}
+	if err := json.Unmarshal(respBody, &entityResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response; %w", err)
+	}
+
+	// Format results
+	formattedResults := make([]map[string]any, len(entityResp.Results))
+	for i, result := range entityResp.Results {
+		formattedResults[i] = map[string]any{
+			"path":       result.Path,
+			"name":       result.Name,
+			"category":   result.Category,
+			"summary":    result.Summary,
+			"match_type": result.MatchType,
+		}
+	}
+
+	return map[string]any{
+		"entity":       params.Entity,
+		"entity_type":  params.EntityType,
+		"result_count": len(formattedResults),
+		"results":      formattedResults,
 	}, nil
 }
 
@@ -598,7 +880,7 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 		},
 		{
 			Name:        "get_file_metadata",
-			Description: "Get complete metadata and semantic analysis for a specific file by path. Returns all available information including summaries, tags, topics, and file-specific metadata.",
+			Description: "Get complete metadata and semantic analysis for a specific file by path. Returns all available information including summaries, tags, topics, entities, related files, and file-specific metadata in a unified FileEntry format.",
 			InputSchema: protocol.InputSchema{
 				Type: "object",
 				Properties: map[string]protocol.Property{
@@ -631,6 +913,52 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 						Maximum:     ptrInt(100),
 					},
 				},
+			},
+		},
+		{
+			Name:        "get_related_files",
+			Description: "Find files related to a given file through shared tags, topics, or entities in the knowledge graph. Requires FalkorDB to be running.",
+			InputSchema: protocol.InputSchema{
+				Type: "object",
+				Properties: map[string]protocol.Property{
+					"path": {
+						Type:        "string",
+						Description: "Path to the source file to find related files for",
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Maximum number of related files to return",
+						Default:     10,
+						Minimum:     ptrInt(1),
+						Maximum:     ptrInt(50),
+					},
+				},
+				Required: []string{"path"},
+			},
+		},
+		{
+			Name:        "search_entities",
+			Description: "Search for files that mention a specific entity (technology, person, concept, organization). Requires FalkorDB to be running.",
+			InputSchema: protocol.InputSchema{
+				Type: "object",
+				Properties: map[string]protocol.Property{
+					"entity": {
+						Type:        "string",
+						Description: "Entity name to search for (e.g., 'Go', 'FalkorDB', 'authentication')",
+					},
+					"entity_type": {
+						Type:        "string",
+						Description: "Optional entity type filter (technology, person, concept, organization)",
+					},
+					"max_results": {
+						Type:        "integer",
+						Description: "Maximum number of results to return",
+						Default:     10,
+						Minimum:     ptrInt(1),
+						Maximum:     ptrInt(100),
+					},
+				},
+				Required: []string{"entity"},
 			},
 		},
 	}
@@ -799,22 +1127,78 @@ func (s *Server) sendError(id any, code int, message string, data any) error {
 }
 
 // GetIndex returns the current index (thread-safe)
-func (s *Server) GetIndex() *types.Index {
+func (s *Server) GetIndex() *types.GraphIndex {
 	s.indexMu.RLock()
 	defer s.indexMu.RUnlock()
 	return s.index
 }
 
 // ReloadIndex atomically updates the server's index (thread-safe)
-func (s *Server) ReloadIndex(newIndex *types.Index) {
+func (s *Server) ReloadIndex(newIndex *types.GraphIndex) {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 	s.index = newIndex
-	s.logger.Info("Index reloaded", "files", len(newIndex.Entries))
+	s.logger.Info("Index reloaded", "files", len(newIndex.Files))
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
 	s.logger.Info("MCP server shutting down")
 	return s.transport.Close()
+}
+
+// callDaemonAPI makes an HTTP request to the daemon API
+func (s *Server) callDaemonAPI(ctx context.Context, method, path string, body any) ([]byte, error) {
+	if s.daemonURL == "" {
+		return nil, fmt.Errorf("daemon URL not configured")
+	}
+
+	url := s.daemonURL + path
+
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request; %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request; %w", err)
+	}
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response; %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		var apiErr struct {
+			Error   string `json:"error"`
+			Details string `json:"details"`
+		}
+		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != "" {
+			return nil, fmt.Errorf("%s: %s", apiErr.Error, apiErr.Details)
+		}
+		return nil, fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	return respBody, nil
+}
+
+// hasDaemonAPI returns true if the daemon API is configured
+func (s *Server) hasDaemonAPI() bool {
+	return s.daemonURL != ""
 }

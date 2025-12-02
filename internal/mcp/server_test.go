@@ -121,11 +121,11 @@ func TestServer_Initialize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.Index{
-				Generated: time.Now(),
-				Root:      "/test",
-				Entries:   []types.IndexEntry{},
-				Stats:     types.IndexStats{},
+			index := &types.GraphIndex{
+				Generated:  time.Now(),
+				MemoryRoot: "/test",
+				Files:      []types.FileEntry{},
+				Stats:      types.IndexStats{},
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -222,11 +222,11 @@ func TestServer_Initialize(t *testing.T) {
 }
 
 func TestServer_Initialized(t *testing.T) {
-	index := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries:   []types.IndexEntry{},
-		Stats:     types.IndexStats{},
+	index := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files:      []types.FileEntry{},
+		Stats:      types.IndexStats{},
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -268,11 +268,11 @@ func TestServer_Initialized(t *testing.T) {
 }
 
 func TestServer_MethodNotFound(t *testing.T) {
-	index := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries:   []types.IndexEntry{},
-		Stats:     types.IndexStats{},
+	index := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files:      []types.FileEntry{},
+		Stats:      types.IndexStats{},
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -340,11 +340,11 @@ func TestServer_ResourcesList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.Index{
-				Generated: time.Now(),
-				Root:      "/test",
-				Entries:   []types.IndexEntry{},
-				Stats:     types.IndexStats{},
+			index := &types.GraphIndex{
+				Generated:  time.Now(),
+				MemoryRoot: "/test",
+				Files:      []types.FileEntry{},
+				Stats:      types.IndexStats{},
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -471,18 +471,15 @@ func TestServer_ResourcesRead(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.Index{
-				Generated: time.Now(),
-				Root:      "/test",
-				Entries: []types.IndexEntry{
+			index := &types.GraphIndex{
+				Generated:  time.Now(),
+				MemoryRoot: "/test",
+				Files: []types.FileEntry{
 					{
-						Metadata: types.FileMetadata{
-							FileInfo: types.FileInfo{
-								Path:     "/test/file.txt",
-								Category: "documents",
-								Size:     100,
-							},
-						},
+						Path:     "/test/file.txt",
+						Name:     "file.txt",
+						Category: "documents",
+						Size:     100,
 					},
 				},
 				Stats: types.IndexStats{
@@ -577,7 +574,7 @@ func TestServer_ToolsList(t *testing.T) {
 			name:        "successful list after initialization",
 			initialized: true,
 			wantError:   false,
-			wantCount:   3, // search_files, get_file_metadata, list_recent_files
+			wantCount:   5, // search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
 		},
 		{
 			name:          "list before initialization",
@@ -589,11 +586,11 @@ func TestServer_ToolsList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.Index{
-				Generated: time.Now(),
-				Root:      "/test",
-				Entries:   []types.IndexEntry{},
-				Stats:     types.IndexStats{},
+			index := &types.GraphIndex{
+				Generated:  time.Now(),
+				MemoryRoot: "/test",
+				Files:      []types.FileEntry{},
+				Stats:      types.IndexStats{},
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -667,7 +664,7 @@ func TestServer_ToolsList(t *testing.T) {
 					}
 				}
 
-				expectedTools := []string{"search_files", "get_file_metadata", "list_recent_files"}
+				expectedTools := []string{"search_files", "get_file_metadata", "list_recent_files", "get_related_files", "search_entities"}
 				for _, name := range expectedTools {
 					if !toolNames[name] {
 						t.Errorf("Expected tool %s not found in tools list", name)
@@ -679,23 +676,18 @@ func TestServer_ToolsList(t *testing.T) {
 }
 
 func TestServer_ToolsCall_SearchFiles(t *testing.T) {
-	index := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/terraform-guide.md",
-						Category: "documents",
-						Size:     1024,
-						Modified: time.Now(),
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Guide to Terraform",
-					Tags:    []string{"terraform", "iac"},
-				},
+				Path:     "/test/terraform-guide.md",
+				Name:     "terraform-guide.md",
+				Category: "documents",
+				Size:     1024,
+				Modified: time.Now(),
+				Summary:  "Guide to Terraform",
+				Tags:     []string{"terraform", "iac"},
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 1, AnalyzedFiles: 1},
@@ -773,22 +765,17 @@ func TestServer_ToolsCall_SearchFiles(t *testing.T) {
 }
 
 func TestServer_ToolsCall_GetFileMetadata(t *testing.T) {
-	index := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/document.md",
-						Category: "documents",
-						Size:     2048,
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Test document",
-					Tags:    []string{"test"},
-				},
+				Path:     "/test/document.md",
+				Name:     "document.md",
+				Category: "documents",
+				Size:     2048,
+				Summary:  "Test document",
+				Tags:     []string{"test"},
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 1},
@@ -844,27 +831,21 @@ func TestServer_ToolsCall_GetFileMetadata(t *testing.T) {
 
 func TestServer_ToolsCall_ListRecentFiles(t *testing.T) {
 	now := time.Now()
-	index := &types.Index{
-		Generated: now,
-		Root:      "/test",
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Generated:  now,
+		MemoryRoot: "/test",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/recent.md",
-						Category: "documents",
-						Modified: now.AddDate(0, 0, -1), // 1 day ago
-					},
-				},
+				Path:     "/test/recent.md",
+				Name:     "recent.md",
+				Category: "documents",
+				Modified: now.AddDate(0, 0, -1), // 1 day ago
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/old.md",
-						Category: "documents",
-						Modified: now.AddDate(0, 0, -30), // 30 days ago
-					},
-				},
+				Path:     "/test/old.md",
+				Name:     "old.md",
+				Category: "documents",
+				Modified: now.AddDate(0, 0, -30), // 30 days ago
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 2},
@@ -929,7 +910,7 @@ func TestServer_ToolsCall_ListRecentFiles(t *testing.T) {
 }
 
 func TestServer_ToolsCall_InvalidTool(t *testing.T) {
-	index := &types.Index{}
+	index := &types.GraphIndex{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	server := NewServer(index, logger, "")
 	server.initialized = true
@@ -975,7 +956,7 @@ func TestServer_ToolsCall_InvalidTool(t *testing.T) {
 }
 
 func TestServer_ToolsCall_InvalidArguments(t *testing.T) {
-	index := &types.Index{}
+	index := &types.GraphIndex{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	server := NewServer(index, logger, "")
 	server.initialized = true
@@ -1068,11 +1049,11 @@ func TestServer_ResourcesSubscribe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.Index{
-				Generated: time.Now(),
-				Root:      "/test",
-				Entries:   []types.IndexEntry{},
-				Stats:     types.IndexStats{},
+			index := &types.GraphIndex{
+				Generated:  time.Now(),
+				MemoryRoot: "/test",
+				Files:      []types.FileEntry{},
+				Stats:      types.IndexStats{},
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -1165,11 +1146,11 @@ func TestServer_ResourcesUnsubscribe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.Index{
-				Generated: time.Now(),
-				Root:      "/test",
-				Entries:   []types.IndexEntry{},
-				Stats:     types.IndexStats{},
+			index := &types.GraphIndex{
+				Generated:  time.Now(),
+				MemoryRoot: "/test",
+				Files:      []types.FileEntry{},
+				Stats:      types.IndexStats{},
 			}
 
 			logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -1233,16 +1214,13 @@ func TestServer_ResourcesUnsubscribe(t *testing.T) {
 }
 
 func TestServer_ReloadIndex(t *testing.T) {
-	originalIndex := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries: []types.IndexEntry{
+	originalIndex := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/original.txt",
-					},
-				},
+				Path: "/test/original.txt",
+				Name: "original.txt",
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 1},
@@ -1253,31 +1231,25 @@ func TestServer_ReloadIndex(t *testing.T) {
 
 	// Verify original index
 	idx := server.GetIndex()
-	if len(idx.Entries) != 1 {
-		t.Fatalf("Original index should have 1 entry, got %d", len(idx.Entries))
+	if len(idx.Files) != 1 {
+		t.Fatalf("Original index should have 1 file, got %d", len(idx.Files))
 	}
-	if idx.Entries[0].Metadata.Path != "/test/original.txt" {
-		t.Errorf("Original index path = %s, want /test/original.txt", idx.Entries[0].Metadata.Path)
+	if idx.Files[0].Path != "/test/original.txt" {
+		t.Errorf("Original index path = %s, want /test/original.txt", idx.Files[0].Path)
 	}
 
 	// Create new index
-	newIndex := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries: []types.IndexEntry{
+	newIndex := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/new1.txt",
-					},
-				},
+				Path: "/test/new1.txt",
+				Name: "new1.txt",
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/new2.txt",
-					},
-				},
+				Path: "/test/new2.txt",
+				Name: "new2.txt",
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 2},
@@ -1288,28 +1260,25 @@ func TestServer_ReloadIndex(t *testing.T) {
 
 	// Verify new index
 	idx = server.GetIndex()
-	if len(idx.Entries) != 2 {
-		t.Fatalf("Reloaded index should have 2 entries, got %d", len(idx.Entries))
+	if len(idx.Files) != 2 {
+		t.Fatalf("Reloaded index should have 2 files, got %d", len(idx.Files))
 	}
-	if idx.Entries[0].Metadata.Path != "/test/new1.txt" {
-		t.Errorf("Reloaded index path[0] = %s, want /test/new1.txt", idx.Entries[0].Metadata.Path)
+	if idx.Files[0].Path != "/test/new1.txt" {
+		t.Errorf("Reloaded index path[0] = %s, want /test/new1.txt", idx.Files[0].Path)
 	}
-	if idx.Entries[1].Metadata.Path != "/test/new2.txt" {
-		t.Errorf("Reloaded index path[1] = %s, want /test/new2.txt", idx.Entries[1].Metadata.Path)
+	if idx.Files[1].Path != "/test/new2.txt" {
+		t.Errorf("Reloaded index path[1] = %s, want /test/new2.txt", idx.Files[1].Path)
 	}
 }
 
 func TestServer_GetIndex(t *testing.T) {
-	index := &types.Index{
-		Generated: time.Now(),
-		Root:      "/test",
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Generated:  time.Now(),
+		MemoryRoot: "/test",
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/file.txt",
-					},
-				},
+				Path: "/test/file.txt",
+				Name: "file.txt",
 			},
 		},
 		Stats: types.IndexStats{TotalFiles: 1},
@@ -1325,17 +1294,17 @@ func TestServer_GetIndex(t *testing.T) {
 		t.Fatal("GetIndex() returned nil")
 	}
 
-	if len(idx.Entries) != 1 {
-		t.Errorf("GetIndex() entries count = %d, want 1", len(idx.Entries))
+	if len(idx.Files) != 1 {
+		t.Errorf("GetIndex() files count = %d, want 1", len(idx.Files))
 	}
 
-	if idx.Entries[0].Metadata.Path != "/test/file.txt" {
-		t.Errorf("GetIndex() path = %s, want /test/file.txt", idx.Entries[0].Metadata.Path)
+	if idx.Files[0].Path != "/test/file.txt" {
+		t.Errorf("GetIndex() path = %s, want /test/file.txt", idx.Files[0].Path)
 	}
 }
 
 func TestServer_CapabilitiesIncludeSubscribe(t *testing.T) {
-	index := &types.Index{}
+	index := &types.GraphIndex{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	server := NewServer(index, logger, "")
 

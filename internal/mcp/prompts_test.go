@@ -231,8 +231,8 @@ func TestPromptRegistry_GeneratePromptMessages_MissingRequiredArgument(t *testin
 	registry := NewPromptRegistry()
 
 	// Create minimal server for testing
-	index := &types.Index{
-		Entries: []types.IndexEntry{},
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{},
 	}
 	server := &Server{
 		index:          index,
@@ -275,8 +275,8 @@ func TestPromptRegistry_GeneratePromptMessages_FileNotFound(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create empty index
-	index := &types.Index{
-		Entries: []types.IndexEntry{},
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{},
 	}
 	server := &Server{
 		index:          index,
@@ -318,8 +318,8 @@ func TestPromptRegistry_GeneratePromptMessages_SearchContext(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create minimal server (search-context doesn't need index data)
-	index := &types.Index{
-		Entries: []types.IndexEntry{},
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{},
 	}
 	server := &Server{
 		index:          index,
@@ -376,24 +376,18 @@ func TestPromptRegistry_GeneratePromptMessages_WithIndexData(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create index with test file
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/file.txt",
-						Type:     "text/plain",
-						Category: "documents",
-						Size:     1024,
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:      "A test file containing sample data",
-					Tags:         []string{"test", "sample"},
-					KeyTopics:    []string{"testing", "examples"},
-					DocumentType: "text document",
-					Confidence:   0.95,
-				},
+				Path:         "/test/file.txt",
+				Name:         "file.txt",
+				Type:         "text/plain",
+				Category:     "documents",
+				Size:         1024,
+				Summary:      "A test file containing sample data",
+				Tags:         []string{"test", "sample"},
+				Topics:       []string{"testing", "examples"},
+				DocumentType: "text document",
 			},
 		},
 	}
@@ -464,19 +458,16 @@ func TestPromptRegistry_GeneratePromptMessages_WithIndexData(t *testing.T) {
 func TestPromptRegistry_GeneratePromptMessages_FileWithoutSemanticAnalysis(t *testing.T) {
 	registry := NewPromptRegistry()
 
-	// Create index with file that has no semantic analysis
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	// Create index with file that has no semantic analysis (empty Summary)
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/file.txt",
-						Type:     "text/plain",
-						Category: "documents",
-						Size:     1024,
-					},
-				},
-				Semantic: nil, // No semantic analysis
+				Path:     "/test/file.txt",
+				Name:     "file.txt",
+				Type:     "text/plain",
+				Category: "documents",
+				Size:     1024,
+				Summary:  "", // No semantic analysis
 			},
 		},
 	}
@@ -517,8 +508,8 @@ func TestPromptRegistry_GeneratePromptMessages_FileWithoutSemanticAnalysis(t *te
 func TestPromptRegistry_GeneratePromptMessages_UnknownPrompt(t *testing.T) {
 	registry := NewPromptRegistry()
 
-	index := &types.Index{
-		Entries: []types.IndexEntry{},
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{},
 	}
 	server := &Server{
 		index:          index,
@@ -564,22 +555,17 @@ func TestPromptRegistry_PromptMessageFormat(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create index with test data
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/file.txt",
-						Type:     "text/plain",
-						Category: "documents",
-						Size:     1024,
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:   "Test summary",
-					Tags:      []string{"test"},
-					KeyTopics: []string{"testing"},
-				},
+				Path:     "/test/file.txt",
+				Name:     "file.txt",
+				Type:     "text/plain",
+				Category: "documents",
+				Size:     1024,
+				Summary:  "Test summary",
+				Tags:     []string{"test"},
+				Topics:   []string{"testing"},
 			},
 		},
 	}

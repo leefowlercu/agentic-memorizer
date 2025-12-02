@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewSearcher(t *testing.T) {
-	index := &types.Index{}
+	index := &types.GraphIndex{}
 	searcher := NewSearcher(index)
 
 	if searcher == nil {
@@ -20,14 +20,11 @@ func TestNewSearcher(t *testing.T) {
 }
 
 func TestSearch_EmptyQuery(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/file.txt",
-					},
-				},
+				Path: "/test/file.txt",
+				Name: "file.txt",
 			},
 		},
 	}
@@ -41,21 +38,15 @@ func TestSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestSearch_FilenameMatch(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/terraform-guide.md",
-					},
-				},
+				Path: "/test/terraform-guide.md",
+				Name: "terraform-guide.md",
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/unrelated.txt",
-					},
-				},
+				Path: "/test/unrelated.txt",
+				Name: "unrelated.txt",
 			},
 		},
 	}
@@ -77,17 +68,12 @@ func TestSearch_FilenameMatch(t *testing.T) {
 }
 
 func TestSearch_SummaryMatch(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/doc.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "A guide about HashiCorp Terraform",
-				},
+				Path:    "/test/doc.md",
+				Name:    "doc.md",
+				Summary: "A guide about HashiCorp Terraform",
 			},
 		},
 	}
@@ -109,17 +95,12 @@ func TestSearch_SummaryMatch(t *testing.T) {
 }
 
 func TestSearch_TagMatch(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/doc.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Tags: []string{"terraform", "infrastructure", "automation"},
-				},
+				Path: "/test/doc.md",
+				Name: "doc.md",
+				Tags: []string{"terraform", "infrastructure", "automation"},
 			},
 		},
 	}
@@ -141,17 +122,12 @@ func TestSearch_TagMatch(t *testing.T) {
 }
 
 func TestSearch_TopicMatch(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/doc.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					KeyTopics: []string{"Terraform automation", "Infrastructure as Code"},
-				},
+				Path:   "/test/doc.md",
+				Name:   "doc.md",
+				Topics: []string{"Terraform automation", "Infrastructure as Code"},
 			},
 		},
 	}
@@ -173,17 +149,12 @@ func TestSearch_TopicMatch(t *testing.T) {
 }
 
 func TestSearch_DocumentTypeMatch(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/doc.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					DocumentType: "terraform-configuration",
-				},
+				Path:         "/test/doc.md",
+				Name:         "doc.md",
+				DocumentType: "terraform-configuration",
 			},
 		},
 	}
@@ -205,19 +176,14 @@ func TestSearch_DocumentTypeMatch(t *testing.T) {
 }
 
 func TestSearch_MultipleMatches(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/terraform-guide.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary:   "A comprehensive guide to Terraform",
-					Tags:      []string{"terraform", "iac"},
-					KeyTopics: []string{"Terraform fundamentals"},
-				},
+				Path:    "/test/terraform-guide.md",
+				Name:    "terraform-guide.md",
+				Summary: "A comprehensive guide to Terraform",
+				Tags:    []string{"terraform", "iac"},
+				Topics:  []string{"Terraform fundamentals"},
 			},
 		},
 	}
@@ -242,38 +208,23 @@ func TestSearch_MultipleMatches(t *testing.T) {
 }
 
 func TestSearch_Scoring(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/terraform-config.tf",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Terraform configuration",
-					Tags:    []string{"terraform"},
-				},
+				Path:    "/test/terraform-config.tf",
+				Name:    "terraform-config.tf",
+				Summary: "Terraform configuration",
+				Tags:    []string{"terraform"},
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/guide.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Mentions terraform in passing",
-				},
+				Path:    "/test/guide.md",
+				Name:    "guide.md",
+				Summary: "Mentions terraform in passing",
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/unrelated.txt",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Not relevant",
-				},
+				Path:    "/test/unrelated.txt",
+				Name:    "unrelated.txt",
+				Summary: "Not relevant",
 			},
 		},
 	}
@@ -291,35 +242,25 @@ func TestSearch_Scoring(t *testing.T) {
 	}
 
 	// First result should be terraform-config.tf (filename + summary + tag = 6.5)
-	if !contains(results[0].Entry.Metadata.Path, "terraform-config") {
-		t.Errorf("First result = %s, expected terraform-config", results[0].Entry.Metadata.Path)
+	if !contains(results[0].File.Path, "terraform-config") {
+		t.Errorf("First result = %s, expected terraform-config", results[0].File.Path)
 	}
 }
 
 func TestSearch_CategoryFilter(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/terraform-guide.md",
-						Category: "documents",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Terraform guide",
-				},
+				Path:     "/test/terraform-guide.md",
+				Name:     "terraform-guide.md",
+				Category: "documents",
+				Summary:  "Terraform guide",
 			},
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path:     "/test/main.tf",
-						Category: "code",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "Terraform configuration",
-				},
+				Path:     "/test/main.tf",
+				Name:     "main.tf",
+				Category: "code",
+				Summary:  "Terraform configuration",
 			},
 		},
 	}
@@ -334,24 +275,21 @@ func TestSearch_CategoryFilter(t *testing.T) {
 		t.Fatalf("Expected 1 result with category filter, got %d", len(results))
 	}
 
-	if results[0].Entry.Metadata.Category != "documents" {
-		t.Errorf("Category = %s, want documents", results[0].Entry.Metadata.Category)
+	if results[0].File.Category != "documents" {
+		t.Errorf("Category = %s, want documents", results[0].File.Category)
 	}
 }
 
 func TestSearch_MaxResults(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{},
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{},
 	}
 
 	// Add 10 entries matching "test"
 	for i := 0; i < 10; i++ {
-		index.Entries = append(index.Entries, types.IndexEntry{
-			Metadata: types.FileMetadata{
-				FileInfo: types.FileInfo{
-					Path: "/test/file-test.txt",
-				},
-			},
+		index.Files = append(index.Files, types.FileEntry{
+			Path: "/test/file-test.txt",
+			Name: "file-test.txt",
 		})
 	}
 
@@ -367,18 +305,13 @@ func TestSearch_MaxResults(t *testing.T) {
 }
 
 func TestSearch_CaseInsensitive(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/Terraform-Guide.md",
-					},
-				},
-				Semantic: &types.SemanticAnalysis{
-					Summary: "A Guide About TERRAFORM",
-					Tags:    []string{"TERRAFORM", "IaC"},
-				},
+				Path:    "/test/Terraform-Guide.md",
+				Name:    "Terraform-Guide.md",
+				Summary: "A Guide About TERRAFORM",
+				Tags:    []string{"TERRAFORM", "IaC"},
 			},
 		},
 	}
@@ -405,15 +338,12 @@ func TestSearch_CaseInsensitive(t *testing.T) {
 }
 
 func TestSearch_NoSemanticAnalysis(t *testing.T) {
-	index := &types.Index{
-		Entries: []types.IndexEntry{
+	index := &types.GraphIndex{
+		Files: []types.FileEntry{
 			{
-				Metadata: types.FileMetadata{
-					FileInfo: types.FileInfo{
-						Path: "/test/terraform.config",
-					},
-				},
-				Semantic: nil, // No semantic analysis
+				Path:    "/test/terraform.config",
+				Name:    "terraform.config",
+				Summary: "", // No semantic analysis
 			},
 		},
 	}

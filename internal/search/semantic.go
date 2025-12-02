@@ -17,18 +17,18 @@ type SearchQuery struct {
 
 // SearchResult represents a single search result
 type SearchResult struct {
-	Entry     types.IndexEntry // The matched index entry
-	Score     float64          // Relevance score
-	MatchType string           // Type of match (filename, summary, tag, topic, document_type)
+	File      types.FileEntry // The matched file entry
+	Score     float64         // Relevance score
+	MatchType string          // Type of match (filename, summary, tag, topic, document_type)
 }
 
 // Searcher performs semantic search over an index
 type Searcher struct {
-	index *types.Index
+	index *types.GraphIndex
 }
 
 // NewSearcher creates a new searcher for the given index
-func NewSearcher(index *types.Index) *Searcher {
+func NewSearcher(index *types.GraphIndex) *Searcher {
 	return &Searcher{index: index}
 }
 
@@ -81,19 +81,19 @@ func (s *Searcher) Search(query SearchQuery) []SearchResult {
 		}
 	}
 
-	// Score each entry
-	for _, entry := range s.index.Entries {
+	// Score each file
+	for _, file := range s.index.Files {
 		// Apply category filter
 		if len(categoryFilter) > 0 {
-			if !categoryFilter[strings.ToLower(entry.Metadata.Category)] {
+			if !categoryFilter[strings.ToLower(file.Category)] {
 				continue
 			}
 		}
 
-		score, matchType := s.scoreEntry(entry, tokens)
+		score, matchType := s.scoreFile(file, tokens)
 		if score > 0.1 { // Minimum score threshold for relevance
 			results = append(results, SearchResult{
-				Entry:     entry,
+				File:      file,
 				Score:     score,
 				MatchType: matchType,
 			})
@@ -113,8 +113,8 @@ func (s *Searcher) Search(query SearchQuery) []SearchResult {
 	return results
 }
 
-// scoreEntry calculates relevance score for an entry using token-based matching
-func (s *Searcher) scoreEntry(entry types.IndexEntry, tokens []string) (float64, string) {
+// scoreFile calculates relevance score for a file entry using token-based matching
+func (s *Searcher) scoreFile(file types.FileEntry, tokens []string) (float64, string) {
 	var score float64
 	var matchType string
 	totalTokens := float64(len(tokens))
@@ -132,15 +132,15 @@ func (s *Searcher) scoreEntry(entry types.IndexEntry, tokens []string) (float64,
 	}
 
 	// 1. Filename match (highest weight: 3.0)
-	filename := strings.ToLower(filepath.Base(entry.Metadata.Path))
+	filename := strings.ToLower(file.Name)
 	filenameMatches := countMatches(filename)
 	if filenameMatches > 0 {
 		score += (float64(filenameMatches) / totalTokens) * 3.0
 		matchType = "filename"
 	}
 
-	// 2. Category match (1.0) - NEW
-	categoryMatches := countMatches(entry.Metadata.Category)
+	// 2. Category match (1.0)
+	categoryMatches := countMatches(file.Category)
 	if categoryMatches > 0 {
 		score += (float64(categoryMatches) / totalTokens) * 1.0
 		if matchType == "" {
@@ -148,10 +148,10 @@ func (s *Searcher) scoreEntry(entry types.IndexEntry, tokens []string) (float64,
 		}
 	}
 
-	// 3. File type match (0.5) - NEW
+	// 3. File type match (0.5)
 	// Check both the Type field and extract extension from filename
-	fileTypeMatches := countMatches(entry.Metadata.Type)
-	ext := strings.TrimPrefix(filepath.Ext(entry.Metadata.Path), ".")
+	fileTypeMatches := countMatches(file.Type)
+	ext := strings.TrimPrefix(filepath.Ext(file.Path), ".")
 	if ext != "" {
 		fileTypeMatches += countMatches(ext)
 	}
@@ -162,23 +162,20 @@ func (s *Searcher) scoreEntry(entry types.IndexEntry, tokens []string) (float64,
 		}
 	}
 
-	// If no semantic analysis, return metadata-only score
-	if entry.Semantic == nil {
-		return score, matchType
-	}
-
-	// 4. Summary match (2.0)
-	summaryMatches := countMatches(entry.Semantic.Summary)
-	if summaryMatches > 0 {
-		score += (float64(summaryMatches) / totalTokens) * 2.0
-		if matchType == "" {
-			matchType = "summary"
+	// 4. Summary match (2.0) - FileEntry has Summary directly
+	if file.Summary != "" {
+		summaryMatches := countMatches(file.Summary)
+		if summaryMatches > 0 {
+			score += (float64(summaryMatches) / totalTokens) * 2.0
+			if matchType == "" {
+				matchType = "summary"
+			}
 		}
 	}
 
-	// 5. Tag matches (1.5)
+	// 5. Tag matches (1.5) - FileEntry has Tags directly
 	tagMatches := 0
-	for _, tag := range entry.Semantic.Tags {
+	for _, tag := range file.Tags {
 		tagMatches += countMatches(tag)
 	}
 	if tagMatches > 0 {
@@ -188,9 +185,9 @@ func (s *Searcher) scoreEntry(entry types.IndexEntry, tokens []string) (float64,
 		}
 	}
 
-	// 6. Topic matches (1.0)
+	// 6. Topic matches (1.0) - FileEntry has Topics directly
 	topicMatches := 0
-	for _, topic := range entry.Semantic.KeyTopics {
+	for _, topic := range file.Topics {
 		topicMatches += countMatches(topic)
 	}
 	if topicMatches > 0 {
@@ -200,12 +197,14 @@ func (s *Searcher) scoreEntry(entry types.IndexEntry, tokens []string) (float64,
 		}
 	}
 
-	// 7. Document type match (0.5)
-	docTypeMatches := countMatches(entry.Semantic.DocumentType)
-	if docTypeMatches > 0 {
-		score += (float64(docTypeMatches) / totalTokens) * 0.5
-		if matchType == "" {
-			matchType = "document_type"
+	// 7. Document type match (0.5) - FileEntry has DocumentType directly
+	if file.DocumentType != "" {
+		docTypeMatches := countMatches(file.DocumentType)
+		if docTypeMatches > 0 {
+			score += (float64(docTypeMatches) / totalTokens) * 0.5
+			if matchType == "" {
+				matchType = "document_type"
+			}
 		}
 	}
 

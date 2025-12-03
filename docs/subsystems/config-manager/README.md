@@ -200,12 +200,13 @@ Configuration reload is triggered via the `config reload` CLI command, which:
 
 *MCP Server Process (require MCP client reconnection):*
 - `mcp.log_file` - MCP log file handle is opened at startup
-- `mcp.daemon_url` - Daemon API URL established at startup
+- `mcp.daemon_host` - Daemon API host established at startup
+- `mcp.daemon_port` - Daemon API port established at startup
 - `mcp.log_level` - Log level configured at startup
 
 **Hot-Reloadable Settings (Daemon):**
 These settings can be changed dynamically while the daemon is running:
-- **Claude API Settings**: `api_key`, `model`, `max_tokens`, `enable_vision`, `timeout_seconds`
+- **Claude API Settings**: `api_key`, `model`, `max_tokens`
 - **Worker Configuration**: `daemon.workers` (concurrent processing capacity)
 - **Rate Limiting**: `daemon.rate_limit_per_min` (API call throttling)
 - **Debounce Timing**: `daemon.debounce_ms` (file change batching delay)
@@ -241,28 +242,38 @@ agentic-memorizer config reload
 The Configuration Types component (`internal/config/types.go`) defines the schema for all configuration using strongly-typed Go structures with comprehensive tag annotations for serialization.
 
 **Root Configuration Structure:**
-The `Config` struct serves as the top-level container with seven major sections:
+The `Config` struct serves as the top-level container with eight major sections:
 - `MemoryRoot` - Directory path where user files are stored
-- `Claude` - Claude API configuration (credentials, model, settings)
-- `Output` - Output formatting preferences
+- `Claude` - Claude API configuration (credentials, model)
 - `Analysis` - Semantic analysis configuration
 - `Daemon` - Background daemon settings
 - `MCP` - Model Context Protocol server configuration
+- `Graph` - FalkorDB knowledge graph configuration
+- `Embeddings` - Vector embeddings configuration
 - `Integrations` - Integration framework configuration
 
 **ClaudeConfig Structure:**
 Configures Claude API integration:
-- `APIKey` - Direct API key (or empty to use environment variable)
-- `APIKeyEnv` - Environment variable name containing API key (default: ANTHROPIC_API_KEY)
+- `APIKey` - Direct API key (or empty to use ANTHROPIC_API_KEY environment variable)
 - `Model` - Claude model identifier (default: claude-sonnet-4-5-20250929)
 - `MaxTokens` - Maximum response length in tokens (default: 1500)
-- `EnableVision` - Toggle for image analysis capabilities (default: true)
-- `TimeoutSeconds` - API request timeout (default: 30 seconds)
 
-**OutputConfig Structure:**
-Controls output format and recent activity:
-- `Format` - Output format: xml, markdown, or json (default: xml)
-- `ShowRecentDays` - Show files modified in last N days in recent activity section (default: 7)
+Note: Vision support and timeout are hardcoded constants (`ClaudeEnableVision=true`, `ClaudeTimeoutSeconds=30`) in `internal/config/constants.go`.
+
+**Hardcoded Settings:**
+The following settings have been moved to hardcoded constants in `internal/config/constants.go` to simplify configuration:
+- `ClaudeAPIKeyEnv` = "ANTHROPIC_API_KEY" - Environment variable for API key
+- `ClaudeEnableVision` = true - Vision analysis is always enabled
+- `ClaudeTimeoutSeconds` = 30 - API timeout in seconds
+- `GraphDatabase` = "memorizer" - FalkorDB database name
+- `GraphPasswordEnv` = "FALKORDB_PASSWORD" - Environment variable for FalkorDB password
+- `EmbeddingsProvider` = "openai" - Only OpenAI embeddings supported
+- `EmbeddingsAPIKeyEnv` = "OPENAI_API_KEY" - Environment variable for embeddings API key
+- `EmbeddingsModel` = "text-embedding-3-small" - OpenAI embedding model
+- `EmbeddingsDimensions` = 1536 - Vector dimensions
+- `EmbeddingsCacheEnabled` = true - Embedding caching is always enabled
+- `EmbeddingsBatchSize` = 100 - Batch size for embedding generation
+- `OutputShowRecentDays` = 7 - Days for recent file display
 
 **AnalysisConfig Structure:**
 Configures semantic analysis behavior:
@@ -290,9 +301,12 @@ Note: Daemon operation is controlled via CLI commands (`daemon start`, `daemon s
 Configures Model Context Protocol server:
 - `LogFile` - MCP server log file path (default: `~/.agentic-memorizer/mcp.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
-- `DaemonURL` - Base URL for daemon's HTTP API (default: empty for disabled)
+- `DaemonHost` - Host for daemon's HTTP API (default: "localhost")
+- `DaemonPort` - Port for daemon's HTTP API (default: 0 for disabled)
 
-The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized. When `DaemonURL` is configured, the MCP server uses the daemon's HTTP API for graph-powered queries and real-time index updates.
+The MCP configuration is separate from daemon logging, enabling independent logging control for MCP integrations. These settings are applied when the MCP server is initialized. When `DaemonPort` is configured with a non-zero value, the MCP server connects to the daemon's HTTP API (constructed as `http://{DaemonHost}:{DaemonPort}`) for graph-powered queries and real-time index updates. The `GetDaemonURL()` helper method constructs the full URL from host and port.
+
+During `initialize`, if the user enables the daemon HTTP server (`daemon.http_port`), the same port is automatically copied to `mcp.daemon_port` to ensure MCP servers can connect to the daemon.
 
 **IntegrationsConfig Structure:**
 Manages integration framework settings:
@@ -338,27 +352,30 @@ A complete `Config` instance with all fields populated with production-ready def
 
 **Default Values Summary:**
 - Memory root: `~/.agentic-memorizer/memory`
-- Claude API key environment variable: `ANTHROPIC_API_KEY`
 - Claude model: `claude-sonnet-4-5-20250929`
 - Max tokens: 1500
-- Vision enabled: true
-- API timeout: 30 seconds
-- Output format: xml
-- Show recent days: 7
-- Analysis enabled: true
 - Max file size: 10485760 (10 MB)
 - Cache directory: `~/.agentic-memorizer/.cache`
 - Daemon workers: 3
 - Debounce delay: 500 ms
 - Rate limit: 20 calls/minute
 - Rebuild interval: 60 minutes
-- Health check port: 0 (disabled)
-- SSE notify port: 0 (disabled)
+- HTTP port: 0 (disabled)
 - Daemon log file: `~/.agentic-memorizer/daemon.log`
 - Daemon log level: info
 - MCP log file: `~/.agentic-memorizer/mcp.log`
 - MCP log level: info
-- MCP daemon SSE URL: empty (disabled)
+- MCP daemon host: localhost
+- MCP daemon port: 0 (disabled)
+- Graph host: localhost
+- Graph port: 6379
+- Graph similarity threshold: 0.7
+- Graph max similar files: 10
+
+**Derived Settings:**
+These settings are automatically computed:
+- `analysis.enabled` - Derived from Claude API key presence
+- `embeddings.enabled` - Derived from embeddings API key presence
 
 ### Validation System
 
@@ -376,14 +393,9 @@ The system uses structured validation with the `Validator` type accumulating err
 - Type verification (must be directory, not regular file)
 
 **Claude API Validation:**
-- API key or environment variable required (one must be specified)
+- API key required (directly or via ANTHROPIC_API_KEY environment variable)
 - Model name required (cannot be empty)
 - Max tokens range enforcement (1-8192 tokens)
-- Timeout range enforcement (1-300 seconds)
-
-**Output Validation:**
-- Format enumeration check (must be xml, markdown, or json)
-- Recent days range enforcement (0-365 days)
 
 **Analysis Validation:**
 - Max file size non-negative check
@@ -487,21 +499,21 @@ The Semantic Analyzer subsystem relies on the Config Manager for Claude API cred
 
 **API Client Configuration:**
 The semantic analyzer creates its Claude API client using configuration values:
-- `cfg.Claude.APIKey` or resolved from `cfg.Claude.APIKeyEnv` environment variable
+- `cfg.Claude.APIKey` or resolved from `ANTHROPIC_API_KEY` environment variable
 - `cfg.Claude.Model` specifies which Claude model to use for analysis
 - `cfg.Claude.MaxTokens` limits response length
-- `cfg.Claude.TimeoutSeconds` configures request timeout
+- `config.ClaudeTimeoutSeconds` (hardcoded constant) configures request timeout
 
 **Analysis Behavior:**
-- `cfg.Claude.EnableVision` toggles image analysis using vision capabilities
-- `cfg.Analysis.Enable` provides a master switch for semantic analysis
+- `config.ClaudeEnableVision` (hardcoded constant) enables image analysis using vision capabilities
+- `cfg.Analysis.Enabled` is derived from API key presence (enabled when Claude API key is set)
 - `cfg.Analysis.MaxFileSize` limits files sent for analysis
 
 **Environment Variable Resolution:**
-The analyzer benefits from automatic API key resolution from environment variables. When `api_key_env` is set (default: ANTHROPIC_API_KEY), the Config Manager resolves the key from the environment, enabling secure credential management without storing keys in configuration files.
+The analyzer benefits from automatic API key resolution from the `ANTHROPIC_API_KEY` environment variable (hardcoded in `config.ClaudeAPIKeyEnv`), enabling secure credential management without storing keys in configuration files.
 
 **Optional Component Pattern:**
-The analyzer is only created when `cfg.Analysis.Enable` is true. This configuration-driven instantiation allows the system to operate in metadata-only mode without Claude API access.
+The analyzer is only created when `cfg.Analysis.Enabled` is true. This configuration-driven instantiation allows the system to operate in metadata-only mode without Claude API access.
 
 ### Cache Manager
 
@@ -522,7 +534,7 @@ daemon initialization:
 The Config Manager ensures the cache directory path is safe (no directory traversal) and properly expanded (tilde to home directory) before the cache manager uses it. This validation prevents security issues and ensures portable configuration.
 
 **Conditional Creation:**
-The cache manager is only created when semantic analysis is enabled. The daemon checks `cfg.Analysis.Enable` before instantiating the cache manager, ensuring resources aren't allocated for unused functionality.
+The cache manager is only created when semantic analysis is enabled. The daemon checks `cfg.Analysis.Enabled` before instantiating the cache manager, ensuring resources aren't allocated for unused functionality.
 
 ### CLI Commands
 
@@ -534,9 +546,9 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 **Command-Specific Usage:**
 
 **Read Command:**
-- Uses `cfg.Output.Format` to determine output format (xml, markdown, json)
-- Respects `cfg.Output.ShowRecentDays` for recent file filtering
+- Uses `--format` flag to determine output format (xml, markdown, json) with hardcoded default of "xml"
 - Uses `cfg.MemoryRoot` to locate files for reading
+- Connects to FalkorDB using `cfg.Graph` settings and `config.GraphDatabase` constant
 
 **Init Command:**
 - Creates default configuration file using `WriteConfig()`

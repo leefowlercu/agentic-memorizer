@@ -1,9 +1,10 @@
 package config
 
+import "fmt"
+
 type Config struct {
 	MemoryRoot   string             `mapstructure:"memory_root" yaml:"memory_root"`
 	Claude       ClaudeConfig       `mapstructure:"claude" yaml:"claude"`
-	Output       OutputConfig       `mapstructure:"output" yaml:"output"`
 	Analysis     AnalysisConfig     `mapstructure:"analysis" yaml:"analysis"`
 	Daemon       DaemonConfig       `mapstructure:"daemon" yaml:"daemon"`
 	MCP          MCPConfig          `mapstructure:"mcp" yaml:"mcp"`
@@ -13,21 +14,13 @@ type Config struct {
 }
 
 type ClaudeConfig struct {
-	APIKey         string `mapstructure:"api_key" yaml:"api_key"`
-	APIKeyEnv      string `mapstructure:"api_key_env" yaml:"api_key_env"`
-	Model          string `mapstructure:"model" yaml:"model"`
-	MaxTokens      int    `mapstructure:"max_tokens" yaml:"max_tokens"`
-	EnableVision   bool   `mapstructure:"enable_vision" yaml:"enable_vision"`
-	TimeoutSeconds int    `mapstructure:"timeout_seconds" yaml:"timeout_seconds"`
-}
-
-type OutputConfig struct {
-	Format         string `mapstructure:"format" yaml:"format"`
-	ShowRecentDays int    `mapstructure:"show_recent_days" yaml:"show_recent_days"`
+	APIKey    string `mapstructure:"api_key" yaml:"api_key"`
+	Model     string `mapstructure:"model" yaml:"model"`
+	MaxTokens int    `mapstructure:"max_tokens" yaml:"max_tokens"`
 }
 
 type AnalysisConfig struct {
-	Enable         bool     `mapstructure:"enable" yaml:"enable"`
+	Enabled        bool     `mapstructure:"enabled" yaml:"enabled"`
 	MaxFileSize    int64    `mapstructure:"max_file_size" yaml:"max_file_size"`
 	SkipExtensions []string `mapstructure:"skip_extensions" yaml:"skip_extensions"`
 	SkipFiles      []string `mapstructure:"skip_files" yaml:"skip_files"`
@@ -45,9 +38,19 @@ type DaemonConfig struct {
 }
 
 type MCPConfig struct {
-	LogFile   string `mapstructure:"log_file" yaml:"log_file"`
-	LogLevel  string `mapstructure:"log_level" yaml:"log_level"`
-	DaemonURL string `mapstructure:"daemon_url" yaml:"daemon_url"` // Base URL for Daemon HTTP API
+	LogFile    string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel   string `mapstructure:"log_level" yaml:"log_level"`
+	DaemonHost string `mapstructure:"daemon_host" yaml:"daemon_host"`
+	DaemonPort int    `mapstructure:"daemon_port" yaml:"daemon_port"`
+}
+
+// GetDaemonURL returns the daemon HTTP API URL constructed from host and port.
+// Returns empty string if daemon port is not configured (0).
+func (m *MCPConfig) GetDaemonURL() string {
+	if m.DaemonPort > 0 {
+		return fmt.Sprintf("http://%s:%d", m.DaemonHost, m.DaemonPort)
+	}
+	return ""
 }
 
 // IntegrationsConfig represents the complete integrations configuration section.
@@ -63,21 +66,14 @@ type IntegrationsConfig struct {
 type GraphConfig struct {
 	Host                string  `mapstructure:"host" yaml:"host"`
 	Port                int     `mapstructure:"port" yaml:"port"`
-	Database            string  `mapstructure:"database" yaml:"database"`
 	Password            string  `mapstructure:"password" yaml:"password"`
-	PasswordEnv         string  `mapstructure:"password_env" yaml:"password_env"`
 	SimilarityThreshold float64 `mapstructure:"similarity_threshold" yaml:"similarity_threshold"`
 	MaxSimilarFiles     int     `mapstructure:"max_similar_files" yaml:"max_similar_files"`
 }
 
-// EmbeddingsConfig contains embedding provider configuration
+// EmbeddingsConfig contains embedding provider configuration.
+// Provider, model, and dimensions are hardcoded to OpenAI text-embedding-3-small.
 type EmbeddingsConfig struct {
-	Enabled       bool   `mapstructure:"enabled" yaml:"enabled"`
-	Provider      string `mapstructure:"provider" yaml:"provider"`
-	APIKey        string `mapstructure:"api_key" yaml:"api_key"`
-	APIKeyEnv     string `mapstructure:"api_key_env" yaml:"api_key_env"`
-	Model         string `mapstructure:"model" yaml:"model"`
-	Dimensions    int    `mapstructure:"dimensions" yaml:"dimensions"`
-	CacheEnabled  bool   `mapstructure:"cache_enabled" yaml:"cache_enabled"`
-	BatchSize     int    `mapstructure:"batch_size" yaml:"batch_size"`
+	Enabled bool   `mapstructure:"enabled" yaml:"enabled"`
+	APIKey  string `mapstructure:"api_key" yaml:"api_key"`
 }

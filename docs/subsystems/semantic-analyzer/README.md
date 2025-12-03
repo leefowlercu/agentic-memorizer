@@ -75,9 +75,9 @@ This design ensures that a single corrupted file, API outage, or configuration c
 All semantic analyzer behavior is controlled through configuration parameters, enabling users to tune the subsystem's operation without code changes. This design separates policy decisions (what to analyze, how aggressively) from mechanism implementation (how to analyze).
 
 Key configuration parameters include:
-- `analysis.enable` - Global toggle for semantic analysis (true/false)
+- `analysis.enabled` - Global toggle for semantic analysis (derived from Claude API key presence)
 - `analysis.max_file_size` - Maximum file size for analysis in bytes (default: 10MB)
-- `claude.enable_vision` - Toggle for image vision analysis (true/false)
+- `claude.enable_vision` - Toggle for image vision analysis (hardcoded: true)
 - `claude.model` - Claude model identifier (default: claude-sonnet-4-5-20250929)
 - `claude.max_tokens` - Response length limit (default: 1500 tokens)
 - `claude.timeout_seconds` - API request timeout (default: 30 seconds)
@@ -266,7 +266,7 @@ The Semantic Analyzer employs distinct strategies for different file types, each
 
 ### Daemon Subsystem
 
-The Daemon subsystem (`internal/daemon/daemon.go`) creates and manages the Semantic Analyzer as an optional component controlled by the `analysis.enable` configuration parameter.
+The Daemon subsystem (`internal/daemon/daemon.go`) creates and manages the Semantic Analyzer as an optional component controlled by the `analysis.enabled` configuration parameter.
 
 **Initialization**:
 During daemon startup, if semantic analysis is enabled, the daemon creates a Client instance with API key, model, max tokens, and timeout from configuration. It then creates an Analyzer instance with the client, vision enablement flag, and max file size limit. If semantic analysis is disabled, the analyzer remains nil throughout the daemon's lifecycle.
@@ -287,7 +287,7 @@ When the File Watcher detects a file change, the daemon's event handler invokes 
 7. Index is persisted atomically to disk
 
 **Optional Component Pattern**:
-The analyzer is only created when `analysis.enable` is true. When disabled, the daemon processes files with metadata only, allowing the system to operate without Claude API access or for metadata-only indexing use cases.
+The analyzer is only created when `analysis.enabled` is true. When disabled, the daemon processes files with metadata only, allowing the system to operate without Claude API access or for metadata-only indexing use cases.
 
 ### Metadata Extractor
 
@@ -366,7 +366,7 @@ IndexEntry {
 
 **Presence Logic**:
 The `Semantic` field is nil in three cases:
-1. Semantic analysis is disabled via `analysis.enable = false` configuration
+1. Semantic analysis is disabled via `analysis.enabled = false` configuration
 2. Analysis failed with an error (error message stored in `Error` field)
 3. File was processed before semantic analysis was implemented
 

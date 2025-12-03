@@ -87,7 +87,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
 			Port:     cfg.Graph.Port,
-			Database: cfg.Graph.Database,
+			Database: config.GraphDatabase, // Hardcoded convention
 		},
 		MemoryRoot: cfg.MemoryRoot,
 	}

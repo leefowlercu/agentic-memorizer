@@ -17,7 +17,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                6379,
-				Database:            "memorizer",
 				SimilarityThreshold: 0.7,
 				MaxSimilarFiles:     10,
 			},
@@ -28,7 +27,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "",
 				Port:                6379,
-				Database:            "memorizer",
 				SimilarityThreshold: 0.7,
 				MaxSimilarFiles:     10,
 			},
@@ -40,7 +38,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                0,
-				Database:            "memorizer",
 				SimilarityThreshold: 0.7,
 				MaxSimilarFiles:     10,
 			},
@@ -52,7 +49,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                70000,
-				Database:            "memorizer",
 				SimilarityThreshold: 0.7,
 				MaxSimilarFiles:     10,
 			},
@@ -60,23 +56,10 @@ func TestValidateGraph(t *testing.T) {
 			errorFields: []string{"graph.port"},
 		},
 		{
-			name: "empty database",
-			graph: GraphConfig{
-				Host:                "localhost",
-				Port:                6379,
-				Database:            "",
-				SimilarityThreshold: 0.7,
-				MaxSimilarFiles:     10,
-			},
-			wantErrors:  true,
-			errorFields: []string{"graph.database"},
-		},
-		{
 			name: "similarity threshold negative",
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                6379,
-				Database:            "memorizer",
 				SimilarityThreshold: -0.5,
 				MaxSimilarFiles:     10,
 			},
@@ -88,7 +71,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                6379,
-				Database:            "memorizer",
 				SimilarityThreshold: 1.5,
 				MaxSimilarFiles:     10,
 			},
@@ -100,7 +82,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                6379,
-				Database:            "memorizer",
 				SimilarityThreshold: 0.7,
 				MaxSimilarFiles:     0,
 			},
@@ -112,7 +93,6 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "localhost",
 				Port:                6379,
-				Database:            "memorizer",
 				SimilarityThreshold: 0.7,
 				MaxSimilarFiles:     200,
 			},
@@ -124,12 +104,11 @@ func TestValidateGraph(t *testing.T) {
 			graph: GraphConfig{
 				Host:                "",
 				Port:                0,
-				Database:            "",
 				SimilarityThreshold: 2.0,
 				MaxSimilarFiles:     0,
 			},
 			wantErrors:  true,
-			errorFields: []string{"graph.host", "graph.port", "graph.database", "graph.similarity_threshold", "graph.max_similar_files"},
+			errorFields: []string{"graph.host", "graph.port", "graph.similarity_threshold", "graph.max_similar_files"},
 		},
 	}
 
@@ -288,14 +267,8 @@ func TestValidateConfig_MCP(t *testing.T) {
 			cfg: &Config{
 				MemoryRoot: "~/.agentic-memorizer/memory",
 				Claude: ClaudeConfig{
-					APIKeyEnv:      "ANTHROPIC_API_KEY",
-					Model:          "claude-sonnet-4-5-20250929",
-					MaxTokens:      1500,
-					TimeoutSeconds: 30,
-				},
-				Output: OutputConfig{
-					Format:         "xml",
-					ShowRecentDays: 7,
+					Model:     "claude-sonnet-4-5-20250929",
+					MaxTokens: 1500,
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
@@ -313,7 +286,6 @@ func TestValidateConfig_MCP(t *testing.T) {
 				Graph: GraphConfig{
 					Host:                "localhost",
 					Port:                6379,
-					Database:            "memorizer",
 					SimilarityThreshold: 0.7,
 					MaxSimilarFiles:     10,
 				},
@@ -325,14 +297,8 @@ func TestValidateConfig_MCP(t *testing.T) {
 			cfg: &Config{
 				MemoryRoot: "~/.agentic-memorizer/memory",
 				Claude: ClaudeConfig{
-					APIKeyEnv:      "ANTHROPIC_API_KEY",
-					Model:          "claude-sonnet-4-5-20250929",
-					MaxTokens:      1500,
-					TimeoutSeconds: 30,
-				},
-				Output: OutputConfig{
-					Format:         "xml",
-					ShowRecentDays: 7,
+					Model:     "claude-sonnet-4-5-20250929",
+					MaxTokens: 1500,
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
@@ -350,7 +316,6 @@ func TestValidateConfig_MCP(t *testing.T) {
 				Graph: GraphConfig{
 					Host:                "localhost",
 					Port:                6379,
-					Database:            "memorizer",
 					SimilarityThreshold: 0.7,
 					MaxSimilarFiles:     10,
 				},
@@ -363,14 +328,8 @@ func TestValidateConfig_MCP(t *testing.T) {
 			cfg: &Config{
 				MemoryRoot: "~/.agentic-memorizer/memory",
 				Claude: ClaudeConfig{
-					APIKeyEnv:      "ANTHROPIC_API_KEY",
-					Model:          "claude-sonnet-4-5-20250929",
-					MaxTokens:      1500,
-					TimeoutSeconds: 30,
-				},
-				Output: OutputConfig{
-					Format:         "xml",
-					ShowRecentDays: 7,
+					Model:     "claude-sonnet-4-5-20250929",
+					MaxTokens: 1500,
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
@@ -388,7 +347,6 @@ func TestValidateConfig_MCP(t *testing.T) {
 				Graph: GraphConfig{
 					Host:                "localhost",
 					Port:                6379,
-					Database:            "memorizer",
 					SimilarityThreshold: 0.7,
 					MaxSimilarFiles:     10,
 				},

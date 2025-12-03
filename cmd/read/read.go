@@ -12,7 +12,6 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var ReadCmd = &cobra.Command{
@@ -43,11 +42,9 @@ var ReadCmd = &cobra.Command{
 }
 
 func init() {
-	ReadCmd.Flags().String("format", config.DefaultConfig.Output.Format, "Output format (xml/markdown/json)")
+	ReadCmd.Flags().String("format", "xml", "Output format (xml/markdown/json)")
 	ReadCmd.Flags().BoolP("verbose", "v", false, "Include related files per entry and graph insights")
 	ReadCmd.Flags().String("integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
-
-	viper.BindPFlag("output.format", ReadCmd.Flags().Lookup("format"))
 }
 
 func validateRead(cmd *cobra.Command, args []string) error {
@@ -104,7 +101,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
 			Port:     cfg.Graph.Port,
-			Database: cfg.Graph.Database,
+			Database: config.GraphDatabase, // Hardcoded convention
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
@@ -121,7 +118,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 	// Get flags
 	formatStr, _ := cmd.Flags().GetString("format")
 	if formatStr == "" {
-		formatStr = cfg.Output.Format
+		formatStr = "xml" // Hardcoded default
 	}
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	integrationName, _ := cmd.Flags().GetString("integration")
@@ -152,7 +149,7 @@ func handleEmptyIndex(cmd *cobra.Command, cfg *config.Config) error {
 
 	formatStr, _ := cmd.Flags().GetString("format")
 	if formatStr == "" {
-		formatStr = cfg.Output.Format
+		formatStr = "xml" // Hardcoded default
 	}
 
 	// Warning message for empty index

@@ -163,7 +163,7 @@ Once computed, the file hash serves multiple purposes:
 The Daemon subsystem (`internal/daemon/daemon.go`) creates and manages the Cache Manager as an optional component that's only initialized when semantic analysis is enabled.
 
 **Initialization:**
-During daemon startup at `daemon.go:113-116`, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enable` at lines 120-133).
+During daemon startup at `daemon.go:113-116`, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enabled` at lines 120-133).
 
 **Worker Pool Distribution:**
 The daemon passes the cache manager instance to the worker pool during initialization. All worker threads share this single cache manager instance, enabling coordinated cache access across parallel processing. The cache manager's stateless design ensures this sharing is safe without explicit synchronization.

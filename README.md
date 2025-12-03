@@ -1815,14 +1815,62 @@ The index tells your AI agent which method to use for each file.
 
 ## Configuration Options
 
-See `config.yaml.example` for all options:
+The configuration system follows "convention over configuration" principles. Most settings have optimal defaults, so you only need to configure what you want to customize.
 
-- **API Settings**: Model, tokens, timeout, vision enable
-- **Analysis**: Enable/disable, file size limits, file exclusions, cache directory
-- **Daemon**: Worker count, rate limits, rebuild intervals, health check, debounce timing
-- **Output**: Format (xml/markdown/json), recent activity days
-- **MCP**: Log file path, log level
-- **Integrations**: Tracks enabled integrations (auto-managed by CLI)
+### Configuration Tiers
+
+**User-Facing Settings** (shown after `initialize`):
+- `memory_root` - Directory containing your memory files
+- `claude.api_key` - Anthropic API key (or set `ANTHROPIC_API_KEY` env var)
+- `claude.model` - Claude model to use (default: `claude-sonnet-4-5-20250929`)
+- `daemon.http_port` - HTTP API port for MCP integration (0 to disable)
+- `daemon.log_level` - Daemon log verbosity (debug/info/warn/error)
+- `mcp.log_level` - MCP server log verbosity
+- `graph.host` / `graph.port` - FalkorDB connection settings
+- `graph.password` - FalkorDB password (or set `FALKORDB_PASSWORD` env var)
+- `embeddings.api_key` - OpenAI API key for embeddings (or set `OPENAI_API_KEY` env var)
+
+**Internal Settings** (available but not in initialized config):
+
+These settings have optimal defaults but can be customized by adding them to your `config.yaml`:
+
+```yaml
+# Analysis tuning
+analysis:
+  max_file_size: 10485760    # 10MB - files larger than this skip semantic analysis
+  skip_extensions: [.zip, .tar, .gz, .exe, .bin, .dmg, .iso]
+  skip_files: [agentic-memorizer]
+  cache_dir: ~/.agentic-memorizer/.cache
+
+# Daemon performance tuning
+daemon:
+  debounce_ms: 500           # Wait time before processing file changes
+  workers: 3                 # Parallel processing workers
+  rate_limit_per_min: 20     # Claude API rate limit
+  full_rebuild_interval_minutes: 60
+  log_file: ~/.agentic-memorizer/daemon.log
+
+# MCP server settings
+mcp:
+  log_file: ~/.agentic-memorizer/mcp.log
+  daemon_host: localhost
+  daemon_port: 0             # Set to match daemon.http_port for MCP integration
+
+# Claude API tuning
+claude:
+  max_tokens: 1500           # Response length limit per analysis
+
+# Graph tuning
+graph:
+  similarity_threshold: 0.7  # Minimum similarity for related files (0.0-1.0)
+  max_similar_files: 10      # Max similar files per query
+```
+
+**Derived Settings** (computed automatically):
+- `analysis.enabled` - Automatically enabled when Claude API key is set
+- `embeddings.enabled` - Automatically enabled when OpenAI API key is set
+
+See `config.yaml.example` for a complete reference with all available options
 
 ### File Exclusions
 
@@ -2205,7 +2253,7 @@ See existing handlers for examples.
 
 - **API Costs**: Semantic analysis uses Claude API calls (costs apply)
   - Mitigated by caching (only analyzes new/modified files)
-  - Can disable semantic analysis in config: `analysis.enable: false` for metadata-only mode
+  - Can disable semantic analysis in config: `analysis.enabled: false` for metadata-only mode
 
 - **File Size Limit**: Default 10MB max for semantic analysis
   - Configurable via `analysis.max_file_size` in config
@@ -2257,7 +2305,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 When indexing many files:
 - Reduce daemon workers: `daemon.workers: 1` in config
 - Lower rate limit: `daemon.rate_limit_per_min: 10` in config
-- Disable semantic analysis temporarily: `analysis.enable: false` in config
+- Disable semantic analysis temporarily: `analysis.enabled: false` in config
 
 ### Cache issues
 

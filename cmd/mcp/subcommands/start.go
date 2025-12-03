@@ -72,8 +72,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		defer logWriter.Close()
 	}
 
-	// Get daemon URL for API access
-	daemonURL := cfg.MCP.DaemonURL
+	// Get daemon URL for API access (constructed from host and port)
+	daemonURL := cfg.MCP.GetDaemonURL()
 
 	// Try to fetch initial index from daemon if available
 	var initialIndex *types.GraphIndex

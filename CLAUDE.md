@@ -354,13 +354,17 @@ The MCP server (`internal/mcp/`) implements Model Context Protocol for tool-base
 The Config Manager (`internal/config/`) implements layered configuration with precedence: defaults → YAML file → environment variables (MEMORIZER_* prefix). Supports hot-reload via `config reload` command for non-structural settings.
 
 Key configuration sections:
-- `claude` - API credentials, model selection, vision toggle, timeouts
-- `analysis` - Enable flag, file size limits, skip patterns, cache directory
+- `claude` - API credentials and model selection (vision and timeouts are hardcoded)
+- `analysis` - File size limits, skip patterns, cache directory (enable is derived from API key presence)
 - `daemon` - Workers, debounce timing, rate limits, rebuild intervals, health check port
-- `integrations` - Per-framework settings with type, output format, custom settings
-- `mcp` - MCP server log file path, log level (separate from daemon logging)
+- `integrations` - Per-framework settings with type and custom settings
+- `mcp` - MCP server log file, log level, and daemon connectivity (`daemon_host`, `daemon_port`)
+- `graph` - FalkorDB host, port, and password (database name is hardcoded)
+- `embeddings` - API key only (enabled is derived from API key presence; provider/model are hardcoded)
 
-Settings requiring daemon restart: `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file`.
+Many settings use hardcoded constants (see `internal/config/constants.go`) to reduce configuration complexity. Settings like `analysis.enabled` and `embeddings.enabled` are automatically derived from API key presence.
+
+Settings requiring daemon restart: `memory_root`, `analysis.cache_dir`, `daemon.log_file`.
 
 Validation uses error accumulation pattern (collects all errors before failing) with structured ValidationError providing field, rule, message, suggestion, and value.
 
@@ -447,7 +451,7 @@ The daemon supports hot-reloading non-structural configuration changes via `conf
 
 **Settings requiring daemon restart:** `memory_root`, `analysis.cache_dir`, `daemon.log_file`
 
-**Settings requiring MCP server restart:** `mcp.log_file`, `mcp.log_level`, `mcp.daemon_url`
+**Settings requiring MCP server restart:** `mcp.log_file`, `mcp.log_level`, `mcp.daemon_host`, `mcp.daemon_port`
 
 **Hot-reloadable daemon settings:** Claude API settings, `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`, `daemon.log_level`, `daemon.http_port`, `daemon.full_rebuild_interval_minutes`, `analysis.skip_extensions`, `analysis.skip_files`
 

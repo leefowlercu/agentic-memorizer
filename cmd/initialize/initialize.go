@@ -165,6 +165,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	cfg.Daemon.HTTPPort = httpPort
 
+	// Copy HTTP port to MCP daemon port (MCP requires daemon connectivity)
+	if httpPort > 0 {
+		cfg.MCP.DaemonPort = httpPort
+		cfg.MCP.DaemonHost = "localhost"
+	}
+
 	// Prompt for FalkorDB configuration
 	falkorDBStarted, err := promptForFalkorDB(&cfg)
 	if err != nil {
@@ -176,7 +182,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to configure embeddings; %w", err)
 	}
 
-	if err := config.WriteConfig(configPath, &cfg); err != nil {
+	if err := config.WriteMinimalConfig(configPath, &cfg); err != nil {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
 
@@ -190,9 +196,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  ✓ Created configuration file: %s\n", configPath)
 	fmt.Printf("  ✓ Created memory directory: %s\n", memoryRoot)
 	fmt.Printf("  ✓ Created cache directory: %s\n", cacheDir)
-	fmt.Printf("  ✓ FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
+	fmt.Printf("  ✓ FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, config.GraphDatabase)
 	if cfg.Embeddings.Enabled {
-		fmt.Printf("  ✓ Embeddings: %s (%s)\n", cfg.Embeddings.Provider, cfg.Embeddings.Model)
+		fmt.Printf("  ✓ Embeddings: %s (%s)\n", config.EmbeddingsProvider, config.EmbeddingsModel)
 	} else {
 		fmt.Printf("  - Embeddings: disabled\n")
 	}
@@ -205,7 +211,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Update config with enabled integrations list if any were set up
 	if len(enabledIntegrations) > 0 {
 		cfg.Integrations.Enabled = enabledIntegrations
-		if err := config.WriteConfig(configPath, &cfg); err != nil {
+		if err := config.WriteMinimalConfig(configPath, &cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to update config with enabled integrations; %v\n", err)
 		}
 		// Reload config after writing
@@ -553,7 +559,7 @@ func promptForFalkorDB(cfg *config.Config) (bool, error) {
 	fmt.Printf("Current configuration:\n")
 	fmt.Printf("  Host: %s\n", cfg.Graph.Host)
 	fmt.Printf("  Port: %d\n", cfg.Graph.Port)
-	fmt.Printf("  Database: %s\n", cfg.Graph.Database)
+	fmt.Printf("  Database: %s (hardcoded)\n", config.GraphDatabase)
 	fmt.Printf("\n1. Use defaults (localhost:%d)\n", cfg.Graph.Port)
 	fmt.Printf("2. Custom configuration\n")
 	if dockerAvailable {
@@ -600,14 +606,7 @@ func promptForFalkorDB(cfg *config.Config) (bool, error) {
 			}
 		}
 
-		fmt.Printf("Enter database name [%s]: ", cfg.Graph.Database)
-		database, _ := reader.ReadString('\n')
-		database = strings.TrimSpace(database)
-		if database != "" {
-			cfg.Graph.Database = database
-		}
-
-		fmt.Printf("\nFalkorDB configured: %s:%d (database: %s)\n\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
+		fmt.Printf("\nFalkorDB configured: %s:%d (database: %s)\n\n", cfg.Graph.Host, cfg.Graph.Port, config.GraphDatabase)
 
 	case "3":
 		if !dockerAvailable {
@@ -710,7 +709,7 @@ func promptForEmbeddings(cfg *config.Config) error {
 		}
 
 		fmt.Printf("\nEmbeddings enabled with %s model (%d dimensions).\n\n",
-			cfg.Embeddings.Model, cfg.Embeddings.Dimensions)
+			config.EmbeddingsModel, config.EmbeddingsDimensions)
 
 	case "2", "":
 		cfg.Embeddings.Enabled = false

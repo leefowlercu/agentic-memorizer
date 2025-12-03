@@ -84,6 +84,36 @@ func checkDeprecatedKeys() {
 			"suggestion", "use daemon.workers (default: 3) to control parallel processing",
 		)
 	}
+
+	// Check for removed output section
+	if viper.IsSet("output.format") || viper.IsSet("output.show_recent_days") {
+		slog.Warn(
+			"deprecated configuration key detected",
+			"key", "output",
+			"message", "output section has been removed; format is now a CLI flag only",
+			"suggestion", "use --format flag with the 'read' command instead",
+		)
+	}
+
+	// Check for removed claude settings
+	if viper.IsSet("claude.api_key_env") {
+		slog.Warn(
+			"deprecated configuration key detected",
+			"key", "claude.api_key_env",
+			"message", "claude.api_key_env has been removed; ANTHROPIC_API_KEY is now the hardcoded env var",
+			"suggestion", "set ANTHROPIC_API_KEY environment variable or use claude.api_key directly",
+		)
+	}
+
+	// Check for removed mcp.daemon_url
+	if viper.IsSet("mcp.daemon_url") {
+		slog.Warn(
+			"deprecated configuration key detected",
+			"key", "mcp.daemon_url",
+			"message", "mcp.daemon_url has been replaced with mcp.daemon_host and mcp.daemon_port",
+			"suggestion", "use mcp.daemon_host and mcp.daemon_port instead",
+		)
+	}
 }
 
 // ValidateConfig validates the complete configuration
@@ -96,7 +126,6 @@ func ValidateConfig(cfg *Config) error {
 	// Phase 1: Basic field validation
 	validateMemoryRoot(v, cfg)
 	validateClaude(v, cfg)
-	validateOutput(v, cfg)
 	validateAnalysis(v, cfg)
 	validateDaemon(v, cfg)
 	validateMCP(v, cfg)
@@ -139,10 +168,9 @@ func validateMemoryRoot(v *Validator, cfg *Config) {
 
 // validateClaude validates Claude API configuration
 func validateClaude(v *Validator, cfg *Config) {
-	// Check if either api_key or api_key_env is set
-	if cfg.Claude.APIKey == "" && cfg.Claude.APIKeyEnv == "" {
-		v.AddError("claude.api_key_env", "required", "either claude.api_key or claude.api_key_env must be set", "Set ANTHROPIC_API_KEY environment variable or configure api_key in config", nil)
-	}
+	// API key validation - note: key may come from hardcoded env var (ANTHROPIC_API_KEY)
+	// We don't error here since analysis.enabled is derived from API key presence
+	// and the daemon will simply skip semantic analysis if no key is set
 
 	// Validate model name (basic check - just ensure it's not empty)
 	if cfg.Claude.Model == "" {
@@ -152,25 +180,6 @@ func validateClaude(v *Validator, cfg *Config) {
 	// Validate max_tokens range
 	if cfg.Claude.MaxTokens < 1 || cfg.Claude.MaxTokens > 8192 {
 		v.AddError("claude.max_tokens", "range", fmt.Sprintf("max_tokens %d is out of valid range (1-8192)", cfg.Claude.MaxTokens), "Set max_tokens between 1 and 8192", cfg.Claude.MaxTokens)
-	}
-
-	// Validate timeout
-	if cfg.Claude.TimeoutSeconds < 1 || cfg.Claude.TimeoutSeconds > 300 {
-		v.AddError("claude.timeout_seconds", "range", fmt.Sprintf("timeout_seconds %d is out of valid range (1-300)", cfg.Claude.TimeoutSeconds), "Set timeout_seconds between 1 and 300", cfg.Claude.TimeoutSeconds)
-	}
-}
-
-// validateOutput validates output configuration
-func validateOutput(v *Validator, cfg *Config) {
-	// Validate format enum
-	validFormats := []string{"xml", "markdown", "json"}
-	if !contains(validFormats, cfg.Output.Format) {
-		v.AddError("output.format", "enum", fmt.Sprintf("invalid format '%s', must be one of: %v", cfg.Output.Format, validFormats), "Set format to 'xml', 'markdown', or 'json'", cfg.Output.Format)
-	}
-
-	// Validate show_recent_days range
-	if cfg.Output.ShowRecentDays < 0 || cfg.Output.ShowRecentDays > 365 {
-		v.AddError("output.show_recent_days", "range", fmt.Sprintf("show_recent_days %d is out of valid range (0-365)", cfg.Output.ShowRecentDays), "Set show_recent_days between 0 and 365", cfg.Output.ShowRecentDays)
 	}
 }
 
@@ -244,6 +253,16 @@ func validateMCP(v *Validator, cfg *Config) {
 	} else if strings.Contains(cfg.MCP.LogFile, "..") {
 		v.AddError("mcp.log_file", "security", "log_file contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.MCP.LogFile)
 	}
+
+	// Validate daemon port
+	if cfg.MCP.DaemonPort < 0 || cfg.MCP.DaemonPort > 65535 {
+		v.AddError("mcp.daemon_port", "range", fmt.Sprintf("daemon_port %d is out of valid range (0-65535)", cfg.MCP.DaemonPort), "Set to 0 to disable daemon integration or a valid port number (1-65535)", cfg.MCP.DaemonPort)
+	}
+
+	// Validate daemon host is set if port is configured
+	if cfg.MCP.DaemonPort > 0 && cfg.MCP.DaemonHost == "" {
+		v.AddError("mcp.daemon_host", "required", "daemon_host is required when daemon_port is set", "Set daemon_host to the daemon hostname (e.g., 'localhost')", nil)
+	}
 }
 
 // validateGraph validates FalkorDB graph configuration.
@@ -259,11 +278,6 @@ func validateGraph(v *Validator, cfg *Config) {
 		v.AddError("graph.port", "range", fmt.Sprintf("graph.port %d is out of valid range (1-65535)", cfg.Graph.Port), "Set graph.port to a valid port number (default: 6379)", cfg.Graph.Port)
 	}
 
-	// Validate database name
-	if cfg.Graph.Database == "" {
-		v.AddError("graph.database", "required", "graph.database is required", "Set graph.database to a graph name (e.g., 'memorizer')", nil)
-	}
-
 	// Validate similarity threshold range
 	if cfg.Graph.SimilarityThreshold < 0.0 || cfg.Graph.SimilarityThreshold > 1.0 {
 		v.AddError("graph.similarity_threshold", "range", fmt.Sprintf("similarity_threshold %.2f is out of valid range (0.0-1.0)", cfg.Graph.SimilarityThreshold), "Set similarity_threshold between 0.0 and 1.0", cfg.Graph.SimilarityThreshold)
@@ -275,37 +289,18 @@ func validateGraph(v *Validator, cfg *Config) {
 	}
 }
 
-// validateEmbeddings validates embeddings provider configuration
+// validateEmbeddings validates embeddings provider configuration.
+// Provider, model, and dimensions are hardcoded - only API key needs validation.
 func validateEmbeddings(v *Validator, cfg *Config) {
 	// Skip validation if embeddings is disabled
+	// Note: embeddings.enabled is derived from API key presence in GetConfig()
 	if !cfg.Embeddings.Enabled {
 		return
 	}
 
-	// Validate provider (only "openai" supported for now)
-	validProviders := []string{"openai"}
-	if !contains(validProviders, cfg.Embeddings.Provider) {
-		v.AddError("embeddings.provider", "enum", fmt.Sprintf("invalid provider '%s', must be one of: %v", cfg.Embeddings.Provider, validProviders), "Set provider to 'openai'", cfg.Embeddings.Provider)
-	}
-
-	// Validate API key or env variable is set
-	if cfg.Embeddings.APIKey == "" && cfg.Embeddings.APIKeyEnv == "" {
-		v.AddError("embeddings.api_key_env", "required", "either embeddings.api_key or embeddings.api_key_env must be set when embeddings is enabled", "Set OPENAI_API_KEY environment variable or configure api_key in config", nil)
-	}
-
-	// Validate model is not empty
-	if cfg.Embeddings.Model == "" {
-		v.AddError("embeddings.model", "required", "embeddings.model is required when embeddings is enabled", "Set model to a valid embedding model (e.g., 'text-embedding-3-small')", nil)
-	}
-
-	// Validate dimensions range (OpenAI models support 256-3072)
-	if cfg.Embeddings.Dimensions < 1 || cfg.Embeddings.Dimensions > 4096 {
-		v.AddError("embeddings.dimensions", "range", fmt.Sprintf("dimensions %d is out of valid range (1-4096)", cfg.Embeddings.Dimensions), "Set dimensions to a valid value (default: 1536 for text-embedding-3-small)", cfg.Embeddings.Dimensions)
-	}
-
-	// Validate batch size
-	if cfg.Embeddings.BatchSize < 1 || cfg.Embeddings.BatchSize > 2048 {
-		v.AddError("embeddings.batch_size", "range", fmt.Sprintf("batch_size %d is out of valid range (1-2048)", cfg.Embeddings.BatchSize), "Set batch_size between 1 and 2048 (default: 100)", cfg.Embeddings.BatchSize)
+	// If enabled, API key must be present (already resolved from env in GetConfig)
+	if cfg.Embeddings.APIKey == "" {
+		v.AddError("embeddings.api_key", "required", "embeddings.api_key is required when embeddings is enabled", "Set OPENAI_API_KEY environment variable or configure api_key in config", nil)
 	}
 }
 

@@ -34,16 +34,21 @@ func InitConfig() error {
 	}
 	viper.AddConfigPath(".") // Current directory fallback
 
+	// Core settings (KEEP - user-configurable)
 	viper.SetDefault("memory_root", DefaultConfig.MemoryRoot)
 	viper.SetDefault("claude.api_key", DefaultConfig.Claude.APIKey)
-	viper.SetDefault("claude.api_key_env", DefaultConfig.Claude.APIKeyEnv)
 	viper.SetDefault("claude.model", DefaultConfig.Claude.Model)
+	viper.SetDefault("daemon.http_port", DefaultConfig.Daemon.HTTPPort)
+	viper.SetDefault("daemon.log_level", DefaultConfig.Daemon.LogLevel)
+	viper.SetDefault("mcp.log_level", DefaultConfig.MCP.LogLevel)
+	viper.SetDefault("graph.host", DefaultConfig.Graph.Host)
+	viper.SetDefault("graph.port", DefaultConfig.Graph.Port)
+	viper.SetDefault("graph.password", DefaultConfig.Graph.Password)
+	viper.SetDefault("embeddings.api_key", DefaultConfig.Embeddings.APIKey)
+
+	// INTERNAL settings (available for power users but not in initialized config)
 	viper.SetDefault("claude.max_tokens", DefaultConfig.Claude.MaxTokens)
-	viper.SetDefault("claude.enable_vision", DefaultConfig.Claude.EnableVision)
-	viper.SetDefault("claude.timeout_seconds", DefaultConfig.Claude.TimeoutSeconds)
-	viper.SetDefault("output.format", DefaultConfig.Output.Format)
-	viper.SetDefault("output.show_recent_days", DefaultConfig.Output.ShowRecentDays)
-	viper.SetDefault("analysis.enable", DefaultConfig.Analysis.Enable)
+	viper.SetDefault("analysis.enabled", DefaultConfig.Analysis.Enabled)
 	viper.SetDefault("analysis.max_file_size", DefaultConfig.Analysis.MaxFileSize)
 	viper.SetDefault("analysis.skip_extensions", DefaultConfig.Analysis.SkipExtensions)
 	viper.SetDefault("analysis.skip_files", DefaultConfig.Analysis.SkipFiles)
@@ -52,31 +57,14 @@ func InitConfig() error {
 	viper.SetDefault("daemon.workers", DefaultConfig.Daemon.Workers)
 	viper.SetDefault("daemon.rate_limit_per_min", DefaultConfig.Daemon.RateLimitPerMin)
 	viper.SetDefault("daemon.full_rebuild_interval_minutes", DefaultConfig.Daemon.FullRebuildIntervalMinutes)
-	viper.SetDefault("daemon.http_port", DefaultConfig.Daemon.HTTPPort)
 	viper.SetDefault("daemon.log_file", DefaultConfig.Daemon.LogFile)
-	viper.SetDefault("daemon.log_level", DefaultConfig.Daemon.LogLevel)
 	viper.SetDefault("mcp.log_file", DefaultConfig.MCP.LogFile)
-	viper.SetDefault("mcp.log_level", DefaultConfig.MCP.LogLevel)
-	viper.SetDefault("mcp.daemon_url", DefaultConfig.MCP.DaemonURL)
-
-	// Graph configuration defaults (FalkorDB is required - no enabled toggle)
-	viper.SetDefault("graph.host", DefaultConfig.Graph.Host)
-	viper.SetDefault("graph.port", DefaultConfig.Graph.Port)
-	viper.SetDefault("graph.database", DefaultConfig.Graph.Database)
-	viper.SetDefault("graph.password", DefaultConfig.Graph.Password)
-	viper.SetDefault("graph.password_env", DefaultConfig.Graph.PasswordEnv)
+	viper.SetDefault("mcp.daemon_host", DefaultConfig.MCP.DaemonHost)
+	viper.SetDefault("mcp.daemon_port", DefaultConfig.MCP.DaemonPort)
 	viper.SetDefault("graph.similarity_threshold", DefaultConfig.Graph.SimilarityThreshold)
 	viper.SetDefault("graph.max_similar_files", DefaultConfig.Graph.MaxSimilarFiles)
-
-	// Embeddings configuration defaults
+	viper.SetDefault("integrations.enabled", DefaultConfig.Integrations.Enabled)
 	viper.SetDefault("embeddings.enabled", DefaultConfig.Embeddings.Enabled)
-	viper.SetDefault("embeddings.provider", DefaultConfig.Embeddings.Provider)
-	viper.SetDefault("embeddings.api_key", DefaultConfig.Embeddings.APIKey)
-	viper.SetDefault("embeddings.api_key_env", DefaultConfig.Embeddings.APIKeyEnv)
-	viper.SetDefault("embeddings.model", DefaultConfig.Embeddings.Model)
-	viper.SetDefault("embeddings.dimensions", DefaultConfig.Embeddings.Dimensions)
-	viper.SetDefault("embeddings.cache_enabled", DefaultConfig.Embeddings.CacheEnabled)
-	viper.SetDefault("embeddings.batch_size", DefaultConfig.Embeddings.BatchSize)
 
 	viper.SetEnvPrefix("MEMORIZER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -117,18 +105,27 @@ func GetConfig() (*Config, error) {
 	cfg.Daemon.LogFile = ExpandHome(cfg.Daemon.LogFile)
 	cfg.MCP.LogFile = ExpandHome(cfg.MCP.LogFile)
 
-	if cfg.Claude.APIKey == "" && cfg.Claude.APIKeyEnv != "" {
-		cfg.Claude.APIKey = os.Getenv(cfg.Claude.APIKeyEnv)
+	// Resolve API keys from hardcoded environment variable names
+	if cfg.Claude.APIKey == "" {
+		cfg.Claude.APIKey = os.Getenv(ClaudeAPIKeyEnv)
+	}
+	if cfg.Graph.Password == "" {
+		cfg.Graph.Password = os.Getenv(GraphPasswordEnv)
+	}
+	if cfg.Embeddings.APIKey == "" {
+		cfg.Embeddings.APIKey = os.Getenv(EmbeddingsAPIKeyEnv)
 	}
 
-	// Resolve graph password from environment variable
-	if cfg.Graph.Password == "" && cfg.Graph.PasswordEnv != "" {
-		cfg.Graph.Password = os.Getenv(cfg.Graph.PasswordEnv)
+	// Derive analysis.enabled from Claude API key presence
+	// If API key is not set, disable analysis regardless of config file setting
+	if cfg.Claude.APIKey == "" {
+		cfg.Analysis.Enabled = false
 	}
 
-	// Resolve embeddings API key from environment variable
-	if cfg.Embeddings.APIKey == "" && cfg.Embeddings.APIKeyEnv != "" {
-		cfg.Embeddings.APIKey = os.Getenv(cfg.Embeddings.APIKeyEnv)
+	// Derive embeddings.enabled from embeddings API key presence
+	// If API key is not set, disable embeddings regardless of config file setting
+	if cfg.Embeddings.APIKey == "" {
+		cfg.Embeddings.Enabled = false
 	}
 
 	return &cfg, nil
@@ -138,6 +135,107 @@ func WriteConfig(path string, cfg *Config) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config; %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file; %w", err)
+	}
+
+	return nil
+}
+
+// MinimalConfig contains only user-facing settings for initial configuration.
+// Internal settings use defaults and are not written to the initialized config file.
+type MinimalConfig struct {
+	MemoryRoot   string                   `yaml:"memory_root"`
+	Claude       MinimalClaudeConfig      `yaml:"claude,omitempty"`
+	Daemon       MinimalDaemonConfig      `yaml:"daemon,omitempty"`
+	MCP          MinimalMCPConfig         `yaml:"mcp,omitempty"`
+	Graph        MinimalGraphConfig       `yaml:"graph,omitempty"`
+	Embeddings   MinimalEmbeddingsConfig  `yaml:"embeddings,omitempty"`
+	Integrations MinimalIntegrationsConfig `yaml:"integrations,omitempty"`
+}
+
+type MinimalClaudeConfig struct {
+	APIKey string `yaml:"api_key,omitempty"`
+	Model  string `yaml:"model,omitempty"`
+}
+
+type MinimalDaemonConfig struct {
+	HTTPPort int    `yaml:"http_port"`
+	LogLevel string `yaml:"log_level,omitempty"`
+}
+
+type MinimalMCPConfig struct {
+	LogLevel   string `yaml:"log_level,omitempty"`
+	DaemonHost string `yaml:"daemon_host,omitempty"`
+	DaemonPort int    `yaml:"daemon_port,omitempty"`
+}
+
+type MinimalGraphConfig struct {
+	Host     string `yaml:"host,omitempty"`
+	Port     int    `yaml:"port,omitempty"`
+	Password string `yaml:"password,omitempty"`
+}
+
+type MinimalEmbeddingsConfig struct {
+	APIKey string `yaml:"api_key,omitempty"`
+}
+
+type MinimalIntegrationsConfig struct {
+	Enabled []string `yaml:"enabled,omitempty"`
+}
+
+// ToMinimalConfig converts a full Config to a MinimalConfig for writing.
+// Only user-facing settings are included; internal settings use defaults.
+func (c *Config) ToMinimalConfig() *MinimalConfig {
+	minimal := &MinimalConfig{
+		MemoryRoot: c.MemoryRoot,
+		Claude: MinimalClaudeConfig{
+			APIKey: c.Claude.APIKey,
+			Model:  c.Claude.Model,
+		},
+		Daemon: MinimalDaemonConfig{
+			HTTPPort: c.Daemon.HTTPPort,
+			LogLevel: c.Daemon.LogLevel,
+		},
+		MCP: MinimalMCPConfig{
+			LogLevel: c.MCP.LogLevel,
+		},
+		Graph: MinimalGraphConfig{
+			Host:     c.Graph.Host,
+			Port:     c.Graph.Port,
+			Password: c.Graph.Password,
+		},
+	}
+
+	// Only include MCP daemon connectivity if enabled
+	if c.MCP.DaemonPort > 0 {
+		minimal.MCP.DaemonHost = c.MCP.DaemonHost
+		minimal.MCP.DaemonPort = c.MCP.DaemonPort
+	}
+
+	// Only include embeddings API key if set
+	if c.Embeddings.APIKey != "" {
+		minimal.Embeddings.APIKey = c.Embeddings.APIKey
+	}
+
+	// Only include integrations if any are enabled
+	if len(c.Integrations.Enabled) > 0 {
+		minimal.Integrations.Enabled = c.Integrations.Enabled
+	}
+
+	return minimal
+}
+
+// WriteMinimalConfig writes only user-facing configuration settings.
+// Internal settings are omitted and will use defaults when loaded.
+func WriteMinimalConfig(path string, cfg *Config) error {
+	minimal := cfg.ToMinimalConfig()
+
+	data, err := yaml.Marshal(minimal)
+	if err != nil {
+		return fmt.Errorf("failed to marshal minimal config; %w", err)
 	}
 
 	if err := os.WriteFile(path, data, 0644); err != nil {

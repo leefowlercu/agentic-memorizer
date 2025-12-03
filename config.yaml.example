@@ -1,16 +1,16 @@
 # Agentic Memory Configuration
+#
+# This file shows the minimal configuration needed for most users.
+# Many settings have optimal defaults and are not shown here.
+# For advanced configuration, see docs/configuration.md
 
 # Root directory for memory files
 memory_root: ~/.agentic-memorizer/memory
 
 # Claude API Configuration
 claude:
-  # API key (set directly or via environment variable)
+  # API key (set directly or via ANTHROPIC_API_KEY environment variable)
   api_key: ""
-
-  # Environment variable containing API key (preferred method)
-  # Set with: export ANTHROPIC_API_KEY="your-key-here"
-  api_key_env: ANTHROPIC_API_KEY
 
   # Claude model to use
   model: claude-sonnet-4-5-20250929
@@ -18,25 +18,8 @@ claude:
   # Maximum tokens for each analysis
   max_tokens: 1500
 
-  # Enable vision analysis for images
-  enable_vision: true
-
-  # Timeout for API calls (seconds)
-  timeout_seconds: 30
-
-# Output Configuration
-output:
-  # Output format: "xml", "markdown", or "json" (default: xml)
-  format: xml
-
-  # Show files modified in last N days in "Recent Activity" section
-  show_recent_days: 7
-
 # Semantic Analysis Configuration
 analysis:
-  # Enable semantic analysis (requires Claude API key)
-  enable: true
-
   # Maximum file size for analysis (bytes) - 10MB default
   max_file_size: 10485760
 
@@ -51,8 +34,6 @@ analysis:
     - .iso
 
   # Specific files to skip by name (system files)
-  # The binary itself is skipped to avoid self-indexing
-  # Config file is in separate directory (~/.agentic-memorizer/) so doesn't need to be skipped
   skip_files:
     - agentic-memorizer
 
@@ -62,22 +43,19 @@ analysis:
 # Background Daemon Configuration
 daemon:
   # Debounce period for file changes (milliseconds)
-  # Batches rapid file changes together to avoid excessive rebuilds
   debounce_ms: 500
 
   # Number of parallel workers for processing files
   workers: 3
 
   # Rate limit for Claude API calls (per minute)
-  # Prevents hitting API rate limits
   rate_limit_per_min: 20
 
   # Full rebuild interval (minutes)
-  # Periodic full scan even if no changes detected
   full_rebuild_interval_minutes: 60
 
   # HTTP server port for health check and SSE endpoints (0 to disable)
-  # Provides /health endpoint for monitoring and /notifications/stream for MCP servers
+  # When enabled, MCP servers can connect for real-time updates
   http_port: 0
 
   # Log file location
@@ -88,19 +66,18 @@ daemon:
 
 # MCP Server Configuration
 mcp:
-  # Log file for MCP server (when running as MCP server)
+  # Log file for MCP server
   log_file: ~/.agentic-memorizer/mcp.log
 
   # Log level for MCP server: debug, info, warn, error
   log_level: info
 
-  # Daemon HTTP API base URL (empty to disable daemon integration)
-  # When set, MCP server uses daemon API for graph-powered queries
-  # Must match daemon http_port setting above (e.g., http://localhost:{http_port})
-  daemon_url: ""
+  # Daemon API connectivity (set automatically during 'integrations setup')
+  # The port should match daemon.http_port when enabled
+  daemon_host: localhost
+  daemon_port: 0
 
 # FalkorDB Knowledge Graph Configuration
-# FalkorDB is the required storage backend for the knowledge graph
 graph:
   # FalkorDB host (default: localhost)
   host: localhost
@@ -108,14 +85,8 @@ graph:
   # FalkorDB port (default: 6379)
   port: 6379
 
-  # Graph database name
-  database: memorizer
-
-  # Password for FalkorDB authentication (optional)
+  # Password for FalkorDB authentication (optional, or set FALKORDB_PASSWORD)
   password: ""
-
-  # Environment variable containing password (preferred method)
-  password_env: FALKORDB_PASSWORD
 
   # Minimum similarity threshold for related file recommendations (0.0-1.0)
   similarity_threshold: 0.7
@@ -124,35 +95,12 @@ graph:
   max_similar_files: 10
 
 # Embeddings Configuration (Optional)
-# Enable vector embeddings for enhanced semantic similarity search
+# Automatically enabled when OPENAI_API_KEY is set
 embeddings:
-  # Enable embedding generation (requires API key)
-  enabled: false
-
-  # Embedding provider: "openai"
-  provider: openai
-
-  # API key (set directly or via environment variable)
+  # API key (set directly or via OPENAI_API_KEY environment variable)
   api_key: ""
 
-  # Environment variable containing API key (preferred method)
-  # Set with: export OPENAI_API_KEY="your-key-here"
-  api_key_env: OPENAI_API_KEY
-
-  # Embedding model to use
-  model: text-embedding-3-small
-
-  # Vector dimensions (must match model output)
-  dimensions: 1536
-
-  # Enable caching of generated embeddings
-  cache_enabled: true
-
-  # Batch size for embedding generation
-  batch_size: 100
-
 # Integration Configuration
-# Tracks which AI agent framework integrations are configured
 # Managed automatically by 'integrations setup/remove' commands
 integrations:
   enabled: []

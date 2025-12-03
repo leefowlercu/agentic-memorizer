@@ -120,16 +120,16 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	metadataExtractor := metadata.NewExtractor()
 
 	var semanticAnalyzer *semantic.Analyzer
-	if cfg.Analysis.Enable {
+	if cfg.Analysis.Enabled {
 		client := semantic.NewClient(
 			cfg.Claude.APIKey,
 			cfg.Claude.Model,
 			cfg.Claude.MaxTokens,
-			cfg.Claude.TimeoutSeconds,
+			config.ClaudeTimeoutSeconds, // Hardcoded convention
 		)
 		semanticAnalyzer = semantic.NewAnalyzer(
 			client,
-			cfg.Claude.EnableVision,
+			config.ClaudeEnableVision, // Hardcoded convention
 			cfg.Analysis.MaxFileSize,
 		)
 	}
@@ -162,7 +162,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
 			Port:     cfg.Graph.Port,
-			Database: cfg.Graph.Database,
+			Database: config.GraphDatabase, // Hardcoded convention
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
@@ -177,7 +177,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	logger.Info("FalkorDB graph manager initialized",
 		"host", cfg.Graph.Host,
 		"port", cfg.Graph.Port,
-		"database", cfg.Graph.Database,
+		"database", config.GraphDatabase,
 	)
 
 	// Create health metrics tracker
@@ -414,17 +414,14 @@ func (d *Daemon) rebuildIndex() error {
 	var embeddingProvider embeddings.Provider
 	var embeddingCache *embeddings.Cache
 	if cfg.Embeddings.Enabled {
-		// Resolve API key
+		// API key already resolved from env in GetConfig()
 		apiKey := cfg.Embeddings.APIKey
-		if apiKey == "" && cfg.Embeddings.APIKeyEnv != "" {
-			apiKey = os.Getenv(cfg.Embeddings.APIKeyEnv)
-		}
 
 		if apiKey != "" {
 			embConfig := embeddings.OpenAIConfig{
 				APIKey:     apiKey,
-				Model:      cfg.Embeddings.Model,
-				Dimensions: cfg.Embeddings.Dimensions,
+				Model:      config.EmbeddingsModel,      // Hardcoded convention
+				Dimensions: config.EmbeddingsDimensions, // Hardcoded convention
 			}
 			var err error
 			embeddingProvider, err = embeddings.NewOpenAIProvider(embConfig, logger)
@@ -432,8 +429,8 @@ func (d *Daemon) rebuildIndex() error {
 				logger.Warn("failed to create embedding provider", "error", err)
 			} else {
 				logger.Info("embedding provider initialized",
-					"model", cfg.Embeddings.Model,
-					"dimensions", cfg.Embeddings.Dimensions,
+					"model", config.EmbeddingsModel,
+					"dimensions", config.EmbeddingsDimensions,
 				)
 			}
 
@@ -445,7 +442,7 @@ func (d *Daemon) rebuildIndex() error {
 			}
 		} else {
 			logger.Warn("embeddings enabled but no API key found",
-				"api_key_env", cfg.Embeddings.APIKeyEnv,
+				"api_key_env", config.EmbeddingsAPIKeyEnv,
 			)
 		}
 	}
@@ -855,7 +852,7 @@ func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.C
 
 // updateSemanticAnalyzer creates and sets a new semantic analyzer
 func (d *Daemon) updateSemanticAnalyzer(cfg *config.Config) error {
-	if !cfg.Analysis.Enable {
+	if !cfg.Analysis.Enabled {
 		d.SetSemanticAnalyzer(nil)
 		return nil
 	}
@@ -864,11 +861,11 @@ func (d *Daemon) updateSemanticAnalyzer(cfg *config.Config) error {
 		cfg.Claude.APIKey,
 		cfg.Claude.Model,
 		cfg.Claude.MaxTokens,
-		cfg.Claude.TimeoutSeconds,
+		config.ClaudeTimeoutSeconds, // Hardcoded convention
 	)
 	analyzer := semantic.NewAnalyzer(
 		client,
-		cfg.Claude.EnableVision,
+		config.ClaudeEnableVision, // Hardcoded convention
 		cfg.Analysis.MaxFileSize,
 	)
 

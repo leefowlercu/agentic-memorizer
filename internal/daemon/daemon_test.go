@@ -528,15 +528,13 @@ func TestDaemon_UpdateSemanticAnalyzer(t *testing.T) {
 
 		cfg := &config.Config{
 			Analysis: config.AnalysisConfig{
-				Enable:      true,
+				Enabled:     true,
 				MaxFileSize: 10 * 1024 * 1024,
 			},
 			Claude: config.ClaudeConfig{
-				APIKey:         "test-key",
-				Model:          "claude-3-sonnet",
-				MaxTokens:      1000,
-				TimeoutSeconds: 30,
-				EnableVision:   true,
+				APIKey:    "test-key",
+				Model:     "claude-3-sonnet",
+				MaxTokens: 1000,
 			},
 		}
 
@@ -557,7 +555,7 @@ func TestDaemon_UpdateSemanticAnalyzer(t *testing.T) {
 
 		// First create analyzer
 		cfg1 := &config.Config{
-			Analysis: config.AnalysisConfig{Enable: true, MaxFileSize: 10 * 1024 * 1024},
+			Analysis: config.AnalysisConfig{Enabled: true, MaxFileSize: 10 * 1024 * 1024},
 			Claude:   config.ClaudeConfig{APIKey: "key", Model: "claude-3-sonnet"},
 		}
 		d.updateSemanticAnalyzer(cfg1)
@@ -568,7 +566,7 @@ func TestDaemon_UpdateSemanticAnalyzer(t *testing.T) {
 
 		// Disable
 		cfg2 := &config.Config{
-			Analysis: config.AnalysisConfig{Enable: false},
+			Analysis: config.AnalysisConfig{Enabled: false},
 		}
 		err := d.updateSemanticAnalyzer(cfg2)
 		if err != nil {

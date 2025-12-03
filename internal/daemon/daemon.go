@@ -125,11 +125,11 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 			cfg.Claude.APIKey,
 			cfg.Claude.Model,
 			cfg.Claude.MaxTokens,
-			config.ClaudeTimeoutSeconds, // Hardcoded convention
+			config.ClaudeTimeoutSeconds, // See internal/config/constants.go
 		)
 		semanticAnalyzer = semantic.NewAnalyzer(
 			client,
-			config.ClaudeEnableVision, // Hardcoded convention
+			config.ClaudeEnableVision, // See internal/config/constants.go
 			cfg.Analysis.MaxFileSize,
 		)
 	}
@@ -240,6 +240,12 @@ func (d *Daemon) Start() error {
 	// Setup signal handling
 	setupSignalHandler(d)
 
+	// Graph initialization with graceful degradation:
+	// - If existing data found: log count, attempt rebuild
+	// - If rebuild fails BUT existing data exists: continue with stale data (degraded mode)
+	// - If rebuild fails AND no existing data: fail startup (can't operate without index)
+	// This allows daemon to start even if initial rebuild hits transient errors.
+
 	// Check if graph has existing data
 	stats, err := d.graphManager.GetStats(d.ctx)
 	if err == nil && stats.TotalFiles > 0 {
@@ -285,7 +291,10 @@ func (d *Daemon) Start() error {
 		}
 	}
 
-	// Notify systemd we're ready (if running under systemd)
+	// Notify systemd we're ready (Type=notify integration).
+	// SdNotify sends readiness signal after health server starts.
+	// Allows systemd to know daemon is fully operational before marking 'active'.
+	// Gracefully no-ops if not running under systemd.
 	if supported, err := daemon.SdNotify(false, daemon.SdNotifyReady); err != nil {
 		logger.Warn("failed to notify systemd", "error", err)
 	} else if supported {
@@ -299,12 +308,9 @@ func (d *Daemon) Start() error {
 
 	logger.Info("daemon shutting down")
 
-	// Shutdown order:
-	// 1. HTTP Server (stop health check and SSE endpoints)
-	// 2. File Watcher (stop file system monitoring)
-	// 3. Wait for goroutines (let workers finish)
-	// 4. Graph Manager (close FalkorDB connection)
-	// 5. PID file cleanup (final cleanup)
+	// Shutdown order principle: Stop inbound requests (HTTP), stop event sources
+	// (watcher), drain workers (wg.Wait), close external connections (graph),
+	// cleanup state (PID). Each step must complete before proceeding.
 
 	// Stop HTTP server
 	if d.httpServer != nil {

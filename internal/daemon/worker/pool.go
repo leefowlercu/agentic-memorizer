@@ -57,13 +57,15 @@ func NewPool(
 	logger *slog.Logger,
 	ctx context.Context,
 ) *Pool {
-	// Convert per-minute rate to per-second rate
-	// Use burst of 3 to allow some flexibility
+	// Convert per-minute rate to per-second for token bucket algorithm.
+	// Burst of 3 allows small bursts while maintaining average rate limit.
+	// Example: 20/min = 0.33/sec, handles Claude API quota gracefully.
 	perSecond := float64(rateLimitPerMin) / 60.0
 	limiter := rate.NewLimiter(rate.Limit(perSecond), 3)
 
-	// Embedding API rate limiter (OpenAI allows 3000 RPM for embeddings)
-	// Default to 500 RPM to be safe
+	// Embedding API rate limiter (OpenAI allows 3000 RPM for embeddings).
+	// Conservative 500 RPM default leaves headroom for other API usage.
+	// Burst of 10 handles initial batch processing without hitting limits.
 	embeddingLimiter := rate.NewLimiter(rate.Limit(500.0/60.0), 10)
 
 	return &Pool{

@@ -27,6 +27,12 @@ func NewAnalyzer(client *Client, enableVision bool, maxFileSize int64) *Analyzer
 	}
 }
 
+// Content routing strategy:
+// - Images -> analyzeImage (vision API with base64 encoding)
+// - Office docs (pptx/docx) -> analyzeDocument (text extraction + analysis)
+// - PDFs -> analyzeDocument (document content blocks API)
+// - Everything else -> analyzeText (standard text analysis)
+// Files exceeding maxFileSize are rejected before routing.
 func (a *Analyzer) Analyze(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	if metadata.Size > a.maxFileSize {
 		return nil, fmt.Errorf("file too large for analysis: %d bytes", metadata.Size)
@@ -54,7 +60,7 @@ func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAna
 	}
 
 	contentStr := string(content)
-	if len(contentStr) > 100000 { // 100KB limit for analysis
+	if len(contentStr) > 100000 { // 100,000 byte limit for analysis
 
 		contentStr = contentStr[:100000] + "\n\n[Content truncated...]"
 	}
@@ -68,7 +74,7 @@ func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAna
 
 	var analysis types.SemanticAnalysis
 	if err := json.Unmarshal([]byte(response), &analysis); err != nil {
-		if jsonStr := extractJSON(response); jsonStr != "" { // Try extracting from markdown code block
+		if jsonStr := extractJSON(response); jsonStr != "" { // Try extracting JSON from code block wrapper
 
 			if err := json.Unmarshal([]byte(jsonStr), &analysis); err == nil {
 				return &analysis, nil

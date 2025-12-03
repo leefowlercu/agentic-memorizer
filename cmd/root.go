@@ -53,6 +53,8 @@ func getVersionString() string {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	// Skip config init for 'initialize' command - it creates config, so can't load it first.
+	// All other commands require existing config and will fail if not initialized.
 	if cmd.Name() == "initialize" {
 		return nil
 	}

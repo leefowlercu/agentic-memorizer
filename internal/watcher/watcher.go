@@ -186,7 +186,10 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		w.logger.Debug("delete event", "path", event.Name)
 
 	case event.Op&fsnotify.Rename == fsnotify.Rename:
-		// Treat rename as delete (the new file will trigger a create event)
+		// Treat rename source as DELETE - fsnotify fires separate events:
+		// Source path gets RENAME (handled here as DELETE)
+		// Destination path gets CREATE (handled by CREATE case)
+		// This ensures both old and new paths are processed correctly.
 		eventType = EventDelete
 		w.logger.Debug("rename event", "path", event.Name)
 

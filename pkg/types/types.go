@@ -1,3 +1,15 @@
+// Package types defines data structures used throughout agentic-memorizer.
+//
+// Type Categories:
+//   - Internal Processing Types (FileMetadata, SemanticAnalysis, IndexEntry):
+//     Used by metadata extraction, semantic analysis, worker pool.
+//     NOT exposed in public output formats.
+//
+//   - Graph-Native Types (GraphIndex, FileEntry):
+//     Public output format consumed by integrations and MCP clients.
+//     Flattened structure optimized for knowledge graph representation.
+//
+// Processing pipeline: FileMetadata -> SemanticAnalysis -> IndexEntry -> FileEntry
 package types
 
 import "time"

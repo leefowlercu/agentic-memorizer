@@ -73,7 +73,11 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to FalkorDB; %w", err)
 	}
 
-	// Initialize sub-components
+	// Initialize sub-components in dependency order:
+	// 1. Schema first (creates constraints and indexes)
+	// 2. Nodes/Edges (core CRUD operations, depend on schema)
+	// 3. Queries (read-only operations, depend on nodes/edges)
+	// 4. Analytics (disambiguation, recommendations, clusters, gaps, temporal)
 	m.schema = NewSchema(m.client, m.config.Schema, m.logger)
 	m.nodes = NewNodes(m.client, m.logger)
 	m.edges = NewEdges(m.client, m.logger)
@@ -165,7 +169,9 @@ func (m *Manager) UpdateSingle(ctx context.Context, entry types.IndexEntry, info
 		return result, fmt.Errorf("failed to upsert file node; %w", err)
 	}
 
-	// Remove existing edges for this file (to rebuild them)
+	// Remove existing edges before creating new ones (rebuild strategy).
+	// Alternative: delta updates. Chosen: full rebuild is simpler, ensures consistency.
+	// Tags/topics/entities may have changed during re-analysis, so clean slate is safer.
 	if exists {
 		if err := m.edges.RemoveFileEdges(ctx, entry.Metadata.Path); err != nil {
 			m.logger.Warn("failed to remove existing edges", "path", entry.Metadata.Path, "error", err)

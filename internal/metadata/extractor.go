@@ -69,7 +69,7 @@ func (e *Extractor) Extract(path string, info os.FileInfo) (*types.FileMetadata,
 			extracted, err := handler.Extract(path, info)
 			if err != nil {
 				// Log error but continue with base metadata
-				fmt.Fprintf(os.Stderr, "Warning: failed to extract metadata from %s: %v\n", path, err)
+				fmt.Fprintf(os.Stderr, "Warning: handler-specific extraction failed for %s, using base metadata: %v\n", path, err)
 				return metadata, nil
 			}
 			return extracted, nil

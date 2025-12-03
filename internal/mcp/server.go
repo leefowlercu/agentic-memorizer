@@ -75,7 +75,10 @@ func NewServer(index *types.GraphIndex, logger *slog.Logger, daemonURL string) *
 	s.toolHandlers["get_related_files"] = s.handleGetRelatedFiles
 	s.toolHandlers["search_entities"] = s.handleSearchEntities
 
-	// Start SSE client if daemon URL provided
+	// Start SSE client for real-time daemon notifications.
+	// Subscribes to index update events from daemon HTTP API.
+	// Enables resource change notifications to MCP clients.
+	// Only initialized if daemon URL configured (MCP can work standalone).
 	if daemonURL != "" {
 		sseURL := s.daemonURL + "/sse"
 		s.sseClient = NewSSEClient(sseURL, s, logger)
@@ -198,7 +201,8 @@ func (s *Server) handleInitialize(ctx context.Context, id any, params json.RawMe
 		"protocol", req.ProtocolVersion,
 	)
 
-	// Validate protocol version (support both 2024-11-05 and 2025-06-18)
+	// Validate MCP protocol version - update supportedVersions when new versions released.
+	// See MCP spec for version compatibility requirements.
 	supportedVersions := []string{"2024-11-05", "2025-06-18"}
 	supported := false
 	for _, v := range supportedVersions {
@@ -971,7 +975,6 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 	return s.sendResponse(id, resp)
 }
 
-// ptrInt returns a pointer to an int
 func ptrInt(i int) *int {
 	return &i
 }

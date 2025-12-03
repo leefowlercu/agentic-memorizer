@@ -21,8 +21,9 @@ func InitConfig() error {
 	configMu.Lock()
 	defer configMu.Unlock()
 
-	// Reset viper state to force fresh config read during reload
-	// This clears cached config values and allows reading updated config files
+	// Reset viper state to support hot-reload functionality.
+	// Clears cached config values, allowing InitConfig() to re-read
+	// updated config files without requiring process restart.
 	viper.Reset()
 
 	viper.SetConfigName("config")
@@ -34,7 +35,7 @@ func InitConfig() error {
 	}
 	viper.AddConfigPath(".") // Current directory fallback
 
-	// Core settings (KEEP - user-configurable)
+	// User-facing settings (see MinimalConfig for initialized config surface area)
 	viper.SetDefault("memory_root", DefaultConfig.MemoryRoot)
 	viper.SetDefault("claude.api_key", DefaultConfig.Claude.APIKey)
 	viper.SetDefault("claude.model", DefaultConfig.Claude.Model)
@@ -46,7 +47,7 @@ func InitConfig() error {
 	viper.SetDefault("graph.password", DefaultConfig.Graph.Password)
 	viper.SetDefault("embeddings.api_key", DefaultConfig.Embeddings.APIKey)
 
-	// INTERNAL settings (available for power users but not in initialized config)
+	// Power-user settings (not included in minimal initialization config)
 	viper.SetDefault("claude.max_tokens", DefaultConfig.Claude.MaxTokens)
 	viper.SetDefault("analysis.enabled", DefaultConfig.Analysis.Enabled)
 	viper.SetDefault("analysis.max_file_size", DefaultConfig.Analysis.MaxFileSize)
@@ -86,7 +87,8 @@ func GetConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config; %w", err)
 	}
 
-	// Validate paths for safety BEFORE expansion
+	// Validate paths for safety BEFORE expansion - prevent path traversal attacks.
+	// Reject paths containing '..' to ensure they stay within expected boundaries.
 	if strings.Contains(cfg.MemoryRoot, "..") {
 		return nil, fmt.Errorf("memory_root contains parent directory reference (..): %s", cfg.MemoryRoot)
 	}
@@ -116,14 +118,16 @@ func GetConfig() (*Config, error) {
 		cfg.Embeddings.APIKey = os.Getenv(EmbeddingsAPIKeyEnv)
 	}
 
-	// Derive analysis.enabled from Claude API key presence
-	// If API key is not set, disable analysis regardless of config file setting
+	// Derive analysis.enabled from Claude API key presence.
+	// Semantic analysis requires Claude API - automatically disable if no key.
+	// This simplifies config and prevents runtime errors from missing credentials.
 	if cfg.Claude.APIKey == "" {
 		cfg.Analysis.Enabled = false
 	}
 
-	// Derive embeddings.enabled from embeddings API key presence
-	// If API key is not set, disable embeddings regardless of config file setting
+	// Derive embeddings.enabled from embeddings API key presence.
+	// Embeddings require OpenAI API - automatically disable if no key.
+	// This simplifies config and prevents runtime errors from missing credentials.
 	if cfg.Embeddings.APIKey == "" {
 		cfg.Embeddings.Enabled = false
 	}

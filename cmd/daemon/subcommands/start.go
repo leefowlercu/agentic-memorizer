@@ -96,6 +96,7 @@ func setupLogger(cfg *config.Config) (*slog.Logger, *lumberjack.Logger, error) {
 	var handler slog.Handler
 	var logWriter *lumberjack.Logger
 	if cfg.Daemon.LogFile != "" {
+		// Extract log directory by removing default suffix (assumes log file ends with "/daemon.log")
 		logDir := cfg.Daemon.LogFile[:len(cfg.Daemon.LogFile)-len("/daemon.log")]
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return nil, nil, fmt.Errorf("failed to create log directory; %w", err)

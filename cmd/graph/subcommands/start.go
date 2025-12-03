@@ -1,13 +1,10 @@
 package subcommands
 
 import (
-	"context"
 	"fmt"
-	"os/exec"
-	"strings"
-	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -31,8 +28,8 @@ func init() {
 
 func validateStart(cmd *cobra.Command, args []string) error {
 	// Check Docker is available
-	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker not found; please install Docker to use the FalkorDB knowledge graph")
+	if !docker.IsAvailable() {
+		return fmt.Errorf("docker not found or not running; please install Docker to use the FalkorDB knowledge graph")
 	}
 
 	cmd.SilenceUsage = true
@@ -54,77 +51,29 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get app directory; %w", err)
 	}
 
-	containerName := "memorizer-falkordb"
-	dataDir := fmt.Sprintf("%s/falkordb", appDir)
-
-	// Check if container already exists
-	checkCmd := exec.Command("docker", "inspect", containerName)
-	if err := checkCmd.Run(); err == nil {
-		// Container exists, check if running
-		statusCmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName)
-		output, err := statusCmd.Output()
-		if err == nil && strings.TrimSpace(string(output)) == "true" {
-			fmt.Printf("FalkorDB container is already running\n")
-			return nil
-		}
-
-		// Container exists but not running, start it
-		fmt.Printf("Starting existing FalkorDB container...\n")
-		startCmd := exec.Command("docker", "start", containerName)
-		if err := startCmd.Run(); err != nil {
-			return fmt.Errorf("failed to start container; %w", err)
-		}
-	} else {
-		// Container doesn't exist, create and start it
-		fmt.Printf("Creating FalkorDB container...\n")
-		fmt.Printf("Data directory: %s\n", dataDir)
-
-		dockerArgs := []string{
-			"run",
-			"--name", containerName,
-			"-p", fmt.Sprintf("%d:6379", cfg.Graph.Port),
-			"-p", "3000:3000", // Browser UI
-			"-v", fmt.Sprintf("%s:/data", dataDir),
-			"--restart", "unless-stopped",
-		}
-
-		if detached {
-			dockerArgs = append(dockerArgs, "-d")
-		}
-
-		dockerArgs = append(dockerArgs, "falkordb/falkordb:latest")
-
-		createCmd := exec.Command("docker", dockerArgs...)
-		createCmd.Stdout = cmd.OutOrStdout()
-		createCmd.Stderr = cmd.ErrOrStderr()
-
-		if err := createCmd.Run(); err != nil {
-			return fmt.Errorf("failed to create container; %w", err)
-		}
+	// Check if already running
+	if docker.IsFalkorDBRunning(cfg.Graph.Port) {
+		fmt.Printf("FalkorDB container is already running\n")
+		fmt.Printf("  Redis port: %d\n", cfg.Graph.Port)
+		fmt.Printf("  Browser UI: http://localhost:3000\n")
+		return nil
 	}
 
-	// Wait for container to be healthy
-	fmt.Printf("Waiting for FalkorDB to be ready...\n")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	fmt.Printf("Starting FalkorDB container...\n")
+	fmt.Printf("Data directory: %s/falkordb\n", appDir)
 
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for FalkorDB to be ready")
-		case <-ticker.C:
-			// Try to ping FalkorDB via redis-cli inside container
-			pingCmd := exec.Command("docker", "exec", containerName, "redis-cli", "ping")
-			output, err := pingCmd.Output()
-			if err == nil && strings.TrimSpace(string(output)) == "PONG" {
-				fmt.Printf("FalkorDB is ready\n")
-				fmt.Printf("  Redis port: %d\n", cfg.Graph.Port)
-				fmt.Printf("  Browser UI: http://localhost:3000\n")
-				return nil
-			}
-		}
+	opts := docker.StartOptions{
+		Port:    cfg.Graph.Port,
+		DataDir: fmt.Sprintf("%s/falkordb", appDir),
+		Detach:  detached,
 	}
+
+	if err := docker.StartFalkorDB(opts); err != nil {
+		return fmt.Errorf("failed to start FalkorDB; %w", err)
+	}
+
+	fmt.Printf("FalkorDB is ready\n")
+	fmt.Printf("  Redis port: %d\n", cfg.Graph.Port)
+	fmt.Printf("  Browser UI: http://localhost:3000\n")
+	return nil
 }

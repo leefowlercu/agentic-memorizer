@@ -3,11 +3,10 @@ package subcommands
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/docker"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/spf13/cobra"
 )
@@ -29,47 +28,29 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	containerName := "memorizer-falkordb"
-
-	// Check Docker availability
-	dockerAvailable := true
-	if _, err := exec.LookPath("docker"); err != nil {
-		dockerAvailable = false
-	}
-
-	// Check container status
-	containerRunning := false
-	if dockerAvailable {
-		checkCmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName)
-		output, err := checkCmd.Output()
-		if err == nil && strings.TrimSpace(string(output)) == "true" {
-			containerRunning = true
-		}
-	}
-
 	fmt.Printf("FalkorDB Status\n")
 	fmt.Printf("===============\n\n")
 
-	if !dockerAvailable {
-		fmt.Printf("Docker:     not installed\n")
+	// Check Docker availability
+	if !docker.IsAvailable() {
+		fmt.Printf("Docker:     not installed or not running\n")
 		fmt.Printf("Container:  N/A\n")
 		fmt.Printf("\nInstall Docker to use the FalkorDB knowledge graph.\n")
 		return nil
 	}
 
 	fmt.Printf("Docker:     available\n")
-	if containerRunning {
+
+	// Check container status
+	if docker.IsFalkorDBRunning(0) {
 		fmt.Printf("Container:  running\n")
+	} else if docker.ContainerExists() {
+		fmt.Printf("Container:  stopped\n")
+		fmt.Printf("\nRun 'agentic-memorizer graph start' to start the container.\n")
+		return nil
 	} else {
-		// Check if container exists but stopped
-		checkCmd := exec.Command("docker", "inspect", containerName)
-		if err := checkCmd.Run(); err == nil {
-			fmt.Printf("Container:  stopped\n")
-			fmt.Printf("\nRun 'agentic-memorizer graph start' to start the container.\n")
-		} else {
-			fmt.Printf("Container:  not created\n")
-			fmt.Printf("\nRun 'agentic-memorizer graph start' to create and start the container.\n")
-		}
+		fmt.Printf("Container:  not created\n")
+		fmt.Printf("\nRun 'agentic-memorizer graph start' to create and start the container.\n")
 		return nil
 	}
 

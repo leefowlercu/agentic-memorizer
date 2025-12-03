@@ -1,22 +1,19 @@
 package initialize
 
 import (
-	"bufio"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
-	"syscall"
-	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/docker"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/codex"  // Register Codex adapter
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/gemini" // Register Gemini adapter
+	tuiinit "github.com/leefowlercu/agentic-memorizer/internal/tui/initialize"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 var InitializeCmd = &cobra.Command{
@@ -25,62 +22,134 @@ var InitializeCmd = &cobra.Command{
 	Long: "\nCreates default configuration file and memory directory.\n\n" +
 		"The initialize command sets up the Agentic Memorizer by creating a default configuration " +
 		"file and the memory directory where you'll store files for analysis and indexing.\n\n" +
-		"Optionally configures integrations with agent frameworks like Claude Code for " +
-		"automatic memory indexing.\n\n" +
+		"By default, runs an interactive TUI wizard. Use --unattended for scripted setup.\n\n" +
 		"After initialization, start the daemon manually with 'agentic-memorizer daemon start' " +
 		"or set up as a system service for automatic management (recommended for production).\n\n" +
 		"By default, configuration and data files are stored in ~/.agentic-memorizer/. " +
 		"You can customize this location by setting the MEMORIZER_APP_DIR environment variable " +
 		"before running initialize.",
-	Example: `  # Default initialization
+	Example: `  # Interactive initialization (TUI wizard)
   agentic-memorizer initialize
 
-  # Initialize with integrations
-  agentic-memorizer initialize --setup-integrations
+  # Unattended initialization with required flags
+  agentic-memorizer initialize --unattended \
+    --use-env-anthropic-api-key \
+    --start-falkordb \
+    --integrations claude-code-hook,claude-code-mcp
 
-  # Custom memory directory
-  agentic-memorizer initialize --memory-root ~/my-memory
-
-  # Custom cache directory
-  agentic-memorizer initialize --cache-dir ~/my-memory/.cache
+  # Unattended with explicit API keys
+  agentic-memorizer initialize --unattended \
+    --anthropic-api-key sk-ant-... \
+    --openai-api-key sk-... \
+    --enable-embeddings \
+    --graph-host localhost \
+    --graph-port 6379
 
   # Force overwrite existing config
-  agentic-memorizer initialize --force
-
-  # After initialization, start the daemon:
-  agentic-memorizer daemon start              # Manual start
-  agentic-memorizer daemon systemctl          # Generate systemd unit
-  agentic-memorizer daemon launchctl          # Generate launchd plist`,
+  agentic-memorizer initialize --force`,
 	PreRunE: validateInit,
 	RunE:    runInit,
 }
 
 func init() {
+	// Directory options
 	InitializeCmd.Flags().String("memory-root", config.DefaultConfig.MemoryRoot, "Memory directory")
-	InitializeCmd.Flags().String("cache-dir", config.DefaultConfig.Analysis.CacheDir, "Cache directory")
+	InitializeCmd.Flags().String("cache-dir", "", "Cache directory (default: <memory-root>/.cache)")
 	InitializeCmd.Flags().Bool("force", false, "Overwrite existing config")
-	InitializeCmd.Flags().Bool("setup-integrations", false, "Configure agent framework integrations")
-	InitializeCmd.Flags().Bool("skip-integrations", false, "Skip integration setup prompt")
-	InitializeCmd.Flags().Int("http-port", -1, "HTTP API port (0 to disable, -1 for interactive prompt)")
+
+	// Mode selection
+	InitializeCmd.Flags().Bool("unattended", false, "Run in unattended mode without interactive prompts")
+
+	// Claude API configuration
+	InitializeCmd.Flags().String("anthropic-api-key", "", "Anthropic API key value")
+	InitializeCmd.Flags().Bool("use-env-anthropic-api-key", false, "Use ANTHROPIC_API_KEY from environment")
+
+	// HTTP API configuration
+	InitializeCmd.Flags().Int("http-port", -1, "HTTP API port (0 to disable, -1 for wizard default)")
+
+	// FalkorDB configuration
+	InitializeCmd.Flags().String("graph-host", config.DefaultConfig.Graph.Host, "FalkorDB host")
+	InitializeCmd.Flags().Int("graph-port", config.DefaultConfig.Graph.Port, "FalkorDB port")
+	InitializeCmd.Flags().String("graph-password", "", "FalkorDB password")
+	InitializeCmd.Flags().Bool("start-falkordb", false, "Start FalkorDB in Docker")
+	InitializeCmd.Flags().Bool("skip-falkordb-check", false, "Skip FalkorDB connectivity verification")
+
+	// Embeddings configuration
+	InitializeCmd.Flags().Bool("enable-embeddings", false, "Enable embeddings")
+	InitializeCmd.Flags().Bool("disable-embeddings", false, "Disable embeddings (default)")
+	InitializeCmd.Flags().String("openai-api-key", "", "OpenAI API key for embeddings")
+	InitializeCmd.Flags().Bool("use-env-openai-api-key", false, "Use OPENAI_API_KEY from environment")
+
+	// Integration configuration
+	InitializeCmd.Flags().StringSlice("integrations", []string{}, "Integrations to setup (comma-separated)")
+
+	// Deprecated flags (kept for backward compatibility)
+	InitializeCmd.Flags().Bool("setup-integrations", false, "Deprecated: use --integrations instead")
+	InitializeCmd.Flags().Bool("skip-integrations", false, "Deprecated: omit --integrations instead")
+	InitializeCmd.Flags().MarkDeprecated("setup-integrations", "use --integrations flag instead")
+	InitializeCmd.Flags().MarkDeprecated("skip-integrations", "simply omit --integrations flag")
 
 	InitializeCmd.Flags().SortFlags = false
 }
 
 func validateInit(cmd *cobra.Command, args []string) error {
+	unattended, _ := cmd.Flags().GetBool("unattended")
+
 	// Validate mutually exclusive flags
-	setupIntegrations, _ := cmd.Flags().GetBool("setup-integrations")
-	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
-	if setupIntegrations && skipIntegrations {
-		return fmt.Errorf("--setup-integrations and --skip-integrations are mutually exclusive")
+	enableEmbeddings, _ := cmd.Flags().GetBool("enable-embeddings")
+	disableEmbeddings, _ := cmd.Flags().GetBool("disable-embeddings")
+	if enableEmbeddings && disableEmbeddings {
+		return fmt.Errorf("--enable-embeddings and --disable-embeddings are mutually exclusive")
+	}
+
+	anthropicKey, _ := cmd.Flags().GetString("anthropic-api-key")
+	useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
+	if anthropicKey != "" && useEnvAnthropic {
+		return fmt.Errorf("--anthropic-api-key and --use-env-anthropic-api-key are mutually exclusive")
+	}
+
+	openaiKey, _ := cmd.Flags().GetString("openai-api-key")
+	useEnvOpenai, _ := cmd.Flags().GetBool("use-env-openai-api-key")
+	if openaiKey != "" && useEnvOpenai {
+		return fmt.Errorf("--openai-api-key and --use-env-openai-api-key are mutually exclusive")
 	}
 
 	// Validate http-port flag if provided
 	httpPort, _ := cmd.Flags().GetInt("http-port")
 	if httpPort < -1 || httpPort > 65535 {
-		return fmt.Errorf("--http-port must be -1 (interactive), 0 (disabled), or 1-65535")
+		return fmt.Errorf("--http-port must be -1 (default), 0 (disabled), or 1-65535")
 	}
-	if httpPort > 0 && httpPort < 1024 {
-		fmt.Printf("Warning: port %d is in the well-known ports range (requires elevated privileges)\n", httpPort)
+
+	// Unattended mode validation
+	if unattended {
+		// Must have either API key or use-env flag
+		if anthropicKey == "" && !useEnvAnthropic {
+			envKey := os.Getenv(config.ClaudeAPIKeyEnv)
+			if envKey == "" {
+				return fmt.Errorf("unattended mode requires --anthropic-api-key or --use-env-anthropic-api-key (or %s environment variable)", config.ClaudeAPIKeyEnv)
+			}
+		}
+
+		// FalkorDB must be addressed
+		startFalkorDB, _ := cmd.Flags().GetBool("start-falkordb")
+		skipCheck, _ := cmd.Flags().GetBool("skip-falkordb-check")
+		if !startFalkorDB && !skipCheck {
+			// Check if FalkorDB is already running
+			graphPort, _ := cmd.Flags().GetInt("graph-port")
+			if !docker.IsFalkorDBRunning(graphPort) {
+				return fmt.Errorf("unattended mode requires FalkorDB to be running, use --start-falkordb to auto-start, or --skip-falkordb-check to bypass")
+			}
+		}
+
+		// Embeddings validation
+		if enableEmbeddings {
+			if openaiKey == "" && !useEnvOpenai {
+				envKey := os.Getenv(config.EmbeddingsAPIKeyEnv)
+				if envKey == "" {
+					return fmt.Errorf("--enable-embeddings requires --openai-api-key or --use-env-openai-api-key (or %s environment variable)", config.EmbeddingsAPIKeyEnv)
+				}
+			}
+		}
 	}
 
 	// All validation passed - errors after this are runtime errors
@@ -89,41 +158,174 @@ func validateInit(cmd *cobra.Command, args []string) error {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	unattended, _ := cmd.Flags().GetBool("unattended")
+
+	if unattended {
+		return runUnattended(cmd)
+	}
+	return runInteractive(cmd)
+}
+
+func runInteractive(cmd *cobra.Command) error {
+	force, _ := cmd.Flags().GetBool("force")
 	memoryRoot, _ := cmd.Flags().GetString("memory-root")
 	cacheDir, _ := cmd.Flags().GetString("cache-dir")
-	force, _ := cmd.Flags().GetBool("force")
-	setupIntegrations, _ := cmd.Flags().GetBool("setup-integrations")
-	skipIntegrations, _ := cmd.Flags().GetBool("skip-integrations")
 
-	// Get app directory (respects MEMORIZER_APP_DIR environment variable)
+	// Get app directory
 	appDir, err := config.GetAppDir()
 	if err != nil {
 		return fmt.Errorf("failed to get app directory; %w", err)
 	}
 	configPath := filepath.Join(appDir, config.ConfigFile)
 
-	if memoryRoot == "" {
-		memoryRoot = config.DefaultConfig.MemoryRoot
-	}
-
-	if cacheDir == "" {
-		cacheDir = filepath.Join(memoryRoot, ".cache")
-	}
-
-	memoryRoot = config.ExpandHome(memoryRoot)
-	cacheDir = config.ExpandHome(cacheDir)
-
+	// Check for existing config
 	if !force {
 		if _, err := os.Stat(configPath); err == nil {
 			return fmt.Errorf("config file already exists at %s (use --force to overwrite)", configPath)
 		}
 	}
 
-	if err := os.MkdirAll(memoryRoot, 0755); err != nil {
+	// Build initial config from defaults and flags
+	cfg := config.DefaultConfig
+	if memoryRoot != "" {
+		cfg.MemoryRoot = config.ExpandHome(memoryRoot)
+	} else {
+		cfg.MemoryRoot = config.ExpandHome(cfg.MemoryRoot)
+	}
+	if cacheDir != "" {
+		cfg.Analysis.CacheDir = config.ExpandHome(cacheDir)
+	} else {
+		cfg.Analysis.CacheDir = config.ExpandHome(cfg.Analysis.CacheDir)
+	}
+
+	// Run the TUI wizard
+	result, err := tuiinit.RunWizard(&cfg)
+	if err != nil {
+		return fmt.Errorf("initialization wizard error; %w", err)
+	}
+
+	if result.Cancelled {
+		fmt.Println("Initialization cancelled.")
+		return nil
+	}
+
+	if !result.Confirmed {
+		fmt.Println("Initialization not confirmed.")
+		return nil
+	}
+
+	// Finalize configuration
+	return finalizeInit(configPath, result.Config)
+}
+
+func runUnattended(cmd *cobra.Command) error {
+	force, _ := cmd.Flags().GetBool("force")
+	memoryRoot, _ := cmd.Flags().GetString("memory-root")
+	cacheDir, _ := cmd.Flags().GetString("cache-dir")
+
+	// Get app directory
+	appDir, err := config.GetAppDir()
+	if err != nil {
+		return fmt.Errorf("failed to get app directory; %w", err)
+	}
+	configPath := filepath.Join(appDir, config.ConfigFile)
+
+	// Check for existing config
+	if !force {
+		if _, err := os.Stat(configPath); err == nil {
+			return fmt.Errorf("config file already exists at %s (use --force to overwrite)", configPath)
+		}
+	}
+
+	// Build config from flags
+	cfg := config.DefaultConfig
+
+	// Memory root
+	if memoryRoot != "" {
+		cfg.MemoryRoot = config.ExpandHome(memoryRoot)
+	} else {
+		cfg.MemoryRoot = config.ExpandHome(cfg.MemoryRoot)
+	}
+
+	// Cache dir
+	if cacheDir != "" {
+		cfg.Analysis.CacheDir = config.ExpandHome(cacheDir)
+	} else {
+		cfg.Analysis.CacheDir = config.ExpandHome(cfg.Analysis.CacheDir)
+	}
+
+	// Anthropic API key
+	anthropicKey, _ := cmd.Flags().GetString("anthropic-api-key")
+	useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
+	if anthropicKey != "" {
+		cfg.Claude.APIKey = anthropicKey
+	} else if useEnvAnthropic || os.Getenv(config.ClaudeAPIKeyEnv) != "" {
+		cfg.Claude.APIKey = "" // Will use env var
+	}
+
+	// HTTP port
+	httpPort, _ := cmd.Flags().GetInt("http-port")
+	if httpPort >= 0 {
+		cfg.Daemon.HTTPPort = httpPort
+		if httpPort > 0 {
+			cfg.MCP.DaemonPort = httpPort
+			cfg.MCP.DaemonHost = "localhost"
+		}
+	}
+
+	// FalkorDB
+	graphHost, _ := cmd.Flags().GetString("graph-host")
+	graphPort, _ := cmd.Flags().GetInt("graph-port")
+	graphPassword, _ := cmd.Flags().GetString("graph-password")
+	cfg.Graph.Host = graphHost
+	cfg.Graph.Port = graphPort
+	cfg.Graph.Password = graphPassword
+
+	// Start FalkorDB if requested
+	startFalkorDBFlag, _ := cmd.Flags().GetBool("start-falkordb")
+	if startFalkorDBFlag {
+		fmt.Println("Starting FalkorDB in Docker...")
+		opts := docker.StartOptions{
+			Port:    graphPort,
+			DataDir: fmt.Sprintf("%s/falkordb", appDir),
+			Detach:  true,
+		}
+		if err := docker.StartFalkorDB(opts); err != nil {
+			return fmt.Errorf("failed to start FalkorDB; %w", err)
+		}
+		fmt.Println("FalkorDB started successfully.")
+		fmt.Printf("  Redis port: %d\n", graphPort)
+		fmt.Printf("  Browser UI: http://localhost:3000\n")
+	}
+
+	// Embeddings
+	enableEmbeddings, _ := cmd.Flags().GetBool("enable-embeddings")
+	openaiKey, _ := cmd.Flags().GetString("openai-api-key")
+	useEnvOpenai, _ := cmd.Flags().GetBool("use-env-openai-api-key")
+	if enableEmbeddings {
+		cfg.Embeddings.Enabled = true
+		if openaiKey != "" {
+			cfg.Embeddings.APIKey = openaiKey
+		} else if useEnvOpenai || os.Getenv(config.EmbeddingsAPIKeyEnv) != "" {
+			cfg.Embeddings.APIKey = "" // Will use env var
+		}
+	}
+
+	// Integrations
+	integrationNames, _ := cmd.Flags().GetStringSlice("integrations")
+	cfg.Integrations.Enabled = integrationNames
+
+	// Finalize configuration
+	return finalizeInit(configPath, &cfg)
+}
+
+func finalizeInit(configPath string, cfg *config.Config) error {
+	// Create directories
+	if err := os.MkdirAll(cfg.MemoryRoot, 0755); err != nil {
 		return fmt.Errorf("failed to create memory directory; %w", err)
 	}
 
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.Analysis.CacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory; %w", err)
 	}
 
@@ -132,111 +334,116 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create config directory; %w", err)
 	}
 
-	cfg := config.DefaultConfig
-	cfg.MemoryRoot = memoryRoot
-	cfg.Analysis.CacheDir = cacheDir
-
-	// Prompt for API key configuration
-	apiKey, err := promptForAPIKey()
-	if err != nil {
-		return fmt.Errorf("failed to prompt for API key; %w", err)
-	}
-
-	// Track whether API key was configured (for Next Steps display)
-	apiKeyConfigured := apiKey != "" || os.Getenv("ANTHROPIC_API_KEY") != ""
-
-	// Set API key in config if provided (empty means using env var)
-	if apiKey != "" {
-		cfg.Claude.APIKey = apiKey
-	}
-
-	// Get HTTP port from flag or prompt
-	httpPortFlag, _ := cmd.Flags().GetInt("http-port")
-	var httpPort int
-	if httpPortFlag >= 0 {
-		// Flag was explicitly set
-		httpPort = httpPortFlag
-	} else {
-		// Interactive prompt
-		httpPort, err = promptForHTTPPort()
-		if err != nil {
-			return fmt.Errorf("failed to prompt for HTTP port; %w", err)
-		}
-	}
-	cfg.Daemon.HTTPPort = httpPort
-
-	// Copy HTTP port to MCP daemon port (MCP requires daemon connectivity)
-	if httpPort > 0 {
-		cfg.MCP.DaemonPort = httpPort
-		cfg.MCP.DaemonHost = "localhost"
-	}
-
-	// Prompt for FalkorDB configuration
-	falkorDBStarted, err := promptForFalkorDB(&cfg)
-	if err != nil {
-		return fmt.Errorf("failed to configure FalkorDB; %w", err)
-	}
-
-	// Prompt for embeddings configuration
-	if err := promptForEmbeddings(&cfg); err != nil {
-		return fmt.Errorf("failed to configure embeddings; %w", err)
-	}
-
-	if err := config.WriteMinimalConfig(configPath, &cfg); err != nil {
+	// Write config
+	if err := config.WriteMinimalConfig(configPath, cfg); err != nil {
 		return fmt.Errorf("failed to write config; %w", err)
 	}
 
-	// Initialize config system to load the freshly written config
-	// This is needed so integration setup can read config values (e.g., memory_root)
+	// Initialize config system
 	if err := config.InitConfig(); err != nil {
 		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
-	fmt.Printf("Configuration:\n")
-	fmt.Printf("  ✓ Created configuration file: %s\n", configPath)
-	fmt.Printf("  ✓ Created memory directory: %s\n", memoryRoot)
-	fmt.Printf("  ✓ Created cache directory: %s\n", cacheDir)
-	fmt.Printf("  ✓ FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, config.GraphDatabase)
+	// Print summary
+	fmt.Printf("\nConfiguration:\n")
+	fmt.Printf("  Created configuration file: %s\n", configPath)
+	fmt.Printf("  Created memory directory: %s\n", cfg.MemoryRoot)
+	fmt.Printf("  Created cache directory: %s\n", cfg.Analysis.CacheDir)
+	fmt.Printf("  FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, config.GraphDatabase)
 	if cfg.Embeddings.Enabled {
-		fmt.Printf("  ✓ Embeddings: %s (%s)\n", config.EmbeddingsProvider, config.EmbeddingsModel)
+		fmt.Printf("  Embeddings: %s (%s)\n", config.EmbeddingsProvider, config.EmbeddingsModel)
 	} else {
-		fmt.Printf("  - Embeddings: disabled\n")
+		fmt.Printf("  Embeddings: disabled\n")
 	}
 
-	enabledIntegrations, err := handleIntegrationSetup(setupIntegrations, skipIntegrations)
+	// Setup integrations
+	if len(cfg.Integrations.Enabled) > 0 {
+		enabledIntegrations, err := setupIntegrations(cfg.Integrations.Enabled)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
+		}
+
+		// Update config with successfully enabled integrations
+		if len(enabledIntegrations) > 0 {
+			cfg.Integrations.Enabled = enabledIntegrations
+			if err := config.WriteMinimalConfig(configPath, cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to update config with enabled integrations; %v\n", err)
+			}
+			if err := config.InitConfig(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to reload config; %v\n", err)
+			}
+		}
+	}
+
+	// Print next steps
+	printNextSteps(cfg)
+
+	return nil
+}
+
+func setupIntegrations(integrationNames []string) ([]string, error) {
+	if len(integrationNames) == 0 {
+		return nil, nil
+	}
+
+	binaryPath, err := findBinaryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
+		return nil, fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure integrations", err)
 	}
 
-	// Update config with enabled integrations list if any were set up
-	if len(enabledIntegrations) > 0 {
-		cfg.Integrations.Enabled = enabledIntegrations
-		if err := config.WriteMinimalConfig(configPath, &cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to update config with enabled integrations; %v\n", err)
+	fmt.Printf("\nConfigured integrations:\n")
+	var enabledIntegrations []string
+	registry := integrations.GlobalRegistry()
+
+	for _, name := range integrationNames {
+		integration, err := registry.Get(name)
+		if err != nil {
+			fmt.Printf("  Warning: Integration %s not found\n", name)
+			continue
 		}
-		// Reload config after writing
-		if err := config.InitConfig(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to reload config; %v\n", err)
+
+		if err := integration.Setup(binaryPath); err != nil {
+			fmt.Printf("  Warning: Failed to setup %s: %v\n", name, err)
+			continue
 		}
+
+		fmt.Printf("  Integration %s configured\n", name)
+		enabledIntegrations = append(enabledIntegrations, name)
 	}
+
+	if len(enabledIntegrations) > 0 {
+		fmt.Printf("\nBinary path: %s\n", binaryPath)
+	}
+
+	return enabledIntegrations, nil
+}
+
+func printNextSteps(cfg *config.Config) {
+	apiKeyConfigured := cfg.Claude.APIKey != "" || os.Getenv(config.ClaudeAPIKeyEnv) != ""
+	falkorDBRunning := docker.IsFalkorDBRunning(cfg.Graph.Port)
 
 	fmt.Printf("\nNext steps:\n")
 	stepNum := 1
+
 	if !apiKeyConfigured {
 		fmt.Printf("%d. Set your Claude API key: export ANTHROPIC_API_KEY=\"your-key-here\"\n", stepNum)
 		stepNum++
 	}
-	if cfg.Embeddings.Enabled && os.Getenv("OPENAI_API_KEY") == "" && cfg.Embeddings.APIKey == "" {
+
+	if cfg.Embeddings.Enabled && os.Getenv(config.EmbeddingsAPIKeyEnv) == "" && cfg.Embeddings.APIKey == "" {
 		fmt.Printf("%d. Set your OpenAI API key: export OPENAI_API_KEY=\"your-key-here\"\n", stepNum)
 		stepNum++
 	}
-	if !falkorDBStarted {
+
+	if !falkorDBRunning {
 		fmt.Printf("%d. Start FalkorDB (required):\n", stepNum)
-		fmt.Printf("   docker run -d --name falkordb -p %d:6379 falkordb/falkordb\n", cfg.Graph.Port)
+		fmt.Printf("   docker run -d --name memorizer-falkordb -p %d:6379 falkordb/falkordb\n", cfg.Graph.Port)
 		stepNum++
 	}
-	fmt.Printf("%d. Add files to %s\n", stepNum, memoryRoot)
+
+	fmt.Printf("%d. Add files to %s\n", stepNum, cfg.MemoryRoot)
 	stepNum++
+
 	fmt.Printf("%d. Start the daemon:\n", stepNum)
 	fmt.Printf("   # Option A: Manual (foreground)\n")
 	fmt.Printf("   agentic-memorizer daemon start\n\n")
@@ -245,225 +452,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   # Option C: System service (background, recommended)\n")
 	fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
 	fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
-
-	return nil
 }
 
-// promptForAPIKey prompts the user for Claude API key configuration
-// Returns the API key to be written to config (empty string if using env var)
-func promptForAPIKey() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
+// Helper functions
 
-	// Check if ANTHROPIC_API_KEY is already set
-	existingKey := os.Getenv("ANTHROPIC_API_KEY")
-	if existingKey != "" {
-		fmt.Printf("\nClaude API key detected in ANTHROPIC_API_KEY environment variable.\n")
-		fmt.Printf("Use existing API key? [Y/n]: ")
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return "", fmt.Errorf("failed to read input; %w", err)
-		}
-
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "n" && response != "no" {
-			// User wants to use the existing env var
-			fmt.Printf("\nUsing ANTHROPIC_API_KEY from environment.\n")
-			return existingKey, nil
-		}
-	}
-
-	// Prompt for configuration method
-	fmt.Printf("\nHow would you like to configure your Claude API key?\n")
-	fmt.Printf("1. Use environment variable (ANTHROPIC_API_KEY)\n")
-	fmt.Printf("2. Enter API key directly (will be stored in config file)\n")
-	fmt.Printf("3. Skip (configure later)\n")
-	fmt.Printf("\nEnter your choice [1/2/3]: ")
-
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("failed to read input; %w", err)
-	}
-
-	response = strings.TrimSpace(response)
-
-	switch response {
-	case "1", "":
-		// Use environment variable
-		if existingKey == "" {
-			fmt.Printf("\nUsing environment variable reference.\n")
-			fmt.Printf("Remember to set: export ANTHROPIC_API_KEY=\"your-key-here\"\n\n")
-		} else {
-			fmt.Printf("\nUsing ANTHROPIC_API_KEY environment variable reference.\n\n")
-		}
-		return "", nil
-
-	case "2":
-		// Direct API key entry with masked input
-		fmt.Printf("\nEnter your Claude API key (input will be hidden): ")
-
-		// Read password (masked input)
-		bytepw, err := term.ReadPassword(int(syscall.Stdin))
-		fmt.Println() // Print newline after password input
-		if err != nil {
-			return "", fmt.Errorf("failed to read API key; %w", err)
-		}
-
-		apiKey := strings.TrimSpace(string(bytepw))
-		if apiKey == "" {
-			fmt.Printf("No API key entered. Falling back to environment variable reference.\n")
-			return "", nil
-		}
-
-		fmt.Printf("API key configured and will be stored in config file.\n\n")
-		return apiKey, nil
-
-	case "3":
-		// Skip
-		fmt.Printf("\nSkipping API key configuration.\n")
-		fmt.Printf("You can configure it later by:\n")
-		fmt.Printf("  - Setting environment variable: export ANTHROPIC_API_KEY=\"your-key\"\n")
-		fmt.Printf("  - Editing config file and adding claude.api_key\n\n")
-		return "", nil
-
-	default:
-		fmt.Printf("Invalid choice. Skipping API key configuration.\n\n")
-		return "", nil
-	}
-}
-
-// promptForHTTPPort prompts the user for HTTP API configuration
-// Returns the port number (0 = disabled)
-func promptForHTTPPort() (int, error) {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Printf("\nEnable HTTP API for health checks and real-time MCP notifications?\n\n")
-	fmt.Printf("The HTTP API provides:\n")
-	fmt.Printf("  - /health endpoint for monitoring daemon status\n")
-	fmt.Printf("  - /notifications/stream for real-time index updates to MCP servers\n\n")
-	fmt.Printf("1. Enable (port: 7600)\n")
-	fmt.Printf("2. Enable (custom port)\n")
-	fmt.Printf("3. Disable (default)\n")
-	fmt.Printf("\nEnter your choice [1/2/3]: ")
-
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return 0, fmt.Errorf("failed to read input; %w", err)
-	}
-
-	response = strings.TrimSpace(response)
-
-	switch response {
-	case "1":
-		fmt.Printf("\nHTTP API will be enabled on port 7600.\n\n")
-		return 7600, nil
-
-	case "2":
-		fmt.Printf("\nEnter custom port (1024-65535): ")
-		portStr, err := reader.ReadString('\n')
-		if err != nil {
-			return 0, fmt.Errorf("failed to read port; %w", err)
-		}
-
-		portStr = strings.TrimSpace(portStr)
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			fmt.Printf("Invalid port number. Falling back to disabled.\n\n")
-			return 0, nil
-		}
-
-		if port < 1 || port > 65535 {
-			fmt.Printf("Port must be between 1 and 65535. Falling back to disabled.\n\n")
-			return 0, nil
-		}
-
-		if port < 1024 {
-			fmt.Printf("Warning: port %d is in the well-known ports range (may require elevated privileges).\n", port)
-		}
-
-		fmt.Printf("HTTP API will be enabled on port %d.\n\n", port)
-		return port, nil
-
-	case "3", "":
-		fmt.Printf("\nHTTP API disabled.\n")
-		fmt.Printf("You can enable it later by editing config.yaml and setting daemon.http_port\n\n")
-		return 0, nil
-
-	default:
-		fmt.Printf("Invalid choice. HTTP API disabled.\n\n")
-		return 0, nil
-	}
-}
-
-func handleIntegrationSetup(setupIntegrations, skipIntegrations bool) ([]string, error) {
-	if skipIntegrations {
-		return nil, nil
-	}
-
-	// Detect available integrations
-	registry := integrations.GlobalRegistry()
-	available := registry.DetectAvailable()
-
-	if len(available) == 0 {
-		fmt.Printf("\nNo agent frameworks detected on this system.\n")
-		fmt.Printf("Supported integrations: Claude Code, Continue.dev, Cline\n")
-		fmt.Printf("Install an agent framework and run 'agentic-memorizer integrations setup <name>' to configure.\n\n")
-		return nil, nil
-	}
-
-	if !setupIntegrations {
-		fmt.Printf("\nDetected agent frameworks:\n")
-		for _, integration := range available {
-			fmt.Printf("  - %s: %s\n", integration.GetName(), integration.GetDescription())
-		}
-		fmt.Printf("\nConfigure integrations with detected frameworks? [y/N]: ")
-		reader := bufio.NewReader(os.Stdin)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return nil, fmt.Errorf("failed to read input; %w", err)
-		}
-
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
-			fmt.Printf("\nTo set up integrations manually, run: agentic-memorizer integrations setup <integration-name>\n")
-			return nil, nil
-		}
-		setupIntegrations = true
-	}
-
-	if setupIntegrations {
-		binaryPath, err := findBinaryPath()
-		if err != nil {
-			return nil, fmt.Errorf("could not auto-detect binary path; %w\nPlease manually configure integrations", err)
-		}
-
-		fmt.Printf("\nConfigured integrations:\n")
-		setupCount := 0
-		enabledIntegrations := []string{}
-
-		for _, integration := range available {
-			err := integration.Setup(binaryPath)
-			if err != nil {
-				fmt.Printf("  Warning: Failed to setup %s: %v\n", integration.GetName(), err)
-				continue
-			}
-			fmt.Printf("  ✓ Integration %s configured\n", integration.GetName())
-			setupCount++
-			enabledIntegrations = append(enabledIntegrations, integration.GetName())
-		}
-
-		if setupCount > 0 {
-			fmt.Printf("\nBinary path: %s\n", binaryPath)
-		} else {
-			fmt.Printf("\nNo integrations were configured successfully.\n\n")
-		}
-
-		return enabledIntegrations, nil
-	}
-
-	return nil, nil
-}
-
-// findBinaryPath attempts to locate the agentic-memorizer binary
 func findBinaryPath() (string, error) {
 	// Try to get the current executable path
 	execPath, err := os.Executable()
@@ -489,236 +481,4 @@ func findBinaryPath() (string, error) {
 	}
 
 	return "", fmt.Errorf("could not locate agentic-memorizer binary")
-}
-
-// isDockerAvailable checks if Docker is installed and running
-func isDockerAvailable() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", "info")
-	return cmd.Run() == nil
-}
-
-// isFalkorDBRunning checks if a FalkorDB container is running on the specified port
-func isFalkorDBRunning(port int) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Check if we can connect to FalkorDB
-	cmd := exec.CommandContext(ctx, "docker", "ps", "--filter", fmt.Sprintf("publish=%d", port), "--format", "{{.Names}}")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(output)) != ""
-}
-
-// startFalkorDB starts a FalkorDB Docker container
-func startFalkorDB(port int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Check if container already exists (stopped)
-	checkCmd := exec.CommandContext(ctx, "docker", "ps", "-a", "--filter", "name=falkordb", "--format", "{{.Names}}")
-	output, _ := checkCmd.Output()
-	if strings.TrimSpace(string(output)) == "falkordb" {
-		// Container exists, try to start it
-		startCmd := exec.CommandContext(ctx, "docker", "start", "falkordb")
-		return startCmd.Run()
-	}
-
-	// Create and start new container
-	cmd := exec.CommandContext(ctx, "docker", "run", "-d",
-		"--name", "falkordb",
-		"-p", fmt.Sprintf("%d:6379", port),
-		"falkordb/falkordb")
-	return cmd.Run()
-}
-
-// promptForFalkorDB prompts for FalkorDB configuration
-// Returns true if FalkorDB was started during setup
-func promptForFalkorDB(cfg *config.Config) (bool, error) {
-	reader := bufio.NewReader(os.Stdin)
-	falkorDBStarted := false
-
-	fmt.Printf("\nFalkorDB Configuration:\n")
-	fmt.Printf("FalkorDB is a graph database required for storing the knowledge graph.\n\n")
-
-	// Check if Docker is available
-	dockerAvailable := isDockerAvailable()
-
-	// Check if FalkorDB is already running
-	if isFalkorDBRunning(cfg.Graph.Port) {
-		fmt.Printf("FalkorDB detected running on port %d.\n", cfg.Graph.Port)
-		fmt.Printf("Using existing FalkorDB instance.\n\n")
-		return true, nil
-	}
-
-	// Prompt for configuration
-	fmt.Printf("Current configuration:\n")
-	fmt.Printf("  Host: %s\n", cfg.Graph.Host)
-	fmt.Printf("  Port: %d\n", cfg.Graph.Port)
-	fmt.Printf("  Database: %s (hardcoded)\n", config.GraphDatabase)
-	fmt.Printf("\n1. Use defaults (localhost:%d)\n", cfg.Graph.Port)
-	fmt.Printf("2. Custom configuration\n")
-	if dockerAvailable {
-		fmt.Printf("3. Start FalkorDB in Docker (recommended)\n")
-	}
-	fmt.Printf("\nEnter your choice [1/2%s]: ", func() string {
-		if dockerAvailable {
-			return "/3"
-		}
-		return ""
-	}())
-
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false, fmt.Errorf("failed to read input; %w", err)
-	}
-	response = strings.TrimSpace(response)
-
-	switch response {
-	case "1", "":
-		fmt.Printf("\nUsing default FalkorDB configuration.\n")
-		if !dockerAvailable {
-			fmt.Printf("Note: Docker not detected. Ensure FalkorDB is running before starting the daemon.\n\n")
-		}
-
-	case "2":
-		// Custom configuration
-		fmt.Printf("\nEnter FalkorDB host [%s]: ", cfg.Graph.Host)
-		host, _ := reader.ReadString('\n')
-		host = strings.TrimSpace(host)
-		if host != "" {
-			cfg.Graph.Host = host
-		}
-
-		fmt.Printf("Enter FalkorDB port [%d]: ", cfg.Graph.Port)
-		portStr, _ := reader.ReadString('\n')
-		portStr = strings.TrimSpace(portStr)
-		if portStr != "" {
-			port, err := strconv.Atoi(portStr)
-			if err == nil && port > 0 && port <= 65535 {
-				cfg.Graph.Port = port
-			} else {
-				fmt.Printf("Invalid port, using default %d\n", cfg.Graph.Port)
-			}
-		}
-
-		fmt.Printf("\nFalkorDB configured: %s:%d (database: %s)\n\n", cfg.Graph.Host, cfg.Graph.Port, config.GraphDatabase)
-
-	case "3":
-		if !dockerAvailable {
-			fmt.Printf("Docker is not available. Please install Docker or choose another option.\n")
-			return false, nil
-		}
-
-		fmt.Printf("\nStarting FalkorDB in Docker...\n")
-		if err := startFalkorDB(cfg.Graph.Port); err != nil {
-			fmt.Printf("Warning: Failed to start FalkorDB: %v\n", err)
-			fmt.Printf("You will need to start FalkorDB manually before running the daemon.\n\n")
-			return false, nil
-		}
-
-		// Wait for FalkorDB to be ready
-		fmt.Printf("Waiting for FalkorDB to be ready...")
-		for i := 0; i < 10; i++ {
-			time.Sleep(time.Second)
-			fmt.Printf(".")
-			if isFalkorDBRunning(cfg.Graph.Port) {
-				break
-			}
-		}
-		fmt.Printf("\n")
-
-		if isFalkorDBRunning(cfg.Graph.Port) {
-			fmt.Printf("FalkorDB started successfully on port %d.\n\n", cfg.Graph.Port)
-			falkorDBStarted = true
-		} else {
-			fmt.Printf("Warning: FalkorDB may not be fully ready. Check 'docker logs falkordb' if issues occur.\n\n")
-		}
-
-	default:
-		fmt.Printf("Invalid choice. Using default configuration.\n\n")
-	}
-
-	return falkorDBStarted, nil
-}
-
-// promptForEmbeddings prompts for embeddings configuration
-func promptForEmbeddings(cfg *config.Config) error {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Printf("Embeddings Configuration:\n")
-	fmt.Printf("Embeddings enable vector-based similarity search for finding related files.\n")
-	fmt.Printf("This requires an OpenAI API key.\n\n")
-
-	// Check if OPENAI_API_KEY is set
-	existingKey := os.Getenv("OPENAI_API_KEY")
-
-	fmt.Printf("1. Enable embeddings%s\n", func() string {
-		if existingKey != "" {
-			return " (OPENAI_API_KEY detected)"
-		}
-		return ""
-	}())
-	fmt.Printf("2. Disable embeddings (default)\n")
-	fmt.Printf("\nEnter your choice [1/2]: ")
-
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read input; %w", err)
-	}
-	response = strings.TrimSpace(response)
-
-	switch response {
-	case "1":
-		cfg.Embeddings.Enabled = true
-
-		if existingKey != "" {
-			fmt.Printf("\nUsing OPENAI_API_KEY from environment.\n")
-		} else {
-			fmt.Printf("\nHow would you like to configure your OpenAI API key?\n")
-			fmt.Printf("1. Use environment variable (OPENAI_API_KEY)\n")
-			fmt.Printf("2. Enter API key directly (will be stored in config file)\n")
-			fmt.Printf("\nEnter your choice [1/2]: ")
-
-			keyResponse, _ := reader.ReadString('\n')
-			keyResponse = strings.TrimSpace(keyResponse)
-
-			if keyResponse == "2" {
-				fmt.Printf("\nEnter your OpenAI API key (input will be hidden): ")
-				bytepw, err := term.ReadPassword(int(syscall.Stdin))
-				fmt.Println()
-				if err != nil {
-					return fmt.Errorf("failed to read API key; %w", err)
-				}
-
-				apiKey := strings.TrimSpace(string(bytepw))
-				if apiKey != "" {
-					cfg.Embeddings.APIKey = apiKey
-					fmt.Printf("OpenAI API key configured.\n")
-				} else {
-					fmt.Printf("No API key entered. Using environment variable reference.\n")
-				}
-			} else {
-				fmt.Printf("\nUsing environment variable reference.\n")
-				fmt.Printf("Remember to set: export OPENAI_API_KEY=\"your-key-here\"\n")
-			}
-		}
-
-		fmt.Printf("\nEmbeddings enabled with %s model (%d dimensions).\n\n",
-			config.EmbeddingsModel, config.EmbeddingsDimensions)
-
-	case "2", "":
-		cfg.Embeddings.Enabled = false
-		fmt.Printf("\nEmbeddings disabled. You can enable them later in config.yaml.\n\n")
-
-	default:
-		cfg.Embeddings.Enabled = false
-		fmt.Printf("Invalid choice. Embeddings disabled.\n\n")
-	}
-
-	return nil
 }

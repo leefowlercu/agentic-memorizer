@@ -2,9 +2,8 @@ package subcommands
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -26,8 +25,8 @@ func init() {
 }
 
 func validateStop(cmd *cobra.Command, args []string) error {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker not found; please install Docker")
+	if !docker.IsAvailable() {
+		return fmt.Errorf("docker not found or not running; please install Docker")
 	}
 
 	cmd.SilenceUsage = true
@@ -35,27 +34,17 @@ func validateStop(cmd *cobra.Command, args []string) error {
 }
 
 func runStop(cmd *cobra.Command, args []string) error {
-	containerName := "memorizer-falkordb"
-
 	// Check if container exists
-	checkCmd := exec.Command("docker", "inspect", containerName)
-	if err := checkCmd.Run(); err != nil {
-		fmt.Printf("FalkorDB container is not running\n")
+	if !docker.ContainerExists() {
+		fmt.Printf("FalkorDB container does not exist\n")
 		return nil
 	}
 
 	// Check if container is running
-	statusCmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName)
-	output, err := statusCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check container status; %w", err)
-	}
-
-	if strings.TrimSpace(string(output)) == "true" {
+	if docker.IsFalkorDBRunning(0) {
 		fmt.Printf("Stopping FalkorDB container...\n")
-		stopCmd := exec.Command("docker", "stop", containerName)
-		if err := stopCmd.Run(); err != nil {
-			return fmt.Errorf("failed to stop container; %w", err)
+		if err := docker.StopFalkorDB(); err != nil {
+			return err
 		}
 		fmt.Printf("FalkorDB container stopped\n")
 	} else {
@@ -64,9 +53,8 @@ func runStop(cmd *cobra.Command, args []string) error {
 
 	if removeContainer {
 		fmt.Printf("Removing FalkorDB container...\n")
-		rmCmd := exec.Command("docker", "rm", containerName)
-		if err := rmCmd.Run(); err != nil {
-			return fmt.Errorf("failed to remove container; %w", err)
+		if err := docker.RemoveFalkorDB(); err != nil {
+			return err
 		}
 		fmt.Printf("FalkorDB container removed (data preserved in volume)\n")
 	}

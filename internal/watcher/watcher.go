@@ -32,6 +32,7 @@ type Watcher struct {
 	rootPath           string
 	skipDirs           []string
 	skipFiles          []string
+	skipExtensions     []string
 	debounceMs         int
 	fsWatcher          *fsnotify.Watcher
 	logger             *slog.Logger
@@ -44,7 +45,7 @@ type Watcher struct {
 }
 
 // New creates a new file system watcher
-func New(rootPath string, skipDirs []string, skipFiles []string, debounceMs int, logger *slog.Logger) (*Watcher, error) {
+func New(rootPath string, skipDirs []string, skipFiles []string, skipExtensions []string, debounceMs int, logger *slog.Logger) (*Watcher, error) {
 	fsWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create fsnotify watcher: %w", err)
@@ -54,6 +55,7 @@ func New(rootPath string, skipDirs []string, skipFiles []string, debounceMs int,
 		rootPath:           rootPath,
 		skipDirs:           skipDirs,
 		skipFiles:          skipFiles,
+		skipExtensions:     skipExtensions,
 		debounceMs:         debounceMs,
 		fsWatcher:          fsWatcher,
 		logger:             logger,
@@ -261,6 +263,14 @@ func (w *Watcher) shouldSkip(path string) bool {
 	// Check if it's in skip files list
 	for _, skipFile := range w.skipFiles {
 		if base == skipFile {
+			return true
+		}
+	}
+
+	// Check if extension should be skipped
+	ext := filepath.Ext(path)
+	for _, skipExt := range w.skipExtensions {
+		if ext == skipExt {
 			return true
 		}
 	}

@@ -19,7 +19,7 @@ func TestWatcher_CreateFile(t *testing.T) {
 
 	// Create watcher
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{".cache", ".git"}, []string{"test-skip"}, 200, logger)
+	w, err := New(tmpDir, []string{".cache", ".git"}, []string{"test-skip"}, nil, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestWatcher_ModifyFile(t *testing.T) {
 
 	// Create watcher
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, 200, logger)
+	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestWatcher_DeleteFile(t *testing.T) {
 
 	// Create watcher
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, 200, logger)
+	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestWatcher_SkipHiddenFiles(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, 200, logger)
+	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestWatcher_Debouncing(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, 200, logger)
+	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestWatcher_NewDirectory(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, 200, logger)
+	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestWatcher_DebounceUpdate(t *testing.T) {
 
 	// Create watcher with initial short debounce (100ms)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, 100, logger)
+	w, err := New(tmpDir, []string{}, []string{}, nil, 100, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}

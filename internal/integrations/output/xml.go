@@ -46,6 +46,7 @@ func xmlEscape(s string) string {
 func (p *XMLProcessor) FormatGraph(index *types.GraphIndex) (string, error) {
 	var sb strings.Builder
 
+	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	sb.WriteString("<memory_index>\n")
 
 	// Metadata section

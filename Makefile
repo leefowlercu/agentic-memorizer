@@ -1,4 +1,4 @@
-.PHONY: build install test test-integration test-all clean uninstall help coverage coverage-html lint fmt vet check test-race daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config goreleaser-check goreleaser-snapshot release-check release-major release-minor release-patch
+.PHONY: build install test test-integration test-all test-e2e test-e2e-quick clean uninstall help coverage coverage-html lint fmt vet check test-race ci-lint ci-test ci-all daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config goreleaser-check goreleaser-snapshot release-check release-major release-minor release-patch
 
 BINARY_NAME=agentic-memorizer
 INSTALL_DIR=$(HOME)/.local/bin
@@ -50,6 +50,14 @@ test-integration: ## Run integration tests only
 test-all: test test-integration ## Run all tests (unit + integration)
 	@echo ""
 	@echo "✅ All tests passed"
+
+test-e2e: build ## Run E2E tests
+	@echo "Running E2E tests..."
+	@cd e2e && $(MAKE) test
+
+test-e2e-quick: build ## Run quick E2E smoke tests
+	@echo "Running E2E smoke tests..."
+	@cd e2e && $(MAKE) test-quick
 
 test-race: ## Run tests with race detector
 	@echo "Running tests with race detector..."
@@ -121,6 +129,26 @@ vet: ## Run go vet
 check: fmt vet test-all ## Run all code quality checks (format, vet, all tests)
 	@echo ""
 	@echo "✅ All checks passed"
+
+ci-lint: ## Run CI linting checks locally
+	@echo "Running CI linting checks..."
+	@if [ -n "$$(gofmt -l .)" ]; then \
+		echo "Go code is not formatted:"; \
+		gofmt -d .; \
+		exit 1; \
+	fi
+	@$(MAKE) vet
+	@echo "✅ CI linting checks passed"
+
+ci-test: ## Run CI test suite locally
+	@echo "Running CI test suite..."
+	@$(MAKE) test
+	@$(MAKE) test-race
+	@echo "✅ CI test suite passed"
+
+ci-all: ci-lint ci-test test-integration ## Run all CI checks locally
+	@echo ""
+	@echo "✅ All CI checks passed"
 
 daemon-start: build ## Build and start daemon
 	@echo "Starting daemon..."

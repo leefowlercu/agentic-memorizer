@@ -347,6 +347,8 @@ The MCP server (`internal/mcp/`) implements Model Context Protocol for tool-base
   - `search_files` - Graph-powered semantic search across tags, topics, summary
   - `get_file_metadata` - File metadata with graph connections (related files, tags, topics)
   - `list_recent_files` - Recently modified files within configurable time window
+  - `get_related_files` - Find files connected through shared tags, topics, or entities with ranked connection strength
+  - `search_entities` - Find files mentioning specific entities (people, organizations, concepts) with optional type filtering
 - **Logging** - Separate log file and level control via `mcp.log_file` and `mcp.log_level` config
 
 ### Configuration System
@@ -355,7 +357,7 @@ The Config Manager (`internal/config/`) implements layered configuration with pr
 
 Key configuration sections:
 - `claude` - API credentials and model selection (vision and timeouts are hardcoded)
-- `analysis` - File size limits, skip patterns, cache directory (enable is derived from API key presence)
+- `analysis` - File size limits, skip patterns (`skip_files`, `skip_extensions`), cache directory (enable is derived from API key presence)
 - `daemon` - Workers, debounce timing, rate limits, rebuild intervals, health check port
 - `integrations` - Per-framework settings with type and custom settings
 - `mcp` - MCP server log file, log level, and daemon connectivity (`daemon_host`, `daemon_port`)
@@ -397,6 +399,18 @@ The project uses Go's standard testing package with table-based tests where appr
 - **MCP server** - Tests JSON-RPC 2.0 protocol implementation, tool handlers
 - **Semantic search** - Tests substring matching, relevance scoring, tag/topic filtering
 
+**End-to-End Testing:**
+
+The project includes comprehensive E2E tests (`e2e/tests/`) covering complete workflows across all major subsystems:
+
+- **Test Infrastructure** - Test harness framework (`e2e/harness/`) provides isolated environments, daemon management, HTTP/MCP/graph clients, and automatic cleanup
+- **Test Suites** - 18 test files covering CLI commands, daemon lifecycle, filesystem integration, HTTP API, SSE, configuration, graph operations, integrations, and output formats
+- **Build Tags** - E2E tests use `//go:build e2e` to separate from unit tests
+- **Docker Integration** - FalkorDB runs in Docker container for realistic graph testing
+- **Isolation** - Each test runs in temporary directory with unique daemon instance
+
+Run E2E tests with `make test-e2e` or specific suites with `-run` flag. See `docs/subsystems/e2e-tests/` for architecture details.
+
 When writing tests:
 - Use `t.Run()` for subtests within table-driven tests
 - Place test data files in `testdata/` directory
@@ -408,7 +422,7 @@ When writing tests:
 **CLI Commands:**
 - Root command: `cmd/root.go`
 - Command packages: `cmd/{initialize,daemon,integrations,config,read,mcp,graph}/`
-- Daemon commands: `cmd/daemon/daemon.go` (parent) + `cmd/daemon/subcommands/` (6 subcommands)
+- Daemon commands: `cmd/daemon/daemon.go` (parent) + `cmd/daemon/subcommands/` (8 subcommands: start, stop, status, restart, logs, rebuild, systemctl, launchctl)
 - Graph commands: `cmd/graph/graph.go` (parent) + `cmd/graph/subcommands/` (3 subcommands)
 - Integration commands: `cmd/integrations/integrations.go` (parent) + `cmd/integrations/subcommands/` (6 subcommands + helpers)
 - Config commands: `cmd/config/config.go` (parent) + `cmd/config/subcommands/` (2 subcommands)
@@ -437,7 +451,7 @@ When writing tests:
 
 - Commit messages use conventional commit format, lowercase, single line
 - Do not mention Claude Code coauthoring in commit messages
-- Current version: v0.12.0 (semantic versioning)
+- Current version: v0.12.1 (semantic versioning)
 
 ### API Rate Limiting
 
@@ -467,6 +481,7 @@ Integration adapters use semantic versioning (MAJOR.MINOR.PATCH) to track change
 - Claude Code Hook: `internal/integrations/adapters/claude/hook_adapter.go` → `IntegrationVersion`
 - Claude Code MCP: `internal/integrations/adapters/claude/mcp_adapter.go` → `MCPIntegrationVersion`
 - Gemini CLI MCP: `internal/integrations/adapters/gemini/mcp_adapter.go` → `MCPIntegrationVersion`
+- Codex CLI MCP: `internal/integrations/adapters/codex/mcp_adapter.go` → `MCPIntegrationVersion`
 
 **When to Bump Versions:**
 

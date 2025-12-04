@@ -115,7 +115,7 @@ func TestWalk(t *testing.T) {
 				return nil
 			}
 
-			err := Walk(tmpDir, tt.skipDirs, tt.skipFiles, visitor)
+			err := Walk(tmpDir, tt.skipDirs, tt.skipFiles, nil, visitor)
 			if err != nil {
 				t.Fatalf("Walk() error = %v", err)
 			}
@@ -169,7 +169,7 @@ func TestWalk_VisitorError(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, visitor)
+	err := Walk(tmpDir, nil, nil, nil, visitor)
 	if err != testErr {
 		t.Errorf("Walk() should propagate visitor error, got %v, want %v", err, testErr)
 	}
@@ -184,7 +184,7 @@ func TestWalk_NonExistentDirectory(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(nonExistent, nil, nil, visitor)
+	err := Walk(nonExistent, nil, nil, nil, visitor)
 
 	// Walk swallows access errors and prints to stderr, so no error is returned
 	// But it should still complete without visiting files
@@ -206,7 +206,7 @@ func TestWalk_EmptyDirectory(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, visitor)
+	err := Walk(tmpDir, nil, nil, nil, visitor)
 	if err != nil {
 		t.Errorf("Walk() error = %v", err)
 	}
@@ -231,7 +231,7 @@ func TestWalk_RootSkipped(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, visitor)
+	err := Walk(tmpDir, nil, nil, nil, visitor)
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
@@ -280,7 +280,7 @@ func TestWalk_HiddenFilesAndDirs(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, visitor)
+	err := Walk(tmpDir, nil, nil, nil, visitor)
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
@@ -396,7 +396,7 @@ func TestWalk_PathCleaning(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(dirtyRoot, nil, nil, visitor)
+	err := Walk(dirtyRoot, nil, nil, nil, visitor)
 	if err != nil {
 		t.Errorf("Walk() error = %v", err)
 	}

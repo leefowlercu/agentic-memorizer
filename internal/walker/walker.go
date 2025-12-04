@@ -9,7 +9,7 @@ import (
 
 type FileVisitor func(path string, info os.FileInfo) error
 
-func Walk(root string, skipDirs []string, skipFiles []string, visitor FileVisitor) error {
+func Walk(root string, skipDirs []string, skipFiles []string, skipExtensions []string, visitor FileVisitor) error {
 	root = filepath.Clean(root)
 
 	skipPaths := make(map[string]bool)
@@ -21,6 +21,11 @@ func Walk(root string, skipDirs []string, skipFiles []string, visitor FileVisito
 	skipFileNames := make(map[string]bool)
 	for _, file := range skipFiles {
 		skipFileNames[file] = true
+	}
+
+	skipExts := make(map[string]bool)
+	for _, ext := range skipExtensions {
+		skipExts[ext] = true
 	}
 
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -51,6 +56,12 @@ func Walk(root string, skipDirs []string, skipFiles []string, visitor FileVisito
 
 		basename := filepath.Base(path)
 		if skipFileNames[basename] {
+			return nil
+		}
+
+		// Check skip extensions
+		ext := filepath.Ext(path)
+		if skipExts[ext] {
 			return nil
 		}
 

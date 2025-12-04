@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/FalkorDB/falkordb-go/v2"
+	"github.com/redis/go-redis/v9/maintnotifications"
 )
 
 // ClientConfig contains FalkorDB connection settings
@@ -65,6 +66,11 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	opts := &falkordb.ConnectionOption{
 		Addr: addr,
+		// Disable maintenance notifications (Redis Enterprise feature not supported by FalkorDB)
+		// This prevents go-redis from attempting CLIENT MAINT_NOTIFICATIONS handshake
+		MaintNotificationsConfig: &maintnotifications.Config{
+			Mode: maintnotifications.ModeDisabled,
+		},
 	}
 
 	if c.config.Password != "" {

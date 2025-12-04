@@ -25,7 +25,7 @@ func NewGapAnalysis(client *Client, logger *slog.Logger) *GapAnalysis {
 
 // Gap represents a knowledge gap in the graph
 type Gap struct {
-	Type        string `json:"type"`        // topic, entity, tag, category
+	Type        string `json:"type"` // topic, entity, tag, category
 	Name        string `json:"name"`
 	FileCount   int64  `json:"file_count"`
 	Description string `json:"description"`

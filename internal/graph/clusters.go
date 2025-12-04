@@ -26,14 +26,14 @@ func NewClusterDetection(client *Client, logger *slog.Logger) *ClusterDetection 
 
 // Cluster represents a group of related files
 type Cluster struct {
-	ID              string        `json:"id"`
-	Name            string        `json:"name"`
-	FileCount       int           `json:"file_count"`
-	Files           []ClusterFile `json:"files"`
-	DominantTags    []string      `json:"dominant_tags"`
-	DominantTopics  []string      `json:"dominant_topics"`
-	DominantEntities []string     `json:"dominant_entities,omitempty"`
-	Categories      []string      `json:"categories"`
+	ID               string        `json:"id"`
+	Name             string        `json:"name"`
+	FileCount        int           `json:"file_count"`
+	Files            []ClusterFile `json:"files"`
+	DominantTags     []string      `json:"dominant_tags"`
+	DominantTopics   []string      `json:"dominant_topics"`
+	DominantEntities []string      `json:"dominant_entities,omitempty"`
+	Categories       []string      `json:"categories"`
 }
 
 // ClusterFile represents a file within a cluster
@@ -512,7 +512,7 @@ func (c *ClusterDetection) FindFileClusterMembership(ctx context.Context, filePa
 	for tagResult.Next() {
 		record := tagResult.Record()
 		membership.TagClusters = append(membership.TagClusters, ClusterMember{
-			Name:           record.GetString(0, ""),
+			Name:            record.GetString(0, ""),
 			SharedFileCount: record.GetInt64(1, 0),
 		})
 	}
@@ -532,7 +532,7 @@ func (c *ClusterDetection) FindFileClusterMembership(ctx context.Context, filePa
 	for topicResult.Next() {
 		record := topicResult.Record()
 		membership.TopicClusters = append(membership.TopicClusters, ClusterMember{
-			Name:           record.GetString(0, ""),
+			Name:            record.GetString(0, ""),
 			SharedFileCount: record.GetInt64(1, 0),
 		})
 	}
@@ -552,7 +552,7 @@ func (c *ClusterDetection) FindFileClusterMembership(ctx context.Context, filePa
 	for entityResult.Next() {
 		record := entityResult.Record()
 		membership.EntityClusters = append(membership.EntityClusters, ClusterMember{
-			Name:           record.GetString(0, ""),
+			Name:            record.GetString(0, ""),
 			SharedFileCount: record.GetInt64(1, 0),
 		})
 	}
@@ -581,6 +581,6 @@ type FileMembership struct {
 
 // ClusterMember represents membership in a cluster
 type ClusterMember struct {
-	Name           string `json:"name"`
-	SharedFileCount int64 `json:"shared_file_count"`
+	Name            string `json:"name"`
+	SharedFileCount int64  `json:"shared_file_count"`
 }

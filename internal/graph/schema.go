@@ -10,18 +10,18 @@ import (
 // SchemaConfig contains schema configuration settings
 type SchemaConfig struct {
 	// Vector index settings
-	EmbeddingDimensions  int    // Default: 1536 for OpenAI text-embedding-3-small
-	SimilarityFunction   string // "cosine" or "euclidean", default: "cosine"
-	VectorIndexM         int    // HNSW M parameter, default: 16
-	VectorIndexEfConstruct int  // HNSW efConstruction, default: 200
+	EmbeddingDimensions    int    // Default: 1536 for OpenAI text-embedding-3-small
+	SimilarityFunction     string // "cosine" or "euclidean", default: "cosine"
+	VectorIndexM           int    // HNSW M parameter, default: 16
+	VectorIndexEfConstruct int    // HNSW efConstruction, default: 200
 }
 
 // DefaultSchemaConfig returns default schema configuration
 func DefaultSchemaConfig() SchemaConfig {
 	return SchemaConfig{
-		EmbeddingDimensions:  1536,
-		SimilarityFunction:   "cosine",
-		VectorIndexM:         16,
+		EmbeddingDimensions:    1536,
+		SimilarityFunction:     "cosine",
+		VectorIndexM:           16,
 		VectorIndexEfConstruct: 200,
 	}
 }
@@ -57,14 +57,14 @@ var NodeLabels = []string{
 
 // RelationshipTypes defines the relationship types in our schema
 var RelationshipTypes = []string{
-	"HAS_TAG",       // File -> Tag
-	"COVERS_TOPIC",  // File -> Topic
-	"IN_CATEGORY",   // File -> Category
-	"MENTIONS",      // File -> Entity
-	"REFERENCES",    // File -> Topic (with type and confidence)
-	"SIMILAR_TO",    // File -> File (embedding similarity)
-	"IN_DIRECTORY",  // File -> Directory
-	"PARENT_OF",     // Topic -> Topic, Directory -> Directory
+	"HAS_TAG",      // File -> Tag
+	"COVERS_TOPIC", // File -> Topic
+	"IN_CATEGORY",  // File -> Category
+	"MENTIONS",     // File -> Entity
+	"REFERENCES",   // File -> Topic (with type and confidence)
+	"SIMILAR_TO",   // File -> File (embedding similarity)
+	"IN_DIRECTORY", // File -> Directory
+	"PARENT_OF",    // Topic -> Topic, Directory -> Directory
 }
 
 // Initialize creates all necessary schema components

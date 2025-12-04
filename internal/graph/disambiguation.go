@@ -32,73 +32,73 @@ func NewDisambiguation(client *Client, logger *slog.Logger) *Disambiguation {
 func defaultAliases() map[string]string {
 	return map[string]string{
 		// Infrastructure & Cloud
-		"tf":         "terraform",
-		"k8s":        "kubernetes",
-		"aws":        "amazon web services",
-		"gcp":        "google cloud platform",
-		"azure":      "microsoft azure",
-		"ec2":        "amazon ec2",
-		"s3":         "amazon s3",
-		"rds":        "amazon rds",
-		"lambda":     "aws lambda",
-		"eks":        "elastic kubernetes service",
-		"ecs":        "elastic container service",
-		"gke":        "google kubernetes engine",
-		"aks":        "azure kubernetes service",
-		"vm":         "virtual machine",
-		"vms":        "virtual machines",
-		"iac":        "infrastructure as code",
-		"ci/cd":      "continuous integration",
-		"cicd":       "continuous integration",
-		"gh":         "github",
-		"gl":         "gitlab",
+		"tf":     "terraform",
+		"k8s":    "kubernetes",
+		"aws":    "amazon web services",
+		"gcp":    "google cloud platform",
+		"azure":  "microsoft azure",
+		"ec2":    "amazon ec2",
+		"s3":     "amazon s3",
+		"rds":    "amazon rds",
+		"lambda": "aws lambda",
+		"eks":    "elastic kubernetes service",
+		"ecs":    "elastic container service",
+		"gke":    "google kubernetes engine",
+		"aks":    "azure kubernetes service",
+		"vm":     "virtual machine",
+		"vms":    "virtual machines",
+		"iac":    "infrastructure as code",
+		"ci/cd":  "continuous integration",
+		"cicd":   "continuous integration",
+		"gh":     "github",
+		"gl":     "gitlab",
 
 		// Programming Languages & Frameworks
-		"js":         "javascript",
-		"ts":         "typescript",
-		"py":         "python",
-		"rb":         "ruby",
-		"go":         "golang",
-		"rs":         "rust",
-		"node":       "nodejs",
-		"react":      "reactjs",
-		"vue":        "vuejs",
-		"ng":         "angular",
-		"dj":         "django",
-		"ror":        "ruby on rails",
-		"rails":      "ruby on rails",
+		"js":    "javascript",
+		"ts":    "typescript",
+		"py":    "python",
+		"rb":    "ruby",
+		"go":    "golang",
+		"rs":    "rust",
+		"node":  "nodejs",
+		"react": "reactjs",
+		"vue":   "vuejs",
+		"ng":    "angular",
+		"dj":    "django",
+		"ror":   "ruby on rails",
+		"rails": "ruby on rails",
 
 		// Databases
-		"pg":         "postgresql",
-		"postgres":   "postgresql",
-		"mysql":      "mysql",
-		"mongo":      "mongodb",
-		"redis":      "redis",
-		"es":         "elasticsearch",
-		"elastic":    "elasticsearch",
-		"dynamodb":   "amazon dynamodb",
-		"falkordb":   "falkordb",
+		"pg":       "postgresql",
+		"postgres": "postgresql",
+		"mysql":    "mysql",
+		"mongo":    "mongodb",
+		"redis":    "redis",
+		"es":       "elasticsearch",
+		"elastic":  "elasticsearch",
+		"dynamodb": "amazon dynamodb",
+		"falkordb": "falkordb",
 
 		// Tools & Protocols
-		"docker":     "docker",
-		"mcp":        "model context protocol",
-		"api":        "api",
-		"rest":       "restful api",
-		"grpc":       "grpc",
-		"graphql":    "graphql",
-		"sql":        "sql",
-		"nosql":      "nosql",
-		"llm":        "large language model",
-		"ai":         "artificial intelligence",
-		"ml":         "machine learning",
+		"docker":  "docker",
+		"mcp":     "model context protocol",
+		"api":     "api",
+		"rest":    "restful api",
+		"grpc":    "grpc",
+		"graphql": "graphql",
+		"sql":     "sql",
+		"nosql":   "nosql",
+		"llm":     "large language model",
+		"ai":      "artificial intelligence",
+		"ml":      "machine learning",
 
 		// HashiCorp
-		"hashi":      "hashicorp",
-		"hashicorp":  "hashicorp",
-		"consul":     "hashicorp consul",
-		"vault":      "hashicorp vault",
-		"nomad":      "hashicorp nomad",
-		"packer":     "hashicorp packer",
+		"hashi":     "hashicorp",
+		"hashicorp": "hashicorp",
+		"consul":    "hashicorp consul",
+		"vault":     "hashicorp vault",
+		"nomad":     "hashicorp nomad",
+		"packer":    "hashicorp packer",
 	}
 }
 
@@ -414,12 +414,12 @@ func (d *Disambiguation) GetEntityVariants(ctx context.Context, entityName strin
 
 // SimilarEntity represents an entity that might be similar to a query
 type SimilarEntity struct {
-	Name          string  `json:"name"`
-	Type          string  `json:"type"`
-	Normalized    string  `json:"normalized"`
-	FileCount     int64   `json:"file_count"`
-	Similarity    float64 `json:"similarity"`
-	MatchReason   string  `json:"match_reason"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"`
+	Normalized  string  `json:"normalized"`
+	FileCount   int64   `json:"file_count"`
+	Similarity  float64 `json:"similarity"`
+	MatchReason string  `json:"match_reason"`
 }
 
 // FindSimilarEntities finds entities similar to the given name

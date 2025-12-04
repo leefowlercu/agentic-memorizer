@@ -34,13 +34,13 @@ type ModificationEvent struct {
 
 // CoModifiedPair represents two files frequently modified together
 type CoModifiedPair struct {
-	File1Path    string  `json:"file1_path"`
-	File1Name    string  `json:"file1_name"`
-	File2Path    string  `json:"file2_path"`
-	File2Name    string  `json:"file2_name"`
-	CoModCount   int64   `json:"co_modification_count"`
-	LastCoMod    string  `json:"last_co_modification"`
-	Relationship string  `json:"relationship"` // same_topic, same_entity, same_category, etc.
+	File1Path    string `json:"file1_path"`
+	File1Name    string `json:"file1_name"`
+	File2Path    string `json:"file2_path"`
+	File2Name    string `json:"file2_name"`
+	CoModCount   int64  `json:"co_modification_count"`
+	LastCoMod    string `json:"last_co_modification"`
+	Relationship string `json:"relationship"` // same_topic, same_entity, same_category, etc.
 }
 
 // GetRecentModifications returns files modified within a time window
@@ -179,9 +179,9 @@ func (t *TemporalTracking) GetModificationTimeline(ctx context.Context, days int
 		}
 
 		timeline = append(timeline, DayActivity{
-			Date:               record.GetString(0, ""),
-			FileCount:          record.GetInt64(1, 0),
-			CategoryBreakdown:  catMap,
+			Date:              record.GetString(0, ""),
+			FileCount:         record.GetInt64(1, 0),
+			CategoryBreakdown: catMap,
 		})
 	}
 
@@ -300,9 +300,9 @@ func (t *TemporalTracking) GetActivityHotspots(ctx context.Context, days int, li
 		lastModTime, _ := time.Parse(time.RFC3339, lastModStr)
 
 		hotspots = append(hotspots, ActivityHotspot{
-			Path:            record.GetString(0, ""),
+			Path:              record.GetString(0, ""),
 			ModificationCount: record.GetInt64(1, 0),
-			LastModified:    lastModTime,
+			LastModified:      lastModTime,
 		})
 	}
 
@@ -343,10 +343,10 @@ func (t *TemporalTracking) GetStaleFiles(ctx context.Context, staleDays int, lim
 		modTime, _ := time.Parse(time.RFC3339, modStr)
 
 		staleFiles = append(staleFiles, StaleFile{
-			Path:        record.GetString(0, ""),
-			Name:        record.GetString(1, ""),
-			Modified:    modTime,
-			Category:    record.GetString(3, ""),
+			Path:                  record.GetString(0, ""),
+			Name:                  record.GetString(1, ""),
+			Modified:              modTime,
+			Category:              record.GetString(3, ""),
 			DaysSinceModification: int(now.Sub(modTime).Hours() / 24),
 		})
 	}

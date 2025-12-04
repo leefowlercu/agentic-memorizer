@@ -1,6 +1,7 @@
 // Package types defines data structures used throughout agentic-memorizer.
 //
 // Type Categories:
+//
 //   - Internal Processing Types (FileMetadata, SemanticAnalysis, IndexEntry):
 //     Used by metadata extraction, semantic analysis, worker pool.
 //     NOT exposed in public output formats.
@@ -179,9 +180,9 @@ type FileEntry struct {
 	Confidence   float64 `json:"confidence,omitempty"`
 
 	// Graph relationships (the knowledge graph edges)
-	Tags     []string     `json:"tags,omitempty"`
-	Topics   []string     `json:"topics,omitempty"`
-	Entities []EntityRef  `json:"entities,omitempty"`
+	Tags     []string    `json:"tags,omitempty"`
+	Topics   []string    `json:"topics,omitempty"`
+	Entities []EntityRef `json:"entities,omitempty"`
 
 	// Related files (the graph value-add) - populated in verbose mode
 	RelatedFiles []RelatedFile `json:"related_files,omitempty"`
@@ -269,7 +270,7 @@ type Cluster struct {
 
 // Gap represents a knowledge gap or coverage issue
 type Gap struct {
-	Type        string `json:"type"`        // topic, entity, tag, category
+	Type        string `json:"type"` // topic, entity, tag, category
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Severity    string `json:"severity"` // low, medium, high

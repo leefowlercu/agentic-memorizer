@@ -142,14 +142,14 @@ func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string, verbose 
 
 // ExportSummary exports a condensed summary suitable for context windows
 type ExportSummary struct {
-	Generated    time.Time        `json:"generated"`
-	Root         string           `json:"root"`
-	TotalFiles   int64            `json:"total_files"`
-	Categories   map[string]int64 `json:"categories"`
-	TopTags      []TagCount       `json:"top_tags"`
-	TopTopics    []TopicCount     `json:"top_topics"`
-	TopEntities  []EntityCount    `json:"top_entities"`
-	RecentFiles  []FileSummary    `json:"recent_files,omitempty"`
+	Generated   time.Time        `json:"generated"`
+	Root        string           `json:"root"`
+	TotalFiles  int64            `json:"total_files"`
+	Categories  map[string]int64 `json:"categories"`
+	TopTags     []TagCount       `json:"top_tags"`
+	TopTopics   []TopicCount     `json:"top_topics"`
+	TopEntities []EntityCount    `json:"top_entities"`
+	RecentFiles []FileSummary    `json:"recent_files,omitempty"`
 }
 
 // TagCount represents a tag with its usage count

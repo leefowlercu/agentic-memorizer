@@ -113,22 +113,22 @@ func normalizeEntityForGraph(name string) string {
 
 	// Common technology aliases
 	aliases := map[string]string{
-		"tf":        "terraform",
-		"k8s":       "kubernetes",
-		"js":        "javascript",
-		"ts":        "typescript",
-		"py":        "python",
-		"go":        "golang",
-		"pg":        "postgresql",
-		"postgres":  "postgresql",
-		"mongo":     "mongodb",
-		"node":      "nodejs",
-		"gh":        "github",
-		"gl":        "gitlab",
-		"aws":       "amazon web services",
-		"gcp":       "google cloud platform",
-		"azure":     "microsoft azure",
-		"mcp":       "model context protocol",
+		"tf":       "terraform",
+		"k8s":      "kubernetes",
+		"js":       "javascript",
+		"ts":       "typescript",
+		"py":       "python",
+		"go":       "golang",
+		"pg":       "postgresql",
+		"postgres": "postgresql",
+		"mongo":    "mongodb",
+		"node":     "nodejs",
+		"gh":       "github",
+		"gl":       "gitlab",
+		"aws":      "amazon web services",
+		"gcp":      "google cloud platform",
+		"azure":    "microsoft azure",
+		"mcp":      "model context protocol",
 	}
 
 	if canonical, ok := aliases[normalized]; ok {

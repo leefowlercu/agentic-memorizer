@@ -55,9 +55,9 @@ func NewManager(config ManagerConfig, logger *slog.Logger) *Manager {
 	client := NewClient(config.Client, logger)
 
 	return &Manager{
-		client:  client,
-		config:  config,
-		logger:  logger.With("component", "graph-manager"),
+		client: client,
+		config: config,
+		logger: logger.With("component", "graph-manager"),
 	}
 }
 

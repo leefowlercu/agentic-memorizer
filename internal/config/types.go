@@ -66,6 +66,7 @@ type IntegrationsConfig struct {
 type GraphConfig struct {
 	Host                string  `mapstructure:"host" yaml:"host"`
 	Port                int     `mapstructure:"port" yaml:"port"`
+	Database            string  `mapstructure:"database" yaml:"database"` // Graph database name
 	Password            string  `mapstructure:"password" yaml:"password"`
 	SimilarityThreshold float64 `mapstructure:"similarity_threshold" yaml:"similarity_threshold"`
 	MaxSimilarFiles     int     `mapstructure:"max_similar_files" yaml:"max_similar_files"`

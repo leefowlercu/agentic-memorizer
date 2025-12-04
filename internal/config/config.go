@@ -44,6 +44,7 @@ func InitConfig() error {
 	viper.SetDefault("mcp.log_level", DefaultConfig.MCP.LogLevel)
 	viper.SetDefault("graph.host", DefaultConfig.Graph.Host)
 	viper.SetDefault("graph.port", DefaultConfig.Graph.Port)
+	viper.SetDefault("graph.database", DefaultConfig.Graph.Database)
 	viper.SetDefault("graph.password", DefaultConfig.Graph.Password)
 	viper.SetDefault("embeddings.api_key", DefaultConfig.Embeddings.APIKey)
 
@@ -151,12 +152,12 @@ func WriteConfig(path string, cfg *Config) error {
 // MinimalConfig contains only user-facing settings for initial configuration.
 // Internal settings use defaults and are not written to the initialized config file.
 type MinimalConfig struct {
-	MemoryRoot   string                   `yaml:"memory_root"`
-	Claude       MinimalClaudeConfig      `yaml:"claude,omitempty"`
-	Daemon       MinimalDaemonConfig      `yaml:"daemon,omitempty"`
-	MCP          MinimalMCPConfig         `yaml:"mcp,omitempty"`
-	Graph        MinimalGraphConfig       `yaml:"graph,omitempty"`
-	Embeddings   MinimalEmbeddingsConfig  `yaml:"embeddings,omitempty"`
+	MemoryRoot   string                    `yaml:"memory_root"`
+	Claude       MinimalClaudeConfig       `yaml:"claude,omitempty"`
+	Daemon       MinimalDaemonConfig       `yaml:"daemon,omitempty"`
+	MCP          MinimalMCPConfig          `yaml:"mcp,omitempty"`
+	Graph        MinimalGraphConfig        `yaml:"graph,omitempty"`
+	Embeddings   MinimalEmbeddingsConfig   `yaml:"embeddings,omitempty"`
 	Integrations MinimalIntegrationsConfig `yaml:"integrations,omitempty"`
 }
 

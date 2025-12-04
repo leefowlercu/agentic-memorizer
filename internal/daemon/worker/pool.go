@@ -28,21 +28,21 @@ type PoolStats struct {
 
 // Pool manages parallel file processing with rate limiting
 type Pool struct {
-	workers            int
-	jobQueue           chan Job
-	resultQueue        chan JobResult
-	rateLimiter        *rate.Limiter
-	embeddingLimiter   *rate.Limiter // Separate rate limiter for embeddings API
-	metadataExtractor  *metadata.Extractor
-	semanticAnalyzer   *semantic.Analyzer
-	embeddingProvider  embeddings.Provider
-	embeddingCache     *embeddings.Cache
-	cacheManager       *cache.Manager
-	logger             *slog.Logger
-	ctx                context.Context
-	wg                 sync.WaitGroup
-	stats              PoolStats
-	statsMu            sync.Mutex
+	workers           int
+	jobQueue          chan Job
+	resultQueue       chan JobResult
+	rateLimiter       *rate.Limiter
+	embeddingLimiter  *rate.Limiter // Separate rate limiter for embeddings API
+	metadataExtractor *metadata.Extractor
+	semanticAnalyzer  *semantic.Analyzer
+	embeddingProvider embeddings.Provider
+	embeddingCache    *embeddings.Cache
+	cacheManager      *cache.Manager
+	logger            *slog.Logger
+	ctx               context.Context
+	wg                sync.WaitGroup
+	stats             PoolStats
+	statsMu           sync.Mutex
 }
 
 // NewPool creates a new worker pool

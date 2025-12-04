@@ -21,7 +21,7 @@ const (
 
 // Hardcoded Graph settings (convention over configuration)
 const (
-	GraphDatabase   = "memorizer"
+	GraphDatabase    = "memorizer"
 	GraphPasswordEnv = "FALKORDB_PASSWORD"
 )
 
@@ -56,7 +56,7 @@ var DefaultConfig = Config{
 		MaxTokens: 1500,
 	},
 	Analysis: AnalysisConfig{
-		Enabled:        true, // Derived from API key presence in GetConfig()
+		Enabled:        true,     // Derived from API key presence in GetConfig()
 		MaxFileSize:    10485760, // 10 MB
 		SkipExtensions: DefaultSkipExtensions,
 		SkipFiles:      DefaultSkipFiles,
@@ -83,6 +83,7 @@ var DefaultConfig = Config{
 	Graph: GraphConfig{
 		Host:                "localhost",
 		Port:                6379,
+		Database:            "memorizer",
 		Password:            "",
 		SimilarityThreshold: 0.7,
 		MaxSimilarFiles:     10,

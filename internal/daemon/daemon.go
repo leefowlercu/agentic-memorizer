@@ -145,11 +145,13 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	if len(skipFiles) == 0 {
 		skipFiles = []string{"agentic-memorizer"}
 	}
+	skipExtensions := cfg.Analysis.SkipExtensions
 
 	fileWatcher, err := watcher.New(
 		cfg.MemoryRoot,
 		skipDirs,
 		skipFiles,
+		skipExtensions,
 		cfg.Daemon.DebounceMs,
 		logger,
 	)
@@ -162,7 +164,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
 			Port:     cfg.Graph.Port,
-			Database: config.GraphDatabase, // Hardcoded convention
+			Database: cfg.Graph.Database,
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
@@ -177,7 +179,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	logger.Info("FalkorDB graph manager initialized",
 		"host", cfg.Graph.Host,
 		"port", cfg.Graph.Port,
-		"database", config.GraphDatabase,
+		"database", cfg.Graph.Database,
 	)
 
 	// Create health metrics tracker
@@ -415,6 +417,7 @@ func (d *Daemon) rebuildIndex() error {
 	if len(skipFiles) == 0 {
 		skipFiles = []string{"agentic-memorizer"}
 	}
+	skipExtensions := cfg.Analysis.SkipExtensions
 
 	// Create embedding provider and cache if embeddings are enabled
 	var embeddingProvider embeddings.Provider
@@ -471,7 +474,7 @@ func (d *Daemon) rebuildIndex() error {
 
 	// Collect all files to process
 	var jobs []worker.Job
-	err := walker.Walk(cfg.MemoryRoot, skipDirs, skipFiles, func(path string, info os.FileInfo) error {
+	err := walker.Walk(cfg.MemoryRoot, skipDirs, skipFiles, skipExtensions, func(path string, info os.FileInfo) error {
 		job := worker.Job{
 			Path:     path,
 			Info:     info,

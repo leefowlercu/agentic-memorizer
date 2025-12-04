@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
@@ -20,15 +19,15 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 	// Create a test index with sample data
 	index := &types.GraphIndex{
 		Generated:  time.Now(),
-		MemoryRoot: "/test/memory",
+		MemoryRoot: "/test",
 		Files: []types.FileEntry{
 			{
-				Path:         "/test/memory/document.docx",
-				Name:         "document.docx",
+				Path:         "/test/document.md",
+				Name:         "document.md",
 				Category:     "documents",
-				Size:         50000,
-				Type:         "docx",
-				WordCount:    ptrInt(1000),
+				Size:         2048,
+				Type:         "md",
+				WordCount:    ptrInt(500),
 				Summary:      "Test document about AI",
 				Tags:         []string{"ai", "testing"},
 				Topics:       []string{"artificial intelligence", "testing"},
@@ -36,7 +35,7 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 				Confidence:   0.95,
 			},
 			{
-				Path:         "/test/memory/image.png",
+				Path:         "/test/image.png",
 				Name:         "image.png",
 				Category:     "images",
 				Size:         10000,
@@ -52,12 +51,12 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 		Stats: types.IndexStats{
 			TotalFiles:    2,
 			AnalyzedFiles: 2,
-			TotalSize:     60000,
+			TotalSize:     12048,
 		},
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger, "", graph.ManagerConfig{}, "")
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -297,7 +296,7 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger, "", graph.ManagerConfig{}, "")
+	server := NewServer(index, logger, "")
 
 	// Replace transport with mock
 	readBuf := bytes.NewBuffer(nil)
@@ -390,8 +389,8 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 			t.Fatalf("Failed to unmarshal tools list: %v", err)
 		}
 
-		if len(listResp.Tools) != 3 {
-			t.Errorf("Tool count = %d, want 3", len(listResp.Tools))
+		if len(listResp.Tools) != 5 {
+			t.Errorf("Tool count = %d, want 5", len(listResp.Tools))
 		}
 	})
 
@@ -455,7 +454,7 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 			Method:  "tools/call",
 			Params: mustMarshal(protocol.ToolsCallRequest{
 				Name:      "get_file_metadata",
-				Arguments: mustMarshal(map[string]any{"path": "terraform-guide"}),
+				Arguments: mustMarshal(map[string]any{"path": "terraform"}),
 			}),
 		}
 
@@ -485,12 +484,15 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 		}
 
 		// Parse and verify result contains metadata
-		var entry types.FileEntry
-		if err := json.Unmarshal([]byte(callResp.Content[0].Text), &entry); err != nil {
-			t.Fatalf("Failed to parse entry JSON: %v", err)
+		var result struct {
+			File   types.FileEntry `json:"file"`
+			Source string          `json:"source"`
+		}
+		if err := json.Unmarshal([]byte(callResp.Content[0].Text), &result); err != nil {
+			t.Fatalf("Failed to parse result JSON: %v", err)
 		}
 
-		if entry.Summary == "" {
+		if result.File.Summary == "" {
 			t.Error("Expected summary in metadata")
 		}
 	})

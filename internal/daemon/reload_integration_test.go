@@ -15,6 +15,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
@@ -70,18 +71,12 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	cfg := &config.Config{
 		MemoryRoot: memoryRoot,
 		Claude: config.ClaudeConfig{
-			APIKey:         "test-api-key",
-			Model:          "claude-3-haiku-20240307",
-			MaxTokens:      1000,
-			EnableVision:   false,
-			TimeoutSeconds: 30,
-		},
-		Output: config.OutputConfig{
-			Format:         "xml",
-			ShowRecentDays: 7,
+			APIKey:    "test-api-key",
+			Model:     "claude-3-haiku-20240307",
+			MaxTokens: 1000,
 		},
 		Analysis: config.AnalysisConfig{
-			Enable:      false, // Disable analysis for faster tests
+			Enabled:     false, // Disable analysis for faster tests
 			MaxFileSize: 1024 * 1024,
 			CacheDir:    cacheDir,
 		},
@@ -95,10 +90,11 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			LogLevel:                   "info",
 		},
 		Graph: config.GraphConfig{
-			Enabled:  true,
-			Host:     "localhost",
-			Port:     6379,
-			Database: "memorizer_test",
+			Host:                "localhost",
+			Port:                6379,
+			Database:            "memorizer_test",
+			SimilarityThreshold: 0.7,
+			MaxSimilarFiles:     10,
 		},
 		MCP: config.MCPConfig{
 			LogFile:  filepath.Join(appDir, "mcp.log"),
@@ -170,6 +166,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		e.Config.MemoryRoot,
 		skipDirs,
 		skipFiles,
+		e.Config.Analysis.SkipExtensions,
 		e.Config.Daemon.DebounceMs,
 		logger,
 	)
@@ -182,8 +179,8 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 
 	// Create health metrics and SSE hub
 	healthMetrics := NewHealthMetrics()
-	sseHub := NewSSEHub(logger)
-	httpServer := NewHTTPServer(sseHub, healthMetrics, logger)
+	sseHub := api.NewSSEHub(logger)
+	httpServer := api.NewHTTPServer(sseHub, healthMetrics, graphManager, e.Config.MemoryRoot, logger)
 
 	d := &Daemon{
 		cfg:               e.Config,

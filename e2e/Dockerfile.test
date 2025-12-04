@@ -1,0 +1,43 @@
+# E2E Test Runner Dockerfile
+# This image contains all tools needed to run end-to-end tests
+
+FROM golang:1.25.1-bookworm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    redis-tools \
+    curl \
+    git \
+    jq \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI (for integration tests that need docker commands)
+RUN curl -fsSL https://get.docker.com -o get-docker.sh && \
+    sh get-docker.sh && \
+    rm get-docker.sh
+
+# Set up Go environment
+ENV GO111MODULE=on \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy go.mod and go.sum for dependency caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the entire project
+COPY . .
+
+# Build the binary for testing (into /usr/local/bin so it survives volume mount)
+RUN make build && mv ./agentic-memorizer /usr/local/bin/agentic-memorizer
+
+# Set up test environment
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Default command runs all E2E tests
+CMD ["go", "test", "-tags=e2e", "-v", "-timeout", "30m", "./e2e/tests/..."]

@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: e2e-falkordb
+    ports:
+      - "16379:6379"  # Use different port to avoid conflicts
+      - "13000:3000"  # Browser UI
+    volumes:
+      - e2e-falkordb-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    environment:
+      - REDIS_ARGS=--appendonly yes
+
+  test-runner:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.test
+    container_name: e2e-test-runner
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    environment:
+      - MEMORIZER_APP_DIR=/tmp/e2e-test
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - GO_TEST_TIMEOUT=30m
+    volumes:
+      - ../:/workspace
+      - e2e-test-data:/tmp/e2e-test
+      - go-mod-cache:/go/pkg/mod
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+
+volumes:
+  e2e-falkordb-data:
+    name: e2e-falkordb-data
+  e2e-test-data:
+    name: e2e-test-data
+  go-mod-cache:
+    name: e2e-go-mod-cache

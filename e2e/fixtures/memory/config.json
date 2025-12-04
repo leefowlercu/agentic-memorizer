@@ -1,0 +1,14 @@
+{
+  "name": "test-configuration",
+  "version": "1.0.0",
+  "settings": {
+    "enabled": true,
+    "workers": 4,
+    "timeout": 30
+  },
+  "features": [
+    "semantic-search",
+    "graph-storage",
+    "real-time-indexing"
+  ]
+}

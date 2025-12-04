@@ -1,0 +1,4 @@
+# Codex CLI test configuration
+
+[mcp]
+# MCP servers will be added during tests

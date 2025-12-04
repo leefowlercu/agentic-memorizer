@@ -1,0 +1,8 @@
+# Invalid test configuration (missing required fields)
+
+analysis:
+  max_file_size: -1  # Invalid: negative size
+
+daemon:
+  workers: 0  # Invalid: must be > 0
+  log_level: invalid_level  # Invalid log level

@@ -4,10 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leefowlercu/agentic-memorizer)](https://goreportcard.com/report/github.com/leefowlercu/agentic-memorizer)
 [![GitHub Release](https://img.shields.io/github/v/release/leefowlercu/agentic-memorizer)](https://github.com/leefowlercu/agentic-memorizer/releases)
+[![CI](https://github.com/leefowlercu/agentic-memorizer/workflows/CI/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/ci.yml)
+[![E2E Tests](https://github.com/leefowlercu/agentic-memorizer/workflows/E2E%20Tests/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/e2e-tests.yml)
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code, Gemini CLI, and OpenAI Codex CLI, plus manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
 
-**Current Version**: v0.12.0 ([CHANGELOG.md](CHANGELOG.md))
+**Current Version**: v0.12.1 ([CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 
@@ -209,7 +211,16 @@ The following frameworks require manual configuration file editing. The `integra
 - **Walker** (`internal/walker/`) - Full directory scans during rebuilds
 - **File Watcher** (`internal/watcher/`) - Real-time monitoring with fsnotify
 - **Worker Pool** - Parallel processing with rate limiting (default 3 workers, 20 calls/min)
-- **HTTP API** (`internal/daemon/api/`) - RESTful endpoints and SSE for real-time updates
+- **HTTP API** (`internal/daemon/api/`) - RESTful endpoints and SSE for real-time updates:
+  - `GET /health` - Health check with metrics
+  - `GET /sse` - Server-Sent Events stream
+  - `GET /api/v1/index` - Full memory index
+  - `POST /api/v1/search` - Semantic search
+  - `GET /api/v1/files/{path}` - File metadata
+  - `GET /api/v1/files/recent` - Recent files
+  - `GET /api/v1/files/related` - Related files
+  - `GET /api/v1/entities/search` - Entity search
+  - `POST /api/v1/rebuild` - Trigger rebuild
 
 **Knowledge Graph** (`internal/graph/`):
 - FalkorDB (Redis-compatible graph database)
@@ -590,7 +601,7 @@ This command automatically:
 
 #### MCP Tools Provided
 
-The MCP server exposes three tools to Claude Code:
+The MCP server exposes five tools to Claude Code:
 
 - **`search_files`** - Semantic search across indexed files
   - Substring-based filename matching
@@ -609,9 +620,19 @@ The MCP server exposes three tools to Claude Code:
   - Sorted by modification date
   - Includes full metadata
 
-#### MCP Prompts
+- **`get_related_files`** - Find files connected through shared concepts
+  - Discovers files with shared tags, topics, or entities
+  - Ranks by connection strength
+  - Enables knowledge graph traversal
 
-The MCP server provides pre-configured prompt templates that help you interact with your memory index efficiently:
+- **`search_entities`** - Search for files mentioning specific entities
+  - Find files referencing people, organizations, concepts
+  - Supports entity type filtering
+  - Returns files with entity mention details
+
+#### MCP Prompts (Claude Code)
+
+The Claude Code MCP server provides pre-configured prompt templates that help you interact with your memory index efficiently:
 
 - **`analyze-file`** - Deep analysis of a specific file
   - Generates detailed analysis using semantic metadata
@@ -1879,7 +1900,7 @@ The indexer automatically excludes:
 - The `.cache/` directory (where analyses are cached)
 - The `agentic-memorizer` binary itself (if located in the memory directory)
 
-You can exclude additional files by name in `config.yaml`:
+You can exclude additional files by name or extension in `config.yaml`:
 
 ```yaml
 analysis:
@@ -1887,9 +1908,14 @@ analysis:
     - agentic-memorizer  # Default
     - my-private-notes.md
     - temp-file.txt
+  skip_extensions:
+    - .log
+    - .tmp
+    - .bak
+    - .swp
 ```
 
-Files in the skip list are completely ignored during indexing and won't appear in the generated index.
+Files matching skip patterns are completely ignored during indexing and won't appear in the generated index.
 
 ### Environment Variables
 
@@ -2230,8 +2256,39 @@ make deps              # Update dependencies
 **Test Types:**
 - **Unit tests** (`make test`) - Fast, no external dependencies
 - **Integration tests** (`make test-integration`) - Full daemon lifecycle, requires `-tags=integration`
+- **E2E tests** (`make test-e2e`) - Complete workflows with Docker-based FalkorDB
 - Integration tests use `MEMORIZER_APP_DIR` for isolated environments
 - Test data in `testdata/` directory
+
+### End-to-End Testing
+
+The project includes comprehensive E2E tests covering complete workflows across all major subsystems:
+
+```bash
+# Run all E2E tests (requires Docker for FalkorDB)
+make test-e2e
+
+# Run specific E2E test suite
+go test -tags=e2e -v ./e2e/tests/ -run TestCLI        # CLI commands
+go test -tags=e2e -v ./e2e/tests/ -run TestDaemon     # Daemon lifecycle
+go test -tags=e2e -v ./e2e/tests/ -run TestHTTPAPI    # HTTP endpoints
+go test -tags=e2e -v ./e2e/tests/ -run TestMCP        # MCP server
+go test -tags=e2e -v ./e2e/tests/ -run TestGraph      # FalkorDB operations
+```
+
+**E2E Test Coverage:**
+- **CLI Tests** - All 30 commands with argument parsing and output validation
+- **Daemon Tests** - Start, stop, status, restart, rebuild operations
+- **Filesystem Tests** - File watching, processing pipelines, cache behavior
+- **HTTP API Tests** - All 9 REST endpoints with request/response validation
+- **SSE Tests** - Real-time event delivery and connection management
+- **Configuration Tests** - Loading, validation, hot-reload, error handling
+- **Graph Tests** - FalkorDB CRUD, schema, queries, and graceful degradation
+- **Integration Tests** - All framework adapters (Claude Code, Gemini, Codex, etc.)
+- **Output Format Tests** - XML, JSON, Markdown processors with schema validation
+- **Walker Tests** - Directory/file/extension skip patterns
+
+The test harness (`e2e/harness/`) provides isolated environments, daemon management, and automatic cleanup. See `docs/subsystems/e2e-tests/` for architecture details.
 
 ### Adding New File Type Handlers
 

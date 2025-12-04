@@ -150,8 +150,21 @@ func (n *Nodes) UpsertFileWithEmbedding(ctx context.Context, file FileNode, embe
 	return nil
 }
 
-// GetFile retrieves a File node by path
+// GetFile retrieves a File node by path or filename
+// If path is absolute, searches by exact path match
+// If path is relative (no leading /), searches by filename
 func (n *Nodes) GetFile(ctx context.Context, path string) (*FileNode, error) {
+	// Try exact path match first
+	if strings.HasPrefix(path, "/") {
+		return n.getFileByPath(ctx, path)
+	}
+
+	// Path doesn't start with / - try filename search
+	return n.GetFileByFilename(ctx, path)
+}
+
+// getFileByPath retrieves a File node by exact path match
+func (n *Nodes) getFileByPath(ctx context.Context, path string) (*FileNode, error) {
 	query := `
 		MATCH (f:File {path: $path})
 		RETURN f.path, f.hash, f.name, f.type, f.category, f.size, f.modified,
@@ -161,6 +174,47 @@ func (n *Nodes) GetFile(ctx context.Context, path string) (*FileNode, error) {
 	result, err := n.client.Query(ctx, query, map[string]any{"path": path})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file node; %w", err)
+	}
+
+	if !result.Next() {
+		return nil, nil // Not found
+	}
+
+	record := result.Record()
+	file := &FileNode{
+		Path:         record.GetString(0, ""),
+		Hash:         record.GetString(1, ""),
+		Name:         record.GetString(2, ""),
+		Type:         record.GetString(3, ""),
+		Category:     record.GetString(4, ""),
+		Size:         record.GetInt64(5, 0),
+		Summary:      record.GetString(7, ""),
+		DocumentType: record.GetString(8, ""),
+		Confidence:   record.GetFloat64(9, 0),
+	}
+
+	// Parse modified time
+	if modStr := record.GetString(6, ""); modStr != "" {
+		if t, err := time.Parse(time.RFC3339, modStr); err == nil {
+			file.Modified = t
+		}
+	}
+
+	return file, nil
+}
+
+// GetFileByFilename retrieves a File node by filename (searches by name field)
+func (n *Nodes) GetFileByFilename(ctx context.Context, filename string) (*FileNode, error) {
+	query := `
+		MATCH (f:File {name: $filename})
+		RETURN f.path, f.hash, f.name, f.type, f.category, f.size, f.modified,
+		       f.summary, f.document_type, f.confidence
+		LIMIT 1
+	`
+
+	result, err := n.client.Query(ctx, query, map[string]any{"filename": filename})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file by filename; %w", err)
 	}
 
 	if !result.Next() {

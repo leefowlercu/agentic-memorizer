@@ -33,18 +33,20 @@ func (m *mockIntegration) withEnabled(enabled bool) *mockIntegration {
 	return m
 }
 
-func (m *mockIntegration) GetName() string                                               { return m.name }
-func (m *mockIntegration) GetDescription() string                                        { return "mock" }
-func (m *mockIntegration) GetVersion() string                                            { return "1.0.0" }
-func (m *mockIntegration) Detect() (bool, error)                                         { return m.detected, nil }
-func (m *mockIntegration) IsEnabled() (bool, error)                                      { return m.enabled, nil }
-func (m *mockIntegration) Setup(binaryPath string) error                                 { m.enabled = true; return nil }
-func (m *mockIntegration) Update(binaryPath string) error                                { return nil }
-func (m *mockIntegration) Remove() error                                                 { m.enabled = false; return nil }
-func (m *mockIntegration) GetCommand(binaryPath string, format OutputFormat) string      { return "" }
-func (m *mockIntegration) FormatOutput(*types.GraphIndex, OutputFormat) (string, error)  { return "", nil }
-func (m *mockIntegration) Validate() error                                               { return nil }
-func (m *mockIntegration) Reload(newConfig IntegrationConfig) error                      { return nil }
+func (m *mockIntegration) GetName() string                                          { return m.name }
+func (m *mockIntegration) GetDescription() string                                   { return "mock" }
+func (m *mockIntegration) GetVersion() string                                       { return "1.0.0" }
+func (m *mockIntegration) Detect() (bool, error)                                    { return m.detected, nil }
+func (m *mockIntegration) IsEnabled() (bool, error)                                 { return m.enabled, nil }
+func (m *mockIntegration) Setup(binaryPath string) error                            { m.enabled = true; return nil }
+func (m *mockIntegration) Update(binaryPath string) error                           { return nil }
+func (m *mockIntegration) Remove() error                                            { m.enabled = false; return nil }
+func (m *mockIntegration) GetCommand(binaryPath string, format OutputFormat) string { return "" }
+func (m *mockIntegration) FormatOutput(*types.GraphIndex, OutputFormat) (string, error) {
+	return "", nil
+}
+func (m *mockIntegration) Validate() error                          { return nil }
+func (m *mockIntegration) Reload(newConfig IntegrationConfig) error { return nil }
 
 func TestNewRegistry(t *testing.T) {
 	registry := NewRegistry()

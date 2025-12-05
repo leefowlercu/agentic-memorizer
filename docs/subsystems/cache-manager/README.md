@@ -8,16 +8,21 @@
    - [File-Based Persistence](#file-based-persistence)
    - [Cache-First Pattern](#cache-first-pattern)
    - [Separation of Concerns](#separation-of-concerns)
-3. [Key Components](#key-components)
+3. [Cache Versioning](#cache-versioning)
+   - [Three-Tier Version System](#three-tier-version-system)
+   - [Versioned Cache Keys](#versioned-cache-keys)
+   - [Staleness Detection](#staleness-detection)
+   - [Version Migration](#version-migration)
+4. [Key Components](#key-components)
    - [Manager Component](#manager-component)
    - [Cache Operations](#cache-operations)
    - [Content Hashing](#content-hashing)
-4. [Integration Points](#integration-points)
+5. [Integration Points](#integration-points)
    - [Daemon Subsystem](#daemon-subsystem)
    - [Worker Pool](#worker-pool)
    - [Semantic Analyzer](#semantic-analyzer)
    - [Type System](#type-system)
-5. [Glossary](#glossary)
+6. [Glossary](#glossary)
 
 ## Overview
 
@@ -92,6 +97,151 @@ Each cache operation (Get, Set) is independent and stateless, enabling concurren
 **Clean Integration Boundaries:**
 The Semantic Analyzer has no knowledge of caching - it simply performs analysis when called. The Cache Manager wraps the analyzer without modifying its behavior. The daemon and worker pool implement the integration logic, deciding when to check cache versus invoke analysis. This separation allows each component to evolve independently.
 
+## Cache Versioning
+
+The Cache Manager implements a three-tier versioning system (`internal/cache/version.go`) to detect when cached entries become stale due to changes in extraction logic, analysis prompts, or data structures. This enables automatic re-analysis of affected files when the application is upgraded.
+
+### Three-Tier Version System
+
+The versioning system uses three independent version numbers, each tracking a specific type of change:
+
+**Schema Version (`CacheSchemaVersion`):**
+Tracks changes to the `CachedAnalysis` structure itself. Increment when:
+- Adding or removing fields from `CachedAnalysis` struct
+- Renaming fields in `CachedAnalysis` struct
+- Changing field types in `CachedAnalysis` struct
+- Changing cache storage format (JSON structure)
+- Changing cache key generation algorithm
+
+Schema version mismatch always indicates staleness because the cached data structure is incompatible with current code.
+
+**Metadata Version (`CacheMetadataVersion`):**
+Tracks changes to metadata extraction logic in the Metadata subsystem. Increment when:
+- Adding fields to `FileMetadata`
+- Changing metadata extraction algorithms
+- Fixing bugs in metadata handlers
+- Adding new metadata handlers
+- Changing categorization logic
+- Updating readability detection
+
+Metadata version behind current indicates the cached metadata may be missing fields or have incorrect values.
+
+**Semantic Version (`CacheSemanticVersion`):**
+Tracks changes to semantic analysis logic in the Semantic Analyzer subsystem. Increment when:
+- Changing prompt templates
+- Adding fields to `SemanticAnalysis`
+- Changing analysis routing logic (which analyzer for which file type)
+- Updating response parsing logic
+- Changing confidence score calculations
+- Updating entity/reference extraction
+- Fixing bugs in semantic analysis
+
+Semantic version behind current indicates the cached analysis may be outdated or incomplete.
+
+### Versioned Cache Keys
+
+Cache entries are stored with version information in the filename to enable efficient staleness detection without reading file contents:
+
+**Filename Format:**
+```
+{hash[:16]}-v{schema}-{metadata}-{semantic}.json
+```
+
+Example: `sha256:abc12345-v1-1-1.json`
+
+The version suffix enables:
+- Quick identification of stale entries via filesystem listing
+- Batch operations on entries of specific versions
+- Statistics collection by version without parsing JSON
+
+**CachedAnalysis Version Fields:**
+Each cached entry stores version numbers in the JSON structure:
+```json
+{
+  "schema_version": 1,
+  "metadata_version": 1,
+  "semantic_version": 1,
+  ...
+}
+```
+
+These fields enable version detection during cache reads and provide redundancy for validation.
+
+### Staleness Detection
+
+The `IsStaleVersion()` function (`internal/cache/version.go:92-115`) implements the staleness detection algorithm:
+
+**Staleness Rules:**
+1. **Schema mismatch** - Always stale (incompatible structure)
+2. **Metadata behind current** - Stale (missing newer metadata fields)
+3. **Semantic behind current** - Stale (outdated analysis)
+4. **Future versions** - Not stale (forward compatible with newer entries)
+
+**Integration with Cache-First Pattern:**
+The worker pool checks version staleness during cache lookup:
+1. `Get(hash)` retrieves cached entry by content hash
+2. `IsStale(cached, hash)` checks content hash match
+3. `IsStaleVersion(cached)` checks version compatibility
+4. If either check indicates staleness, re-analyze the file
+
+**Logging:**
+When a cached entry is skipped due to version staleness, the worker logs at DEBUG level:
+```
+skipping stale cache entry (version mismatch)
+```
+
+This enables tracking of re-analysis triggered by version upgrades.
+
+### Version Migration
+
+The system handles version transitions gracefully through automatic re-analysis rather than explicit migration:
+
+**Legacy Entry Handling:**
+Entries created before versioning (version 0.0.0) are detected by `IsLegacyVersion()` and treated as stale. These entries have zero values for all version fields and are re-analyzed on first access.
+
+**Cache Statistics:**
+The `GetStats()` method provides version distribution statistics:
+```go
+type CacheStats struct {
+    TotalEntries  int            // Total number of cached entries
+    LegacyEntries int            // Entries from before versioning (v0.0.0)
+    TotalSize     int64          // Total size in bytes
+    VersionCounts map[string]int // Count of entries per version string
+}
+```
+
+**Selective Clearing:**
+The `ClearOldVersions()` method removes stale entries while preserving current entries:
+```go
+removed, err := manager.ClearOldVersions()
+```
+
+This enables proactive cache maintenance during upgrades without full cache clearing.
+
+**CLI Commands:**
+Users can inspect and manage cache versions via CLI:
+```bash
+# View cache statistics including version distribution
+agentic-memorizer cache status
+
+# Clear only stale entries (preserves current version)
+agentic-memorizer cache clear --old-versions
+
+# Clear all entries
+agentic-memorizer cache clear --all
+
+# Clear stale cache during daemon rebuild
+agentic-memorizer daemon rebuild --clear-old-cache
+```
+
+**Version Bump Workflow:**
+When making changes that require a version bump:
+1. Identify which tier is affected (schema, metadata, or semantic)
+2. Increment the appropriate constant in `internal/cache/version.go`
+3. Document the change in commit message
+4. Run `cache status` to verify version change
+5. Optionally run `cache clear --old-versions` to remove stale entries
+
 ## Key Components
 
 ### Manager Component
@@ -111,7 +261,7 @@ The current implementation provides implicit thread safety through file system a
 
 ### Cache Operations
 
-The Cache Manager provides five core operations that implement the complete cache lifecycle:
+The Cache Manager provides seven core operations that implement the complete cache lifecycle:
 
 **Get Operation:**
 The `Get(fileHash string)` method retrieves cached analysis for a given content hash. It constructs the cache file path from the hash (using the first 16 characters as the filename), attempts to read the JSON file, and unmarshals the content into a `CachedAnalysis` structure. The return values distinguish between cache misses and errors:
@@ -132,6 +282,18 @@ The `Clear()` method removes all cached files by iterating through entries in th
 
 **Hash Computation:**
 The `HashFile(filePath string)` function computes the SHA-256 hash of a file's content. It streams the entire file through the hasher without size limits, producing a deterministic hash value. The hash is returned in the format `"sha256:" + hex-encoded-hash`, matching the cache key format used throughout the system. This function is typically called by worker threads before cache lookup.
+
+**Statistics Operation:**
+The `GetStats()` method returns comprehensive statistics about cache contents without modifying any entries. It iterates through all cache files, reading and parsing each to extract version information and file sizes. The method returns a `CacheStats` structure containing:
+- `TotalEntries` - Count of all cached entries
+- `LegacyEntries` - Count of entries from before versioning (v0.0.0)
+- `TotalSize` - Aggregate size of all cache files in bytes
+- `VersionCounts` - Map from version string to entry count, enabling version distribution analysis
+
+This operation supports the `cache status` CLI command and health metrics reporting.
+
+**Selective Clear Operation:**
+The `ClearOldVersions()` method removes cache entries that are not the current version while preserving valid entries. It iterates through all cache files, checks each entry's version against `IsCurrentVersion()`, and deletes entries that fail the check. The method returns the count of removed entries, enabling users to understand the scope of cleanup. This operation is more targeted than `Clear()`, allowing proactive cache maintenance during upgrades without losing all cached work. It supports the `cache clear --old-versions` CLI command and `daemon rebuild --clear-old-cache` flag.
 
 ### Content Hashing
 
@@ -222,6 +384,9 @@ The primary cache data structure contains:
 - `FilePath string` - Original file path (for reference and debugging, not used as cache key)
 - `FileHash string` - SHA-256 content hash in "sha256:hex" format (the actual cache key)
 - `AnalyzedAt time.Time` - Timestamp of when semantic analysis was performed
+- `SchemaVersion int` - Cache schema version at time of creation (for staleness detection)
+- `MetadataVersion int` - Metadata extraction version at time of creation
+- `SemanticVersion int` - Semantic analysis version at time of creation
 - `Metadata FileMetadata` - Complete file metadata including path, size, type, category, word count, dimensions, etc.
 - `Semantic *SemanticAnalysis` - AI-generated semantic understanding (nil if analysis failed or was disabled)
 - `Error *string` - Optional error message if analysis failed
@@ -268,3 +433,19 @@ The `FileHash` field in `CachedAnalysis` serves as both the cache key and a stor
 **Durability**: Property where cached entries persist across daemon restarts through file-based storage, avoiding redundant API calls during index rebuilds.
 
 **Location Independence**: Property where files retain cached analysis even when renamed or moved, enabled by content-based rather than path-based cache keys.
+
+**Cache Version**: Combined version string (e.g., "v1.1.1") representing schema, metadata, and semantic versions, used to identify when cached entries need re-analysis.
+
+**Schema Version**: Version number tracking changes to CachedAnalysis structure; increment when changing field names, types, or adding/removing fields.
+
+**Metadata Version**: Version number tracking changes to metadata extraction logic; increment when modifying FileMetadata structure or extraction handlers.
+
+**Semantic Version**: Version number tracking changes to semantic analysis logic; increment when modifying prompts, response parsing, or SemanticAnalysis structure.
+
+**Legacy Entry**: Cache entry from before versioning was implemented, identified by version v0.0.0, treated as stale and re-analyzed on access.
+
+**Version Staleness**: Condition where a cached entry's version is older than current application version, indicating the entry should be re-analyzed.
+
+**Selective Clearing**: Cache maintenance operation that removes only stale (non-current version) entries while preserving valid entries, via `ClearOldVersions()`.
+
+**Version Distribution**: Statistical breakdown of cache entries by version, provided by `GetStats()` to understand cache composition after upgrades.

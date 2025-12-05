@@ -22,6 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - [Subsystem Independence](#subsystem-independence)
   - [Separation of Metadata and Semantics](#separation-of-metadata-and-semantics)
   - [Content-Addressable Caching](#content-addressable-caching)
+  - [Cache Versioning](#cache-versioning)
   - [Handler/Adapter Patterns](#handleradapter-patterns)
 - [Testing Approach](#testing-approach)
 - [Key File Locations](#key-file-locations)
@@ -148,6 +149,18 @@ make validate-config
 
 # Rebuild index (use --force to clear graph first)
 ./agentic-memorizer daemon rebuild
+
+# Rebuild with stale cache clearing
+./agentic-memorizer daemon rebuild --clear-old-cache
+
+# Check cache status
+./agentic-memorizer cache status
+
+# Clear stale cache entries
+./agentic-memorizer cache clear --old-versions
+
+# Clear all cache entries
+./agentic-memorizer cache clear --all
 
 # Generate systemd unit file (Linux)
 ./agentic-memorizer daemon systemctl
@@ -384,6 +397,36 @@ Metadata extraction is fast and deterministic; semantic analysis is slow and AI-
 
 Cache keys are SHA-256 hashes of file content (not paths), enabling cache hits across file renames/moves and automatic invalidation on content changes. No explicit cache invalidation logic needed.
 
+### Cache Versioning
+
+The semantic analysis cache uses three-tier versioning to detect stale entries after application upgrades:
+
+- **SchemaVersion** - CachedAnalysis struct format changes (bump when adding/removing/renaming fields)
+- **MetadataVersion** - Metadata extraction logic changes (bump when metadata output changes)
+- **SemanticVersion** - Semantic analysis logic changes (bump when prompts or analysis changes)
+
+**Version Constants Location:** `internal/cache/version.go`
+
+**Cache Key Format:** `{content-hash[:16]}-v{schema}-{metadata}-{semantic}.json`
+
+Example: `sha256:abc12345def67890-v1-1-1.json`
+
+**Staleness Detection:**
+- Schema mismatch (any direction) = always stale
+- Metadata/semantic version behind current = stale
+- Metadata/semantic version ahead (future) = not stale (forward compatible)
+
+**When Modifying Cache-Related Code:**
+1. Identify scope of changes (struct format, metadata, or semantic)
+2. Bump appropriate version constant in `internal/cache/version.go`
+3. Commit message should mention cache version bump
+
+**CLI Commands:**
+- `cache status` - Show version distribution and entry counts
+- `cache clear --old-versions` - Remove stale entries
+- `cache clear --all` - Remove all entries
+- `daemon rebuild --clear-old-cache` - Clear stale entries before rebuild
+
 ### Handler/Adapter Patterns
 
 Both metadata extraction and integration systems use handler/adapter patterns with registries. New file types or frameworks can be added by implementing interfaces and registering—no changes to core logic required.
@@ -421,9 +464,10 @@ When writing tests:
 
 **CLI Commands:**
 - Root command: `cmd/root.go`
-- Command packages: `cmd/{initialize,daemon,integrations,config,read,mcp,graph}/`
+- Command packages: `cmd/{initialize,daemon,integrations,config,read,mcp,graph,cache}/`
 - Daemon commands: `cmd/daemon/daemon.go` (parent) + `cmd/daemon/subcommands/` (8 subcommands: start, stop, status, restart, logs, rebuild, systemctl, launchctl)
 - Graph commands: `cmd/graph/graph.go` (parent) + `cmd/graph/subcommands/` (3 subcommands)
+- Cache commands: `cmd/cache/cache.go` (parent) + `cmd/cache/subcommands/` (2 subcommands: status, clear)
 - Integration commands: `cmd/integrations/integrations.go` (parent) + `cmd/integrations/subcommands/` (6 subcommands + helpers)
 - Config commands: `cmd/config/config.go` (parent) + `cmd/config/subcommands/` (2 subcommands)
 

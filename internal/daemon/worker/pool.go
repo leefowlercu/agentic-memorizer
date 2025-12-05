@@ -205,12 +205,26 @@ func (p *Pool) processJob(job Job) JobResult {
 		cached, err := p.cacheManager.Get(fileHash)
 		if err == nil && cached != nil && !p.cacheManager.IsStale(cached, fileHash) {
 			semanticAnalysis = cached.Semantic
-			p.logger.Debug("cache hit", "path", job.Path)
+			p.logger.Debug("cache hit",
+				"path", job.Path,
+				"version", cache.VersionString(cached),
+			)
 
 			p.statsMu.Lock()
 			p.stats.CacheHits++
 			p.statsMu.Unlock()
 		} else {
+			// Log reason for cache miss with version info
+			if cached != nil && cache.IsStaleVersion(cached) {
+				p.logger.Debug("cache version stale, re-analyzing",
+					"path", job.Path,
+					"cached_version", cache.VersionString(cached),
+					"current_version", cache.CacheVersion(),
+				)
+			} else if cached != nil {
+				p.logger.Debug("cache content stale, re-analyzing", "path", job.Path)
+			}
+
 			// Wait for rate limiter before making API call
 			if err := p.rateLimiter.Wait(p.ctx); err != nil {
 				p.logger.Warn("rate limiter cancelled", "path", job.Path, "error", err)
@@ -234,7 +248,7 @@ func (p *Pool) processJob(job Job) JobResult {
 				p.stats.APICalls++
 				p.statsMu.Unlock()
 
-				// Cache result
+				// Cache result (version fields set by cacheManager.Set)
 				cachedAnalysis := &types.CachedAnalysis{
 					FilePath:   job.Path,
 					FileHash:   fileHash,

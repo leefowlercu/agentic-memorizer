@@ -6,11 +6,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
 )
 
-var forceRebuild bool
+var (
+	forceRebuild  bool
+	clearOldCache bool
+)
 
 var RebuildCmd = &cobra.Command{
 	Use:   "rebuild",
@@ -20,13 +24,16 @@ var RebuildCmd = &cobra.Command{
 		"all files in the memory directory, extracting metadata, performing semantic " +
 		"analysis, and rebuilding all graph relationships.\n\n" +
 		"Use --force to clear the graph before rebuilding (otherwise, existing entries " +
-		"are updated in place).",
+		"are updated in place).\n\n" +
+		"Use --clear-old-cache to remove stale cache entries before rebuilding. This ensures " +
+		"files are re-analyzed with the current analysis version.",
 	PreRunE: validateRebuild,
 	RunE:    runRebuild,
 }
 
 func init() {
 	RebuildCmd.Flags().BoolVarP(&forceRebuild, "force", "f", false, "Clear graph before rebuilding")
+	RebuildCmd.Flags().BoolVar(&clearOldCache, "clear-old-cache", false, "Clear stale cache entries before rebuilding")
 }
 
 func validateRebuild(cmd *cobra.Command, args []string) error {
@@ -43,6 +50,39 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config; %w", err)
+	}
+
+	// Clear stale cache entries if requested
+	if clearOldCache {
+		cacheManager, err := cache.NewManager(cfg.Analysis.CacheDir)
+		if err != nil {
+			return fmt.Errorf("failed to initialize cache manager; %w", err)
+		}
+
+		stats, err := cacheManager.GetStats()
+		if err != nil {
+			return fmt.Errorf("failed to get cache stats; %w", err)
+		}
+
+		// Count stale entries
+		currentVersion := cache.CacheVersion()
+		staleCount := 0
+		for version, count := range stats.VersionCounts {
+			if version != currentVersion {
+				staleCount += count
+			}
+		}
+
+		if staleCount > 0 {
+			fmt.Printf("Clearing %d stale cache entries...\n", staleCount)
+			removed, err := cacheManager.ClearOldVersions()
+			if err != nil {
+				return fmt.Errorf("failed to clear old cache versions; %w", err)
+			}
+			fmt.Printf("Removed %d stale cache entries\n\n", removed)
+		} else {
+			fmt.Printf("No stale cache entries to clear\n\n")
+		}
 	}
 
 	// Check if daemon is running by hitting health endpoint

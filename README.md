@@ -1227,8 +1227,9 @@ agentic-memorizer daemon stop
 agentic-memorizer daemon restart
 
 # Force immediate rebuild
-agentic-memorizer daemon rebuild           # Rebuild index
-agentic-memorizer daemon rebuild --force   # Clear graph first, then rebuild
+agentic-memorizer daemon rebuild                    # Rebuild index
+agentic-memorizer daemon rebuild --force            # Clear graph first, then rebuild
+agentic-memorizer daemon rebuild --clear-old-cache  # Clear stale cache entries before rebuild
 
 # View daemon logs
 agentic-memorizer daemon logs              # Last 50 lines
@@ -1711,6 +1712,11 @@ agentic-memorizer graph stop            # Stop FalkorDB container
 agentic-memorizer graph status          # Check graph health and stats
 agentic-memorizer daemon rebuild        # Rebuild index/graph (use --force to clear first)
 
+# Manage semantic analysis cache
+agentic-memorizer cache status          # Show cache statistics and version info
+agentic-memorizer cache clear --old-versions  # Clear stale cache entries
+agentic-memorizer cache clear --all     # Clear all cache entries
+
 # Read precomputed index (for SessionStart hooks)
 agentic-memorizer read [flags]
 
@@ -2165,6 +2171,11 @@ agentic-memorizer/
 │   │       ├── start.go      # Start FalkorDB container
 │   │       ├── stop.go       # Stop FalkorDB container
 │   │       └── status.go     # Check graph health
+│   ├── cache/                # Cache management commands
+│   │   ├── cache.go          # Parent cache command
+│   │   └── subcommands/      # Cache subcommands (2 total)
+│   │       ├── status.go     # Show cache statistics
+│   │       └── clear.go      # Clear cache entries
 │   ├── mcp/                  # MCP server commands
 │   │   ├── mcp.go            # Parent mcp command
 │   │   └── subcommands/
@@ -2366,12 +2377,39 @@ When indexing many files:
 
 ### Cache issues
 
-Clear cache to force re-analysis of all files:
+The semantic analysis cache uses versioning to detect stale entries after application upgrades.
+
+**Check cache status:**
 
 ```bash
-rm -rf ~/.agentic-memorizer/.cache
+agentic-memorizer cache status
+```
+
+This shows:
+- Current cache version
+- Total entries and size
+- Version distribution (current, legacy, stale)
+- Number of entries that need re-analysis
+
+**Clear stale entries (recommended after upgrade):**
+
+```bash
+# Clear only stale/legacy entries
+agentic-memorizer cache clear --old-versions
+
+# Or include with rebuild
+agentic-memorizer daemon rebuild --clear-old-cache
+```
+
+**Force re-analysis of all files:**
+
+```bash
+# Clear all cache entries
+agentic-memorizer cache clear --all
 agentic-memorizer daemon restart
 ```
+
+**Legacy entries (v0.0.0):** Entries from before cache versioning was implemented. They will be re-analyzed automatically on next daemon rebuild.
 
 ## Contributing
 

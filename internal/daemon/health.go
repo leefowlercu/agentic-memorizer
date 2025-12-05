@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 )
 
@@ -21,6 +22,7 @@ type HealthMetrics struct {
 	LastBuildSuccess bool      `json:"last_build_success"`
 	IndexFileCount   int       `json:"index_file_count"`
 	WatcherActive    bool      `json:"watcher_active"`
+	cacheManager     *cache.Manager
 	mu               sync.RWMutex
 }
 
@@ -102,6 +104,13 @@ func (h *HealthMetrics) SetWatcherActive(active bool) {
 	h.WatcherActive = active
 }
 
+// SetCacheManager sets the cache manager for cache stats reporting
+func (h *HealthMetrics) SetCacheManager(manager *cache.Manager) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cacheManager = manager
+}
+
 // GetSnapshot returns a snapshot of current metrics
 // Implements api.HealthMetricsProvider interface
 func (h *HealthMetrics) GetSnapshot() api.HealthSnapshot {
@@ -109,7 +118,7 @@ func (h *HealthMetrics) GetSnapshot() api.HealthSnapshot {
 	defer h.mu.RUnlock()
 
 	uptime := time.Since(h.StartTime)
-	return api.HealthSnapshot{
+	snapshot := api.HealthSnapshot{
 		StartTime:        h.StartTime,
 		Uptime:           formatDuration(uptime),
 		UptimeSeconds:    uptime.Seconds(),
@@ -121,7 +130,19 @@ func (h *HealthMetrics) GetSnapshot() api.HealthSnapshot {
 		LastBuildSuccess: h.LastBuildSuccess,
 		IndexFileCount:   h.IndexFileCount,
 		WatcherActive:    h.WatcherActive,
+		CacheVersion:     cache.CacheVersion(),
 	}
+
+	// Get cache stats if cache manager is available
+	if h.cacheManager != nil {
+		if stats, err := h.cacheManager.GetStats(); err == nil {
+			snapshot.CacheTotalEntries = stats.TotalEntries
+			snapshot.CacheLegacyEntries = stats.LegacyEntries
+			snapshot.CacheTotalSize = stats.TotalSize
+		}
+	}
+
+	return snapshot
 }
 
 // formatDuration formats a duration in human-readable form

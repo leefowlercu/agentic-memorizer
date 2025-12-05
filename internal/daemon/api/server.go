@@ -33,6 +33,12 @@ type HealthSnapshot struct {
 	LastBuildSuccess bool
 	IndexFileCount   int
 	WatcherActive    bool
+
+	// Cache versioning stats
+	CacheVersion       string
+	CacheTotalEntries  int
+	CacheLegacyEntries int
+	CacheTotalSize     int64
 }
 
 // HTTPServer manages the daemon's unified HTTP API
@@ -188,6 +194,12 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 			"index_file_count":   snapshot.IndexFileCount,
 			"watcher_active":     snapshot.WatcherActive,
 			"sse_clients":        sseClients,
+		},
+		"cache": map[string]any{
+			"version":        snapshot.CacheVersion,
+			"total_entries":  snapshot.CacheTotalEntries,
+			"legacy_entries": snapshot.CacheLegacyEntries,
+			"total_size":     snapshot.CacheTotalSize,
 		},
 	}
 

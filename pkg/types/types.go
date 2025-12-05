@@ -113,8 +113,18 @@ type IndexStats struct {
 	AvgTagsPerFile    float64 `json:"avg_tags_per_file,omitempty"`
 }
 
-// CachedAnalysis represents a cached semantic analysis result
+// CachedAnalysis represents a cached semantic analysis result.
+//
+// Version fields (SchemaVersion, MetadataVersion, SemanticVersion) track cache
+// compatibility. Entries with version 0.0.0 are legacy entries from before
+// versioning was implemented. See internal/cache/version.go for version semantics.
 type CachedAnalysis struct {
+	// Versioning - tracks cache entry compatibility
+	SchemaVersion   int `json:"schema_version"`   // CachedAnalysis structure version
+	MetadataVersion int `json:"metadata_version"` // Metadata extraction logic version
+	SemanticVersion int `json:"semantic_version"` // Semantic analysis logic version
+
+	// Core fields
 	FilePath   string            `json:"file_path"`
 	FileHash   string            `json:"file_hash"`
 	AnalyzedAt time.Time         `json:"analyzed_at"`

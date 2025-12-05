@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/leefowlercu/agentic-memorizer/cmd/cache"
 	"github.com/leefowlercu/agentic-memorizer/cmd/config"
 	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
 	"github.com/leefowlercu/agentic-memorizer/cmd/graph"
@@ -34,6 +35,7 @@ func init() {
 	memorizerCmd.AddCommand(initialize.InitializeCmd)
 	memorizerCmd.AddCommand(daemon.DaemonCmd)
 	memorizerCmd.AddCommand(graph.GraphCmd)
+	memorizerCmd.AddCommand(cache.CacheCmd)
 	memorizerCmd.AddCommand(read.ReadCmd)
 	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
 	memorizerCmd.AddCommand(config.ConfigCmd)

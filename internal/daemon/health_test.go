@@ -1,8 +1,11 @@
 package daemon
 
 import (
+	"os"
 	"sync"
 	"testing"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 )
 
 func TestRecordFileProcessed(t *testing.T) {
@@ -250,5 +253,82 @@ func TestHealthMetrics_ConcurrentReadsAndWrites(t *testing.T) {
 	snapshot := metrics.GetSnapshot()
 	if snapshot.FilesProcessed != iterations {
 		t.Errorf("Expected FilesProcessed to be %d, got %d", iterations, snapshot.FilesProcessed)
+	}
+}
+
+func TestHealthMetrics_CacheStats(t *testing.T) {
+	// Create temp cache directory
+	tempDir, err := os.MkdirTemp("", "health-test-cache")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create cache manager
+	cacheManager, err := cache.NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create cache manager: %v", err)
+	}
+
+	// Create metrics without cache manager
+	metrics := NewHealthMetrics()
+	snapshot := metrics.GetSnapshot()
+
+	// Should have cache version even without manager
+	if snapshot.CacheVersion != cache.CacheVersion() {
+		t.Errorf("Expected CacheVersion %q, got %q", cache.CacheVersion(), snapshot.CacheVersion)
+	}
+
+	// Without cache manager, stats should be zero
+	if snapshot.CacheTotalEntries != 0 {
+		t.Errorf("Expected CacheTotalEntries to be 0 without manager, got %d", snapshot.CacheTotalEntries)
+	}
+
+	// Set cache manager
+	metrics.SetCacheManager(cacheManager)
+	snapshot = metrics.GetSnapshot()
+
+	// With empty cache, stats should still be zero
+	if snapshot.CacheTotalEntries != 0 {
+		t.Errorf("Expected CacheTotalEntries to be 0 for empty cache, got %d", snapshot.CacheTotalEntries)
+	}
+
+	// Verify version is reported
+	if snapshot.CacheVersion == "" {
+		t.Error("Expected CacheVersion to be set")
+	}
+}
+
+func TestHealthMetrics_SetCacheManager(t *testing.T) {
+	metrics := NewHealthMetrics()
+
+	// Test setting nil (should not panic)
+	metrics.SetCacheManager(nil)
+	snapshot := metrics.GetSnapshot()
+
+	// Should still have version but no stats
+	if snapshot.CacheVersion == "" {
+		t.Error("Expected CacheVersion to be set even with nil manager")
+	}
+
+	// Create temp cache directory
+	tempDir, err := os.MkdirTemp("", "health-test-cache")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	cacheManager, err := cache.NewManager(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create cache manager: %v", err)
+	}
+
+	// Set valid cache manager
+	metrics.SetCacheManager(cacheManager)
+	snapshot = metrics.GetSnapshot()
+
+	// Verify cache manager is used
+	if snapshot.CacheVersion != cache.CacheVersion() {
+		t.Errorf("Expected CacheVersion %q, got %q", cache.CacheVersion(), snapshot.CacheVersion)
 	}
 }

@@ -184,6 +184,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 
 	// Create health metrics tracker
 	healthMetrics := NewHealthMetrics()
+	healthMetrics.SetCacheManager(cacheManager)
 
 	// Create SSE notification hub
 	sseHub := api.NewSSEHub(logger)

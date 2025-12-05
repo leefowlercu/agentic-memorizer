@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,4 +325,173 @@ func TestCache_IdenticalContent(t *testing.T) {
 	} else {
 		t.Logf("Content-addressable cache verified: identical content = identical hash (%s)", hash1)
 	}
+}
+
+// TestCache_StatusCommand tests the cache status command output
+func TestCache_StatusCommand(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Test cache status with empty cache
+	stdout, stderr, exitCode := h.RunCommand("cache", "status")
+
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+	harness.AssertContains(t, stdout, "Cache Status")
+	harness.AssertContains(t, stdout, "Current Version:")
+	harness.AssertContains(t, stdout, "Total Entries:")
+	harness.AssertContains(t, stdout, "Total Size:")
+}
+
+// TestCache_StatusWithEntries tests cache status output format
+// Note: Without Claude API key, no cache entries are created, so we just verify the output format
+func TestCache_StatusWithEntries(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Test cache status command output format (doesn't require daemon)
+	stdout, stderr, exitCode := h.RunCommand("cache", "status")
+
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+	harness.AssertContains(t, stdout, "Cache Status")
+	harness.AssertContains(t, stdout, "Current Version:")
+	harness.AssertContains(t, stdout, "Statistics")
+	harness.AssertContains(t, stdout, "Total Entries:")
+	harness.AssertContains(t, stdout, "Total Size:")
+	harness.AssertContains(t, stdout, "Legacy Entries:")
+
+	t.Logf("Cache status output:\n%s", stdout)
+}
+
+// TestCache_ClearRequiresFlag tests that cache clear requires a flag
+func TestCache_ClearRequiresFlag(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Try to clear without flag
+	stdout, stderr, exitCode := h.RunCommand("cache", "clear")
+
+	// Should fail and show usage
+	if exitCode == 0 {
+		t.Errorf("Expected non-zero exit code when no flag provided")
+	}
+
+	output := stdout + stderr
+	harness.AssertContains(t, output, "--all")
+	harness.AssertContains(t, output, "--old-versions")
+}
+
+// TestCache_ClearAll tests the cache clear --all command
+func TestCache_ClearAll(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Clear all cache entries (may be empty, which is fine)
+	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--all")
+
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+	// Accept either "Cache cleared successfully" or "Cache is already empty"
+	output := stdout + stderr
+	if !containsAny(output, "Cache cleared successfully", "Cache is already empty") {
+		t.Errorf("Expected cache clear message, got: %s", output)
+	}
+
+	// Verify cache is empty
+	stdout2, stderr2, exitCode2 := h.RunCommand("cache", "status")
+	harness.AssertExitCode(t, 0, exitCode2, stdout2, stderr2)
+	harness.AssertContains(t, stdout2, "Total Entries:  0")
+}
+
+// TestCache_ClearOldVersions tests the cache clear --old-versions command
+func TestCache_ClearOldVersions(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Clear old versions (should have no effect on empty/current-only cache)
+	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--old-versions")
+
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+	// Should indicate no stale entries to clear
+	output := stdout + stderr
+	if !containsAny(output, "No stale entries", "Removed 0", "All", "current") {
+		t.Logf("Output: %s", output)
+	}
+}
+
+// TestCache_ClearMutuallyExclusive tests that --all and --old-versions are mutually exclusive
+func TestCache_ClearMutuallyExclusive(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Try to use both flags
+	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--all", "--old-versions")
+
+	// Should fail
+	if exitCode == 0 {
+		t.Errorf("Expected non-zero exit code when both flags provided")
+	}
+
+	output := stdout + stderr
+	harness.AssertContains(t, output, "cannot use both")
+}
+
+// TestCache_HelpCommand tests cache command help
+func TestCache_HelpCommand(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"cache help", []string{"cache", "--help"}},
+		{"cache status help", []string{"cache", "status", "--help"}},
+		{"cache clear help", []string{"cache", "clear", "--help"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout, stderr, exitCode := h.RunCommand(tt.args...)
+
+			harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+			harness.AssertContains(t, stdout, "Usage:")
+		})
+	}
+}
+
+// containsAny checks if s contains any of the substrings
+func containsAny(s string, substrs ...string) bool {
+	for _, substr := range substrs {
+		if strings.Contains(s, substr) {
+			return true
+		}
+	}
+	return false
 }

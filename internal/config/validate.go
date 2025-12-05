@@ -181,6 +181,11 @@ func validateClaude(v *Validator, cfg *Config) {
 	if cfg.Claude.MaxTokens < 1 || cfg.Claude.MaxTokens > 8192 {
 		v.AddError("claude.max_tokens", "range", fmt.Sprintf("max_tokens %d is out of valid range (1-8192)", cfg.Claude.MaxTokens), "Set max_tokens between 1 and 8192", cfg.Claude.MaxTokens)
 	}
+
+	// Validate timeout range (5-300 seconds)
+	if cfg.Claude.Timeout < 5 || cfg.Claude.Timeout > 300 {
+		v.AddError("claude.timeout", "range", fmt.Sprintf("timeout %d is out of valid range (5-300 seconds)", cfg.Claude.Timeout), "Set timeout between 5 and 300 seconds", cfg.Claude.Timeout)
+	}
 }
 
 // validateAnalysis validates analysis configuration
@@ -289,8 +294,14 @@ func validateGraph(v *Validator, cfg *Config) {
 	}
 }
 
+// OpenAI embedding model dimensions
+var openAIEmbeddingModels = map[string]int{
+	"text-embedding-3-small": 1536,
+	"text-embedding-3-large": 3072,
+	"text-embedding-ada-002": 1536,
+}
+
 // validateEmbeddings validates embeddings provider configuration.
-// Provider, model, and dimensions are hardcoded - only API key needs validation.
 func validateEmbeddings(v *Validator, cfg *Config) {
 	// Skip validation if embeddings is disabled
 	// Note: embeddings.enabled is derived from API key presence in GetConfig()
@@ -301,6 +312,25 @@ func validateEmbeddings(v *Validator, cfg *Config) {
 	// If enabled, API key must be present (already resolved from env in GetConfig)
 	if cfg.Embeddings.APIKey == "" {
 		v.AddError("embeddings.api_key", "required", "embeddings.api_key is required when embeddings is enabled", "Set OPENAI_API_KEY environment variable or configure api_key in config", nil)
+	}
+
+	// Validate provider (only OpenAI is currently supported)
+	validProviders := []string{"openai"}
+	if cfg.Embeddings.Provider != "" && !contains(validProviders, cfg.Embeddings.Provider) {
+		v.AddError("embeddings.provider", "enum", fmt.Sprintf("provider '%s' is not supported", cfg.Embeddings.Provider), "Only 'openai' is currently supported", cfg.Embeddings.Provider)
+	}
+
+	// Validate model and dimensions for OpenAI provider
+	if cfg.Embeddings.Provider == "" || cfg.Embeddings.Provider == "openai" {
+		expectedDim, validModel := openAIEmbeddingModels[cfg.Embeddings.Model]
+		if !validModel && cfg.Embeddings.Model != "" {
+			v.AddError("embeddings.model", "enum", fmt.Sprintf("unknown OpenAI embedding model: %s", cfg.Embeddings.Model), "Use text-embedding-3-small, text-embedding-3-large, or text-embedding-ada-002", cfg.Embeddings.Model)
+		}
+
+		// Validate dimensions match model
+		if validModel && cfg.Embeddings.Dimensions != expectedDim {
+			v.AddError("embeddings.dimensions", "model_match", fmt.Sprintf("dimensions %d don't match model %s (expected %d)", cfg.Embeddings.Dimensions, cfg.Embeddings.Model, expectedDim), fmt.Sprintf("Use dimensions %d for model %s", expectedDim, cfg.Embeddings.Model), cfg.Embeddings.Dimensions)
+		}
 	}
 }
 

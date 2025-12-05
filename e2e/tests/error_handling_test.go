@@ -115,6 +115,9 @@ func TestErrorHandling_GracefulDegradation(t *testing.T) {
 	configContent := `# E2E Test Configuration
 memory_root: ` + h.MemoryRoot + `
 
+claude:
+  timeout: 30
+
 analysis:
   max_file_size: 10485760
   skip_extensions: []

@@ -12,27 +12,31 @@ const (
 	MCPLogFile    = "mcp.log"
 )
 
-// Hardcoded Claude API settings (convention over configuration)
+// Hardcoded environment variable names (convention over configuration)
+// These define which environment variables are checked for credentials.
+// The actual values (API keys, passwords) come from the environment or config file.
 const (
-	ClaudeAPIKeyEnv      = "ANTHROPIC_API_KEY"
-	ClaudeEnableVision   = true
-	ClaudeTimeoutSeconds = 30
+	ClaudeAPIKeyEnv = "ANTHROPIC_API_KEY"
 )
 
-// Hardcoded Graph settings (convention over configuration)
+// Hardcoded Graph environment variable names
 const (
-	GraphDatabase    = "memorizer"
 	GraphPasswordEnv = "FALKORDB_PASSWORD"
 )
 
-// Hardcoded Embeddings settings (convention over configuration)
+// Hardcoded Embeddings environment variable names and internal settings
 const (
-	EmbeddingsProvider     = "openai"
-	EmbeddingsAPIKeyEnv    = "OPENAI_API_KEY"
-	EmbeddingsModel        = "text-embedding-3-small"
-	EmbeddingsDimensions   = 1536
-	EmbeddingsCacheEnabled = true
-	EmbeddingsBatchSize    = 100
+	EmbeddingsAPIKeyEnv = "OPENAI_API_KEY"
+	// Internal settings - not configurable
+	EmbeddingsCacheEnabled = true // Always enabled for performance
+	EmbeddingsBatchSize    = 100  // Optimized for OpenAI API rate limits
+)
+
+// Embeddings defaults - can be overridden in config.yaml
+const (
+	DefaultEmbeddingsProvider   = "openai"
+	DefaultEmbeddingsModel      = "text-embedding-3-small"
+	DefaultEmbeddingsDimensions = 1536
 )
 
 // Hardcoded Output settings (convention over configuration)
@@ -52,8 +56,10 @@ var DefaultSkipFiles = []string{"agentic-memorizer"}
 var DefaultConfig = Config{
 	MemoryRoot: "~/" + AppDirName + "/" + MemoryDirName,
 	Claude: ClaudeConfig{
-		Model:     "claude-sonnet-4-5-20250929",
-		MaxTokens: 1500,
+		Model:        "claude-sonnet-4-5-20250929",
+		MaxTokens:    1500,
+		Timeout:      30,   // API request timeout in seconds
+		EnableVision: true, // Enable vision API for image analysis
 	},
 	Analysis: AnalysisConfig{
 		Enabled:        true,     // Derived from API key presence in GetConfig()
@@ -89,7 +95,10 @@ var DefaultConfig = Config{
 		MaxSimilarFiles:     10,
 	},
 	Embeddings: EmbeddingsConfig{
-		Enabled: false, // Derived from API key presence in GetConfig()
-		APIKey:  "",
+		Enabled:    false, // Derived from API key presence in GetConfig()
+		APIKey:     "",
+		Provider:   DefaultEmbeddingsProvider,
+		Model:      DefaultEmbeddingsModel,
+		Dimensions: DefaultEmbeddingsDimensions,
 	},
 }

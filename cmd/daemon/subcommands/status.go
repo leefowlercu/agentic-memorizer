@@ -94,7 +94,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
 			Port:     cfg.Graph.Port,
-			Database: config.GraphDatabase, // Hardcoded convention
+			Database: cfg.Graph.Database,
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
@@ -114,7 +114,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			fmt.Println("Status: Connected (failed to get stats)")
 		} else {
 			fmt.Printf("Status: Connected (%s:%d)\n", cfg.Graph.Host, cfg.Graph.Port)
-			fmt.Printf("Database: %s\n", config.GraphDatabase)
+			fmt.Printf("Database: %s\n", cfg.Graph.Database)
 			fmt.Printf("Files: %d\n", stats.TotalFiles)
 			fmt.Printf("Tags: %d\n", stats.TotalTags)
 			fmt.Printf("Topics: %d\n", stats.TotalTopics)

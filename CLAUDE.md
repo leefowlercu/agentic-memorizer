@@ -368,16 +368,29 @@ The MCP server (`internal/mcp/`) implements Model Context Protocol for tool-base
 
 The Config Manager (`internal/config/`) implements layered configuration with precedence: defaults → YAML file → environment variables (MEMORIZER_* prefix). Supports hot-reload via `config reload` command for non-structural settings.
 
+Configuration is organized into tiers:
+- **Minimal tier** (shown in initialized config): Core settings users typically need to change
+- **Advanced tier** (documented, not shown by default): Rarely changed settings with sensible defaults
+- **Hardcoded** (documented, not configurable): Internal conventions that should not change
+
+Use `config show-schema` to discover all available settings:
+```bash
+agentic-memorizer config show-schema                  # Show all settings
+agentic-memorizer config show-schema --advanced-only  # Show advanced settings
+agentic-memorizer config show-schema --hardcoded-only # Show hardcoded conventions
+agentic-memorizer config show-schema --format yaml    # Output as YAML
+```
+
 Key configuration sections:
-- `claude` - API credentials and model selection (vision and timeouts are hardcoded)
+- `claude` - API credentials, model selection, timeout (5-300s), enable_vision toggle
 - `analysis` - File size limits, skip patterns (`skip_files`, `skip_extensions`), cache directory (enable is derived from API key presence)
 - `daemon` - Workers, debounce timing, rate limits, rebuild intervals, health check port
 - `integrations` - Per-framework settings with type and custom settings
 - `mcp` - MCP server log file, log level, and daemon connectivity (`daemon_host`, `daemon_port`)
-- `graph` - FalkorDB host, port, and password (database name is hardcoded)
-- `embeddings` - API key only (enabled is derived from API key presence; provider/model are hardcoded)
+- `graph` - FalkorDB host, port, database name, and password
+- `embeddings` - API key, provider, model, and dimensions (enabled is derived from API key presence)
 
-Many settings use hardcoded constants (see `internal/config/constants.go`) to reduce configuration complexity. Settings like `analysis.enabled` and `embeddings.enabled` are automatically derived from API key presence.
+Settings like `analysis.enabled` and `embeddings.enabled` are automatically derived from API key presence.
 
 Settings requiring daemon restart: `memory_root`, `analysis.cache_dir`, `daemon.log_file`.
 

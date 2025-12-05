@@ -1857,11 +1857,17 @@ The configuration system follows "convention over configuration" principles. Mos
 - `graph.password` - FalkorDB password (or set `FALKORDB_PASSWORD` env var)
 - `embeddings.api_key` - OpenAI API key for embeddings (or set `OPENAI_API_KEY` env var)
 
-**Internal Settings** (available but not in initialized config):
+**Advanced Settings** (available but not in initialized config):
 
 These settings have optimal defaults but can be customized by adding them to your `config.yaml`:
 
 ```yaml
+# Claude API tuning
+claude:
+  max_tokens: 1500           # Response length limit per analysis (1-8192)
+  timeout: 30                # API request timeout in seconds (5-300)
+  enable_vision: true        # Enable vision API for image analysis
+
 # Analysis tuning
 analysis:
   max_file_size: 10485760    # 10MB - files larger than this skip semantic analysis
@@ -1883,14 +1889,22 @@ mcp:
   daemon_host: localhost
   daemon_port: 0             # Set to match daemon.http_port for MCP integration
 
-# Claude API tuning
-claude:
-  max_tokens: 1500           # Response length limit per analysis
+# Embeddings tuning
+embeddings:
+  provider: openai           # Embedding provider (only 'openai' currently supported)
+  model: text-embedding-3-small  # Embedding model
+  dimensions: 1536           # Vector dimensions (must match model)
 
 # Graph tuning
 graph:
   similarity_threshold: 0.7  # Minimum similarity for related files (0.0-1.0)
   max_similar_files: 10      # Max similar files per query
+```
+
+To discover all available settings:
+
+```bash
+agentic-memorizer config show-schema --advanced-only
 ```
 
 **Derived Settings** (computed automatically):

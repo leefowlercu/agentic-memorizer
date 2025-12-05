@@ -267,8 +267,10 @@ func TestValidateConfig_MCP(t *testing.T) {
 			cfg: &Config{
 				MemoryRoot: "~/.agentic-memorizer/memory",
 				Claude: ClaudeConfig{
-					Model:     "claude-sonnet-4-5-20250929",
-					MaxTokens: 1500,
+					Model:        "claude-sonnet-4-5-20250929",
+					MaxTokens:    1500,
+					Timeout:      30,
+					EnableVision: true,
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
@@ -297,8 +299,10 @@ func TestValidateConfig_MCP(t *testing.T) {
 			cfg: &Config{
 				MemoryRoot: "~/.agentic-memorizer/memory",
 				Claude: ClaudeConfig{
-					Model:     "claude-sonnet-4-5-20250929",
-					MaxTokens: 1500,
+					Model:        "claude-sonnet-4-5-20250929",
+					MaxTokens:    1500,
+					Timeout:      30,
+					EnableVision: true,
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
@@ -328,8 +332,10 @@ func TestValidateConfig_MCP(t *testing.T) {
 			cfg: &Config{
 				MemoryRoot: "~/.agentic-memorizer/memory",
 				Claude: ClaudeConfig{
-					Model:     "claude-sonnet-4-5-20250929",
-					MaxTokens: 1500,
+					Model:        "claude-sonnet-4-5-20250929",
+					MaxTokens:    1500,
+					Timeout:      30,
+					EnableVision: true,
 				},
 				Analysis: AnalysisConfig{
 					CacheDir: "~/.agentic-memorizer/.cache",
@@ -373,6 +379,196 @@ func TestValidateConfig_MCP(t *testing.T) {
 				if !strings.Contains(errStr, tt.errContains) {
 					t.Errorf("expected error to contain %q, got: %v", tt.errContains, errStr)
 				}
+			}
+		})
+	}
+}
+
+func TestValidateClaude_Timeout(t *testing.T) {
+	tests := []struct {
+		name       string
+		timeout    int
+		wantErrors bool
+	}{
+		{
+			name:       "valid timeout minimum",
+			timeout:    5,
+			wantErrors: false,
+		},
+		{
+			name:       "valid timeout default",
+			timeout:    30,
+			wantErrors: false,
+		},
+		{
+			name:       "valid timeout maximum",
+			timeout:    300,
+			wantErrors: false,
+		},
+		{
+			name:       "invalid timeout too low",
+			timeout:    4,
+			wantErrors: true,
+		},
+		{
+			name:       "invalid timeout zero",
+			timeout:    0,
+			wantErrors: true,
+		},
+		{
+			name:       "invalid timeout negative",
+			timeout:    -1,
+			wantErrors: true,
+		},
+		{
+			name:       "invalid timeout too high",
+			timeout:    301,
+			wantErrors: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Validator{}
+			cfg := &Config{
+				Claude: ClaudeConfig{
+					Model:        "claude-sonnet-4-5-20250929",
+					MaxTokens:    1500,
+					Timeout:      tt.timeout,
+					EnableVision: true,
+				},
+			}
+			validateClaude(v, cfg)
+
+			if tt.wantErrors && !v.HasErrors() {
+				t.Errorf("expected validation errors, got none")
+			}
+
+			if !tt.wantErrors && v.HasErrors() {
+				t.Errorf("expected no validation errors, got: %v", v.Error())
+			}
+		})
+	}
+}
+
+func TestValidateEmbeddings_Provider(t *testing.T) {
+	tests := []struct {
+		name       string
+		provider   string
+		wantErrors bool
+	}{
+		{
+			name:       "valid provider openai",
+			provider:   "openai",
+			wantErrors: false,
+		},
+		{
+			name:       "valid provider empty (uses default)",
+			provider:   "",
+			wantErrors: false,
+		},
+		{
+			name:       "invalid provider anthropic",
+			provider:   "anthropic",
+			wantErrors: true,
+		},
+		{
+			name:       "invalid provider unknown",
+			provider:   "unknown-provider",
+			wantErrors: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Validator{}
+			cfg := &Config{
+				Embeddings: EmbeddingsConfig{
+					Enabled:    true,
+					APIKey:     "test-key",
+					Provider:   tt.provider,
+					Model:      "text-embedding-3-small",
+					Dimensions: 1536,
+				},
+			}
+			validateEmbeddings(v, cfg)
+
+			if tt.wantErrors && !v.HasErrors() {
+				t.Errorf("expected validation errors, got none")
+			}
+
+			if !tt.wantErrors && v.HasErrors() {
+				t.Errorf("expected no validation errors, got: %v", v.Error())
+			}
+		})
+	}
+}
+
+func TestValidateEmbeddings_ModelDimensionMatch(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		dimensions int
+		wantErrors bool
+	}{
+		{
+			name:       "valid small model dimensions",
+			model:      "text-embedding-3-small",
+			dimensions: 1536,
+			wantErrors: false,
+		},
+		{
+			name:       "valid large model dimensions",
+			model:      "text-embedding-3-large",
+			dimensions: 3072,
+			wantErrors: false,
+		},
+		{
+			name:       "valid ada-002 model dimensions",
+			model:      "text-embedding-ada-002",
+			dimensions: 1536,
+			wantErrors: false,
+		},
+		{
+			name:       "invalid small model wrong dimensions",
+			model:      "text-embedding-3-small",
+			dimensions: 3072,
+			wantErrors: true,
+		},
+		{
+			name:       "invalid large model wrong dimensions",
+			model:      "text-embedding-3-large",
+			dimensions: 1536,
+			wantErrors: true,
+		},
+		{
+			name:       "invalid unknown model",
+			model:      "unknown-model",
+			dimensions: 1536,
+			wantErrors: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Validator{}
+			cfg := &Config{
+				Embeddings: EmbeddingsConfig{
+					Enabled:    true,
+					APIKey:     "test-key",
+					Provider:   "openai",
+					Model:      tt.model,
+					Dimensions: tt.dimensions,
+				},
+			}
+			validateEmbeddings(v, cfg)
+
+			if tt.wantErrors && !v.HasErrors() {
+				t.Errorf("expected validation errors, got none")
+			}
+
+			if !tt.wantErrors && v.HasErrors() {
+				t.Errorf("expected no validation errors, got: %v", v.Error())
 			}
 		})
 	}

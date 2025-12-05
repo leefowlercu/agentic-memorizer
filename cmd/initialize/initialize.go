@@ -349,9 +349,9 @@ func finalizeInit(configPath string, cfg *config.Config) error {
 	fmt.Printf("  Created configuration file: %s\n", configPath)
 	fmt.Printf("  Created memory directory: %s\n", cfg.MemoryRoot)
 	fmt.Printf("  Created cache directory: %s\n", cfg.Analysis.CacheDir)
-	fmt.Printf("  FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, config.GraphDatabase)
+	fmt.Printf("  FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
 	if cfg.Embeddings.Enabled {
-		fmt.Printf("  Embeddings: %s (%s)\n", config.EmbeddingsProvider, config.EmbeddingsModel)
+		fmt.Printf("  Embeddings: %s (%s)\n", cfg.Embeddings.Provider, cfg.Embeddings.Model)
 	} else {
 		fmt.Printf("  Embeddings: disabled\n")
 	}

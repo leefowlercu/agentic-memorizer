@@ -226,6 +226,9 @@ func (h *E2EHarness) createConfigWithHTTPPort(httpPort int) error {
 	config := fmt.Sprintf(`# E2E Test Configuration
 memory_root: %s
 
+claude:
+  timeout: 30
+
 analysis:
   max_file_size: 10485760
   skip_extensions: []

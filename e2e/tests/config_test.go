@@ -330,6 +330,7 @@ func TestConfig_MinimalConfiguration(t *testing.T) {
 		"claude": map[string]any{
 			"api_key": "sk-test-minimal-key",
 			"model":   "claude-3-5-sonnet-20241022",
+			"timeout": 30,
 		},
 	}
 

@@ -4,6 +4,7 @@
 
 1. [Overview](#overview)
 2. [Design Principles](#design-principles)
+   - [Configuration Tiers](#configuration-tiers)
    - [Layered Configuration Priority](#layered-configuration-priority)
    - [Error Accumulation Pattern](#error-accumulation-pattern)
    - [Path Expansion and Safety](#path-expansion-and-safety)
@@ -11,6 +12,7 @@
 3. [Key Components](#key-components)
    - [Configuration Loading](#configuration-loading)
    - [Configuration Types](#configuration-types)
+   - [Configuration Schema](#configuration-schema)
    - [Constants and Defaults](#constants-and-defaults)
    - [Validation System](#validation-system)
 4. [Integration Points](#integration-points)
@@ -29,6 +31,55 @@ The Config Manager implements a layered configuration approach where default val
 By centralizing all configuration management, the Config Manager provides a single source of truth for system behavior. All subsystems query configuration through strongly-typed structures, eliminating magic strings and enabling compile-time type checking. The subsystem also handles cross-cutting concerns like path expansion (tilde to home directory), security validation (preventing directory traversal), and environment variable resolution for sensitive values like API keys.
 
 ## Design Principles
+
+### Configuration Tiers
+
+The Config Manager organizes settings into three distinct tiers that balance flexibility with simplicity, making configuration approachable for new users while providing full control for advanced users.
+
+**Tier 1: Minimal (shown in initialized config.yaml)**
+These settings appear in the default configuration file and are commonly adjusted:
+- `memory_root` - Directory to index
+- `claude.api_key` - Claude API credentials
+- `claude.model` - Claude model for semantic analysis
+- `daemon.http_port` - HTTP API port (0 = disabled)
+- `graph.host`, `graph.port` - FalkorDB connection
+- `integrations.enabled` - List of enabled integrations
+
+**Tier 2: Advanced (documented, not shown by default)**
+These settings can be added to `config.yaml` to override sensible defaults:
+- `claude.max_tokens` - Maximum tokens per request (default: 1500)
+- `claude.timeout` - API request timeout in seconds (default: 30)
+- `claude.enable_vision` - Enable image analysis (default: true)
+- `analysis.max_file_size` - Maximum file size for analysis (default: 10MB)
+- `analysis.skip_extensions`, `analysis.skip_files` - File filtering
+- `daemon.workers`, `daemon.debounce_ms`, `daemon.rate_limit_per_min` - Worker pool tuning
+- `embeddings.provider` - Embedding provider (default: "openai")
+- `embeddings.model` - Embedding model (default: "text-embedding-3-small")
+- `embeddings.dimensions` - Vector dimensions (default: 1536)
+- `graph.similarity_threshold`, `graph.max_similar_files` - Graph tuning
+
+**Tier 3: Hardcoded (documented, not configurable)**
+These values are hardcoded for consistency and operational correctness:
+- Environment variable names: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FALKORDB_PASSWORD`
+- Application directory name: `.agentic-memorizer`
+- Configuration file name: `config.yaml`
+- Internal batch sizes and retry logic
+
+**Discovering Configuration Options:**
+Users can explore all available settings using the `config show-schema` command:
+```bash
+# Show all settings with defaults and descriptions
+agentic-memorizer config show-schema
+
+# Show only advanced settings
+agentic-memorizer config show-schema --advanced-only
+
+# Show only hardcoded conventions
+agentic-memorizer config show-schema --hardcoded-only
+
+# Output as YAML or JSON
+agentic-memorizer config show-schema --format yaml
+```
 
 ### Layered Configuration Priority
 
@@ -257,23 +308,19 @@ Configures Claude API integration:
 - `APIKey` - Direct API key (or empty to use ANTHROPIC_API_KEY environment variable)
 - `Model` - Claude model identifier (default: claude-sonnet-4-5-20250929)
 - `MaxTokens` - Maximum response length in tokens (default: 1500)
-
-Note: Vision support and timeout are hardcoded constants (`ClaudeEnableVision=true`, `ClaudeTimeoutSeconds=30`) in `internal/config/constants.go`.
+- `Timeout` - API request timeout in seconds (default: 30, valid range: 5-300)
+- `EnableVision` - Enable vision API for image analysis (default: true)
 
 **Hardcoded Settings:**
-The following settings have been moved to hardcoded constants in `internal/config/constants.go` to simplify configuration:
-- `ClaudeAPIKeyEnv` = "ANTHROPIC_API_KEY" - Environment variable for API key
-- `ClaudeEnableVision` = true - Vision analysis is always enabled
-- `ClaudeTimeoutSeconds` = 30 - API timeout in seconds
-- `GraphDatabase` = "memorizer" - FalkorDB database name
+The following settings are hardcoded constants in `internal/config/constants.go`:
+- `ClaudeAPIKeyEnv` = "ANTHROPIC_API_KEY" - Environment variable for Claude API key
 - `GraphPasswordEnv` = "FALKORDB_PASSWORD" - Environment variable for FalkorDB password
-- `EmbeddingsProvider` = "openai" - Only OpenAI embeddings supported
 - `EmbeddingsAPIKeyEnv` = "OPENAI_API_KEY" - Environment variable for embeddings API key
-- `EmbeddingsModel` = "text-embedding-3-small" - OpenAI embedding model
-- `EmbeddingsDimensions` = 1536 - Vector dimensions
 - `EmbeddingsCacheEnabled` = true - Embedding caching is always enabled
 - `EmbeddingsBatchSize` = 100 - Batch size for embedding generation
 - `OutputShowRecentDays` = 7 - Days for recent file display
+
+Use `config show-schema --hardcoded-only` to view all hardcoded settings with their reasons.
 
 **AnalysisConfig Structure:**
 Configures semantic analysis behavior:
@@ -324,6 +371,44 @@ Each field includes three tags:
 - `yaml` - For YAML serialization when writing configuration
 - `json` - For JSON serialization in API responses
 
+### Configuration Schema
+
+The Configuration Schema component (`internal/config/schema.go`) provides programmatic access to the complete configuration schema, including field metadata, defaults, tiers, and documentation.
+
+**Schema Types:**
+
+**ConfigSchema:**
+Root schema structure containing:
+- `Sections` - List of configuration sections (claude, daemon, analysis, etc.)
+- `Hardcoded` - List of non-configurable settings with reasons
+
+**SchemaSection:**
+Represents a configuration section:
+- `Name` - Section identifier (e.g., "claude", "daemon")
+- `Description` - Human-readable section description
+- `Fields` - List of fields in this section
+
+**SchemaField:**
+Describes a single configuration field:
+- `Name` - Field identifier (e.g., "timeout")
+- `Type` - Data type (string, int, bool, float64, []string)
+- `Default` - Default value
+- `Tier` - Configuration tier (minimal or advanced)
+- `HotReload` - Whether the setting can be changed without restart
+- `Description` - Human-readable field description
+
+**HardcodedSetting:**
+Describes a non-configurable constant:
+- `Name` - Constant identifier
+- `Value` - Hardcoded value
+- `Reason` - Explanation of why this is hardcoded
+
+**Usage:**
+The `GetConfigSchema()` function returns the complete schema, used by:
+- `config show-schema` command for schema discovery
+- Documentation generation tools
+- Configuration validation
+
 ### Constants and Defaults
 
 The Constants and Defaults component (`internal/config/constants.go`) centralizes all default values, application constants, and fallback behaviors, ensuring consistent behavior across the system.
@@ -353,7 +438,9 @@ A complete `Config` instance with all fields populated with production-ready def
 **Default Values Summary:**
 - Memory root: `~/.agentic-memorizer/memory`
 - Claude model: `claude-sonnet-4-5-20250929`
-- Max tokens: 1500
+- Claude max tokens: 1500
+- Claude timeout: 30 seconds
+- Claude enable vision: true
 - Max file size: 10485760 (10 MB)
 - Cache directory: `~/.agentic-memorizer/.cache`
 - Daemon workers: 3
@@ -371,6 +458,9 @@ A complete `Config` instance with all fields populated with production-ready def
 - Graph port: 6379
 - Graph similarity threshold: 0.7
 - Graph max similar files: 10
+- Embeddings provider: openai
+- Embeddings model: text-embedding-3-small
+- Embeddings dimensions: 1536
 
 **Derived Settings:**
 These settings are automatically computed:
@@ -396,6 +486,12 @@ The system uses structured validation with the `Validator` type accumulating err
 - API key required (directly or via ANTHROPIC_API_KEY environment variable)
 - Model name required (cannot be empty)
 - Max tokens range enforcement (1-8192 tokens)
+- Timeout range enforcement (5-300 seconds)
+
+**Embeddings Validation:**
+- Provider enumeration (only "openai" currently supported)
+- Model enumeration (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002)
+- Dimensions must match model (1536 for small/ada-002, 3072 for large)
 
 **Analysis Validation:**
 - Max file size non-negative check
@@ -502,10 +598,10 @@ The semantic analyzer creates its Claude API client using configuration values:
 - `cfg.Claude.APIKey` or resolved from `ANTHROPIC_API_KEY` environment variable
 - `cfg.Claude.Model` specifies which Claude model to use for analysis
 - `cfg.Claude.MaxTokens` limits response length
-- `config.ClaudeTimeoutSeconds` (hardcoded constant) configures request timeout
+- `cfg.Claude.Timeout` configures request timeout in seconds
 
 **Analysis Behavior:**
-- `config.ClaudeEnableVision` (hardcoded constant) enables image analysis using vision capabilities
+- `cfg.Claude.EnableVision` enables/disables image analysis using vision capabilities
 - `cfg.Analysis.Enabled` is derived from API key presence (enabled when Claude API key is set)
 - `cfg.Analysis.MaxFileSize` limits files sent for analysis
 
@@ -624,3 +720,7 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 **MCP Log File**: Path to the Model Context Protocol (MCP) server log output, separate from daemon logs, enabling independent logging configuration for MCP integrations (typically `~/.agentic-memorizer/mcp.log`).
 
 **MCP Log Level**: Logging verbosity control for MCP server operations (debug, info, warn, error), allows independent configuration from daemon logging for troubleshooting MCP integration issues.
+
+**Configuration Tier**: Categorization of settings as minimal (shown in default config), advanced (documented but hidden by default), or hardcoded (not configurable). Enables approachable initial configuration while providing full control for power users.
+
+**Config Show-Schema**: CLI command (`config show-schema`) that displays the complete configuration schema including all fields, types, defaults, tiers, and hardcoded settings. Supports table, YAML, and JSON output formats.

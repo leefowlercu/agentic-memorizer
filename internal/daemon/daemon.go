@@ -125,11 +125,11 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 			cfg.Claude.APIKey,
 			cfg.Claude.Model,
 			cfg.Claude.MaxTokens,
-			config.ClaudeTimeoutSeconds, // See internal/config/constants.go
+			cfg.Claude.Timeout,
 		)
 		semanticAnalyzer = semantic.NewAnalyzer(
 			client,
-			config.ClaudeEnableVision, // See internal/config/constants.go
+			cfg.Claude.EnableVision,
 			cfg.Analysis.MaxFileSize,
 		)
 	}
@@ -428,10 +428,18 @@ func (d *Daemon) rebuildIndex() error {
 		apiKey := cfg.Embeddings.APIKey
 
 		if apiKey != "" {
+			// Validate provider (only OpenAI supported for now)
+			if cfg.Embeddings.Provider != "" && cfg.Embeddings.Provider != "openai" {
+				logger.Warn("only openai embeddings provider supported",
+					"configured", cfg.Embeddings.Provider,
+					"using", "openai",
+				)
+			}
+
 			embConfig := embeddings.OpenAIConfig{
 				APIKey:     apiKey,
-				Model:      config.EmbeddingsModel,      // Hardcoded convention
-				Dimensions: config.EmbeddingsDimensions, // Hardcoded convention
+				Model:      cfg.Embeddings.Model,
+				Dimensions: cfg.Embeddings.Dimensions,
 			}
 			var err error
 			embeddingProvider, err = embeddings.NewOpenAIProvider(embConfig, logger)
@@ -439,8 +447,9 @@ func (d *Daemon) rebuildIndex() error {
 				logger.Warn("failed to create embedding provider", "error", err)
 			} else {
 				logger.Info("embedding provider initialized",
-					"model", config.EmbeddingsModel,
-					"dimensions", config.EmbeddingsDimensions,
+					"provider", "openai",
+					"model", cfg.Embeddings.Model,
+					"dimensions", cfg.Embeddings.Dimensions,
 				)
 			}
 
@@ -871,11 +880,11 @@ func (d *Daemon) updateSemanticAnalyzer(cfg *config.Config) error {
 		cfg.Claude.APIKey,
 		cfg.Claude.Model,
 		cfg.Claude.MaxTokens,
-		config.ClaudeTimeoutSeconds, // Hardcoded convention
+		cfg.Claude.Timeout,
 	)
 	analyzer := semantic.NewAnalyzer(
 		client,
-		config.ClaudeEnableVision, // Hardcoded convention
+		cfg.Claude.EnableVision,
 		cfg.Analysis.MaxFileSize,
 	)
 

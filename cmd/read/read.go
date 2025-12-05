@@ -101,7 +101,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
 			Port:     cfg.Graph.Port,
-			Database: config.GraphDatabase, // Hardcoded convention
+			Database: cfg.Graph.Database,
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),

@@ -17,8 +17,8 @@ type ClaudeConfig struct {
 	APIKey       string `mapstructure:"api_key" yaml:"api_key"`
 	Model        string `mapstructure:"model" yaml:"model"`
 	MaxTokens    int    `mapstructure:"max_tokens" yaml:"max_tokens"`
-	Timeout      int    `mapstructure:"timeout" yaml:"timeout"`               // API request timeout in seconds (5-300)
-	EnableVision bool   `mapstructure:"enable_vision" yaml:"enable_vision"`   // Enable vision API for image analysis
+	Timeout      int    `mapstructure:"timeout" yaml:"timeout"`             // API request timeout in seconds (5-300)
+	EnableVision bool   `mapstructure:"enable_vision" yaml:"enable_vision"` // Enable vision API for image analysis
 }
 
 type AnalysisConfig struct {
@@ -79,7 +79,7 @@ type GraphConfig struct {
 type EmbeddingsConfig struct {
 	Enabled    bool   `mapstructure:"enabled" yaml:"enabled"`
 	APIKey     string `mapstructure:"api_key" yaml:"api_key"`
-	Provider   string `mapstructure:"provider" yaml:"provider"`       // Embedding provider (only "openai" currently supported)
-	Model      string `mapstructure:"model" yaml:"model"`             // Embedding model (e.g., text-embedding-3-small)
-	Dimensions int    `mapstructure:"dimensions" yaml:"dimensions"`   // Vector dimensions (must match model)
+	Provider   string `mapstructure:"provider" yaml:"provider"`     // Embedding provider (only "openai" currently supported)
+	Model      string `mapstructure:"model" yaml:"model"`           // Embedding model (e.g., text-embedding-3-small)
+	Dimensions int    `mapstructure:"dimensions" yaml:"dimensions"` // Vector dimensions (must match model)
 }

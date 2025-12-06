@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	showSchemaFormat       string
-	showSchemaAdvancedOnly bool
+	showSchemaFormat        string
+	showSchemaAdvancedOnly  bool
 	showSchemaHardcodedOnly bool
 )
 

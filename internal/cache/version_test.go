@@ -27,18 +27,18 @@ func TestCacheVersion(t *testing.T) {
 
 func TestParseCacheVersion(t *testing.T) {
 	tests := []struct {
-		name           string
-		cached         *types.CachedAnalysis
-		wantSchema     int
-		wantMetadata   int
-		wantSemantic   int
+		name         string
+		cached       *types.CachedAnalysis
+		wantSchema   int
+		wantMetadata int
+		wantSemantic int
 	}{
 		{
-			name:           "nil entry",
-			cached:         nil,
-			wantSchema:     0,
-			wantMetadata:   0,
-			wantSemantic:   0,
+			name:         "nil entry",
+			cached:       nil,
+			wantSchema:   0,
+			wantMetadata: 0,
+			wantSemantic: 0,
 		},
 		{
 			name: "legacy entry (all zeros)",

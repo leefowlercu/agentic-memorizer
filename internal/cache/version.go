@@ -1,6 +1,6 @@
 // Package cache provides semantic analysis caching with content-addressable storage.
 //
-// Cache Versioning System
+// # Cache Versioning System
 //
 // The cache uses a three-tier versioning system to detect when cached entries
 // become stale due to changes in extraction logic, analysis prompts, or data structures.

@@ -1,11 +1,15 @@
 package subcommands
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
+
+var validateFormat string
 
 var ValidateCmd = &cobra.Command{
 	Use:   "validate",
@@ -20,13 +24,36 @@ var ValidateCmd = &cobra.Command{
 	Example: `  # Validate current configuration
   agentic-memorizer config validate
 
-  # Validate specific config file
-  agentic-memorizer config validate --config /path/to/config.yaml`,
+  # Validate and show full config in YAML
+  agentic-memorizer config validate --format yaml
+
+  # Validate and show full config in JSON
+  agentic-memorizer config validate --format json`,
 	PreRunE: validateValidate,
 	RunE:    runValidate,
 }
 
+func init() {
+	ValidateCmd.Flags().StringVar(&validateFormat, "format", "",
+		"Output format for full configuration (yaml, json)")
+}
+
 func validateValidate(cmd *cobra.Command, args []string) error {
+	// Validate format if specified
+	if validateFormat != "" {
+		validFormats := []string{"yaml", "json"}
+		found := false
+		for _, f := range validFormats {
+			if validateFormat == f {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("invalid format %q; valid formats are: yaml, json", validateFormat)
+		}
+	}
+
 	// All errors after this are runtime errors
 	cmd.SilenceUsage = true
 	return nil
@@ -51,14 +78,37 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("validation failed")
 	}
 
+	// Simple success message
 	fmt.Println("✓ Configuration is valid")
-	fmt.Println()
-	fmt.Printf("Configuration file: %s\n", config.GetConfigPath())
-	fmt.Printf("Memory root: %s\n", cfg.MemoryRoot)
-	fmt.Printf("Cache directory: %s\n", cfg.Analysis.CacheDir)
-	fmt.Printf("Graph host: %s:%d\n", cfg.Graph.Host, cfg.Graph.Port)
-	fmt.Printf("MCP daemon: %s\n", cfg.MCP.GetDaemonURL())
-	fmt.Printf("MCP log level: %s\n", cfg.MCP.LogLevel)
 
+	// If format specified, print full config
+	if validateFormat != "" {
+		fmt.Println()
+		switch validateFormat {
+		case "yaml":
+			return printConfigYAML(cfg)
+		case "json":
+			return printConfigJSON(cfg)
+		}
+	}
+
+	return nil
+}
+
+func printConfigYAML(cfg *config.Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config to YAML; %w", err)
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+func printConfigJSON(cfg *config.Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config to JSON; %w", err)
+	}
+	fmt.Println(string(data))
 	return nil
 }

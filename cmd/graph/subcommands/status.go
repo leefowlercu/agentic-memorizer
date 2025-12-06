@@ -3,6 +3,8 @@ package subcommands
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
@@ -73,7 +75,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		MemoryRoot: cfg.MemoryRoot,
 	}
 
-	manager := graph.NewManager(managerConfig, nil)
+	// Use discard logger to suppress graph initialization logs
+	discardLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	manager := graph.NewManager(managerConfig, discardLogger)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

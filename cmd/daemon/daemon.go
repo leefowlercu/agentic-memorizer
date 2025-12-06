@@ -10,9 +10,9 @@ import (
 var DaemonCmd = &cobra.Command{
 	Use:   "daemon",
 	Short: "Manage the background indexing daemon",
-	Long: "\nManage the background indexing daemon that maintains a precomputed index.\n\n" +
-		"The daemon watches the memory directory for changes and automatically rebuilds " +
-		"the index, enabling quick startup for the read command.",
+	Long: "\nManage the background indexing daemon that maintains the knowledge graph.\n\n" +
+		"The daemon watches the memory directory for changes and automatically updates " +
+		"the graph database, enabling quick access via the read command.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("please specify a subcommand: start, stop, status, restart, rebuild, logs, systemctl, or launchctl")
 	},

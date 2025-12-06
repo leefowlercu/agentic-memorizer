@@ -18,7 +18,8 @@ var StatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show daemon status",
 	Long: "\nShow the current status of the background indexing daemon.\n\n" +
-		"Displays whether the daemon is running, index statistics, and configuration details.",
+		"Displays whether the daemon is running, graph database statistics (queried directly from FalkorDB), " +
+		"and configuration details.",
 	PreRunE: validateStatus,
 	RunE:    runStatus,
 }

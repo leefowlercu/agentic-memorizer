@@ -74,6 +74,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			APIKey:    "test-api-key",
 			Model:     "claude-3-haiku-20240307",
 			MaxTokens: 1000,
+			Timeout:   30, // API request timeout in seconds (5-300)
 		},
 		Analysis: config.AnalysisConfig{
 			Enabled:     false, // Disable analysis for faster tests

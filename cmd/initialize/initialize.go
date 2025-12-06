@@ -222,12 +222,12 @@ func runInteractive(cmd *cobra.Command) error {
 		return nil
 	}
 
-	// Finalize configuration
-	if err := finalizeInit(configPath, result.Config); err != nil {
+	// Finalize configuration (skip next steps - will print after startup handling)
+	if err := finalizeInit(configPath, result.Config, true); err != nil {
 		return err
 	}
 
-	// Handle startup step choices
+	// Handle startup step choices and print next steps with context
 	return handleStartupChoices(result)
 }
 
@@ -328,8 +328,8 @@ func runUnattended(cmd *cobra.Command) error {
 	integrationNames, _ := cmd.Flags().GetStringSlice("integrations")
 	cfg.Integrations.Enabled = integrationNames
 
-	// Finalize configuration
-	return finalizeInit(configPath, &cfg)
+	// Finalize configuration (print next steps for unattended mode)
+	return finalizeInit(configPath, &cfg, false)
 }
 
 func handleStartupChoices(result *tuiinit.WizardResult) error {
@@ -403,17 +403,7 @@ func handleStartupChoices(result *tuiinit.WizardResult) error {
 			}
 
 		case 1: // StartLater
-			fmt.Println("\nTo start the daemon manually:")
-			fmt.Println("  agentic-memorizer daemon start")
-			fmt.Println("\nOr enable auto-start with your service manager:")
-			if runtime.GOOS == "linux" {
-				fmt.Println("  systemctl --user enable agentic-memorizer")
-				fmt.Println("  systemctl --user start agentic-memorizer")
-			} else if runtime.GOOS == "darwin" {
-				user := os.Getenv("USER")
-				fmt.Printf("  launchctl enable gui/$(id -u)/com.%s.agentic-memorizer\n", user)
-				fmt.Printf("  launchctl kickstart -k gui/$(id -u)/com.%s.agentic-memorizer\n", user)
-			}
+			// Service installed but not started - instructions will be shown in printNextSteps()
 		}
 
 	case 1: // InstallSystem
@@ -421,14 +411,18 @@ func handleStartupChoices(result *tuiinit.WizardResult) error {
 
 	case 2: // InstallSkip
 		fmt.Println("\nAutomatic startup skipped.")
-		fmt.Println("\nTo start the daemon manually:")
-		fmt.Println("  agentic-memorizer daemon start")
 	}
+
+	// Print next steps with startup context
+	printNextSteps(result.Config, &StartupInfo{
+		InstallChoice: int(installChoice),
+		StartChoice:   int(startChoice),
+	})
 
 	return nil
 }
 
-func finalizeInit(configPath string, cfg *config.Config) error {
+func finalizeInit(configPath string, cfg *config.Config, skipNextSteps bool) error {
 	// Create directories
 	if err := os.MkdirAll(cfg.MemoryRoot, 0755); err != nil {
 		return fmt.Errorf("failed to create memory directory; %w", err)
@@ -484,8 +478,10 @@ func finalizeInit(configPath string, cfg *config.Config) error {
 		}
 	}
 
-	// Print next steps
-	printNextSteps(cfg)
+	// Print next steps (unless interactive mode will handle it later)
+	if !skipNextSteps {
+		printNextSteps(cfg, nil)
+	}
 
 	return nil
 }
@@ -527,7 +523,13 @@ func setupIntegrations(integrationNames []string) ([]string, error) {
 	return enabledIntegrations, nil
 }
 
-func printNextSteps(cfg *config.Config) {
+// StartupInfo contains information about service-manager setup choices
+type StartupInfo struct {
+	InstallChoice int // 0=InstallUser, 1=InstallSystem, 2=InstallSkip
+	StartChoice   int // 0=StartNow, 1=StartLater (only relevant for InstallUser)
+}
+
+func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 	apiKeyConfigured := cfg.Claude.APIKey != "" || os.Getenv(config.ClaudeAPIKeyEnv) != ""
 	falkorDBRunning := docker.IsFalkorDBRunning(cfg.Graph.Port)
 
@@ -553,14 +555,45 @@ func printNextSteps(cfg *config.Config) {
 	fmt.Printf("%d. Add files to %s\n", stepNum, cfg.MemoryRoot)
 	stepNum++
 
-	fmt.Printf("%d. Start the daemon:\n", stepNum)
-	fmt.Printf("   # Option A: Manual (foreground)\n")
-	fmt.Printf("   agentic-memorizer daemon start\n\n")
-	fmt.Printf("   # Option B: Manual (background)\n")
-	fmt.Printf("   nohup agentic-memorizer daemon start &\n\n")
-	fmt.Printf("   # Option C: System service (background, recommended)\n")
-	fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
-	fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
+	// Only show daemon startup instructions if service-manager was NOT set up,
+	// or if it was set up but the daemon is not yet started
+	showDaemonInstructions := true
+	if startup != nil {
+		if startup.InstallChoice == 0 && startup.StartChoice == 0 {
+			// InstallUser + StartNow: daemon already started via service-manager
+			showDaemonInstructions = false
+		} else if startup.InstallChoice == 1 {
+			// InstallSystem: system-level instructions already shown
+			showDaemonInstructions = false
+		}
+	}
+
+	if showDaemonInstructions {
+		fmt.Printf("%d. Start the daemon:\n", stepNum)
+		if startup != nil && startup.InstallChoice == 0 && startup.StartChoice == 1 {
+			// InstallUser + StartLater: service is installed but not started
+			fmt.Printf("   # Service installed - enable and start it:\n")
+			if runtime.GOOS == "linux" {
+				fmt.Printf("   systemctl --user enable agentic-memorizer\n")
+				fmt.Printf("   systemctl --user start agentic-memorizer\n\n")
+			} else if runtime.GOOS == "darwin" {
+				user := os.Getenv("USER")
+				fmt.Printf("   launchctl enable gui/$(id -u)/com.%s.agentic-memorizer\n", user)
+				fmt.Printf("   launchctl kickstart -k gui/$(id -u)/com.%s.agentic-memorizer\n\n", user)
+			}
+			fmt.Printf("   # Or manually (foreground):\n")
+			fmt.Printf("   agentic-memorizer daemon start\n")
+		} else {
+			// InstallSkip or unattended mode: show all options
+			fmt.Printf("   # Option A: Manual (foreground)\n")
+			fmt.Printf("   agentic-memorizer daemon start\n\n")
+			fmt.Printf("   # Option B: Manual (background)\n")
+			fmt.Printf("   nohup agentic-memorizer daemon start &\n\n")
+			fmt.Printf("   # Option C: System service (background, recommended)\n")
+			fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
+			fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
+		}
+	}
 }
 
 // Helper functions

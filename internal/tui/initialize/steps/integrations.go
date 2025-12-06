@@ -117,11 +117,12 @@ func (s *IntegrationsStep) getIntelligentSubtitle() string {
 	alreadyConfigured := s.countConfiguredIntegrations()
 	available := len(s.available)
 
-	if alreadyConfigured == 0 {
+	switch alreadyConfigured {
+	case 0:
 		return "Select integrations to configure"
-	} else if alreadyConfigured == available {
+	case available:
 		return "Review configured integrations"
-	} else {
+	default:
 		return "Review and configure integrations"
 	}
 }

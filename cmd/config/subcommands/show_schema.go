@@ -3,6 +3,7 @@ package subcommands
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
@@ -50,13 +51,7 @@ func init() {
 func validateShowSchema(cmd *cobra.Command, args []string) error {
 	// Validate format
 	validFormats := []string{"table", "yaml", "json"}
-	found := false
-	for _, f := range validFormats {
-		if showSchemaFormat == f {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(validFormats, showSchemaFormat)
 	if !found {
 		return fmt.Errorf("invalid format %q; valid formats are: %s", showSchemaFormat, strings.Join(validFormats, ", "))
 	}

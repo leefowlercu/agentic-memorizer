@@ -21,8 +21,8 @@ test: setup ## Run full E2E test suite
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running E2E tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 30m ./e2e/tests/...
-	@echo "Stopping services..."
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-quick: setup ## Run quick smoke tests only
 	@echo "Starting FalkorDB..."
@@ -31,7 +31,8 @@ test-quick: setup ## Run quick smoke tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running smoke tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 5m -run "^TestSmoke" ./e2e/tests/...
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-verbose: setup ## Run tests with verbose output
 	@echo "Starting FalkorDB..."
@@ -40,7 +41,8 @@ test-verbose: setup ## Run tests with verbose output
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running tests (verbose)..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 30m -count=1 ./e2e/tests/...
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-cli: setup ## Run CLI command tests only
 	@echo "Starting FalkorDB..."
@@ -49,7 +51,8 @@ test-cli: setup ## Run CLI command tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running CLI tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/cli_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-daemon: setup ## Run daemon lifecycle tests only
 	@echo "Starting FalkorDB..."
@@ -58,7 +61,8 @@ test-daemon: setup ## Run daemon lifecycle tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running daemon tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/daemon_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-mcp: setup ## Run MCP server tests only
 	@echo "Starting FalkorDB..."
@@ -67,7 +71,8 @@ test-mcp: setup ## Run MCP server tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running MCP tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/mcp_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-integrations: setup ## Run integration adapter tests only
 	@echo "Starting FalkorDB..."
@@ -76,7 +81,8 @@ test-integrations: setup ## Run integration adapter tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running integration tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/integration_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-config: setup ## Run configuration tests only
 	@echo "Starting FalkorDB..."
@@ -85,7 +91,8 @@ test-config: setup ## Run configuration tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running config tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/config_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-graph: setup ## Run FalkorDB graph tests only
 	@echo "Starting FalkorDB..."
@@ -94,7 +101,8 @@ test-graph: setup ## Run FalkorDB graph tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running graph tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/graph_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 test-e2e: setup ## Run end-to-end workflow tests only
 	@echo "Starting FalkorDB..."
@@ -103,7 +111,8 @@ test-e2e: setup ## Run end-to-end workflow tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running E2E workflow tests..."
 	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/e2e_test.go
-	docker-compose down
+	@echo "Stopping services and cleaning volumes..."
+	docker-compose down -v
 
 clean: ## Stop services and clean up
 	@echo "Stopping services..."

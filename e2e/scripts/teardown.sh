@@ -8,13 +8,12 @@ echo "Tearing down E2E test environment..."
 
 cd "$(dirname "$0")/.."
 
-# Stop all services
-echo "Stopping Docker services..."
-docker-compose down
-
-# Optionally remove volumes
-if [ "$1" = "--clean-volumes" ]; then
-    echo "Removing Docker volumes..."
+# Stop all services and remove volumes by default
+echo "Stopping Docker services and removing volumes..."
+if [ "$1" = "--keep-volumes" ]; then
+    echo "Note: Keeping volumes (use without --keep-volumes to remove)"
+    docker-compose down
+else
     docker-compose down -v
 fi
 

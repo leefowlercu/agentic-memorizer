@@ -97,7 +97,7 @@ func TestErrorHandling_CorruptedConfigFile(t *testing.T) {
 	}
 }
 
-// TestErrorHandling_GracefulDegradation tests daemon without FalkorDB
+// TestErrorHandling_GracefulDegradation tests daemon fails without FalkorDB
 func TestErrorHandling_GracefulDegradation(t *testing.T) {
 	h := harness.New(t)
 	if err := h.Setup(); err != nil {
@@ -152,35 +152,26 @@ mcp:
 		t.Fatalf("Failed to add file: %v", err)
 	}
 
-	// Start daemon
-	ctx, cancel := context.WithCancel(context.Background())
+	// Try to start daemon (should fail without working graph DB)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start daemon: %v", err)
-	}
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Error("Daemon started without FalkorDB (should have failed)")
+		t.Logf("Output: %s", string(output))
 
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
-
-	// Wait for daemon to start
-	if err := h.WaitForHealthy(30 * time.Second); err != nil {
-		t.Logf("Daemon not healthy (expected without graph): %v", err)
+		// Stop daemon if it somehow started
+		stopCmd := exec.Command(h.BinaryPath, "daemon", "stop")
+		stopCmd.Env = append(stopCmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
+		stopCmd.Run()
 	} else {
-		t.Log("Daemon started successfully despite unavailable graph (graceful degradation)")
-
-		// Verify health endpoint still works
-		health, err := h.HTTPClient.Health()
-		if err != nil {
-			t.Errorf("Health endpoint failed: %v", err)
-		} else {
-			t.Logf("Health response: %+v", health)
-		}
+		t.Log("Daemon correctly failed to start without FalkorDB")
+		t.Logf("Error: %v", err)
+		t.Logf("Output: %s", string(output))
 	}
 }
 

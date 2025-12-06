@@ -50,6 +50,7 @@ func InitConfig() error {
 
 	// Power-user settings (not included in minimal initialization config)
 	viper.SetDefault("claude.max_tokens", DefaultConfig.Claude.MaxTokens)
+	viper.SetDefault("claude.timeout", DefaultConfig.Claude.Timeout)
 	viper.SetDefault("analysis.enabled", DefaultConfig.Analysis.Enabled)
 	viper.SetDefault("analysis.max_file_size", DefaultConfig.Analysis.MaxFileSize)
 	viper.SetDefault("analysis.skip_extensions", DefaultConfig.Analysis.SkipExtensions)
@@ -297,16 +298,6 @@ func GetAppDir() (string, error) {
 		return "", fmt.Errorf("failed to get home directory; %w", err)
 	}
 	return filepath.Join(home, AppDirName), nil
-}
-
-// GetIndexPath returns the path to the precomputed index file.
-// The index is stored at ~/.agentic-memorizer/index.json
-func GetIndexPath() (string, error) {
-	appDir, err := GetAppDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(appDir, IndexFile), nil
 }
 
 // GetPIDPath returns the daemon PID file path.

@@ -367,11 +367,6 @@ func GetConfigSchema() *ConfigSchema {
 				Reason: "Configuration file naming convention",
 			},
 			{
-				Name:   "IndexFile",
-				Value:  IndexFile,
-				Reason: "Index file naming convention",
-			},
-			{
 				Name:   "DaemonLogFile",
 				Value:  DaemonLogFile,
 				Reason: "Daemon log file naming convention",

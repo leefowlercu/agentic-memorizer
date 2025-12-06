@@ -6,7 +6,6 @@ const (
 	MemoryDirName = "memory"
 	CacheDirName  = ".cache"
 	ConfigFile    = "config.yaml"
-	IndexFile     = "index.json"
 	DaemonLogFile = "daemon.log"
 	DaemonPIDFile = "daemon.pid"
 	MCPLogFile    = "mcp.log"

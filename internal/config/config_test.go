@@ -128,65 +128,6 @@ func TestGetAppDir_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestGetIndexPath(t *testing.T) {
-	tests := []struct {
-		name      string
-		appDirEnv string
-		wantError bool
-		validate  func(t *testing.T, result string)
-	}{
-		{
-			name:      "default index path",
-			appDirEnv: "",
-			wantError: false,
-			validate: func(t *testing.T, result string) {
-				if !strings.HasSuffix(result, IndexFile) {
-					t.Errorf("expected path to end with %q, got %q", IndexFile, result)
-				}
-			},
-		},
-		{
-			name:      "custom app dir index path",
-			appDirEnv: "/tmp/test-app",
-			wantError: false,
-			validate: func(t *testing.T, result string) {
-				expected := filepath.Join("/tmp/test-app", IndexFile)
-				if result != expected {
-					t.Errorf("expected %q, got %q", expected, result)
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.appDirEnv != "" {
-				t.Setenv("MEMORIZER_APP_DIR", tt.appDirEnv)
-			} else {
-				os.Unsetenv("MEMORIZER_APP_DIR")
-			}
-
-			result, err := GetIndexPath()
-
-			if tt.wantError {
-				if err == nil {
-					t.Error("GetIndexPath() expected error but got nil")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("GetIndexPath() unexpected error: %v", err)
-				return
-			}
-
-			if tt.validate != nil {
-				tt.validate(t, result)
-			}
-		})
-	}
-}
-
 func TestGetPIDPath(t *testing.T) {
 	tests := []struct {
 		name      string

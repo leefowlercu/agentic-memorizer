@@ -107,10 +107,7 @@ func (s *HTTPServer) Start(port int) error {
 	// Health check
 	mux.HandleFunc("/health", s.handleHealth)
 
-	// SSE stream (legacy path for backwards compatibility)
-	mux.HandleFunc("/notifications/stream", s.hub.HandleSSE)
-
-	// SSE stream (new path)
+	// SSE stream
 	mux.HandleFunc("/sse", s.hub.HandleSSE)
 
 	// API v1 endpoints

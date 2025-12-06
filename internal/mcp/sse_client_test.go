@@ -21,7 +21,7 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 	mux := http.NewServeMux()
 	connected := make(chan bool, 1)
 
-	mux.HandleFunc("/notifications/stream", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		// Verify headers
 		if r.Header.Get("Accept") != "text/event-stream" {
 			t.Errorf("Expected Accept header 'text/event-stream', got %s", r.Header.Get("Accept"))
@@ -65,7 +65,7 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 		Files: []types.FileEntry{},
 	}
 	srv := NewServer(idx, logger, "")
-	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
+	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
 
 	// Start client
 	srv.sseClient.Start()
@@ -98,7 +98,7 @@ func TestSSEClient_ReceiveNotification(t *testing.T) {
 	mux := http.NewServeMux()
 	notificationReceived := make(chan bool, 1)
 
-	mux.HandleFunc("/notifications/stream", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -141,7 +141,7 @@ func TestSSEClient_ReceiveNotification(t *testing.T) {
 	// Create SSE client (index reload will be processed from SSE event)
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
 	srv := NewServer(initialIndex, logger, "")
-	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
+	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
 
 	// Start client
 	srv.sseClient.Start()
@@ -169,7 +169,7 @@ func TestSSEClient_AutoReconnect(t *testing.T) {
 	var countMu sync.Mutex
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		countMu.Lock()
 		connectionCount++
 		count := connectionCount
@@ -210,7 +210,7 @@ func TestSSEClient_AutoReconnect(t *testing.T) {
 		Files: []types.FileEntry{},
 	}
 	srv := NewServer(idx, logger, "")
-	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
+	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
 
 	// Start client
 	srv.sseClient.Start()
@@ -237,7 +237,7 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 	maxClients := make(chan int, 1)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		countMu.Lock()
 		clientCount++
 		current := clientCount
@@ -290,7 +290,7 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 			Files: []types.FileEntry{},
 		}
 		srv := NewServer(idx, logger, "")
-		clients[i] = NewSSEClient(fmt.Sprintf("http://localhost:%d/notifications/stream", port), srv, logger)
+		clients[i] = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
 		clients[i].Start()
 	}
 
@@ -319,7 +319,7 @@ func TestSSEClient_DaemonContinuesWithoutClients(t *testing.T) {
 	mux := http.NewServeMux()
 	broadcastCount := 0
 
-	mux.HandleFunc("/notifications/stream", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, _ := w.(http.Flusher)
 

@@ -21,7 +21,7 @@ func TestSSEHub_MultipleClients(t *testing.T) {
 
 	// Start SSE server
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
+	mux.HandleFunc("/sse", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -48,7 +48,7 @@ func TestSSEHub_MultipleClients(t *testing.T) {
 
 	for i := 0; i < numClients; i++ {
 		go func() {
-			resp, err := http.Get(baseURL + "/notifications/stream")
+			resp, err := http.Get(baseURL + "/sse")
 			if err != nil {
 				return
 			}
@@ -88,7 +88,7 @@ func TestSSEHub_Broadcast(t *testing.T) {
 	hub := NewSSEHub(logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
+	mux.HandleFunc("/sse", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -116,7 +116,7 @@ func TestSSEHub_Broadcast(t *testing.T) {
 
 	for i := 0; i < numClients; i++ {
 		go func() {
-			resp, err := http.Get(baseURL + "/notifications/stream")
+			resp, err := http.Get(baseURL + "/sse")
 			if err != nil {
 				return
 			}
@@ -178,7 +178,7 @@ func TestSSEHub_Keepalive(t *testing.T) {
 	hub := NewSSEHub(logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
+	mux.HandleFunc("/sse", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -203,7 +203,7 @@ func TestSSEHub_Keepalive(t *testing.T) {
 	keepaliveReceived := make(chan bool, 1)
 
 	go func() {
-		resp, err := http.Get(baseURL + "/notifications/stream")
+		resp, err := http.Get(baseURL + "/sse")
 		if err != nil {
 			return
 		}
@@ -234,7 +234,7 @@ func TestSSEHub_GracefulShutdown(t *testing.T) {
 	hub := NewSSEHub(logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/notifications/stream", hub.HandleSSE)
+	mux.HandleFunc("/sse", hub.HandleSSE)
 
 	server := &http.Server{
 		Handler: mux,
@@ -252,7 +252,7 @@ func TestSSEHub_GracefulShutdown(t *testing.T) {
 
 	// Connect a client
 	go func() {
-		resp, err := http.Get(baseURL + "/notifications/stream")
+		resp, err := http.Get(baseURL + "/sse")
 		if err != nil {
 			return
 		}

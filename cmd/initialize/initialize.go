@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/docker"
@@ -12,6 +14,7 @@ import (
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/codex"  // Register Codex adapter
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/gemini" // Register Gemini adapter
+	"github.com/leefowlercu/agentic-memorizer/internal/servicemanager"
 	tuiinit "github.com/leefowlercu/agentic-memorizer/internal/tui/initialize"
 	"github.com/spf13/cobra"
 )
@@ -93,6 +96,11 @@ func init() {
 }
 
 func validateInit(cmd *cobra.Command, args []string) error {
+	// Check platform support for service manager integration
+	if !servicemanager.IsPlatformSupported() {
+		return fmt.Errorf("service manager integration only supported on Linux and macOS; current platform: %s", runtime.GOOS)
+	}
+
 	unattended, _ := cmd.Flags().GetBool("unattended")
 
 	// Validate mutually exclusive flags
@@ -215,7 +223,12 @@ func runInteractive(cmd *cobra.Command) error {
 	}
 
 	// Finalize configuration
-	return finalizeInit(configPath, result.Config)
+	if err := finalizeInit(configPath, result.Config); err != nil {
+		return err
+	}
+
+	// Handle startup step choices
+	return handleStartupChoices(result)
 }
 
 func runUnattended(cmd *cobra.Command) error {
@@ -317,6 +330,102 @@ func runUnattended(cmd *cobra.Command) error {
 
 	// Finalize configuration
 	return finalizeInit(configPath, &cfg)
+}
+
+func handleStartupChoices(result *tuiinit.WizardResult) error {
+	if result.StartupStep == nil {
+		// No startup step (shouldn't happen)
+		return nil
+	}
+
+	step := result.StartupStep
+	installChoice := step.GetInstallChoice()
+	startChoice := step.GetStartChoice()
+
+	switch installChoice {
+	case 0: // InstallUser (imported as steps.InstallUser but we can't access it here)
+		installPath := step.GetInstallPath()
+		fmt.Printf("\n✓ Service installed: %s\n", installPath)
+
+		switch startChoice {
+		case 0: // StartNow
+			fmt.Println("\nEnabling and starting daemon via service manager...")
+
+			if runtime.GOOS == "linux" {
+				// systemd user service
+				if err := runCommand("systemctl", "--user", "daemon-reload"); err != nil {
+					return fmt.Errorf("failed to reload systemd daemon; %w", err)
+				}
+				if err := runCommand("systemctl", "--user", "enable", "agentic-memorizer"); err != nil {
+					return fmt.Errorf("failed to enable service; %w", err)
+				}
+				if err := runCommand("systemctl", "--user", "start", "agentic-memorizer"); err != nil {
+					return fmt.Errorf("failed to start service; %w", err)
+				}
+				fmt.Println("✓ Daemon enabled and started via systemd")
+
+			} else if runtime.GOOS == "darwin" {
+				// launchd user agent
+				user := os.Getenv("USER")
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return fmt.Errorf("failed to get home directory; %w", err)
+				}
+
+				// Get UID
+				uidCmd := exec.Command("id", "-u")
+				uidOutput, err := uidCmd.Output()
+				if err != nil {
+					return fmt.Errorf("failed to get UID; %w", err)
+				}
+				uid := strings.TrimSpace(string(uidOutput))
+
+				plistPath := fmt.Sprintf("%s/Library/LaunchAgents/com.%s.agentic-memorizer.plist", home, user)
+				serviceName := fmt.Sprintf("gui/%s/com.%s.agentic-memorizer", uid, user)
+
+				// Bootstrap (load) the agent
+				if err := runCommand("launchctl", "bootstrap", fmt.Sprintf("gui/%s", uid), plistPath); err != nil {
+					// Ignore error if already loaded
+					fmt.Printf("Note: Service may already be loaded (ignoring bootstrap error)\n")
+				}
+
+				// Enable the agent
+				if err := runCommand("launchctl", "enable", serviceName); err != nil {
+					return fmt.Errorf("failed to enable service; %w", err)
+				}
+
+				// Start the agent
+				if err := runCommand("launchctl", "kickstart", "-k", serviceName); err != nil {
+					return fmt.Errorf("failed to start service; %w", err)
+				}
+
+				fmt.Println("✓ Daemon enabled and started via launchd")
+			}
+
+		case 1: // StartLater
+			fmt.Println("\nTo start the daemon manually:")
+			fmt.Println("  agentic-memorizer daemon start")
+			fmt.Println("\nOr enable auto-start with your service manager:")
+			if runtime.GOOS == "linux" {
+				fmt.Println("  systemctl --user enable agentic-memorizer")
+				fmt.Println("  systemctl --user start agentic-memorizer")
+			} else if runtime.GOOS == "darwin" {
+				user := os.Getenv("USER")
+				fmt.Printf("  launchctl enable gui/$(id -u)/com.%s.agentic-memorizer\n", user)
+				fmt.Printf("  launchctl kickstart -k gui/$(id -u)/com.%s.agentic-memorizer\n", user)
+			}
+		}
+
+	case 1: // InstallSystem
+		fmt.Println("\n" + step.GetSystemInstructions())
+
+	case 2: // InstallSkip
+		fmt.Println("\nAutomatic startup skipped.")
+		fmt.Println("\nTo start the daemon manually:")
+		fmt.Println("  agentic-memorizer daemon start")
+	}
+
+	return nil
 }
 
 func finalizeInit(configPath string, cfg *config.Config) error {
@@ -455,6 +564,15 @@ func printNextSteps(cfg *config.Config) {
 }
 
 // Helper functions
+
+func runCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s; output: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
 
 func findBinaryPath() (string, error) {
 	// Try to get the current executable path

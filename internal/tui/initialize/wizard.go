@@ -14,10 +14,11 @@ import (
 
 // WizardResult contains the outcome of the wizard
 type WizardResult struct {
-	Config    *config.Config
-	Confirmed bool
-	Cancelled bool
-	Err       error
+	Config      *config.Config
+	Confirmed   bool
+	Cancelled   bool
+	Err         error
+	StartupStep *steps.StartupStep // Startup configuration choices
 }
 
 // WizardModel is the main Bubbletea model for the initialization wizard
@@ -43,6 +44,7 @@ func NewWizard(cfg *config.Config) *WizardModel {
 		steps.NewEmbeddingsStep(),
 		steps.NewIntegrationsStep(),
 		steps.NewConfirmStep(),
+		steps.NewStartupStep(),
 	}
 
 	stepNames := make([]string, len(stepList))
@@ -99,7 +101,12 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View implements tea.Model
 func (m WizardModel) View() string {
 	if m.quitting {
-		return styles.MutedText.Render("Initialization cancelled.\n")
+		// Only show cancellation message if user didn't confirm
+		if !m.confirmed {
+			return styles.MutedText.Render("Initialization cancelled.\n")
+		}
+		// Confirmed completion - return empty (let command handle output)
+		return ""
 	}
 
 	var b strings.Builder
@@ -130,6 +137,15 @@ func (m WizardModel) View() string {
 
 // nextStep advances to the next step
 func (m WizardModel) nextStep() (tea.Model, tea.Cmd) {
+	// Check if current step is ConfirmStep and capture confirmation state
+	if confirmStep, ok := m.steps[m.currentStep].(*steps.ConfirmStep); ok {
+		m.confirmed = confirmStep.IsConfirmed()
+		// If not confirmed, user selected "No, go back"
+		if !m.confirmed {
+			return m.prevStep()
+		}
+	}
+
 	// Apply current step's values to config
 	if err := m.steps[m.currentStep].Apply(m.config); err != nil {
 		m.err = err
@@ -138,10 +154,6 @@ func (m WizardModel) nextStep() (tea.Model, tea.Cmd) {
 
 	// Check if this was the last step
 	if m.currentStep >= len(m.steps)-1 {
-		// Check if user confirmed
-		if confirmStep, ok := m.steps[m.currentStep].(*steps.ConfirmStep); ok {
-			m.confirmed = confirmStep.IsConfirmed()
-		}
 		m.quitting = true
 		return m, tea.Quit
 	}
@@ -183,11 +195,21 @@ func RunWizard(initialConfig *config.Config) (*WizardResult, error) {
 		return nil, fmt.Errorf("unexpected model type; expected WizardModel, got %T", finalModel)
 	}
 
+	// Extract StartupStep for post-wizard processing
+	var startupStep *steps.StartupStep
+	for _, step := range m.steps {
+		if s, ok := step.(*steps.StartupStep); ok {
+			startupStep = s
+			break
+		}
+	}
+
 	return &WizardResult{
-		Config:    m.config,
-		Confirmed: m.confirmed,
-		Cancelled: m.quitting && !m.confirmed,
-		Err:       m.err,
+		Config:      m.config,
+		Confirmed:   m.confirmed,
+		Cancelled:   m.quitting && !m.confirmed,
+		Err:         m.err,
+		StartupStep: startupStep,
 	}, nil
 }
 

@@ -26,7 +26,7 @@
 
 ## Overview
 
-The Cache Manager subsystem provides intelligent caching of semantic analysis results to avoid redundant API calls to Claude. It stores AI-generated file analyses keyed by content hash, enabling the system to reuse expensive semantic analysis results when files haven't changed. This dramatically reduces API costs (often achieving cache hit rates exceeding 95%), accelerates index builds, and improves overall system performance.
+The Cache Manager subsystem provides intelligent caching of semantic analysis results to avoid redundant API calls to Claude. It stores AI-generated file analyses keyed by content hash, enabling the system to reuse expensive semantic analysis results when files haven't changed. This dramatically reduces API costs, accelerates index builds, and improves overall system performance.
 
 The subsystem uses a content-addressable storage strategy where each cached analysis is keyed by a SHA-256 hash of the file's content. This approach provides automatic cache invalidation when file content changes and enables cache hits even when files are renamed or moved. Cache entries are persisted as individual JSON files in a designated cache directory, providing durability across daemon restarts and human-readable storage for debugging purposes.
 
@@ -79,7 +79,7 @@ The Cache Manager implements a cache-first processing pattern where expensive op
 6. All subsequent files with identical content reuse the cached result
 
 **Performance Impact:**
-The cache-first pattern transforms the performance characteristics of file processing. Without caching, every file requires a Claude API call (network I/O, 1-5 seconds typical latency, API quota consumption, cost per call). With caching and typical hit rates exceeding 95%, most files complete processing in milliseconds through local file reads. This makes index rebuilds practical even for large repositories.
+The cache-first pattern transforms the performance characteristics of file processing. Without caching, every file requires a Claude API call (network I/O, 1-5 seconds typical latency, API quota consumption, cost per call). With caching, most files in stable codebases complete processing in milliseconds through local file reads, as unchanged files hit the cache. This makes index rebuilds practical even for large repositories.
 
 **Statistics Tracking:**
 The worker pool maintains cache hit and API call counters, enabling visibility into cache effectiveness. These metrics are logged during processing and exposed through health endpoints, allowing users to understand cache performance and identify scenarios where hit rates are lower than expected.
@@ -169,7 +169,7 @@ These fields enable version detection during cache reads and provide redundancy 
 
 ### Staleness Detection
 
-The `IsStaleVersion()` function (`internal/cache/version.go:92-115`) implements the staleness detection algorithm:
+The `IsStaleVersion()` function (`internal/cache/version.go`) implements the staleness detection algorithm:
 
 **Staleness Rules:**
 1. **Schema mismatch** - Always stale (incompatible structure)
@@ -325,7 +325,7 @@ Once computed, the file hash serves multiple purposes:
 The Daemon subsystem (`internal/daemon/daemon.go`) creates and manages the Cache Manager as an optional component that's only initialized when semantic analysis is enabled.
 
 **Initialization:**
-During daemon startup at `daemon.go:113-116`, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enabled` at lines 120-133).
+During daemon startup, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enabled`).
 
 **Worker Pool Distribution:**
 The daemon passes the cache manager instance to the worker pool during initialization. All worker threads share this single cache manager instance, enabling coordinated cache access across parallel processing. The cache manager's stateless design ensures this sharing is safe without explicit synchronization.
@@ -338,7 +338,7 @@ The daemon respects the `analysis.cache_dir` configuration parameter, enabling u
 
 ### Worker Pool
 
-The Worker Pool subsystem (`internal/daemon/worker_pool.go`) implements the cache-first processing pattern that wraps semantic analysis with cache lookup logic.
+The Worker Pool subsystem (`internal/daemon/worker/pool.go`) implements the cache-first processing pattern that wraps semantic analysis with cache lookup logic.
 
 **Processing Pipeline:**
 Each worker processes files through a multi-stage pipeline where caching is integrated after metadata extraction and hash computation but before semantic analysis:
@@ -351,10 +351,10 @@ Each worker processes files through a multi-stage pipeline where caching is inte
 6. **Index Update**: Worker adds entry to index regardless of cache hit/miss
 
 **Statistics Tracking:**
-The worker pool maintains counters for cache hits and API calls, enabling calculation of cache hit rate. These statistics are logged during processing and exposed through health metrics. High cache hit rates (>95%) indicate effective caching, while low rates may indicate frequent file changes or cache issues.
+The worker pool maintains counters for cache hits and API calls, enabling calculation of cache hit rate. These statistics are logged during processing and exposed through health metrics. High cache hit rates indicate effective caching, while low rates may indicate frequent file changes or cache issues. The worker pool also tracks embedding-related statistics (`EmbeddingCacheHits`, `EmbeddingAPICalls`) when the embeddings subsystem is enabled.
 
 **Rate Limiting Integration:**
-Rate limiting occurs only on the cache miss path within the worker pool processing (`worker_pool.go:212`). When cache provides results, no rate limiter token is consumed, allowing workers to process cached files at maximum speed without API quota constraints. Note: The daemon event handler for incremental updates (`daemon.go:540-563`) does NOT use rate limiting, processing file changes immediately with cache-first logic but without rate limiter token acquisition. This integration ensures that caching provides not just performance benefits but also quota preservation in the worker pool context.
+Rate limiting occurs only on the cache miss path within the worker pool processing. When cache provides results, no rate limiter token is consumed, allowing workers to process cached files at maximum speed without API quota constraints. This integration ensures that caching provides not just performance benefits but also quota preservation.
 
 **Concurrency:**
 Multiple workers access the cache manager concurrently during parallel processing. The cache manager's stateless design and file system atomicity ensure this concurrent access is safe. Each worker independently checks cache, performs analysis on misses, and stores results without coordination overhead.
@@ -367,7 +367,7 @@ The Cache Manager wraps the Semantic Analyzer subsystem to reduce Claude API cal
 The integration implements a classic wrapper pattern where cache logic surrounds semantic analysis calls. The Semantic Analyzer exposes a simple `Analyze(metadata)` interface, and the worker pool wraps this with cache-first logic. The analyzer never sees cache hits - it's only invoked on cache misses.
 
 **Complete Result Caching:**
-The cache stores the entire `SemanticAnalysis` structure returned by the analyzer, including summary (2-3 sentence description), tags (semantic keywords), key topics (main themes), document type (genre classification), and confidence score. All fields are preserved through caching, ensuring cache hits are indistinguishable from fresh analysis.
+The cache stores the entire `SemanticAnalysis` structure returned by the analyzer, including summary (2-3 sentence description), tags (semantic keywords), topics (main themes), entities (people, organizations, concepts), document type (genre classification), and confidence score. All fields are preserved through caching, ensuring cache hits are indistinguishable from fresh analysis.
 
 **Metadata Preservation:**
 The cache stores not just semantic analysis results but also the complete `FileMetadata` structure alongside them. This enables reconstruction of full index entries from cache without re-extracting metadata. The cached metadata also provides context for debugging and cache inspection.
@@ -408,7 +408,7 @@ The `FileHash` field in `CachedAnalysis` serves as both the cache key and a stor
 
 **Cache Miss**: Failed cache lookup requiring new semantic analysis via Claude API, typically occurring on first analysis or after file content changes.
 
-**Cache Hit Rate**: Percentage of files served from cache versus total files processed, typically exceeding 95% in stable codebases indicating effective caching.
+**Cache Hit Rate**: Percentage of files served from cache versus total files processed, indicating effective caching when high in stable codebases.
 
 **Cache Staleness**: Condition where a cached entry's file hash doesn't match the current file's content hash, indicating content has changed and cache entry is invalid.
 

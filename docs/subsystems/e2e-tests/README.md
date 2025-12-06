@@ -84,15 +84,19 @@ The harness handles the complexity of process management, temporary directory cr
 
 ### Test Harness Framework
 
-The harness framework (`e2e/harness/`) provides the foundation for all E2E tests:
+The harness framework (`e2e/harness/`) provides the foundation for all E2E tests through five specialized components:
 
-- **E2EHarness**: Core orchestration structure managing test environments, daemon processes, and cleanup
-- **Environment Management**: Creates isolated application directories with unique configurations
-- **Daemon Control**: Methods for starting, stopping, and health-checking daemon processes
-- **HTTP Client**: Provides typed methods for calling daemon HTTP API endpoints
-- **Graph Client**: Manages FalkorDB connections and provides graph query helpers
-- **Binary Execution**: Runs CLI commands with captured stdout/stderr and exit codes
-- **Cleanup Tracking**: Maintains registry of all resources for guaranteed cleanup
+- **E2EHarness** (`harness.go`): Core orchestration managing test environments with isolated app directories, unique graph names for test isolation, and environment variable configuration. Provides daemon lifecycle methods (start, stop, health polling), binary execution with captured output, memory file creation helpers, and automatic cleanup registration.
+
+- **HTTP Client** (`http_client.go`): Type-safe HTTP client providing methods for all daemon API endpoints including health checks, semantic search, file metadata retrieval, recent files queries, related file discovery, entity search, rebuild triggers, and full index retrieval. Uses 5-second request timeouts and supports dynamic port configuration.
+
+- **MCP Client** (`mcp_client.go`): Full JSON-RPC 2.0 MCP protocol implementation spawning MCP server as subprocess via stdio transport. Provides initialize/shutdown lifecycle, resource listing/reading, tool listing/calling, and thread-safe request ID management with line-delimited message handling.
+
+- **Graph Client** (`graph_client.go`): FalkorDB test client with connection management, Cypher query execution, graph clearing, node counting by label, file existence checks, tag/topic retrieval, and related file discovery through shared graph relationships.
+
+- **Cleanup Infrastructure** (`cleanup.go`): Comprehensive resource management with LIFO cleanup function execution, graceful daemon shutdown with timeout fallback, graph clearing with context deadlines, and selective file removal preserving cache directories.
+
+- **Assertions Helper** (`assertions.go`): 28 assertion functions covering command execution (exit codes, success/failure), string matching (contains, empty checks), data structures (map keys, list lengths), error validation, equality comparisons, and test utilities (retry loops, log dumping).
 
 ### Test Fixtures
 
@@ -106,20 +110,30 @@ Fixtures are immutable reference data that tests can copy or reference without m
 
 ### Test Suites
 
-Test suites (`e2e/tests/`) are organized by functional area:
+Test suites (`e2e/tests/`) comprise 18 test files with 171 test functions covering 9,259 lines of test code:
 
-- **CLI Tests**: Validate command execution, argument parsing, output formatting, and error handling
-- **Daemon Tests**: Test lifecycle operations (start, stop, status, restart, rebuild)
-- **Filesystem Tests**: Verify file watching, processing pipelines, and cache behavior
-- **HTTP API Tests**: Validate REST endpoints, request/response formats, and error responses
-- **SSE Tests**: Test real-time notification delivery and connection management
-- **Configuration Tests**: Verify loading, validation, hot-reload, and error reporting
-- **Graph Tests**: Validate FalkorDB operations, schema management, and semantic queries
-- **Integration Tests**: Test adapter behavior, setup/remove operations, and output wrapping
-- **Output Format Tests**: Verify XML, JSON, and Markdown output processors
-- **Error Handling Tests**: Test graceful degradation and error recovery scenarios
+| Test Suite | Lines | Coverage |
+|------------|-------|----------|
+| **smoke_test.go** | 76 | 3 smoke tests validating harness setup, version command, and help text |
+| **cli_test.go** | 384 | 13 CLI command tests covering version, help, invalid commands, daemon operations, config management, graph commands, integrations, and read command |
+| **daemon_test.go** | 301 | 4 daemon lifecycle tests including start/stop, health endpoint validation, and multiple start prevention |
+| **filesystem_test.go** | 385 | File system integration tests verifying new file detection, modification tracking, deletion handling, rename operations, debouncing, and subdirectory scanning |
+| **graph_test.go** | 443 | 7 graph tests validating status checks, connection establishment, query execution, node creation, and relationship management |
+| **graph_advanced_test.go** | 892 | Advanced graph operations including schema creation, file upsert logic, semantic search, query optimization, and data persistence |
+| **http_api_test.go** | 580 | HTTP API endpoint tests covering search, metadata retrieval, recent files, index queries, and comprehensive error handling |
+| **sse_test.go** | 304 | SSE notification tests with single/multiple client handling, event delivery validation, and disconnection recovery |
+| **mcp_test.go** | 762 | 11 MCP protocol tests including initialize/shutdown lifecycle, resource operations, tool calls, protocol compliance, and error scenarios |
+| **integration_test.go** | 857 | 15 integration adapter tests for claude-code-hook, claude-code-mcp, gemini-cli-mcp, and codex-cli-mcp including setup, validation, and removal |
+| **config_test.go** | 876 | 12 configuration tests covering validation, hot-reload, environment variable overrides, immutable field detection, and error reporting |
+| **cache_test.go** | 497 | 9 cache tests validating directory creation, file processing, modification detection, cache status reporting, and cache clearing operations |
+| **metadata_test.go** | 335 | Metadata extraction tests for different file types and formats |
+| **walker_test.go** | 492 | File discovery and walker tests validating skip patterns, directory traversal, and filtering logic |
+| **edge_cases_test.go** | 624 | Edge case handling for unusual file types, special characters, and boundary conditions |
+| **error_handling_test.go** | 390 | Error scenario tests including graceful degradation, recovery mechanisms, and user-facing error messages |
+| **output_formats_test.go** | 436 | Output format validation for JSON, XML, and Markdown with schema compliance and integration wrapping |
+| **e2e_test.go** | 625 | 6 comprehensive end-to-end workflows including fresh installation, integration setup, daemon lifecycle, file processing pipeline, MCP tools, graph operations, error recovery, and complete system validation |
 
-Each suite uses the test harness to set up isolated environments and validate complete workflows from user input to system output.
+Each suite uses the test harness to establish isolated environments and validate complete workflows from user input through system processing to final output.
 
 ### Cleanup Infrastructure
 
@@ -213,53 +227,55 @@ Tests ensure output processors produce correctly formatted and valid output for 
 
 ## Test Categories
 
-### CLI Command Tests
+The 171 test functions are organized into 12 functional categories providing comprehensive system validation:
 
-Validate all CLI commands execute correctly, handle arguments properly, display appropriate output, and return correct exit codes. Tests cover both success paths and error conditions, ensuring helpful error messages guide users toward correct usage.
+### CLI Command Tests (13 tests, 384 lines)
 
-### Daemon Lifecycle Tests
+Validate all CLI commands execute correctly with proper argument parsing, formatted output, and appropriate exit codes. Tests verify version display, help text generation, invalid command handling, daemon operations (start/stop/status/restart/rebuild), configuration management (validate/reload), graph commands (start/stop/status), integration operations (list/setup/remove), and read command functionality. Coverage includes both success paths and error conditions with user-facing error message validation.
 
-Verify daemon start, stop, status, restart, and rebuild operations work correctly. Tests ensure PID files are managed properly, health checks respond correctly, log files are created, and graceful shutdown occurs on SIGTERM.
+### Daemon Lifecycle Tests (4 tests, 301 lines)
 
-### File System Integration Tests
+Verify daemon start/stop/status/restart/rebuild operations through complete lifecycle workflows. Tests ensure PID files are created and removed correctly, health check endpoints respond with accurate status, log files contain expected events, graceful shutdown occurs on SIGTERM/SIGHUP signals, and duplicate start attempts are prevented with clear error messages.
 
-Validate the complete file processing pipeline from file creation through indexing. Tests verify that files are discovered, metadata extracted, semantic analysis performed, cache hits occur on repeated processing, and index entries contain expected data.
+### File System Integration Tests (385 lines)
 
-### HTTP API Tests
+Validate the complete file processing pipeline from file creation through indexing with real-time monitoring. Tests verify new file detection within debounce windows, modification tracking with content hash updates, deletion event handling, rename operation processing, rapid change debouncing (multiple edits → single processing), subdirectory scanning, and skip pattern enforcement for hidden files and excluded extensions.
 
-Validate all REST endpoints including health checks, semantic search, file metadata retrieval, related file queries, entity search, and rebuild operations. Tests verify request parsing, response formatting, error handling, and status codes.
+### HTTP API Tests (580 lines)
 
-### SSE Notification Tests
+Validate all REST endpoints with comprehensive request/response validation. Tests cover health checks with daemon status, semantic search across tags/topics/summary, file metadata retrieval with graph connections, recent files queries with time windows, related file discovery through shared relationships, entity search with type filtering, rebuild triggers with force flag support, and full index retrieval. Includes error handling validation for malformed requests, missing resources, and invalid parameters.
 
-Verify Server-Sent Events deliver real-time notifications for file additions, modifications, deletions, and rebuilds. Tests validate event format, connection management, and proper cleanup on disconnect.
+### SSE Notification Tests (4 tests, 304 lines)
 
-### Configuration Tests
+Verify Server-Sent Events deliver real-time notifications for index changes. Tests validate single client event reception, multiple concurrent client handling, event format compliance (file_added, file_modified, file_deleted, rebuild_complete events), connection lifecycle management, automatic reconnection on temporary failures, and proper cleanup on client disconnect.
 
-Validate configuration loading, validation rules, hot-reload functionality, and error reporting. Tests ensure invalid configurations are rejected with helpful messages, structural changes are blocked during reload, and non-structural changes apply correctly.
+### Configuration Tests (12 tests, 876 lines)
 
-### Graph Integration Tests
+Validate configuration loading, validation, and runtime updates. Tests ensure YAML parsing correctness, validation rule enforcement (type checking, range validation, path safety), hot-reload functionality for non-structural settings (workers, rate limits, log levels), immutable field detection (memory_root, cache_dir, log files require restart), environment variable override precedence (MEMORIZER_* prefix), and helpful error messages with suggestions for common mistakes.
 
-Verify FalkorDB operations including schema creation, node/edge management, semantic queries, related file discovery, and graceful degradation. Tests ensure the graph correctly models file relationships and supports complex queries.
+### Graph Integration Tests (7 basic + advanced, 1,335 lines)
 
-### Integration Framework Tests
+Verify FalkorDB operations from connection management through complex semantic queries. Basic tests validate status checks, connection establishment with authentication, query execution with result parsing, node creation with properties, and relationship management. Advanced tests cover schema creation with constraints, file upsert logic (create vs update), semantic search across multiple signals (tags, topics, entities), related file discovery with connection strength ranking, query optimization for large graphs, and data persistence across daemon restarts. Includes graceful degradation testing when FalkorDB is unavailable.
 
-Validate adapter behavior for all supported frameworks including detection, setup operations, configuration file modifications, remove operations, and output wrapping. Tests ensure adapters safely modify configuration files and produce correctly formatted output.
+### Integration Framework Tests (15 tests, 857 lines)
 
-### Metadata and Cache Tests
+Validate adapter behavior for all supported frameworks (Claude Code hook/MCP, Gemini CLI MCP, Codex CLI MCP). Tests verify framework detection via config file presence, setup operations that safely modify configuration files (JSON for Claude/Gemini, TOML for Codex), validation of integration health and configuration correctness, remove operations that cleanly uninstall integrations, output processor behavior (XML, JSON, Markdown), integration wrapping with framework-specific envelopes (SessionStart hook JSON, MCP JSON-RPC), binary path detection and configuration, and version management for adapter compatibility.
 
-Verify metadata extraction for different file types, cache key computation, cache hit behavior, and cache invalidation on content changes. Tests ensure the cache subsystem correctly identifies identical content and avoids redundant processing.
+### Metadata and Cache Tests (9 tests + metadata extraction, 832 lines)
 
-### Output Format Tests
+Verify metadata extraction handlers for different file types and cache operations. Tests validate cache directory creation with proper permissions, cache key computation from content hashes (SHA-256), cache hit behavior avoiding redundant API calls, cache invalidation on content changes, metadata extraction for text files (word/line counts), images (dimensions, format), PDFs (page counts), office documents (extraction methods), version-based staleness detection (schema/metadata/semantic versions), cache status reporting with entry counts and size statistics, and selective cache clearing (old versions vs. all entries).
 
-Validate XML, JSON, and Markdown output formatting including structure, schema compliance, integration wrapping, and empty index handling. Tests ensure output processors produce valid, well-formed output for all consumption contexts.
+### Output Format Tests (436 lines)
 
-### Error Handling Tests
+Validate output processors produce correctly formatted data for different consumption contexts. Tests verify XML structure with proper schema compliance, JSON formatting with accurate type representation, Markdown table generation with aligned columns, integration-specific wrapping (SessionStart hook JSON envelope with systemMessage/additionalContext fields, MCP JSON-RPC responses), empty index handling with appropriate null/empty values, and metadata accuracy preservation across format transformations.
 
-Verify graceful degradation when external dependencies are unavailable, proper error messages for user mistakes, recovery from transient failures, and continued operation despite component failures.
+### Error Handling Tests (390 lines)
 
-### Walker Configuration Tests
+Verify graceful degradation and error recovery across failure scenarios. Tests validate daemon behavior when FalkorDB is unavailable (warnings logged, operations continue with reduced functionality), recovery from transient API failures (retry with backoff), handling of corrupted cache files (skip and rebuild), invalid configuration detection with helpful error messages, missing binary path handling during integration setup, permission errors with actionable suggestions, and network timeout handling with appropriate fallback behavior.
 
-Validate that walker correctly applies skip patterns for directories, files, and extensions. Tests ensure configuration rules are honored during both full scans and real-time watching.
+### Walker Configuration Tests (492 lines)
+
+Validate file discovery subsystem correctly applies configuration rules. Tests verify skip pattern enforcement for directories (.git, node_modules, .cache), file exclusion by name (.DS_Store, Thumbs.db), extension-based filtering (.log, .tmp, .swp), hidden file/directory handling (leading dot), symlink traversal prevention, directory depth limits, and real-time watcher integration ensuring consistent behavior between full scans and incremental monitoring.
 
 ---
 
@@ -267,32 +283,93 @@ Validate that walker correctly applies skip patterns for directories, files, and
 
 ### Build Tags
 
-E2E tests use the `e2e` build tag to separate them from unit tests. This allows:
-- Running unit tests quickly during development without E2E overhead
-- Running E2E tests separately in CI/CD pipelines
-- Avoiding accidental execution of long-running E2E tests during unit test runs
+E2E tests use the `e2e` build tag (`//go:build e2e`) at the top of all 18 test files to separate them from unit tests. This separation enables:
+- Fast unit test execution during development (no Docker overhead, no daemon spawning)
+- Isolated E2E test execution in CI/CD pipelines with FalkorDB container orchestration
+- Prevention of accidental long-running test execution during standard `go test ./...` runs
 
-Tests are compiled only when explicitly requested via `go test -tags=e2e`.
+Tests are compiled only when explicitly requested via `go test -tags=e2e` or `make test-e2e`.
 
 ### Test Execution Lifecycle
 
-Each test follows this lifecycle:
-1. **Setup**: Harness creates isolated application directory and configuration
-2. **Execution**: Test runs CLI commands, spawns daemon, or calls HTTP endpoints
-3. **Validation**: Test asserts expected behavior using standard Go testing assertions
-4. **Cleanup**: Harness terminates processes, removes temporary directories, and closes connections
+Each test follows a consistent four-phase lifecycle managed by the test harness:
 
-The harness ensures cleanup always runs via `t.Cleanup()` callbacks, even when tests fail or panic.
+1. **Setup Phase**: Harness creates isolated test environment
+   - Generate unique temporary directory via `t.TempDir()`
+   - Create memory root, cache directory, and required subdirectories
+   - Write minimal valid configuration with unique graph name
+   - Set `MEMORIZER_APP_DIR` environment variable
+   - Initialize HTTP, MCP, and Graph clients with test-specific configurations
+   - Register cleanup callbacks via `t.Cleanup()`
+
+2. **Execution Phase**: Test performs operations and interactions
+   - Run CLI commands via `h.RunCommand()` with captured stdout/stderr/exit codes
+   - Start daemon process and wait for health check via `h.StartDaemon()` + `h.WaitForHealthy()`
+   - Create test files in memory directory using `h.AddMemoryFile()`
+   - Call HTTP API endpoints through type-safe client methods
+   - Execute MCP protocol operations (initialize, resource/tool calls, shutdown)
+   - Query FalkorDB graph database via Cypher query helpers
+
+3. **Validation Phase**: Test asserts expected behavior
+   - Use 28 assertion helpers from `assertions.go` for consistent validation
+   - Verify command exit codes, output content, and error messages
+   - Validate API response structure, status codes, and data accuracy
+   - Check graph node/edge existence and relationship correctness
+   - Confirm file processing pipeline produces expected index entries
+   - Assert configuration changes applied correctly or rejected appropriately
+
+4. **Cleanup Phase**: Harness releases all resources (guaranteed execution)
+   - Stop daemon process with graceful shutdown (SIGTERM with timeout fallback)
+   - Clear graph database to prevent cross-test contamination
+   - Close HTTP, MCP, and Graph client connections
+   - Remove temporary directories (automatic via `t.TempDir()`)
+   - Execute registered cleanup functions in LIFO order
+   - Cleanup runs even when tests fail or panic (via defer mechanisms)
 
 ### Timeout Management
 
-E2E tests use generous timeouts to account for:
-- Docker container startup latency
-- Daemon initialization time
-- File processing delays
-- Graph query execution time
+E2E tests employ environment-specific timeout strategies:
 
-Tests that spawn long-running operations include explicit timeout parameters to prevent hanging, typically set to 5-30 minutes depending on test complexity.
+**Full Test Suite**: 30-minute timeout (`-timeout 30m`) accounting for:
+- FalkorDB Docker container startup (health polling up to 30 seconds)
+- Binary compilation if not pre-built
+- Daemon initialization across all 171 tests
+- Cumulative file processing and semantic analysis operations
+- Graph query execution for complex relationship searches
+
+**Individual Test Suites**: 10-minute timeout per suite via Makefile targets:
+- `make test-cli` - CLI command tests (10m)
+- `make test-daemon` - Daemon lifecycle tests (10m)
+- `make test-mcp` - MCP protocol tests (10m)
+- `make test-integrations` - Integration framework tests (10m)
+- `make test-config` - Configuration tests (10m)
+- `make test-graph` - Graph integration tests (10m)
+- `make test-e2e` - Comprehensive workflow tests (10m)
+
+**Quick Smoke Tests**: 5-minute timeout (`make test-quick`) for rapid validation during development with only 3 essential tests (harness setup, version command, help text).
+
+**Component-Specific Timeouts**:
+- Health endpoint polling: 2-second wait after PID file creation
+- HTTP client requests: 5-second timeout per API call
+- Graph query operations: 10-second context deadline for complex queries
+- Daemon graceful shutdown: 5-second timeout before SIGKILL fallback
+- FalkorDB health check: 30-second polling with 1-second intervals
+
+**Makefile Test Targets** (`e2e/Makefile`):
+```makefile
+test                    # Full suite (30m timeout, all 18 files)
+test-quick             # Smoke tests only (5m timeout, 3 tests)
+test-verbose           # All tests with verbose output (-count=1 prevents caching)
+test-cli               # CLI command tests (10m)
+test-daemon            # Daemon lifecycle tests (10m)
+test-mcp               # MCP protocol tests (10m)
+test-integrations      # Integration framework tests (10m)
+test-config            # Configuration tests (10m)
+test-graph             # Graph integration tests (10m)
+test-e2e               # Comprehensive workflow tests (10m)
+```
+
+All targets use `-tags=e2e` flag and run tests from `./tests/...` directory. Environment setup includes FalkorDB container startup with health polling before test execution begins.
 
 ---
 

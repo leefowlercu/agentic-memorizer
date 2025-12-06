@@ -24,7 +24,7 @@ This documentation is intended for:
 - **Core Subsystems**
   - [Daemon](#daemon)
 - **Index Management**
-  - [Index Manager](#index-manager)
+  - [Index Management](#index-management)
   - [File Watcher](#file-watcher)
 - **File Processing**
   - [Metadata Extractor](#metadata-extractor)
@@ -43,6 +43,8 @@ This documentation is intended for:
 - **Utilities**
   - [Walker](#walker)
   - [Version](#version)
+- **Testing**
+  - [E2E Tests](#e2e-tests)
 
 ---
 
@@ -51,12 +53,12 @@ This documentation is intended for:
 #### [Daemon](./daemon/)
 **Status:** ✅ Documented
 
-The background indexing daemon that maintains a precomputed memory index through continuous file monitoring.
+The background indexing daemon that maintains a FalkorDB knowledge graph through continuous file monitoring.
 
 **Key Features:**
 - File system watching with fsnotify
 - Parallel file processing with worker pools
-- Atomic index updates
+- Real-time graph updates via FalkorDB
 - Health monitoring and metrics
 - System service integration (systemd/launchd)
 
@@ -65,7 +67,7 @@ The background indexing daemon that maintains a precomputed memory index through
 - `internal/daemon/worker_pool.go` - Parallel processing
 - `internal/daemon/health.go` - Health monitoring
 - `cmd/daemon/daemon.go` - Parent CLI command
-- `cmd/daemon/subcommands/` - Daemon subcommands (start, stop, status, restart, rebuild, logs)
+- `cmd/daemon/subcommands/` - Daemon subcommands (start, stop, status, restart, logs, rebuild, systemctl, launchctl)
 
 **See:** [daemon/README.md](./daemon/README.md)
 
@@ -73,24 +75,25 @@ The background indexing daemon that maintains a precomputed memory index through
 
 ### Index Management
 
-#### [Index Manager](./index-manager/)
+#### [Index Management](./index-management/)
 **Status:** ✅ Documented
 
-Manages the precomputed index file with thread-safe operations and atomic writes.
+Graph-native storage architecture with on-demand export capabilities for SessionStart hooks and external integrations.
 
 **Key Features:**
-- Thread-safe read/write operations
-- Atomic file updates (temp + rename)
-- Incremental index updates
-- Corruption recovery
-- Index versioning
+- FalkorDB-backed persistent storage (nodes and relationships)
+- Real-time graph updates via Graph Manager
+- On-demand index export from live graph data
+- Thread-safe graph operations with connection pooling
+- GraphIndex generation for SessionStart hooks and read command
+- No file-based persistence (fully graph-native)
 
 **Primary Components:**
-- `internal/index/manager.go` - Index management
-- `internal/index/computed.go` - Index structure
-- `pkg/types/types.go` - Type definitions
+- `internal/graph/manager.go` - Graph CRUD operations and queries
+- `internal/graph/export.go` - GraphIndex export from graph
+- `pkg/types/types.go` - GraphIndex and FileEntry structures
 
-**See:** [index-manager/README.md](./index-manager/README.md)
+**See:** [index-management/README.md](./index-management/README.md)
 
 ---
 
@@ -233,6 +236,8 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 **Supported Integrations:**
 - Claude Code Hook (claude-code-hook) - SessionStart hooks for context injection
 - Claude Code MCP (claude-code-mcp) - MCP server for on-demand tools
+- Gemini CLI MCP (gemini-cli-mcp) - MCP server for Google Gemini CLI
+- Codex CLI MCP (codex-cli-mcp) - MCP server for Codex CLI
 - Continue.dev (manual setup)
 - Cline (manual setup)
 - Aider (manual setup)
@@ -242,9 +247,11 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 **Primary Components:**
 - `internal/integrations/registry.go` - Integration registry
 - `internal/integrations/interface.go` - Integration interface
-- `internal/integrations/adapters/claude/` - Claude Code adapter
-- `internal/integrations/adapters/generic/` - Generic adapter
-- `internal/integrations/output/` - Output processors
+- `internal/integrations/adapters/claude/` - Claude Code adapters (hook & MCP)
+- `internal/integrations/adapters/gemini/` - Gemini CLI MCP adapter
+- `internal/integrations/adapters/codex/` - Codex CLI MCP adapter
+- `internal/integrations/adapters/generic/` - Generic adapter for manual integrations
+- `internal/integrations/output/` - Output processors (XML, Markdown, JSON)
 
 **See:** [integration-registry/README.md](./integration-registry/README.md)
 
@@ -295,14 +302,15 @@ FalkorDB-backed knowledge graph for persistent storage and relationship-based qu
 #### [MCP Server](./mcp/)
 **Status:** ✅ Documented
 
-Exposes the precomputed index through the Model Context Protocol (MCP) as a standardized server interface for universal integration with AI development tools.
+Exposes the knowledge graph through the Model Context Protocol (MCP) as a standardized server interface for universal integration with AI development tools.
 
 **Key Features:**
 - JSON-RPC 2.0 protocol implementation
-- Static context delivery in multiple formats (XML, Markdown, JSON)
-- Dynamic semantic search across indexed files
-- Metadata retrieval and time-based filtering
-- Support for Claude Code, GitHub Copilot CLI, and future MCP clients
+- Static context delivery via GraphIndex export in multiple formats (XML, Markdown, JSON)
+- Dynamic graph-powered semantic search across knowledge base
+- Metadata retrieval and time-based filtering via daemon HTTP API
+- Graph query tools (search, related files, entity search, recent files)
+- Support for Claude Code, Gemini CLI, Codex CLI, and any MCP-compliant client
 
 **Primary Components:**
 - `internal/mcp/server.go` - MCP server orchestrator
@@ -317,18 +325,26 @@ Exposes the precomputed index through the Model Context Protocol (MCP) as a stan
 #### [Semantic Search](./semantic-search/)
 **Status:** ✅ Documented
 
-Provides weighted, relevance-based search capabilities across the precomputed index using token-based matching.
+Provides graph-powered, relationship-aware search capabilities with automatic fallback to in-memory search.
 
 **Key Features:**
-- Token-based semantic search across seven fields (filename, category, type, summary, tags, topics, document type)
-- Weighted proportional scoring algorithm for relevance ranking
-- Stop word filtering and case-insensitive matching
+- **Primary Mode**: Graph-based search using Cypher queries against FalkorDB
+  - Multi-signal search across filenames, tags, topics, entities, and summaries
+  - Relationship traversal (HAS_TAG, COVERS_TOPIC, MENTIONS edges)
+  - Related files discovery through shared connections
+  - Entity search with normalized name matching
+  - Vector similarity search (when embeddings enabled)
+  - Full-text search on summaries
+- **Fallback Mode**: Token-based in-memory search when graph unavailable
+  - Weighted proportional scoring across seven fields
+  - Stop word filtering and case-insensitive matching
+- Graceful degradation with automatic mode switching
 - Category filtering and configurable result limits
-- Stateless, thread-safe operation with pure function design
 
 **Primary Components:**
-- `internal/search/semantic.go` - Searcher implementation
-- `internal/search/` - Query parsing and scoring algorithms
+- `internal/graph/manager.go` - Graph-powered search queries
+- `internal/search/semantic.go` - Fallback in-memory searcher
+- `internal/daemon/api/` - HTTP API search endpoints
 
 **See:** [semantic-search/README.md](./semantic-search/README.md)
 
@@ -372,6 +388,40 @@ Version information management for build-time metadata.
 
 ---
 
+### Testing
+
+#### [E2E Tests](./e2e-tests/)
+**Status:** ✅ Documented
+
+Comprehensive end-to-end testing framework for validating complete workflows across the full application stack.
+
+**Key Features:**
+- Isolated test environments with temporary directories
+- Test harness framework for daemon management
+- HTTP, MCP, and graph client abstractions
+- Automatic cleanup and resource management
+- Build tag separation from unit tests (`//go:build e2e`)
+- Docker integration for FalkorDB testing
+
+**Test Coverage:**
+- CLI command execution and output validation
+- Daemon lifecycle management
+- File system watching and processing pipelines
+- HTTP API endpoints and SSE notifications
+- Graph database operations and queries
+- Configuration validation and hot-reload
+- Integration framework setup and teardown
+- Error handling and edge cases
+
+**Primary Components:**
+- `e2e/harness/` - Test harness framework
+- `e2e/tests/` - Test suites (18 test files)
+- `e2e/fixtures/` - Test data and fixtures
+
+**See:** [e2e-tests/README.md](./e2e-tests/README.md)
+
+---
+
 ## Subsystem Interactions
 
 ```
@@ -392,8 +442,8 @@ Version information management for build-time metadata.
         │                      │                             │
         v                      v                             v
 ┌──────────────┐        ┌──────────────────┐       ┌──────────────────┐
-│   Daemon     │───────>│  Index Manager   │       │   Integration    │
-│  Subsystem   │        │   (atomic I/O)   │       │    Registry      │
+│   Daemon     │───────>│  Graph Manager   │       │   Integration    │
+│  Subsystem   │        │  (FalkorDB ops)  │       │    Registry      │
 └──────┬───────┘        └────────┬─────────┘       └────────┬─────────┘
        │                         │                          │
        │                ┌────────┼───────┐                  │
@@ -403,28 +453,34 @@ Version information management for build-time metadata.
 ┌────────┐ ┌──────┐ ┌───────┐  ┌──────────────────┐  ┌──────────────┐
 │Watcher │ │Worker│ │ Read  │  │   MCP Server     │  │   Output     │
 │        │ │ Pool │ │Command│  │                  │  │  Processors  │
-└────────┘ └───┬──┘ └───────┘  └─────────┬────────┘  └──────────────┘
-               │                         │
-       ┌───────┴───────┐                 │
-       │               │                 │
-       v               v                 v
-  ┌─────────┐    ┌──────────┐    ┌───────────────┐
-  │Metadata │    │ Semantic │    │  Daemon HTTP  │
-  │Extractor│    │ Analyzer │    │     API       │
-  └────┬────┘    └────┬─────┘    └───────┬───────┘
-       │              │                  │
-       │              v                  v
-       │         ┌─────────┐      ┌──────────────┐
-       │         │ Claude  │      │   FalkorDB   │
-       │         │   API   │      │    Graph     │
-       │         └─────────┘      └──────┬───────┘
-       │              │                  │
-       └──────┬───────┘                  │
-              v                          v
-       ┌────────────┐            ┌──────────────┐
-       │   Cache    │            │ External MCP │
-       │  Manager   │            │   Clients    │
-       └────────────┘            └──────────────┘
+└────────┘ └───┬──┘ └───┬───┘  └─────────┬────────┘  └──────────────┘
+               │        │                │
+       ┌───────┴────┐   │                │
+       │            │   │                │
+       v            v   v                v
+  ┌─────────┐ ┌──────────┐       ┌───────────────┐
+  │Metadata │ │ Semantic │       │  Daemon HTTP  │
+  │Extractor│ │ Analyzer │       │     API       │
+  └────┬────┘ └────┬─────┘       └───────┬───────┘
+       │           │                     │
+       │           v                     │
+       │      ┌─────────┐                │
+       │      │ Claude  │                │
+       │      │   API   │                │
+       │      └─────────┘                │
+       │           │                     │
+       └───────┬───┘                     │
+               v                         v
+        ┌────────────┐           ┌──────────────┐
+        │   Cache    │           │   FalkorDB   │
+        │  Manager   │           │    Graph     │
+        └────────────┘           └──────┬───────┘
+                                        │
+                                        v
+                                 ┌──────────────┐
+                                 │ External MCP │
+                                 │   Clients    │
+                                 └──────────────┘
 ```
 
 ## Documentation Standards
@@ -491,9 +547,29 @@ If you're looking for specific subsystem information:
 
 ---
 
-**Last Updated:** 2025-11-30
+**Last Updated:** 2025-12-05
 
 **Recent Updates:**
+- Comprehensive subsystems index accuracy review (2025-12-05)
+  - Corrected Daemon description: "maintains FalkorDB knowledge graph" (not "precomputed memory index")
+  - Updated Daemon key features: "Real-time graph updates via FalkorDB" (not "Atomic index updates")
+  - Completely rewrote Index Management section to reflect graph-native architecture:
+    - Changed title from "Index Manager" to "Index Management" throughout
+    - Updated description: "Graph-native storage with on-demand export" (not "precomputed index file with atomic writes")
+    - Replaced key features to reflect FalkorDB storage, GraphIndex export, no file persistence
+    - Updated primary components: `internal/graph/manager.go` and `export.go` (not `internal/index/`)
+  - Updated MCP Server description: "Exposes knowledge graph" (not "precomputed index")
+  - Enhanced MCP Server key features to clarify GraphIndex export and daemon HTTP API integration
+  - Updated Subsystem Interactions diagram: "Graph Manager (FalkorDB ops)" replacing "Index Manager (atomic I/O)"
+  - Added missing daemon subcommands: systemctl, launchctl
+  - Fixed broken link: index-manager → index-management
+  - Added E2E Tests subsystem to index with comprehensive description
+  - Enhanced Integration Registry: added Gemini CLI MCP and Codex CLI MCP to supported integrations
+  - Updated Semantic Search description to reflect graph-powered architecture with in-memory fallback
+- Version subsystem documentation accuracy review (2025-12-05)
+  - Updated version references from 0.11.0 to 0.12.1
+  - Added MCP Server integration point
+  - Enhanced version command documentation
 - Added FalkorDB Graph subsystem documentation (2025-11-30)
 - Updated architecture diagram to include graph subsystem
 - Comprehensive accuracy review of all subsystem documentation (2025-11-22)

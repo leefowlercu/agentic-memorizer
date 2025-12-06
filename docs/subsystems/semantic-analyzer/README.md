@@ -11,6 +11,8 @@
 3. [Key Components](#key-components)
    - [Analyzer Component](#analyzer-component)
    - [Client Component](#client-component)
+   - [Entity Extraction](#entity-extraction)
+   - [Reference Extraction](#reference-extraction)
    - [Analysis Strategies](#analysis-strategies)
 4. [Integration Points](#integration-points)
    - [Daemon Subsystem](#daemon-subsystem)
@@ -21,7 +23,7 @@
 
 ## Overview
 
-The Semantic Analyzer subsystem provides AI-powered understanding of files using the Claude API. It transforms raw file content into structured semantic information including summaries, tags, key topics, document type classifications, and confidence scores. This subsystem operates as the second stage of file processing (after metadata extraction), enriching file entries with intelligent analysis that enables AI agents to understand file content and purpose before reading them.
+The Semantic Analyzer subsystem provides AI-powered understanding of files using the Claude API. It transforms raw file content into structured semantic information including summaries, tags, key topics, document type classifications, entity extraction, reference mapping, and confidence scores. This subsystem operates as the second stage of file processing (after metadata extraction), enriching file entries with intelligent analysis that enables AI agents to understand file content and purpose before reading them.
 
 The subsystem is architected around three core components: an Analyzer orchestration layer that routes files to appropriate analysis strategies, a Client integration layer that manages Claude API communication with retry logic and error handling, and specialized analysis methods for different content types (text, images, Office documents, PDFs). The analyzer intelligently selects the optimal Claude API capability for each file type, using vision analysis for images, document blocks for PDFs, and text extraction for Office formats.
 
@@ -109,7 +111,9 @@ The Analyzer component (`internal/semantic/analyzer.go`) serves as the orchestra
 - **Document Processing**: Extracts text from DOCX/PPTX via ZIP parsing and XML text run extraction
 - **PDF Handling**: Encodes PDFs for native Claude document understanding
 - **Binary Fallback**: Synthesizes analysis from metadata when content analysis isn't possible
-- **Prompt Construction**: Builds structured prompts with file context and output format requirements
+- **Prompt Construction**: Builds structured prompts with file context and output format requirements requesting summary, tags, topics, document type, entities, and references
+- **Entity Extraction**: Identifies named entities (technologies, people, organizations, concepts, projects) mentioned in file content
+- **Reference Mapping**: Extracts topic dependencies and relationships (requires, extends, related-to, implements) with confidence scoring
 - **Response Parsing**: Extracts JSON from Claude responses, including fallback extraction from markdown code blocks
 
 **Analysis Methods:**
@@ -126,9 +130,9 @@ The Analyzer component (`internal/semantic/analyzer.go`) serves as the orchestra
 
 **`analyzeDocx()`** - Extracts text from Word documents by opening as ZIP archive, parsing document XML, and extracting text runs from `<w:t>` tags
 
-**`analyzeBinary()`** - Creates fallback analysis from metadata only, synthesizing summary from file type and characteristics with confidence of 0.5
+**`analyzeBinary()`** - Creates fallback analysis from metadata only, synthesizing summary from file type and characteristics with confidence of 0.5, and initializing empty entity and reference arrays
 
-**`buildPrompt()`** - Constructs analysis prompts that include file metadata context and request JSON-formatted responses with specific fields (summary, tags, key_topics, document_type)
+**`buildPrompt()`** - Constructs analysis prompts that include file metadata context and request JSON-formatted responses with specific fields (summary, tags, key_topics, document_type, entities, references)
 
 **`extractJSON()`** - Parses Claude responses, first attempting direct JSON unmarshaling, then falling back to extracting JSON from markdown code blocks
 
@@ -172,6 +176,61 @@ All API requests use the Claude Messages API format with:
 
 **Error Handling:**
 The client distinguishes between retryable errors (network failures, 429 rate limiting, 500/502/503/504 server errors) and permanent errors (400/401/403 client errors), implementing retry logic only for transient failures.
+
+### Entity Extraction
+
+The Semantic Analyzer extracts named entities from file content to identify key technologies, people, organizations, concepts, and projects mentioned or depicted in files. Entity extraction is performed across all analysis strategies (text, vision, document, presentation) to build a comprehensive understanding of what and who files reference.
+
+**Entity Structure:**
+Each extracted entity consists of two fields:
+- `name` (string) - The entity name (e.g., "Terraform", "AWS", "Docker", "Claude", "Python")
+- `type` (string) - Entity classification: technology, person, concept, organization, project
+
+**Extraction Guidance by Analysis Type:**
+- **Image Analysis**: Identifies logos, product names, people, and technologies visible in the image
+- **Document/Presentation Analysis**: Focuses on specific technologies, tools, people, organizations, and key concepts mentioned in text
+- **Text Analysis**: Extracts technologies, frameworks, people, and concepts referenced in code or documentation
+
+**Implementation Details:**
+All five analysis methods (`analyzeText()`, `analyzeImage()`, `analyzeDocument()`, `analyzePptx()`, `analyzeDocx()`) request entities as the 5th field in their Claude API prompts. The binary fallback strategy (`analyzeBinary()`) initializes an empty entity array to maintain structural consistency.
+
+**Use Cases:**
+Entity extraction enables several key capabilities:
+- Finding all files that mention a specific technology (e.g., "Show me files about Docker")
+- Understanding technology dependencies across the knowledge base
+- Identifying subject matter experts mentioned in documentation
+- Building technology relationship graphs through the FalkorDB integration
+
+### Reference Extraction
+
+The Semantic Analyzer extracts topic references and dependencies from file content to map how files relate to, build upon, or depend on other concepts. Reference extraction captures the relational structure of knowledge, identifying what files require, extend, relate to, or implement.
+
+**Reference Structure:**
+Each extracted reference consists of three fields:
+- `topic` (string) - The referenced topic or concept (e.g., "containerization", "authentication", "REST APIs")
+- `type` (string) - Relationship classification: requires, extends, related-to, implements
+- `confidence` (float64) - Strength of the reference from 0.0 to 1.0
+
+**Reference Types:**
+- **requires**: The file depends on or assumes knowledge of the referenced topic
+- **extends**: The file builds upon or expands the referenced topic
+- **related-to**: The file has a general connection to the referenced topic
+- **implements**: The file provides an implementation of the referenced concept
+
+**Extraction Guidance by Analysis Type:**
+- **Image Analysis**: Identifies concepts the image relates to or explains
+- **Document/Presentation Analysis**: Identifies what the content depends on, builds upon, or relates to
+- **Text Analysis**: Extracts dependencies and relationships mentioned in code or documentation
+
+**Implementation Details:**
+All five analysis methods request references as the 6th field in their Claude API prompts. The binary fallback strategy initializes an empty reference array. Claude provides confidence scores for each reference to indicate the strength and certainty of the relationship.
+
+**Use Cases:**
+Reference extraction enables advanced knowledge graph capabilities:
+- Understanding prerequisite knowledge for learning paths
+- Identifying tightly coupled concepts that should be learned together
+- Finding files that build upon or extend specific topics
+- Mapping conceptual dependencies across documentation
 
 ### Analysis Strategies
 
@@ -259,6 +318,8 @@ The Semantic Analyzer employs distinct strategies for different file types, each
 3. Create minimal key topics from category
 4. Set document type to category value
 5. Assign confidence score of 0.5 to indicate metadata-only analysis
+6. Initialize empty entity array to maintain structural consistency
+7. Initialize empty reference array to maintain structural consistency
 
 **Purpose**: Ensures all files receive structured analysis entries, enabling graceful degradation when semantic understanding isn't available
 
@@ -329,12 +390,13 @@ After metadata extraction, the daemon or worker computes a SHA-256 hash of the f
 6. Subsequent files with identical content skip analysis
 
 **Cache Structure**:
-Cached entries are stored as JSON files in `~/.agentic-memorizer/.cache/summaries/` with filenames derived from the first 16 characters of the content hash. Each entry contains:
+Cached entries are stored as JSON files in `~/.agentic-memorizer/.cache/summaries/` with filenames derived from the first 16 characters of the content hash and version information. Each entry contains:
+- Schema version, metadata version, semantic version (for staleness detection)
 - File path (for reference, not cache key)
 - Content hash (actual cache key)
 - Analysis timestamp
 - Complete file metadata
-- Semantic analysis results
+- Semantic analysis results (including entities and references)
 - Error message (if analysis failed)
 
 **Performance Impact**:
@@ -342,6 +404,34 @@ The cache achieves high hit rates (often >95%) in typical usage patterns where f
 
 **Cache Invalidation**:
 Content-based hashing provides automatic cache invalidation. When a file's content changes, its hash changes, resulting in a cache miss and triggering new analysis. The cache contains no explicit invalidation or expiration logic since the content hash inherently tracks file state.
+
+**Cache Versioning**:
+The cache implements a three-tier versioning system to detect when cached entries become stale due to changes in extraction logic, analysis prompts, or data structures. Each cache entry includes three version fields that are checked during cache lookups:
+
+**Version Tiers**:
+- **SchemaVersion** (current: 1) - Tracks changes to CachedAnalysis structure itself (adding/removing/renaming fields, changing field types, altering cache storage format)
+- **MetadataVersion** (current: 1) - Tracks changes to metadata extraction logic (new FileMetadata fields, extraction algorithm changes, handler updates, categorization changes)
+- **SemanticVersion** (current: 1) - Tracks changes to semantic analysis logic (prompt template updates, new SemanticAnalysis fields, analysis routing changes, entity/reference extraction updates)
+
+**Cache Key Format**:
+Cache filenames include version information: `{hash[:16]}-v{schema}-{metadata}-{semantic}.json` (e.g., `sha256:abc12345-v1-1-1.json`). Legacy entries from before versioning use the format `{hash[:16]}.json` and are treated as version 0.0.0.
+
+**Staleness Detection**:
+During cache lookups, the cache manager evaluates staleness using the following rules:
+- Schema version mismatch (any direction) = always stale (incompatible structure)
+- Metadata version behind current = stale (missing newer metadata fields)
+- Semantic version behind current = stale (outdated analysis prompts or logic)
+- Future versions (newer than current) = not stale (forward compatible)
+
+When a stale entry is detected, the file is re-analyzed with current logic and the cache entry is updated with new version numbers. This versioning system ensures that application upgrades automatically trigger re-analysis of files that would benefit from newer extraction or analysis capabilities.
+
+**Version Bump Scenarios**:
+Developers increment version constants in `internal/cache/version.go` when making changes:
+- Bump SchemaVersion when modifying CachedAnalysis struct or cache storage format
+- Bump MetadataVersion when changing metadata extraction handlers or adding FileMetadata fields
+- Bump SemanticVersion when updating prompts, adding entity/reference fields, or changing analysis routing
+
+The `cache status` and `cache clear --old-versions` commands help manage versioned cache entries.
 
 ### Type System
 
@@ -353,6 +443,8 @@ The Semantic Analyzer populates the `SemanticAnalysis` structure defined in the 
 - `KeyTopics` ([]string) - 3-5 main themes or subjects covered in the file
 - `DocumentType` (string) - Genre or category classification (e.g., "technical-documentation", "configuration", "test-code")
 - `Confidence` (float64) - Analysis confidence score from 0.0 to 1.0 indicating reliability
+- `Entities` ([]Entity) - Named entities extracted from content, each with `name` (string) and `type` (technology, person, concept, organization, project)
+- `References` ([]Reference) - Topic dependencies and relationships, each with `topic` (string), `type` (requires, extends, related-to, implements), and `confidence` (float64)
 
 **Integration with Index Entries**:
 The `SemanticAnalysis` structure is embedded in `IndexEntry` as an optional pointer field:
@@ -410,5 +502,21 @@ Downstream consumers should be aware that confidence scores are only meaningful 
 **Retry Logic**: Error handling pattern that attempts failed API requests multiple times with increasing delays, distinguishing between transient failures (retry) and permanent errors (fail immediately).
 
 **Confidence Score**: Numeric value from 0.0 to 1.0 indicating reliability of semantic analysis. Currently, 0.5 is explicitly set for metadata-only fallback (binary files), while Claude API responses default to 0.0 since confidence is not requested in prompts. This field does not currently provide reliable distinction between successful and unsuccessful Claude analyses.
+
+**Entity Extraction**: Process of identifying and extracting named entities (technologies, people, organizations, concepts, projects) from file content. All analysis strategies request entities as the 5th field in prompts. Entities consist of a name and type classification, enabling technology dependency tracking and subject matter expert identification.
+
+**Entity Types**: Five classifications for extracted entities: technology (programming languages, frameworks, tools), person (individuals mentioned or depicted), concept (abstract ideas or methodologies), organization (companies or groups), project (specific software projects or initiatives).
+
+**Reference Extraction**: Process of identifying topic dependencies and relationships within file content. All analysis strategies request references as the 6th field in prompts. References capture how files relate to, require, extend, or implement other concepts, building a knowledge dependency graph.
+
+**Reference Types**: Four classifications for extracted references: requires (file depends on the topic), extends (file builds upon the topic), related-to (general connection to the topic), implements (file provides implementation of the topic). Each reference includes a confidence score from 0.0 to 1.0.
+
+**Cache Versioning**: Three-tier versioning system (SchemaVersion, MetadataVersion, SemanticVersion) that tracks cache entry compatibility with current code. Version mismatches or outdated versions trigger automatic re-analysis during cache lookups. Cache keys include version information in format `{hash[:16]}-v{schema}-{metadata}-{semantic}.json`.
+
+**Schema Version**: Cache version tier tracking CachedAnalysis structure changes (field additions, removals, renames, type changes). Schema version mismatches in either direction indicate incompatible cache entries that must be re-analyzed.
+
+**Metadata Version**: Cache version tier tracking metadata extraction logic changes (new FileMetadata fields, handler updates, categorization changes). Metadata versions behind current trigger re-analysis to capture newer metadata fields.
+
+**Semantic Version**: Cache version tier tracking semantic analysis logic changes (prompt updates, new SemanticAnalysis fields, routing changes, entity/reference extraction updates). Semantic versions behind current trigger re-analysis with updated prompts.
 
 **Token Budget**: Maximum number of tokens Claude can use in response (default 1500), controlling response length and API costs while ensuring complete analysis output.

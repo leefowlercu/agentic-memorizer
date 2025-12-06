@@ -43,6 +43,9 @@ The FalkorDB Knowledge Graph subsystem provides persistent graph-based storage f
 3. **Persistence** - Graph data survives daemon restarts
 4. **Scalability** - FalkorDB handles large file collections efficiently
 5. **Future Extensibility** - Graph model supports adding new node/edge types
+6. **Hierarchical Organization** - Directory structure and topic hierarchies
+7. **Similarity Search** - Embedding-based vector search for semantic similarity
+8. **Entity Disambiguation** - Normalized entity names for deduplication
 
 ## Design Principles
 
@@ -95,31 +98,55 @@ All graph operations are idempotent:
 
 **Location:** `internal/graph/manager.go`
 
-The Manager handles FalkorDB connection lifecycle and health monitoring.
+The Manager handles FalkorDB connection lifecycle, health monitoring, and coordinates all graph operations.
 
 ```go
 type Manager struct {
-    client   *redis.Client
-    graph    *falkordb.Graph
-    queries  *Queries
-    logger   *slog.Logger
-    mu       sync.RWMutex
+    client          *Client
+    schema          *Schema
+    nodes           *Nodes
+    edges           *Edges
+    queries         *Queries
+    disambiguation  *Disambiguation
+    recommendations *Recommendations
+    clusters        *ClusterDetection
+    gapAnalysis     *GapAnalysis
+    temporal        *TemporalTracking
+
+    config    ManagerConfig
+    logger    *slog.Logger
+    mu        sync.RWMutex
+    connected bool
 }
 
 // Key methods
-func NewManager(logger *slog.Logger) *Manager
-func (m *Manager) Connect(ctx context.Context, addr string) error
+func NewManager(config ManagerConfig, logger *slog.Logger) *Manager
+func (m *Manager) Initialize(ctx context.Context) error
 func (m *Manager) Close() error
 func (m *Manager) IsConnected() bool
-func (m *Manager) Queries() *Queries
+func (m *Manager) Search(ctx context.Context, query string, limit int, categoryFilter string) ([]SearchResult, error)
+func (m *Manager) VectorSearch(ctx context.Context, embedding []float32, limit int) ([]SearchResult, error)
+func (m *Manager) GetRecommendations(ctx context.Context, filePath string, limit int) ([]Recommendation, error)
+func (m *Manager) DetectClusters(ctx context.Context) ([]Cluster, error)
 ```
 
-**Connection Flow:**
-1. Parse Redis address (host:port)
-2. Create Redis client with connection pool
-3. Create FalkorDB graph handle
-4. Initialize Queries helper
-5. Ensure schema constraints exist
+**Initialization Flow:**
+1. Connect to FalkorDB client
+2. Initialize schema (constraints and indexes)
+3. Initialize sub-components (nodes, edges, queries)
+4. Initialize analytics (disambiguation, recommendations, clusters, gaps, temporal)
+
+**Sub-Components:**
+- **Client** - Low-level FalkorDB client wrapper
+- **Schema** - Schema initialization and index management
+- **Nodes** - Node CRUD operations
+- **Edges** - Relationship CRUD operations
+- **Queries** - High-level query patterns
+- **Disambiguation** - Entity normalization and deduplication
+- **Recommendations** - File recommendation engine
+- **Clusters** - Topic/entity clustering detection
+- **GapAnalysis** - Knowledge coverage gap detection
+- **TemporalTracking** - Temporal analysis of file modifications
 
 ### Queries
 
@@ -129,18 +156,29 @@ Queries encapsulates all Cypher query operations for the graph.
 
 **Core Operations:**
 
+*Search Operations:*
 | Method | Purpose |
 |--------|---------|
-| `UpsertFile` | Create/update File node with metadata |
-| `DeleteFile` | Remove File node and relationships |
-| `GetFile` | Retrieve File by path |
-| `GetFileConnections` | Get tags, topics, entities for a file |
-| `Search` | Multi-signal semantic search |
+| `VectorSearch` | Embedding-based similarity search |
+| `FullTextSearch` | Full-text search on file summaries |
+| `SearchByFilename` | Substring search on filenames |
+| `SearchByTag` | Find files with specific tags |
+| `SearchByTopic` | Find files covering topics |
+| `SearchByEntity` | Find files mentioning entities |
+| `SearchByCategory` | Find files in a category |
+
+*Relationship Operations:*
+| Method | Purpose |
+|--------|---------|
+| `GetFileConnections` | Get all tags, topics, entities for a file |
+| `GetRelatedFiles` | Find files sharing tags/topics/entities |
+| `FindFilesWithSharedEntities` | Find files sharing specific entities |
+
+*Retrieval Operations:*
+| Method | Purpose |
+|--------|---------|
 | `GetRecentFiles` | Files modified within time window |
-| `GetRelatedFiles` | Files sharing tags/topics |
-| `SearchByEntity` | Files mentioning entity |
-| `ClearGraph` | Remove all nodes and relationships |
-| `GetStats` | Node/relationship counts |
+| `GetGraphOverview` | High-level graph statistics |
 
 **Search Query Structure:**
 ```cypher
@@ -237,14 +275,14 @@ The HTTP API exposes graph queries over HTTP for MCP and other clients.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health status with graph metrics |
-| `/api/v1/index` | GET | Export full index |
-| `/api/v1/search` | POST | Semantic search |
-| `/api/v1/files/{path}` | GET | File metadata with connections |
-| `/api/v1/files/recent` | GET | Recently modified files |
-| `/api/v1/files/related` | GET | Related files by path |
-| `/api/v1/entities/search` | GET | Files mentioning entity |
-| `/api/v1/rebuild` | POST | Trigger index rebuild |
-| `/sse` | GET | Server-Sent Events stream |
+| `/api/v1/index` | GET | Export full GraphIndex from graph |
+| `/api/v1/search` | POST | Semantic search across tags, topics, summary |
+| `/api/v1/files/{path}` | GET | File metadata with graph connections |
+| `/api/v1/files/recent` | GET | Recently modified files within time window |
+| `/api/v1/files/related` | GET | Related files by shared tags/topics |
+| `/api/v1/entities/search` | GET | Files mentioning specific entity |
+| `/api/v1/rebuild` | POST | Trigger index rebuild (with optional force flag) |
+| `/sse` | GET | Server-Sent Events stream for real-time updates |
 
 ### CLI Commands
 
@@ -317,8 +355,9 @@ Represents a named entity (person, organization, concept).
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `name` | string | Entity name (unique) |
-| `type` | string | Entity type (person, org, etc.) |
+| `name` | string | Entity name (display name) |
+| `normalized` | string | Normalized entity name (unique, for deduplication) |
+| `type` | string | Entity type (person, org, technology, concept) |
 
 #### Category Node
 
@@ -327,6 +366,14 @@ Represents a file category (documents, images, code, data, other).
 | Property | Type | Description |
 |----------|------|-------------|
 | `name` | string | Category name (unique) |
+
+#### Directory Node
+
+Represents a directory in the file hierarchy.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `path` | string | Directory path (unique) |
 
 ### Relationship Types
 
@@ -362,18 +409,65 @@ Connects File to Category nodes.
 (File)-[:IN_CATEGORY]->(Category)
 ```
 
+#### REFERENCES
+
+Connects File to Topic with additional metadata (type and confidence).
+
+```
+(File)-[:REFERENCES {type: string, confidence: float}]->(Topic)
+```
+
+#### SIMILAR_TO
+
+Connects files based on embedding similarity.
+
+```
+(File)-[:SIMILAR_TO {score: float}]->(File)
+```
+
+#### IN_DIRECTORY
+
+Connects File to Directory for hierarchical organization.
+
+```
+(File)-[:IN_DIRECTORY]->(Directory)
+```
+
+#### PARENT_OF
+
+Hierarchical relationships between Topics or Directories.
+
+```
+(Topic)-[:PARENT_OF]->(Topic)
+(Directory)-[:PARENT_OF]->(Directory)
+```
+
 ### Constraints and Indexes
 
 **Unique Constraints:**
 - `File.path` - Ensures no duplicate file entries
 - `Tag.name` - Ensures tag deduplication
 - `Topic.name` - Ensures topic deduplication
-- `Entity.name` - Ensures entity deduplication
+- `Entity.normalized` - Ensures entity deduplication (normalized names)
 - `Category.name` - Ensures category deduplication
+- `Directory.path` - Ensures no duplicate directory entries
 
 **Indexes:**
-- Automatically created by unique constraints
-- Support efficient lookups by unique properties
+
+*Range Indexes* (for fast property lookups):
+- `File.path` - Primary file lookup
+- `File.hash` - Content-based deduplication
+- `Tag.name` - Tag lookup
+- `Topic.name` - Topic lookup
+- `Category.name` - Category lookup
+- `Entity.normalized` - Entity lookup and disambiguation
+- `Directory.path` - Directory hierarchy navigation
+
+*Full-Text Index*:
+- `File.summary` - Full-text search on file summaries
+
+*Vector Index*:
+- `File.embedding` - Similarity search using embeddings (HNSW algorithm, cosine similarity)
 
 ## Integration Points
 
@@ -712,7 +806,7 @@ Trigger index rebuild.
 
 ---
 
-**Last Updated:** 2025-11-30
+**Last Updated:** 2025-12-05
 
 **Related Documentation:**
 - [Daemon Subsystem](../daemon/README.md)

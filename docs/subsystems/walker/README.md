@@ -47,7 +47,7 @@ The callback returns an error, giving the caller the power to halt traversal at 
 
 ### Skip Pattern Strategy
 
-The Walker implements a two-tier filtering strategy that distinguishes between directory-level and file-level exclusions, optimizing performance by preventing traversal of entire subtrees.
+The Walker implements a three-tier filtering strategy that distinguishes between directory-level, file-level, and extension-level exclusions, optimizing performance by preventing traversal of entire subtrees.
 
 **Directory-Level Skipping:**
 When a directory matches a skip pattern, the walker returns `filepath.SkipDir`, preventing descent into that directory and its entire subtree. This early pruning provides massive performance benefits by avoiding traversal of potentially thousands of files within excluded directories like `.git` or `.cache`. The walker maintains a map of absolute skip paths built by joining the root with each skip directory name, enabling O(1) lookup during traversal.
@@ -55,11 +55,14 @@ When a directory matches a skip pattern, the walker returns `filepath.SkipDir`, 
 **File-Level Skipping:**
 After a directory passes filtering, individual files within that directory are checked against file skip patterns. Files whose basenames match the skip list are silently ignored without callback invocation. This file-level filtering has lower performance impact since it only affects individual files rather than entire directory trees.
 
+**Extension-Level Skipping:**
+After file-level filtering, files are checked against the skip extensions list. Files whose extensions (including the dot, e.g., `.zip`, `.tar`) match the skip list are silently ignored without callback invocation. This provides an efficient way to exclude entire categories of files (archives, binaries, etc.) without explicitly listing each filename.
+
 **Hidden File Filtering:**
 The walker automatically excludes any file or directory whose name starts with a dot (`.`), treating them as hidden system files. This built-in filter prevents accidental processing of hidden configuration files, temporary files, and system directories. The hidden file filter applies before explicit skip patterns and cannot be disabled.
 
 **Performance Optimization:**
-The two-tier strategy recognizes that directory skipping has exponentially greater impact than file skipping. A single directory skip can eliminate thousands of file checks. The walker prioritizes directory filtering, checking it first and using `filepath.SkipDir` to short-circuit traversal efficiently.
+The three-tier strategy recognizes that directory skipping has exponentially greater impact than file or extension skipping. A single directory skip can eliminate thousands of file checks. The walker prioritizes directory filtering, checking it first and using `filepath.SkipDir` to short-circuit traversal efficiently. File and extension filtering occur sequentially after directory filtering passes.
 
 ### Recursive Traversal
 
@@ -101,19 +104,20 @@ The Walk function (`internal/walker/walker.go`) provides recursive directory tra
 
 **Function Signature:**
 ```
-Walk(root string, skipDirs []string, skipFiles []string, visitor FileVisitor) error
+Walk(root string, skipDirs []string, skipFiles []string, skipExtensions []string, visitor FileVisitor) error
 ```
 
 **Parameters:**
 - `root` - Starting directory for traversal (typically the memory root)
 - `skipDirs` - List of directory names to exclude from traversal (triggers subtree pruning)
 - `skipFiles` - List of file basenames to exclude from processing (individual file filtering)
+- `skipExtensions` - List of file extensions to exclude from processing (e.g., `.zip`, `.tar`, `.exe`)
 - `visitor` - Callback function invoked for each qualifying file
 
 **Traversal Process:**
 1. Normalizes the root path using `filepath.Clean()`
 2. Converts relative skip directories to absolute paths by joining with root
-3. Builds map data structures for efficient skip pattern lookup
+3. Builds map data structures for efficient skip pattern lookup (directories, files, and extensions)
 4. Initiates recursive traversal using `filepath.Walk()`
 5. For each path encountered, applies filtering rules hierarchically
 6. Invokes callback for files that pass all filters
@@ -127,7 +131,8 @@ The walk applies filters in this order:
 4. Directory pass-through (directories that pass return `nil` to continue traversal)
 5. Hidden file filter (name starts with `.` skips file without callback)
 6. Explicit file skip (basename matches `skipFiles` list skips without callback)
-7. File callback (qualifying files invoke the visitor function)
+7. Extension filter (file extension matches `skipExtensions` list skips without callback)
+8. File callback (qualifying files invoke the visitor function)
 
 **Return Value:**
 Returns `nil` on successful completion or an error if the callback returns an error. File system errors during traversal are logged but don't cause Walk to return an error.
@@ -174,6 +179,9 @@ Skip directories should be specified as basenames or paths relative to the root 
 **File Filtering:**
 File filtering operates after a directory has passed filtering and its contents are being examined. Files are checked against the skip files list by basename comparison (not full path). Matching files are silently skipped without callback invocation.
 
+**Extension Filtering:**
+Extension filtering operates after file filtering, checking the file extension against the skip extensions list. Extensions are matched including the dot separator (e.g., `.zip`, `.tar`, `.exe`). Files with matching extensions are silently skipped without callback invocation. This provides a convenient way to exclude binary files, archives, and other non-analyzable file types.
+
 **Hidden Item Filtering:**
 The walker automatically filters any file or directory whose basename starts with `.` (dot character), treating them as hidden system items. This filter applies before explicit skip patterns and cannot be disabled, preventing accidental processing of configuration files, temporary files, and system directories.
 
@@ -181,6 +189,7 @@ The walker automatically filters any file or directory whose basename starts wit
 The walker uses Go maps for skip pattern storage, providing O(1) lookup performance:
 - `skipPaths map[string]bool` - Absolute paths of directories to skip
 - `skipFileNames map[string]bool` - Basenames of files to skip
+- `skipExts map[string]bool` - File extensions to skip (including dot)
 
 These maps are built once at walk initialization and reused throughout traversal for efficient filtering.
 
@@ -202,9 +211,10 @@ The daemon provides a closure as the visitor callback that captures a job slice:
 5. Callback returns nil to continue traversal
 
 **Skip Pattern Configuration:**
-The daemon configures skip patterns from two sources:
+The daemon configures skip patterns from three sources:
 - **Hardcoded Skip Directories**: `.cache` (prevents indexing the cache) and `.git` (prevents indexing version control data)
 - **Configured Skip Files**: From `config.Analysis.SkipFiles`, allowing users to exclude specific files like binaries or build artifacts
+- **Configured Skip Extensions**: From `config.Analysis.SkipExtensions`, allowing users to exclude entire categories of files by extension (default: `.zip`, `.tar`, `.gz`, `.exe`, `.bin`, `.dmg`, `.iso`)
 
 **Post-Traversal Processing:**
 After the walk completes, the daemon:
@@ -251,8 +261,8 @@ The Walker and File Watcher serve complementary roles in the daemon's file disco
 
 **Shared Filtering Approach:**
 Both components implement similar skip pattern logic but with independent implementations and different matching strategies:
-- **Walker**: Uses `skipDirs` and `skipFiles` parameters with map-based lookup. Directory filtering compares **full absolute paths** against skip patterns.
-- **Watcher**: Uses `shouldSkip()` and `shouldSkipDir()` methods with slice-based checking. Directory filtering compares only **basenames** against skip patterns.
+- **Walker**: Uses `skipDirs`, `skipFiles`, and `skipExtensions` parameters with map-based lookup. Directory filtering compares **full absolute paths** against skip patterns.
+- **Watcher**: Uses `shouldSkip()` and `shouldSkipDir()` methods with slice-based checking. Directory filtering compares only **basenames** against skip patterns. Both use identical extension filtering logic.
 
 This difference means the walker's directory skip patterns must be specified as basenames or relative paths (which get joined with root to form absolute paths), while the watcher matches skip directories by basename only. This duplication is intentional - the components operate independently with different operational characteristics (walker is one-shot, watcher is continuous) and different performance requirements (walker optimizes for batch processing, watcher optimizes for real-time response).
 
@@ -270,29 +280,36 @@ The watcher runs continuously, detecting file changes between full rebuilds and 
 The Walker receives configuration indirectly through the daemon, which reads skip patterns from the Config Manager and passes them to the walker during traversal.
 
 **Configuration Flow:**
-1. Config Manager loads `config.yaml` with `Analysis.SkipFiles` list
-2. Daemon reads skip files configuration during initialization
+1. Config Manager loads `config.yaml` with `Analysis.SkipFiles` and `Analysis.SkipExtensions` lists
+2. Daemon reads skip configuration during initialization
 3. Daemon adds hardcoded skip directories (`.cache`, `.git`)
 4. Daemon passes combined skip patterns to walker during rebuild
 
 **Hardcoded vs. Configurable:**
 - **Skip Directories**: Hardcoded in daemon (`.cache`, `.git`) - not user-configurable
 - **Skip Files**: Configurable via `config.Analysis.SkipFiles` - user-definable list
+- **Skip Extensions**: Configurable via `config.Analysis.SkipExtensions` - user-definable list with sensible defaults
 
 **Design Rationale:**
-Skip directories are hardcoded to prevent users from accidentally indexing cache data or version control history, which would be counterproductive. Skip files are configurable to allow users to exclude project-specific files like compiled binaries or build artifacts.
+Skip directories are hardcoded to prevent users from accidentally indexing cache data or version control history, which would be counterproductive. Skip files and extensions are configurable to allow users to exclude project-specific files and file types.
 
 **Default Skip Files:**
 The default configuration includes:
 - `agentic-memorizer` - The binary itself to prevent self-indexing
 
-Users can extend this list with additional files specific to their workflows or projects.
+**Default Skip Extensions:**
+The default configuration includes:
+- `.zip`, `.tar`, `.gz` - Archive formats
+- `.exe`, `.bin` - Binary executables
+- `.dmg`, `.iso` - Disk images
+
+Users can extend or override these lists with additional patterns specific to their workflows or projects. Both `skip_files` and `skip_extensions` are hot-reloadable configuration settings.
 
 ## Glossary
 
 **FileVisitor**: A callback function type that receives each discovered file's path and `os.FileInfo` structure. The visitor pattern allows the walker to remain generic while enabling caller-specific processing logic for each file.
 
-**Skip Patterns**: Lists of directory and file names to exclude from traversal. Directory skip patterns trigger early termination of subtree traversal (performance optimization), while file skip patterns filter individual files after directories pass filtering.
+**Skip Patterns**: Lists of directory names, file names, and file extensions to exclude from traversal. Directory skip patterns trigger early termination of subtree traversal (performance optimization), while file and extension skip patterns filter individual files after directories pass filtering.
 
 **Absolute Skip Paths**: The walker converts relative skip directory names to absolute paths by joining with the root directory. This conversion happens once at initialization and enables efficient map-based lookup during traversal.
 
@@ -317,6 +334,8 @@ Users can extend this list with additional files specific to their workflows or 
 **Graceful Degradation**: Error handling strategy where file system access errors are logged but don't stop traversal, ensuring partial success rather than all-or-nothing failure.
 
 **Subtree Exclusion**: Preventing traversal of an entire directory tree by returning `filepath.SkipDir` when a directory matches a skip pattern, avoiding examination of potentially thousands of files.
+
+**Extension Matching**: File extension comparison including the dot separator (e.g., `.zip`, `.tar`). Extension filtering provides efficient exclusion of entire categories of files by type rather than individual filenames.
 
 **Visitor Pattern**: Design pattern where an algorithm (traversal) is separated from the operations performed on elements (file processing), enabling the same traversal code to support different operations through callbacks.
 

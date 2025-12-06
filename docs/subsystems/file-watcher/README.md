@@ -40,11 +40,12 @@ Since fsnotify only watches explicitly registered directories (not recursively),
 
 ### Filtering Strategy
 
-The File Watcher implements a three-level filtering strategy to reduce system overhead and prevent index pollution:
+The File Watcher implements a four-level filtering strategy to reduce system overhead and prevent index pollution:
 
 1. **Directory Skip**: Prevents descending into specified directories like `.git`, `.cache`, and other hidden directories
 2. **File Skip**: Ignores specific files configured by the user, such as binaries or temporary files
-3. **Hidden Filter**: Automatically skips any file or directory starting with `.`
+3. **Extension Skip**: Filters files by extension (e.g., `.exe`, `.dll`, `.so`) to exclude binary or unwanted file types
+4. **Hidden Filter**: Automatically skips any file or directory starting with `.`
 
 This filtering happens before events are added to the batch, minimizing the memory footprint and processing overhead of the watcher.
 
@@ -72,6 +73,7 @@ The Watcher struct (`internal/watcher/watcher.go`) is the core component that ma
 - `batchedEvents`: Map accumulating events during the debounce period
 - `skipDirs`: Directories to ignore during recursive watching
 - `skipFiles`: Specific files to ignore
+- `skipExtensions`: File extensions to ignore (e.g., `.exe`, `.dll`)
 - `debounceMs`: Debounce period in milliseconds
 - `debounceIntervalCh`: Buffered channel (capacity 1) for runtime debounce interval updates
 
@@ -116,37 +118,38 @@ Each event includes the event type and the absolute path to the affected file.
 
 ### Daemon Subsystem
 
-The Daemon subsystem creates and manages the File Watcher lifecycle. During daemon initialization (`internal/daemon/daemon.go:140-156`), it instantiates a watcher with configuration-driven parameters:
+The Daemon subsystem creates and manages the File Watcher lifecycle. During daemon initialization (`internal/daemon/daemon.go:142-157`), it instantiates a watcher with configuration-driven parameters:
 
 - Root path from `cfg.MemoryRoot`
 - Skip directories hardcoded as `.cache` and `.git`
 - Skip files from `cfg.Analysis.SkipFiles`
+- Skip extensions from `cfg.Analysis.SkipExtensions`
 - Debounce period from `cfg.Daemon.DebounceMs`
 
 The daemon runs a dedicated goroutine (`processWatcherEvents()`) that consumes events from the watcher's channel and delegates to `handleFileEvent()` for processing. Event handling differs by type:
 
-- **Create/Modify**: Extracts metadata, computes file hash, checks cache (recording cache hit metric via `RecordCacheHit()` if found), performs semantic analysis if needed (recording API call metric via `RecordAPICall()`), updates the index, records file processed metric via `RecordFileProcessed()`, and increments index file count via `IncrementIndexFileCount()` when a new file is added
-- **Delete**: Removes the entry from the index and decrements index file count via `DecrementIndexFileCount()` if removal was successful
+- **Create/Modify**: Extracts metadata, computes file hash, checks cache (recording cache hit metric via `RecordCacheHit()` if found), performs semantic analysis if needed (recording API call metric via `RecordAPICall()`), updates the graph, records file processed metric via `RecordFileProcessed()`, and increments index file count via `IncrementIndexFileCount()` when a new file is added
+- **Delete**: Removes the entry from the graph and decrements index file count via `DecrementIndexFileCount()` if removal was successful
 
-All changes are immediately persisted via atomic write operations to ensure index consistency. Health metrics are recorded throughout the event processing flow to accurately track cache hits, API calls, files processed, and index file count changes during incremental updates.
+All changes are immediately stored in the FalkorDB graph database to ensure data consistency. Health metrics are recorded throughout the event processing flow to accurately track cache hits, API calls, files processed, and index file count changes during incremental updates.
 
 The daemon also tracks watcher health via `HealthMetrics.WatcherActive`, which is exposed through an optional HTTP health check endpoint.
 
 **Configuration Hot-Reload:**
-The daemon supports runtime debounce interval updates without restarting via the `config reload` command. When configuration is reloaded (`daemon.go:747`), the daemon calls `watcher.UpdateDebounceInterval()` with the new value. The watcher uses a buffered channel (capacity 1) to signal the debounce goroutine, which then recreates the ticker with the new interval. If the channel is full (a previous update hasn't been processed), a warning is logged and the update is skipped. This design enables non-blocking configuration updates while the watcher continues processing events.
+The daemon supports runtime debounce interval updates without restarting via the `config reload` command. When configuration is reloaded (`daemon.go:834-837`), the daemon calls `watcher.UpdateDebounceInterval()` with the new value. The watcher uses a buffered channel (capacity 1) to signal the debounce goroutine, which then recreates the ticker with the new interval. If the channel is full (a previous update hasn't been processed), a warning is logged and the update is skipped. This design enables non-blocking configuration updates while the watcher continues processing events.
 
-### Index Manager
+### Graph Manager
 
-The File Watcher indirectly integrates with the Index Manager through the daemon. The event flow is:
+The File Watcher indirectly integrates with the Graph Manager through the daemon. The event flow is:
 
 1. Watcher emits events
 2. Daemon processes events and performs semantic analysis
-3. Daemon calls Index Manager methods with tracking information:
-   - `UpdateSingle(entry types.IndexEntry, info UpdateInfo) (UpdateResult, error)` - For creates/modifies, passing UpdateInfo to track what happened during processing (cache hit, API call, error)
-   - `RemoveFile(path string) (RemoveResult, error)` - For deletes, returning RemoveResult with removal status and file size
-4. Index Manager updates the in-memory index and relevant statistics
+3. Daemon calls Graph Manager methods:
+   - `UpdateSingle(ctx, entry types.IndexEntry, info UpdateInfo) (UpdateResult, error)` - For creates/modifies, passing UpdateInfo to track what happened during processing (cache hit, API call, error)
+   - `RemoveFile(ctx, path string) error` - For deletes, removing the file node and all its edges from the graph
+4. Graph Manager updates the FalkorDB knowledge graph with file nodes and relationships (tags, topics, entities, categories)
 5. Daemon uses the result to update health metrics (increment/decrement file count)
-6. Daemon persists the updated index to disk
+6. SSE hub broadcasts real-time update notifications to connected clients
 
 This separation of concerns allows the watcher to focus solely on file system monitoring while the daemon orchestrates the complete update workflow.
 
@@ -161,9 +164,13 @@ daemon:
 analysis:
   skip_files:                   # User-configured files to ignore
     - agentic-memorizer
+  skip_extensions:              # User-configured extensions to ignore
+    - .exe
+    - .dll
+    - .so
 ```
 
-The watcher also uses hardcoded skip patterns (`.cache`, `.git`) and automatically filters hidden files and directories. This configuration-driven approach allows users to customize the watcher's behavior without modifying code.
+The watcher also uses hardcoded skip directories (`.cache`, `.git`) and automatically filters hidden files and directories. This configuration-driven approach allows users to customize the watcher's behavior without modifying code.
 
 ## Glossary
 

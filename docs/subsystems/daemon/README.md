@@ -8,17 +8,20 @@
    - [Core Daemon](#core-daemon)
    - [Worker Pool](#worker-pool)
    - [File Watcher](#file-watcher)
-   - [Index Manager](#index-manager)
+   - [Graph Manager](#graph-manager)
    - [PID Management](#pid-management)
    - [Signal Handling](#signal-handling)
    - [Health Monitoring](#health-monitoring)
    - [SSE Notification Hub](#sse-notification-hub)
+   - [Embeddings System](#embeddings-system)
+   - [Service Manager Integration](#service-manager-integration)
 4. [Integration Points](#integration-points)
    - [Configuration System](#configuration-system)
    - [Cache System](#cache-system)
    - [Metadata Extractor](#metadata-extractor)
    - [Semantic Analyzer](#semantic-analyzer)
    - [Directory Walker](#directory-walker)
+   - [Graph System](#graph-system)
    - [CLI Commands](#cli-commands)
    - [Read Command](#read-command)
    - [MCP Server Integration](#mcp-server-integration)
@@ -86,11 +89,11 @@ During runtime, the daemon processes file system events from the watcher by subm
 
 ### Worker Pool
 
-The worker pool provides parallel file processing with rate limiting and priority-based scheduling. It manages a configurable number of worker goroutines that process files concurrently, implements token bucket rate limiting for API calls, and prioritizes recently modified files for processing.
+The worker pool provides parallel file processing with rate limiting and batch priority sorting. It manages a configurable number of worker goroutines that process files concurrently, implements dual token bucket rate limiting for Claude API and embeddings API calls, and processes files based on initial priority sorting.
 
-Each worker follows a consistent processing flow: extract metadata from the file, compute a content hash, check the cache using that hash, and either use the cached result or perform semantic analysis via the Claude API. The worker pool tracks detailed statistics including jobs processed, cache hit rates, API calls made, and error counts.
+Each worker follows a consistent processing flow: extract metadata from the file, compute a content hash, check the cache using that hash, and either use the cached result or perform semantic analysis via the Claude API. If embeddings are enabled and analysis succeeds, an embedding vector is generated and cached separately. The worker pool tracks detailed statistics including jobs processed, cache hit rates, API calls made, embedding calls, and error counts.
 
-Priority calculation considers file modification time, giving highest priority to files modified in the last hour, followed by files modified in the last day, week, and older files respectively. This ensures that recent changes are reflected in the index quickly while still processing all files eventually.
+Priority sorting occurs at batch submission time, with jobs sorted by modification time before entering the processing queue. Files modified within the last hour receive highest priority (100), followed by files modified in the last day (50), last week (25), and older files (10). Once sorted, jobs are processed FIFO by available workers. This ensures recent changes are analyzed first during rebuilds while maintaining efficient throughput.
 
 ### File Watcher
 
@@ -98,15 +101,17 @@ The file watcher component provides real-time file system monitoring using the f
 
 Event debouncing uses a map-based batching mechanism where events accumulate for a configurable period before being sent for processing. This batching ensures that the last write wins for any given path, preventing redundant work when files are modified multiple times in quick succession. The debounce interval can be changed at runtime during configuration reload by signaling the watcher through a channel, causing it to recreate its internal ticker with the new interval.
 
-The watcher filters events intelligently, skipping hidden files and directories, ignoring configurable file patterns, and handling special cases like the cache directory and version control directories. It translates file system events into appropriate actions: Create and Modify events trigger analysis, Delete events trigger index removal, and Rename events are handled as deletion followed by creation.
+The watcher filters events intelligently, skipping hidden files and directories (dot-prefixed), ignoring configurable file patterns and extensions, and handling special cases like the cache directory and `.git` version control directories. It translates file system events into appropriate actions: Create and Modify events trigger analysis, Delete events trigger index removal, and Rename events are handled as deletion of the source path (with destination handled separately as Create).
 
-### Index Manager
+### Graph Manager
 
-The index manager provides thread-safe management of the precomputed index file. It maintains an in-memory representation of the index, coordinates atomic writes to disk, enables incremental updates for individual files, and supports full index replacement during rebuilds.
+The graph manager provides persistent storage and relationship-based querying through FalkorDB, a graph database backend. It stores files as nodes with metadata and semantic analysis, creates relationship edges for tags, topics, entities, and categories, and enables semantic search across the knowledge graph.
 
-The atomic write pattern ensures index integrity by writing to a temporary file, syncing to disk to ensure durability, and atomically renaming to the final location. This guarantees that the index file is never in a partially-written state, even if the daemon crashes during a write operation.
+The graph manager is initialized during daemon startup and required for daemon operation. It maintains connections to the FalkorDB Docker container, creates schema constraints for node types and relationships, and provides graceful degradation when the database is temporarily unavailable.
 
-The index manager supports both bulk operations during full rebuilds and incremental operations for individual file changes. Incremental updates modify the in-memory index and immediately persist the change atomically, ensuring that file changes are reflected in the index with minimal delay.
+File operations in the graph support both single-file updates and full rebuilds. UpdateSingle adds or modifies a single file node with its relationships, returning information about whether the file was newly added or updated. RemoveFile deletes a file node and all its relationships. During rebuilds, all discovered files are written to the graph with their metadata, semantic analysis, and optional embedding vectors.
+
+The graph manager exposes query operations for semantic search, related file discovery, entity search, and recent file queries. These operations power both the HTTP API endpoints and MCP server tools, enabling rich semantic exploration of the indexed knowledge base.
 
 ### PID Management
 
@@ -145,7 +150,7 @@ The health server can be disabled by setting the health check port to 0 in confi
 
 The SSE notification hub provides real-time index update notifications to connected MCP server instances via Server-Sent Events. This enables MCP servers to reload their indexes immediately when changes occur, rather than polling or waiting for manual refresh.
 
-The hub exposes two HTTP endpoints: `/notifications/stream` for the SSE event stream and `/health` for monitoring connected clients. The SSE stream endpoint delivers notifications in standard SSE format with event type "notification" and JSON-formatted data containing the notification type (`index_updated` for single file changes, `index_rebuilt` for full rebuilds), timestamp, and optional metadata (file path for updates, total file count for rebuilds).
+The hub exposes SSE event streams at the `/sse` endpoint. The SSE stream delivers notifications in standard SSE format with JSON-formatted event data containing the event type, timestamp, and complete graph index. Two event types are sent: `index_snapshot` on initial connection and `index_updated` for all subsequent changes (both single-file updates and full rebuilds send the same event type with the complete updated index).
 
 The hub supports unlimited concurrent MCP server connections. Each connection receives all broadcast notifications until it disconnects. Client connections are tracked in a thread-safe map, and the `/health` endpoint reports the current count of connected clients for operational monitoring.
 
@@ -159,11 +164,19 @@ Notifications are broadcast by the daemon after successful index writes. The `Br
 
 Implementation is located in `internal/daemon/sse_hub.go`, with integration points in `internal/daemon/daemon.go` for lifecycle management and broadcast calls.
 
+### Embeddings System
+
+The embeddings system provides optional vector embedding generation for file content, enabling future vector similarity search capabilities. When enabled via configuration, the system generates embedding vectors for successfully analyzed files and caches them separately from semantic analysis results.
+
+The embeddings provider supports OpenAI's text embedding models with configurable dimensions. Embedding generation occurs after semantic analysis succeeds and only if the file has a non-empty summary. The worker pool maintains a separate rate limiter for embedding API calls (hardcoded at 500 RPM) to prevent embedding generation from affecting Claude API quota.
+
+Embeddings are cached independently using content hash as the key, stored in a separate cache directory. During graph updates, embeddings are included if available via UpdateSingleWithEmbedding. The embedding system is designed for future extensibility but currently stores vectors without utilizing them for search operations.
+
 ### Service Manager Integration
 
 The daemon follows modern Go best practices by running in foreground mode and delegating process supervision to external service managers. This design avoids self-daemonization anti-patterns in favor of battle-tested tools like systemd and launchd.
 
-The daemon provides two commands for generating service manager configuration files. The `systemctl` command generates systemd unit files for Linux systems, while the `launchctl` command generates launchd plist files for macOS. Both commands detect the binary path automatically and create user-level and system-level configuration templates.
+The daemon provides two commands for generating service manager configuration files. The `daemon systemctl` command generates systemd unit files for Linux systems, while the `daemon launchctl` command generates launchd plist files for macOS. Both commands detect the binary path automatically and create user-level and system-level configuration templates.
 
 When running under systemd, the daemon implements the Type=notify protocol by sending a readiness notification after the health server starts. This integration ensures systemd knows when the daemon is fully operational and ready to handle requests. The notification occurs via the go-systemd library's SdNotify function.
 
@@ -203,6 +216,14 @@ The daemon uses the directory walker during full index rebuilds to traverse the 
 
 The walker returns relative paths from the memory directory root, which are then submitted to the worker pool for analysis. This separation allows the walker to focus purely on file system traversal while the worker pool handles the more complex processing logic.
 
+### Graph System
+
+The daemon integrates deeply with the graph system for persistent storage and semantic querying. All processed files are stored as nodes in FalkorDB with their metadata, semantic analysis, and relationship edges.
+
+The graph manager is initialized during daemon startup and must be available for the daemon to operate. If initialization fails, the daemon will not start. During runtime, the graph provides graceful degradation when temporarily unavailable, logging warnings but continuing to accept new files.
+
+File updates flow through UpdateSingle for incremental changes and UpdateSingleWithEmbedding when embedding vectors are available. Full rebuilds write all discovered files to the graph in batch. The daemon queries the graph for statistics during startup to detect existing data and determine whether to continue with stale data if the initial rebuild fails.
+
 ### CLI Commands
 
 CLI commands provide the user interface for daemon control. The daemon supports eight subcommands: start, stop, status, restart, rebuild, logs, systemctl, and launchctl.
@@ -215,19 +236,19 @@ The config reload command validates and applies configuration changes by sending
 
 ### Read Command
 
-The read command represents the primary consumption interface for the daemon's output. It loads the precomputed index file, formats it according to the requested output format and integration wrapper, and outputs the result to stdout for consumption by agent frameworks.
+The read command provides backwards compatibility for integration adapters that use precomputed index files. It queries the graph database to export the complete index, formats it according to the requested output format and integration wrapper, and outputs the result to stdout for consumption by agent frameworks.
 
-Critically, the read command is daemon-independent. It directly reads the index file without any communication with the daemon process. This design provides fast read operations, resilience to daemon unavailability, and simplicity in the integration interface.
+The read command requires the graph database to be available. It exports the complete index from FalkorDB using the graph manager's export functionality, then applies formatting and integration-specific wrapping. This design maintains the same interface as the legacy index file approach while leveraging the graph's persistent storage.
 
 ### MCP Server Integration
 
 The daemon integrates with MCP server instances through the SSE notification hub, enabling real-time index synchronization for MCP-enabled AI tools. MCP servers connect to the daemon's SSE stream endpoint and receive notifications whenever the index changes.
 
-When an MCP server starts, it connects to `http://localhost:{http_port}/notifications/stream` if the HTTP server is enabled. The connection uses standard HTTP with `Accept: text/event-stream` header and remains open for the duration of the MCP server's lifecycle. Multiple MCP servers can connect simultaneously, each maintaining its own independent stream.
+When an MCP server starts, it connects to `http://localhost:{http_port}/sse` if the HTTP server is enabled. The connection uses standard HTTP with `Accept: text/event-stream` header and remains open for the duration of the MCP server's lifecycle. Multiple MCP servers can connect simultaneously, each maintaining its own independent stream.
 
-The daemon broadcasts notifications to all connected MCP servers immediately after successful index writes. After processing a file event through the worker pool, the daemon calls `index.Manager.WriteAtomic()` to persist the updated index, then calls `sseHub.BroadcastIndexUpdate()` with notification type `index_updated` and the affected file path. Similarly, after completing a full rebuild, the daemon broadcasts type `index_rebuilt` with the total file count.
+The daemon broadcasts notifications to all connected MCP servers immediately after successful graph updates. After processing a file event through the worker pool, the daemon calls `graphManager.UpdateSingle()` to persist the updated file node and relationships, then calls `sseHub.BroadcastIndexUpdate()` which sends an `index_updated` event with the complete graph index. Full rebuilds trigger the same `index_updated` event type after all files are written to the graph.
 
-MCP servers receive these notifications as SSE events with JSON payloads containing `type`, `timestamp`, and optional metadata fields. Upon receiving a notification, an MCP server reloads its in-memory index from disk via `index.Manager.LoadComputed()`, then sends JSON-RPC notifications to its connected clients (e.g., Claude Code) informing them that resources have changed. This cascading notification chain ensures AI tools can react immediately to index changes.
+MCP servers receive these notifications as SSE events with JSON payloads containing `type` (either `index_snapshot` on initial connection or `index_updated` for changes), `timestamp`, and the complete `GraphIndex` structure in the `data` field. Upon receiving an `index_updated` notification, an MCP server reloads its in-memory index by querying the graph manager's export functionality, then sends JSON-RPC notifications to its connected clients (e.g., Claude Code) informing them that resources have changed. This cascading notification chain ensures AI tools can react immediately to index changes.
 
 The integration supports configuration hot-reload. When the `http_port` setting changes during daemon configuration reload, the HTTP server shuts down gracefully (disconnecting all MCP servers from the SSE stream), and restarts on the updated port. MCP servers detect the disconnection, wait with exponential backoff, and automatically reconnect when the server becomes available again.
 
@@ -241,25 +262,27 @@ Implementation touchpoints include: `internal/daemon/daemon.go` (lifecycle manag
 
 Daemon startup follows a carefully orchestrated sequence to ensure proper initialization. Configuration is loaded and validated, logging is configured with appropriate output destinations and levels, and all component instances are created in dependency order.
 
-Process management begins with checking for an existing daemon through PID file validation. If no daemon is running, a new PID file is written. Signal handlers are registered for graceful shutdown and operational commands. Crash recovery is attempted by loading any existing index file.
+The graph manager is initialized early in the startup sequence, establishing a connection to FalkorDB and creating schema constraints. If graph initialization fails, the daemon will not start. Once the graph is initialized, the daemon checks for existing data in the graph to determine whether to continue with stale data if the initial rebuild encounters errors.
 
-The daemon then performs an initial full rebuild to ensure the index is current, starts the file watcher to begin monitoring for changes, launches background goroutines for event processing and periodic rebuilds, and optionally starts the HTTP server (if `http_port > 0`) which provides both health check and SSE notification endpoints. Finally, it logs successful startup and blocks waiting for the context to be cancelled.
+Process management begins with checking for an existing daemon through PID file validation. If no daemon is running, a new PID file is written. Signal handlers are registered for graceful shutdown and operational commands.
+
+The daemon then performs an initial full rebuild to ensure the graph is current, writing all discovered files as nodes with their metadata, semantic analysis, and relationships. After the rebuild completes, the file watcher starts monitoring for changes, background goroutines launch for event processing and periodic rebuilds, and the HTTP server starts (if `http_port > 0`) providing health check and SSE notification endpoints. For systemd environments, a readiness notification is sent after the HTTP server starts. Finally, the daemon logs successful startup and blocks waiting for context cancellation.
 
 ### Runtime Operations
 
-During normal operation, the daemon runs several concurrent processes. The event processing loop receives events from the file watcher, submits them to the worker pool, collects results, updates the in-memory index, atomically writes the updated index to disk, and broadcasts an `index_updated` notification to connected MCP servers via the SSE hub (if enabled).
+During normal operation, the daemon runs several concurrent processes. The event processing loop receives events from the file watcher, submits them to the worker pool for metadata extraction and semantic analysis, collects results including optional embeddings, writes file nodes and relationships to the graph via `UpdateSingle()` or `UpdateSingleWithEmbedding()`, and broadcasts an `index_updated` notification to connected MCP servers via the SSE hub (if enabled).
 
-Throughout event processing, health metrics are recorded to track operational activity. When a file is processed, the daemon records cache hits (`RecordCacheHit()`) when cached analysis is reused, API calls (`RecordAPICall()`) when semantic analysis is performed, file processing (`RecordFileProcessed()`) after successful index update, and index file count changes (`IncrementIndexFileCount()` for new files, `DecrementIndexFileCount()` for deletions). This granular tracking ensures metrics accurately reflect both full rebuilds and incremental updates.
+Throughout event processing, health metrics are recorded to track operational activity. When a file is processed, the daemon records cache hits (`RecordCacheHit()`) when cached analysis is reused, API calls (`RecordAPICall()`) when semantic analysis is performed, file processing (`RecordFileProcessed()`) after successful graph update, and index file count changes (`IncrementIndexFileCount()` for new files, `DecrementIndexFileCount()` for deletions). This granular tracking ensures metrics accurately reflect both full rebuilds and incremental updates.
 
-The periodic rebuild loop triggers full directory walks at configured intervals, submits all discovered files to the worker pool with priority sorting, collects results, builds a complete index structure, calculates statistics, atomically replaces the index file, and broadcasts an `index_rebuilt` notification to connected MCP servers.
+The periodic rebuild loop triggers full directory walks at configured intervals, submits all discovered files to the worker pool with priority sorting (recent files first), collects results with metadata and semantic analysis, writes all file nodes to the graph in batch, calculates statistics from worker pool and graph, and broadcasts an `index_updated` notification to connected MCP servers.
 
-Both loops operate concurrently and handle context cancellation to enable clean shutdown. The worker pool processes jobs continuously, respecting rate limits and updating statistics as work completes. The SSE hub maintains connections to MCP servers, delivering notifications and keepalive messages independently of the main processing loops.
+Both loops operate concurrently and handle context cancellation to enable clean shutdown. The worker pool processes jobs continuously, respecting dual rate limits for Claude API and embeddings API, updating statistics as work completes. The SSE hub maintains connections to MCP servers, delivering notifications with the complete graph index and keepalive messages independently of the main processing loops.
 
 ### Shutdown Sequence
 
-Graceful shutdown is triggered by receiving SIGINT or SIGTERM signals. The daemon cancels its context to signal all goroutines to exit, stops the file watcher to prevent new events from being generated, stops the SSE notification hub (if enabled) to disconnect MCP servers gracefully, and waits for all worker goroutines to complete their current jobs using a WaitGroup.
+Graceful shutdown is triggered by receiving SIGINT or SIGTERM signals. The daemon cancels its context to signal all goroutines to exit, stops the HTTP server (which includes both health check and SSE endpoints) to disconnect MCP servers gracefully, stops the file watcher to prevent new events from being generated, and waits for all worker goroutines to complete their current jobs using a WaitGroup.
 
-After all background work completes, the daemon stops the health check HTTP server and removes its PID file to indicate it is no longer running. The daemon logs the shutdown completion and exits. This sequence ensures no work is lost, all network connections are closed properly, resources are released, and the system is left in a clean state.
+After all background work completes, the daemon closes the graph manager connection to FalkorDB and removes its PID file to indicate it is no longer running. The daemon logs the shutdown completion and exits. This sequence ensures no work is lost, all network connections (HTTP and graph) are closed properly, resources are released, and the system is left in a clean state.
 
 ## Future Enhancements
 
@@ -277,19 +300,21 @@ Potential minor improvements that could be considered in the future include file
 
 **Event Loop**: A programming construct that continuously waits for and processes events. The daemon uses event loops for file system events and periodic rebuild triggers.
 
-**Framework Integration**: An adapter that formats the precomputed index for consumption by a specific agent framework like Claude Code or Claude Agents.
+**Embedding Vector**: A high-dimensional numerical representation of file content generated by embedding models, enabling future vector similarity search capabilities.
 
-**Health Metrics**: Operational statistics tracked by the daemon including uptime, processing counts, error rates, and system state.
+**Framework Integration**: An adapter that formats the graph index export for consumption by a specific agent framework like Claude Code or Gemini CLI.
 
-**Index Manager**: The component responsible for maintaining and persisting the precomputed index with thread-safety and atomicity guarantees.
+**Graph Node**: A vertex in the FalkorDB knowledge graph representing a file, tag, topic, entity, or category with associated properties.
+
+**Graph Relationship**: An edge in the FalkorDB knowledge graph connecting nodes (e.g., HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY).
+
+**Health Metrics**: Operational statistics tracked by the daemon including uptime, processing counts, error rates, cache statistics, and system state.
 
 **PID File**: A file containing the process ID of a running daemon, used for process tracking and duplicate prevention.
 
-**Precomputed Index**: An index file that contains all semantic analysis results and metadata, maintained continuously by the daemon for instant loading by agent frameworks.
+**Priority Sorting**: Ordering jobs by priority before submission to workers. The worker pool sorts batches by file modification time, then processes jobs FIFO.
 
-**Priority Queue**: A queue where items are processed in priority order rather than insertion order. The worker pool uses priorities based on file modification time.
-
-**Rate Limiting**: Controlling the rate at which operations occur to stay within quotas or avoid overwhelming external services. The daemon rate-limits Claude API calls.
+**Rate Limiting**: Controlling the rate at which operations occur to stay within quotas or avoid overwhelming external services. The daemon uses dual rate limiters for Claude API calls and embeddings API calls.
 
 **Semantic Analysis**: AI-powered understanding of file contents including summarization, tagging, and topic extraction.
 

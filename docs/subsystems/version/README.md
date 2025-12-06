@@ -10,11 +10,13 @@
    - [Two-Level Version Tracking](#two-level-version-tracking)
 3. [Key Components](#key-components)
    - [Package Variables](#package-variables)
+   - [VERSION File](#version-file)
    - [Version Functions](#version-functions)
    - [Build System Integration](#build-system-integration)
 4. [Integration Points](#integration-points)
    - [Daemon Subsystem](#daemon-subsystem)
    - [Index Manager](#index-manager)
+   - [MCP Server](#mcp-server)
    - [CLI Commands](#cli-commands)
 5. [Glossary](#glossary)
 
@@ -49,7 +51,7 @@ Simple builds using `go build` without ldflags rely on automatic fallbacks (embe
 The Version subsystem prioritizes developer experience by providing meaningful defaults and automatic fallback mechanisms that enable builds without requiring explicit build-time injection setup.
 
 **Default Values:**
-- Version: `""` (empty string) - Falls back to embedded VERSION file content (currently "0.11.0")
+- Version: `""` (empty string) - Falls back to embedded VERSION file content (currently "0.12.1")
 - GitCommit: "unknown" - Falls back to VCS metadata from `runtime/debug.ReadBuildInfo()` when available
 - BuildDate: "unknown" - Falls back to VCS commit time from `runtime/debug.ReadBuildInfo()` when available
 
@@ -144,7 +146,7 @@ Storing both versions in index files enables sophisticated compatibility checkin
 The Version subsystem defines three package-level string variables that serve as injection targets for build-time metadata.
 
 **Version Variable:**
-Stores the application semantic version following semver conventions (e.g., "v0.11.0"). The default value is `""` (empty string). When empty, the `getVersion()` function returns the content of the embedded VERSION file (via `//go:embed VERSION` directive). Build systems can inject version values from git tags using `git describe --tags --always` or explicit tag values through ldflags. This variable identifies release versions and appears in user-facing output.
+Stores the application semantic version following semver conventions (e.g., "v0.12.1"). The default value is `""` (empty string). When empty, the `getVersion()` function returns the content of the embedded VERSION file (via `//go:embed VERSION` directive). Build systems can inject version values from git tags using `git describe --tags --always` or explicit tag values through ldflags. This variable identifies release versions and appears in user-facing output.
 
 **GitCommit Variable:**
 Stores the git commit hash that identifies the exact source code state. The default value is "unknown". When not set via ldflags, the `getGitCommit()` function attempts to extract commit information from Go's build metadata using `runtime/debug.ReadBuildInfo()`. This automatic extraction provides a 7-character short hash when available. When set via ldflags using `git rev-parse HEAD`, this variable contains the full 40-character hexadecimal string. A `-dirty` suffix is appended when the workspace has uncommitted changes. This variable enables tracing binaries back to their precise source code, supporting debugging and security audits.
@@ -160,7 +162,7 @@ All three variables are string types, matching the `-X` flag's requirements. The
 The VERSION file serves as the canonical source of truth for the application's semantic version number, providing a stable version identifier that persists across builds.
 
 **File Location:**
-The VERSION file resides at `internal/version/VERSION` and contains only the semantic version number without the `v` prefix (e.g., `0.11.0`). This plain text file is committed to version control and updated by release automation scripts.
+The VERSION file resides at `internal/version/VERSION` and contains only the semantic version number without the `v` prefix (e.g., `0.12.1`). This plain text file is committed to version control and updated by release automation scripts.
 
 **Multiple Consumers:**
 The VERSION file serves three distinct purposes in the build system:
@@ -182,7 +184,7 @@ Storing the version in a dedicated file rather than a constant in code enables v
 The Version subsystem exposes four public functions that provide version information for different use cases and display contexts.
 
 **GetVersion Function:**
-Returns a comprehensive version string combining all three metadata components in the format: `"<version> (commit: <hash>, built: <date>)"`. For example: `"v0.11.0 (commit: a942b5c, built: 2025-11-01T17:39:22Z)"`. This function provides complete version information suitable for logging, debugging output, and detailed status displays.
+Returns a comprehensive version string combining all three metadata components in the format: `"<version> (commit: <hash>, built: <date>)"`. For example: `"v0.12.1 (commit: a942b5c, built: 2025-11-01T17:39:22Z)"`. This function provides complete version information suitable for logging, debugging output, and detailed status displays.
 
 **Use Cases:**
 - Daemon startup logging for operational visibility
@@ -191,7 +193,7 @@ Returns a comprehensive version string combining all three metadata components i
 - Support requests requiring exact binary identification
 
 **GetShortVersion Function:**
-Returns just the version number without commit or build metadata, in the format: `"<version>"`. For example: `"v0.11.0"` or `"0.11.0"`. This function internally calls `getVersion()`, which returns either the ldflags-injected version or the embedded VERSION file content.
+Returns just the version number without commit or build metadata, in the format: `"<version>"`. For example: `"v0.12.1"` or `"0.12.1"`. This function internally calls `getVersion()`, which returns either the ldflags-injected version or the embedded VERSION file content.
 
 **Use Cases:**
 - Brief version displays in CLI output
@@ -257,7 +259,7 @@ The ldflags contain `-X` flags for each variable:
 
 **Git Integration:**
 Version information derives from git commands executed during build:
-- `git describe --tags --always --dirty` produces descriptive version string (e.g., "v0.11.0" for tagged release, "v0.10.0-5-ga942b5c-dirty" for development)
+- `git describe --tags --always --dirty` produces descriptive version string (e.g., "v0.12.1" for tagged release, "v0.12.0-5-ga942b5c-dirty" for development)
 - `git rev-parse HEAD` produces full commit SHA
 - `date -u +%Y-%m-%dT%H:%M:%SZ` produces UTC timestamp in ISO 8601 format
 
@@ -289,7 +291,7 @@ The Index Manager subsystem stores daemon version information in computed index 
 **Version Storage:**
 When writing index files, the index manager includes the daemon version in the `ComputedIndex` structure. This structure contains:
 - `Version` field: Index schema version (e.g., "1.0")
-- `DaemonVersion` field: Application version from Version subsystem (e.g., "v0.6.0 (commit: a942b5c, built: 2025-11-01T17:39:22Z)")
+- `DaemonVersion` field: Application version from Version subsystem (e.g., "v0.12.1 (commit: a942b5c, built: 2025-11-01T17:39:22Z)")
 
 **Separation from Schema Version:**
 The daemon version is distinct from the index schema version. Schema version tracks the format of the index file structure itself. Daemon version tracks which application release created the index. This separation enables independent versioning of data format and application logic.
@@ -299,6 +301,17 @@ Storing daemon version in index files enables future compatibility checking. If 
 
 **Persistence:**
 Daemon version information persists in index files across daemon restarts and system reboots. This persistence creates an audit trail of index creation, supporting forensic analysis and version migration planning.
+
+### MCP Server
+
+The MCP Server subsystem advertises version information in Model Context Protocol initialize responses, enabling MCP clients to identify the server version.
+
+**Initialize Response:**
+When an MCP client connects, the server responds to the `initialize` request with server metadata (`internal/mcp/server.go:225-228`). This metadata includes:
+- `ServerInfo.Name`: "agentic-memorizer"
+- `ServerInfo.Version`: Short version from `version.GetShortVersion()` (e.g., "v0.12.1")
+
+This enables MCP clients (like Claude Code, Gemini CLI, or Codex CLI) to identify which version of agentic-memorizer they're communicating with, supporting compatibility checks and debugging.
 
 ### CLI Commands
 
@@ -310,7 +323,7 @@ The `daemon status` command reads the precomputed index file and displays its me
 **Version Command:**
 The `version` command (`cmd/version/version.go`) displays detailed version information for the agentic-memorizer binary. The command calls `PrintVersion()` which outputs a multi-line format showing Version, Commit, and Built fields separately using `GetShortVersion()`, `GetGitCommit()`, and `GetBuildDate()` respectively. This enables users to query version without starting the daemon or examining index files. Example output:
 ```
-Version: 0.11.0
+Version: v0.12.1
 Commit:  a942b5c
 Built:   2025-11-22T14:30:00Z
 ```
@@ -318,7 +331,10 @@ Built:   2025-11-22T14:30:00Z
 **Usage:**
 ```bash
 agentic-memorizer version
+agentic-memorizer --version  # Alternative using root command flag
 ```
+
+Both forms display the same multi-line format. The `--version` flag is implemented through a custom version template on the root command that calls the same version functions.
 
 This command provides clean, parseable output suitable for scripts, CI/CD pipelines, and support ticket reporting.
 
@@ -330,7 +346,7 @@ This command provides clean, parseable output suitable for scripts, CI/CD pipeli
 
 **Build Provenance**: The ability to trace a compiled binary back to its exact source code state. Git commit hashes provide provenance by identifying the specific code version that produced a binary.
 
-**Semantic Versioning (SemVer)**: Version numbering scheme following MAJOR.MINOR.PATCH format (e.g., v0.6.0). Major version increments indicate breaking changes, minor increments add features, patch increments fix bugs.
+**Semantic Versioning (SemVer)**: Version numbering scheme following MAJOR.MINOR.PATCH format (e.g., v0.12.1). Major version increments indicate breaking changes, minor increments add features, patch increments fix bugs.
 
 **Schema Version**: Version number tracking the format of data structures like index files. Schema versions change when data format evolves, independent of application version changes.
 
@@ -338,9 +354,9 @@ This command provides clean, parseable output suitable for scripts, CI/CD pipeli
 
 **Daemon Version**: The specific application version that created an index file. Stored in `ComputedIndex.DaemonVersion` field, sourced from the Version subsystem.
 
-**VERSION File**: Plain text file at `internal/version/VERSION` containing the canonical semantic version number (e.g., "0.11.0"). Embedded into binaries via `//go:embed` directive and read by the Makefile. Updated by release automation scripts during version bumps.
+**VERSION File**: Plain text file at `internal/version/VERSION` containing the canonical semantic version number (e.g., "0.12.1"). Embedded into binaries via `//go:embed` directive and read by the Makefile. Updated by release automation scripts during version bumps.
 
-**Git Tag**: A named reference to a specific git commit, typically used for releases (e.g., v0.11.0). Tags provide stable version identifiers that don't change as development continues.
+**Git Tag**: A named reference to a specific git commit, typically used for releases (e.g., v0.12.1). Tags provide stable version identifiers that don't change as development continues.
 
 **Git Commit SHA**: A hexadecimal hash uniquely identifying a specific code state. Can be full 40-character hash (from ldflags) or short 7-character hash (from BuildInfo). Commit hashes enable precise source code identification for any binary.
 

@@ -6,7 +6,6 @@
    - [What is MCP?](#what-is-mcp)
    - [Purpose of the MCP Subsystem](#purpose-of-the-mcp-subsystem)
    - [Strategic Value](#strategic-value)
-   - [Current Implementation Status](#current-implementation-status)
 2. [Design Principles](#design-principles)
    - [JSON-RPC 2.0 Protocol Adherence](#json-rpc-20-protocol-adherence)
    - [Handler Registry Pattern](#handler-registry-pattern)
@@ -16,6 +15,7 @@
    - [Protocol Layer](#protocol-layer)
    - [Transport Layer](#transport-layer)
    - [Server Orchestrator](#server-orchestrator)
+   - [SSE Client Integration](#sse-client-integration)
    - [Search Integration](#search-integration)
    - [Tool Implementations](#tool-implementations)
    - [Prompt Implementations](#prompt-implementations)
@@ -57,16 +57,6 @@ The MCP subsystem addresses several limitations of the existing SessionStart hoo
 - **Protocol Standardization**: Aligns with industry-standard integration method for AI tool ecosystems
 
 The subsystem maintains backward compatibility with existing Claude Code hooks while opening the door to a broader range of AI development tools.
-
-### Current Implementation Status
-
-The MCP subsystem has completed Phase 5 of the implementation plan:
-
-- **Phase 1: Protocol Foundation** (Complete) - JSON-RPC 2.0 server, stdio transport, handshake protocol
-- **Phase 2: Resource Implementation** (Complete) - Static index serving in three formats
-- **Phase 3: Tool Implementation** (Complete) - Three tools for search, metadata, and recent files
-- **Phase 4: Integration & Testing** (Complete) - SSE notifications, index subscriptions, daemon integration
-- **Phase 5: MCP Prompts** (Complete) - Pre-configured prompt templates with index-aware message generation
 
 ---
 
@@ -172,10 +162,12 @@ The protocol layer defines the message types that flow between MCP clients and t
 - `ToolsCallRequest`: Tool invocation with name and arguments
 - `ToolsCallResponse`: Result content array with optional error flag
 
-**Prompt Types** (Future - Phase 5)
-- Templated workflows for common operations
-- Prompt discovery and parameter collection
-- Type definitions planned for Phase 5 (handler stubs exist returning "not yet implemented" errors)
+**Prompt Types** (`protocol/prompts.go`)
+- `Prompt`: Templated workflow with name, description, and arguments
+- `PromptArgument`: Parameter definition with required/optional flag
+- `PromptsListResponse`: Array of available prompts for discovery
+- `PromptsGetRequest`: Prompt invocation with name and argument values
+- `PromptsGetResponse`: Generated message array with context-aware content
 
 ### Transport Layer
 
@@ -210,8 +202,8 @@ The server orchestrator coordinates all subsystem components and manages protoco
 
 **Handler Registries**
 - `resourceHandlers`: Declared for future extensibility but currently unused (resources use direct switch-case routing in `handleResourcesRead()` for simplicity)
-- `toolHandlers`: Maps tool names to execution functions
-- `promptHandlers`: Reserved for Phase 5 prompt implementations
+- `toolHandlers`: Maps tool names to execution functions (5 tools registered)
+- `promptHandlers`: Declared for consistency but unused (prompts use PromptRegistry pattern)
 
 **Message Processing Flow**
 1. Read JSON-RPC message from transport
@@ -228,6 +220,38 @@ The server orchestrator coordinates all subsystem components and manages protoco
 - Context cancellation propagation to handlers
 - Clean resource release on shutdown
 - Error recovery without server crash
+
+### SSE Client Integration
+
+The SSE client enables real-time index synchronization between daemon and MCP server:
+
+**SSE Client** (`internal/mcp/sse_client.go`)
+- Connects to daemon's Server-Sent Events endpoint (`/sse`)
+- Listens for `index_snapshot` and `index_updated` event types
+- Automatically reconnects with exponential backoff (5-second default)
+- Runs in background goroutine with context cancellation
+
+**Event Processing Flow**
+1. Daemon publishes index change events to `/sse` endpoint
+2. SSE client receives event with updated index data
+3. Client calls `server.ReloadIndex()` to update in-memory index
+4. Client sends JSON-RPC notifications to subscribed MCP clients
+5. AI tools receive `notifications/resources/updated` messages
+6. Tools can re-fetch resources to get updated data
+
+**Subscription Management** (`internal/mcp/subscriptions.go`)
+- Tracks which resources (URIs) clients have subscribed to
+- Thread-safe subscription registry using sync.RWMutex
+- Subscriptions lost on MCP server restart (in-memory only)
+- Clients re-subscribe on reconnection
+
+**Reconnection Behavior**
+- Connection failures trigger automatic retry with backoff
+- Fixed 5-second reconnection interval (not configurable)
+- Continues retrying until context cancelled or server shutdown
+- Logs connection status and errors for debugging
+
+This integration enables near-instant index propagation from daemon to AI tools without polling or manual refresh.
 
 ### Search Integration
 
@@ -284,7 +308,9 @@ File: `nih-cit-technical-workshop.pptx`
 
 ### Tool Implementations
 
-The subsystem implements three tools for interacting with the file index:
+The subsystem implements five tools for interacting with the file index:
+
+**Index-Based Tools** (work standalone without daemon):
 
 **search_files**
 - Performs token-based semantic search with stop word filtering across all indexed files
@@ -292,19 +318,38 @@ The subsystem implements three tools for interacting with the file index:
 - Uses weighted scoring with partial token matching (see Search Integration section for algorithm details)
 - Parameters: query (required), categories (optional filter), max_results (default 10, max 100)
 - Returns: Query echo, result count, array of matches with path/score/match_type/summary/tags
+- Fallback: Uses daemon API if available, falls back to in-memory index search
 - Use case: "Find all documents about Terraform" or "Search for PowerPoint presentations about workshops"
 
 **get_file_metadata**
 - Retrieves detailed metadata for a specific file
 - Parameters: path (required, supports partial matching)
 - Returns: Complete index entry with all metadata and semantic analysis
+- Fallback: Uses daemon API if available, falls back to in-memory index lookup
 - Use case: "Show me the metadata for the deployment guide" or "What tags are on config.yaml?"
 
 **list_recent_files**
 - Lists files modified within a specified time window
 - Parameters: days (default 7), limit (default 20)
 - Returns: Files sorted by modification time descending with full metadata
+- Fallback: Uses daemon API if available, falls back to in-memory time filtering
 - Use case: "What files changed this week?" or "Show recent documentation updates"
+
+**Graph-Based Tools** (require daemon with FalkorDB):
+
+**get_related_files**
+- Finds files related through shared tags, topics, or entities in knowledge graph
+- Parameters: path (required), limit (default 10)
+- Returns: Related files with connection strength and relationship type
+- Requires: Daemon API with FalkorDB connection (returns error if unavailable)
+- Use case: "What files are related to this deployment guide?" or "Find similar documentation"
+
+**search_entities**
+- Searches for files mentioning specific entities (people, organizations, concepts)
+- Parameters: entity (required), entity_type (optional filter), max_results (default 10)
+- Returns: Files mentioning the entity with context and relevance
+- Requires: Daemon API with FalkorDB connection (returns error if unavailable)
+- Use case: "Find all files mentioning Terraform" or "Search for documents about AWS"
 
 All tools validate inputs, handle missing data gracefully, and return structured JSON results that clients can parse and present to users.
 
@@ -371,13 +416,24 @@ The MCP subsystem uses dedicated configuration settings separate from the daemon
 **MCP Configuration** (`internal/config/types.go`)
 - `log_file`: Path to MCP server log file (default: `~/.agentic-memorizer/mcp.log`)
 - `log_level`: Logging verbosity - debug, info, warn, error (default: `info`)
+- `daemon_host`: Daemon hostname for API integration (default: `localhost`)
+- `daemon_port`: Daemon HTTP port (default: `0` - disables daemon integration when 0)
 - Log rotation: Automatic rotation at 10MB with 3 backups, 28-day retention, compression enabled
+
+**Note on daemon_port**: When set to 0 (default), daemon integration is disabled:
+- MCP server operates in standalone mode using in-memory index
+- Graph-based tools (get_related_files, search_entities) return errors
+- Index-based tools (search_files, get_file_metadata, list_recent_files) use fallback search
+- No SSE client started for real-time updates
+- Set to daemon's HTTP port (e.g., 8080) to enable full functionality
 
 **Config File Example** (`.agentic-memorizer/config.yaml`):
 ```yaml
 mcp:
   log_file: ~/.agentic-memorizer/mcp.log
   log_level: info
+  daemon_host: localhost
+  daemon_port: 8080  # Set to 0 to disable daemon integration
 ```
 
 **Command-Line Override**:
@@ -453,27 +509,49 @@ Clients can request their preferred format through URI routing, with MIME types 
 
 ### Daemon Integration
 
-The MCP server and daemon maintain independent operation:
+The MCP server integrates with the daemon through a sophisticated real-time architecture:
 
-**Separation of Concerns**
-- Daemon: Watches memory directory, generates/updates index
-- MCP Server: Reads precomputed index, serves to clients
-- No direct communication between processes
+**Integration Architecture**
+- **Initial Index Loading**: MCP server fetches current index via daemon HTTP API at startup (`/api/v1/index`)
+- **Real-Time Updates**: SSE client connects to daemon notification stream (`/sse` endpoint)
+- **Fallback Mode**: MCP server can operate standalone with in-memory index if daemon unavailable
+- **Tool Routing**: Index-based tools use fallback search; graph-based tools require daemon connection
 
-**Shared State**
-- Both read index file from same path (`config.GetIndexPath()`)
-- Daemon writes atomically (temp file + rename)
-- MCP server reads at startup only (no live reload)
+**SSE Real-Time Update Flow** (`internal/mcp/sse_client.go`)
+1. MCP server starts SSE client on daemon `/sse` endpoint (if `daemon_port` configured)
+2. SSE client listens for `index_snapshot` and `index_updated` events
+3. On event received, MCP server reloads in-memory index (`ReloadIndex()`)
+4. Subscribed MCP clients receive `notifications/resources/updated` JSON-RPC notifications
+5. AI tools can re-fetch updated resources without MCP server restart
 
-**User Workflow**
+**Configuration-Based Behavior**
+- `daemon_port > 0`: Full integration with daemon API and SSE updates
+- `daemon_port = 0`: Standalone mode, uses empty index or pre-loaded snapshot
+
+**Dual-Mode Operation**
+- **Connected Mode** (daemon available):
+  - Index-based tools query daemon API for graph-powered results
+  - Graph-based tools (get_related_files, search_entities) use FalkorDB
+  - Real-time index updates via SSE stream
+  - Resource subscriptions notify clients of changes
+
+- **Standalone Mode** (daemon unavailable):
+  - Index-based tools fall back to in-memory semantic search
+  - Graph-based tools return "daemon API not available" errors
+  - No real-time updates (static index snapshot)
+  - Subscriptions tracked but never notified
+
+**User Workflow (Connected Mode)**
 1. Start daemon: `agentic-memorizer daemon start`
-2. Daemon builds initial index
-3. Start MCP server: `agentic-memorizer mcp start` (invoked by AI tool)
-4. Server loads current index snapshot
-5. Daemon continues updating index in background
-6. Server restart required to pick up index changes
+2. Daemon builds initial index and starts HTTP API
+3. Configure MCP: Set `daemon_port` to daemon's HTTP port (e.g., 8080)
+4. Start MCP server: `agentic-memorizer mcp start` (invoked by AI tool)
+5. MCP fetches current index from daemon API
+6. SSE client begins streaming daemon notifications
+7. Index updates propagate in real-time to MCP clients
+8. No MCP restart needed for index changes
 
-This decoupling ensures the MCP server remains simple and reliable while the daemon handles complex file watching and semantic analysis.
+This architecture provides the best of both worlds: simple standalone operation for basic use cases and sophisticated real-time integration for production workflows.
 
 ### External Client Integration
 
@@ -622,6 +700,15 @@ Executable functions in MCP that AI assistants can invoke with parameters. Tools
 
 **Weighted Scoring**
 An algorithm that assigns different point values to different types of matches when ranking search results. In agentic-memorizer's semantic search, filename matches receive the highest weight (3.0), followed by summary matches (2.0), tag matches (1.5), topic matches (1.0), and document type matches (0.5). Results are sorted by cumulative score.
+
+**Server-Sent Events (SSE)**
+A standard HTTP-based protocol for server-to-client real-time notifications using long-lived connections. The daemon publishes index update events via `/sse` endpoint; the MCP server's SSE client subscribes to receive these events and propagate index changes to connected AI tools without polling.
+
+**Resource Subscriptions**
+A mechanism where MCP clients explicitly subscribe to specific resource URIs to receive notifications when those resources change. When the daemon updates the index, subscribed clients receive `notifications/resources/updated` JSON-RPC messages prompting them to re-fetch the updated data.
+
+**Fallback Mode**
+An operational mode where the MCP server uses in-memory index search when daemon API is unavailable. Index-based tools (search_files, get_file_metadata, list_recent_files) fall back to local semantic search, while graph-based tools (get_related_files, search_entities) return errors requiring daemon connectivity.
 
 ---
 

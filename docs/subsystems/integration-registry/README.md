@@ -214,10 +214,12 @@ Both must be present for successful detection.
 5. Verifies registration using `claude mcp get agentic-memorizer`
 
 **Output Behavior:**
-The MCP adapter **does not use `FormatOutput()`**. Instead of formatting the entire index for injection, it exposes three MCP tools that Claude Code can invoke on-demand:
+The MCP adapter **does not use `FormatOutput()`**. Instead of formatting the entire index for injection, it exposes five MCP tools that Claude Code can invoke on-demand:
 - `search_files` - Semantic search across indexed files
 - `get_file_metadata` - Retrieve complete metadata for specific files
 - `list_recent_files` - List recently modified files
+- `get_related_files` - Find files connected through shared tags, topics, or entities
+- `search_entities` - Find files mentioning specific entities
 
 **When to Use:**
 - **Hook adapter (claude-code-hook)**: Best for complete file awareness, smaller memory directories, always-available context
@@ -248,10 +250,12 @@ Both must be present for successful detection.
 4. Writes modified configuration atomically with temporary backup creation
 
 **Output Behavior:**
-Like the Claude Code MCP adapter, the Gemini CLI MCP adapter **does not use `FormatOutput()`**. It exposes the same three MCP tools that Gemini CLI can invoke on-demand:
+Like the Claude Code MCP adapter, the Gemini CLI MCP adapter **does not use `FormatOutput()`**. It exposes five MCP tools that Gemini CLI can invoke on-demand:
 - `search_files` - Semantic search across indexed files
 - `get_file_metadata` - Retrieve complete metadata for specific files
 - `list_recent_files` - List recently modified files
+- `get_related_files` - Find files connected through shared tags, topics, or entities
+- `search_entities` - Find files mentioning specific entities
 
 **When to Use:**
 The Gemini CLI MCP adapter is the only integration option for Gemini CLI users. It provides on-demand file discovery and metadata retrieval through MCP tools during Gemini CLI chat sessions.
@@ -280,10 +284,12 @@ Both must be present for successful detection.
 4. Writes modified configuration atomically with temporary backup creation
 
 **Output Behavior:**
-Like other MCP adapters, the Codex CLI MCP adapter **does not use `FormatOutput()`**. It exposes the same three MCP tools that Codex CLI can invoke on-demand:
+Like other MCP adapters, the Codex CLI MCP adapter **does not use `FormatOutput()`**. It exposes five MCP tools that Codex CLI can invoke on-demand:
 - `search_files` - Semantic search across indexed files
 - `get_file_metadata` - Retrieve complete metadata for specific files
 - `list_recent_files` - List recently modified files
+- `get_related_files` - Find files connected through shared tags, topics, or entities
+- `search_entities` - Find files mentioning specific entities
 
 **Configuration Format:**
 Unlike Claude Code and Gemini CLI which use JSON, Codex CLI uses TOML format (`~/.codex/config.toml`). The adapter uses `github.com/pelletier/go-toml/v2` for TOML parsing and generation, handling optional fields with pointer types (`*bool`, `*int`) and preserving non-MCP configuration sections during updates.
@@ -327,7 +333,7 @@ All config file operations use atomic writes with backup pattern for safety.
 Output Processors (`internal/integrations/output/`) are independent formatters that render the memory index into different base formats before integration-specific wrapping is applied.
 
 **Processor Interface:**
-All processors implement the `OutputProcessor` interface with a single `Format()` method that accepts an Index and returns formatted output as a string. Processors can be configured with Options (e.g., ShowRecentDays filter) at creation time.
+All processors implement the `GraphOutputProcessor` interface with `FormatGraph()` and `GetFormat()` methods. The `FormatGraph()` method accepts a GraphIndex and returns formatted output as a string. Processors can be configured with Options (e.g., ShowRecentDays filter) at creation time.
 
 #### XML Processor
 
@@ -473,7 +479,7 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Integration Wrapping**: Framework-specific envelope or transformation applied to base format to conform to framework expectations (e.g., SessionStart JSON for Claude Code).
 
-**Output Processor**: Independent formatter implementing the OutputProcessor interface that renders Index data into a specific base format without knowledge of integrations.
+**Output Processor**: Independent formatter implementing the GraphOutputProcessor interface that renders GraphIndex data into a specific base format without knowledge of integrations.
 
 **SessionStart Hook**: Claude Code's mechanism for running commands at session initialization, triggered by matchers like "startup", "resume", "clear", or "compact".
 

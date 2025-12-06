@@ -198,14 +198,21 @@ The `InitConfig()` function performs the complete configuration bootstrap sequen
 The `GetConfig()` function provides access to loaded configuration:
 1. Unmarshals Viper configuration into strongly-typed `Config` struct
 2. Expands tilde notation in paths to full home directory paths
-3. Resolves API keys from environment variables if `api_key_env` is specified
-4. Returns complete configuration ready for consumption by other subsystems
+3. Resolves API keys from hardcoded environment variable names (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FALKORDB_PASSWORD`)
+4. Derives `analysis.enabled` and `embeddings.enabled` from API key presence
+5. Returns complete configuration ready for consumption by other subsystems
 
 **Configuration Writing:**
 The `WriteConfig()` function enables programmatic configuration creation:
 1. Marshals configuration structure to YAML format
 2. Writes to specified file path with appropriate permissions
 3. Used by initialize command to create default configuration files
+
+The `WriteMinimalConfig()` function writes only user-facing settings:
+1. Converts full `Config` to `MinimalConfig` via `ToMinimalConfig()` method
+2. Filters out advanced/internal settings not needed for typical usage
+3. Marshals minimal configuration to YAML format
+4. Used by initialize command to create approachable default configuration files
 
 **Path Helper Functions:**
 - `GetAppDir()` - Returns app directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
@@ -324,7 +331,7 @@ Use `config show-schema --hardcoded-only` to view all hardcoded settings with th
 
 **AnalysisConfig Structure:**
 Configures semantic analysis behavior:
-- `Enable` - Toggle semantic analysis entirely (default: true)
+- `Enabled` - Toggle semantic analysis entirely (default: true)
 - `MaxFileSize` - Maximum file size for analysis in bytes (default: 10MB)
 - `SkipExtensions` - File extensions to exclude from analysis
 - `SkipFiles` - Specific filenames to exclude
@@ -644,7 +651,7 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 **Read Command:**
 - Uses `--format` flag to determine output format (xml, markdown, json) with hardcoded default of "xml"
 - Uses `cfg.MemoryRoot` to locate files for reading
-- Connects to FalkorDB using `cfg.Graph` settings and `config.GraphDatabase` constant
+- Connects to FalkorDB using `cfg.Graph` settings (host, port, database name from `cfg.Graph.Database`)
 
 **Init Command:**
 - Creates default configuration file using `WriteConfig()`

@@ -68,6 +68,7 @@ clean: ## Remove build artifacts
 	@echo "Cleaning..."
 	@rm -f $(BINARY_NAME)
 	@rm -f coverage.out coverage.html
+	@rm -rf dist/
 	@echo "✅ Clean complete"
 
 clean-cache: ## Remove cache files only

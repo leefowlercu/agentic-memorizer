@@ -13,6 +13,7 @@
    - [Configuration Loading](#configuration-loading)
    - [Configuration Types](#configuration-types)
    - [Configuration Schema](#configuration-schema)
+   - [Schema Generator](#schema-generator)
    - [Constants and Defaults](#constants-and-defaults)
    - [Validation System](#validation-system)
 4. [Integration Points](#integration-points)
@@ -42,7 +43,13 @@ These settings appear in the default configuration file and are commonly adjuste
 - `claude.api_key` - Claude API credentials
 - `claude.model` - Claude model for semantic analysis
 - `daemon.http_port` - HTTP API port (0 = disabled)
+- `daemon.log_level` - Logging verbosity for daemon operations
+- `mcp.log_level` - Logging verbosity for MCP server
+- `mcp.daemon_host` - Daemon HTTP host for MCP connectivity (conditional)
+- `mcp.daemon_port` - Daemon HTTP port for MCP connectivity (conditional)
 - `graph.host`, `graph.port` - FalkorDB connection
+- `graph.password` - FalkorDB authentication password
+- `embeddings.api_key` - OpenAI API key for embeddings (conditional)
 - `integrations.enabled` - List of enabled integrations
 
 **Tier 2: Advanced (documented, not shown by default)**
@@ -216,7 +223,6 @@ The `WriteMinimalConfig()` function writes only user-facing settings:
 
 **Path Helper Functions:**
 - `GetAppDir()` - Returns app directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
-- `GetIndexPath()` - Returns path to precomputed index file (uses app directory)
 - `GetPIDPath()` - Returns path to daemon PID file (uses app directory)
 - `ExpandHome()` - Expands tilde in arbitrary paths
 - `GetConfigPath()` - Returns path to loaded configuration file
@@ -380,7 +386,33 @@ Each field includes three tags:
 
 ### Configuration Schema
 
-The Configuration Schema component (`internal/config/schema.go`) provides programmatic access to the complete configuration schema, including field metadata, defaults, tiers, and documentation.
+The Configuration Schema component (`internal/config/schema.go` and `internal/config/schema_generator.go`) provides programmatic access to the complete configuration schema through automatic reflection-based generation.
+
+**Architecture:**
+
+The schema is generated automatically via reflection on `Config` and `MinimalConfig` structs, ensuring schema accuracy and eliminating manual maintenance drift. The `GetConfigSchema()` function delegates to `generateConfigSchema()` which:
+
+1. **Introspects MinimalConfig structs** - Walks the MinimalConfig type hierarchy to identify which fields are minimal tier
+2. **Introspects Config structs** - Walks the full Config type hierarchy to generate field definitions
+3. **Auto-derives tier classification** - Fields present in MinimalConfig are "minimal", all others are "advanced"
+4. **Applies metadata** - Enriches fields with descriptions and hot-reload flags from metadata maps
+5. **Filters derived fields** - Excludes computed fields like `analysis.enabled` and `embeddings.enabled`
+
+**Key Innovation: Automatic Tier Derivation**
+
+Tier classification is determined by struct presence, not manual maintenance:
+- If a field exists in `MinimalConfig` structs → tier = "minimal"
+- If a field exists only in `Config` struct → tier = "advanced"
+- Schema generation cannot drift from MinimalConfig definitions (single source of truth)
+
+**Metadata Storage:**
+
+Since reflection cannot derive human-readable content, three metadata maps provide descriptions and operational characteristics:
+- `fieldDescriptions` - Maps field paths to documentation strings
+- `hotReloadSettings` - Maps field paths to hot-reload capability flags
+- `sectionDescriptions` - Maps section names to overview text
+
+These maps are maintained in `schema_generator.go` and are the only components requiring manual updates when adding fields.
 
 **Schema Types:**
 
@@ -399,8 +431,8 @@ Represents a configuration section:
 Describes a single configuration field:
 - `Name` - Field identifier (e.g., "timeout")
 - `Type` - Data type (string, int, bool, float64, []string)
-- `Default` - Default value
-- `Tier` - Configuration tier (minimal or advanced)
+- `Default` - Default value from `DefaultConfig` constant
+- `Tier` - Configuration tier (minimal or advanced), auto-derived from MinimalConfig presence
 - `HotReload` - Whether the setting can be changed without restart
 - `Description` - Human-readable field description
 
@@ -416,6 +448,74 @@ The `GetConfigSchema()` function returns the complete schema, used by:
 - Documentation generation tools
 - Configuration validation
 
+### Schema Generator
+
+The Schema Generator component (`internal/config/schema_generator.go`) implements the reflection-based schema generation system that automatically derives configuration schema from struct definitions.
+
+**Core Functions:**
+
+**generateConfigSchema():**
+Main entry point that orchestrates schema generation:
+1. Builds map of minimal-tier field paths via `buildMinimalFieldMap()`
+2. Generates configuration sections via `generateConfigSections()`
+3. Retrieves hardcoded settings via `getHardcodedSettings()`
+4. Returns complete `ConfigSchema` with all metadata
+
+**buildMinimalFieldMap():**
+Reflects on `MinimalConfig` struct hierarchy to identify minimal-tier fields:
+- Walks `MinimalConfig` struct tree recursively
+- Extracts field names from `yaml` struct tags
+- Builds dot-notation path map (e.g., "daemon.log_level", "claude.api_key")
+- Returns map used for automatic tier determination
+
+**generateConfigSections():**
+Walks `Config` struct to generate schema sections:
+- Iterates through top-level Config fields
+- Calls `generateSection()` for each configuration section
+- Uses reflection to extract field types and default values from `DefaultConfig`
+
+**generateSection():**
+Generates individual section with field definitions:
+- Handles special case for top-level `memory_root` string field
+- Walks struct fields using reflection to build SchemaField list
+- Calls `determineTier()` to auto-derive tier classification
+- Applies metadata from description and hot-reload maps
+- Filters out derived fields via `isDerivedField()`
+
+**determineTier():**
+The key innovation - automatic tier classification:
+- Takes field path and minimal fields map
+- Returns "minimal" if path exists in map, otherwise "advanced"
+- Makes tier drift impossible since MinimalConfig is source of truth
+
+**isDerivedField():**
+Filters computed fields from schema output:
+- Returns true for `analysis.enabled` (derived from Claude API key presence)
+- Returns true for `embeddings.enabled` (derived from embeddings API key presence)
+- Prevents user confusion about non-configurable derived state
+
+**Metadata Maps:**
+
+Three maps provide information that cannot be derived via reflection:
+
+- **fieldDescriptions** - Human-readable field documentation (e.g., "API request timeout in seconds (5-300)")
+- **hotReloadSettings** - Hot-reload capability flags (true = can reload, false = requires restart)
+- **sectionDescriptions** - Configuration section overview text
+
+**Adding New Configuration Fields:**
+
+When adding a new configuration option:
+1. Add field to appropriate struct in `types.go` (e.g., `ClaudeConfig`, `DaemonConfig`)
+2. Add default value to `DefaultConfig` constant in `constants.go`
+3. Add viper default in `InitConfig()` function in `config.go`
+4. Add metadata entries in `schema_generator.go`:
+   - Field description in `fieldDescriptions` map
+   - Hot-reload flag in `hotReloadSettings` map
+5. If the field should be minimal tier, add it to corresponding `MinimalConfig` struct in `config.go`
+6. Schema generation automatically includes the field with correct tier classification
+
+The reflection-based system ensures tier classification stays synchronized with MinimalConfig definitions, eliminating manual schema maintenance.
+
 ### Constants and Defaults
 
 The Constants and Defaults component (`internal/config/constants.go`) centralizes all default values, application constants, and fallback behaviors, ensuring consistent behavior across the system.
@@ -425,7 +525,6 @@ The Constants and Defaults component (`internal/config/constants.go`) centralize
 - `MemoryDirName` = "memory" - Default memory storage directory name
 - `CacheDirName` = ".cache" - Cache directory name
 - `ConfigFile` = "config.yaml" - Configuration filename
-- `IndexFile` = "index.json" - Precomputed index filename
 - `DaemonLogFile` = "daemon.log" - Daemon log filename
 - `DaemonPIDFile` = "daemon.pid" - Daemon process ID filename
 - `MCPLogFile` = "mcp.log" - MCP server log filename
@@ -561,7 +660,6 @@ The daemon reads its configuration during startup via `config.GetConfig()`, rece
 
 **Path Resolution:**
 The daemon uses configuration helper functions to locate system files:
-- `config.GetIndexPath()` - Location for index storage
 - `config.GetPIDPath()` - Location for process ID file
 - Path expansion ensures portable configuration across user accounts
 

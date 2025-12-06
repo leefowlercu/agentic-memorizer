@@ -87,6 +87,12 @@ make clean-cache
 
 # Run a specific test
 go test -v -run TestName ./path/to/package
+
+# Run E2E tests
+make test-e2e
+
+# Run quick E2E smoke tests
+make test-e2e-quick
 ```
 
 ### Daemon Development
@@ -152,6 +158,10 @@ make validate-config
 
 # Rebuild with stale cache clearing
 ./agentic-memorizer daemon rebuild --clear-old-cache
+
+# Clear graph data by deleting persistence files
+rm -rf ~/.agentic-memorizer/falkordb/*
+docker restart memorizer-falkordb
 
 # Check cache status
 ./agentic-memorizer cache status
@@ -295,6 +305,23 @@ To rebuild the graph, use `daemon rebuild [--force]`.
 
 **Graceful Degradation:**
 When FalkorDB is unavailable, the daemon logs warnings but continues operating. Graph queries return empty results rather than errors.
+
+**Data Persistence:**
+FalkorDB stores data at `/data` inside the container, which is bind-mounted to `~/.agentic-memorizer/falkordb/`. Persistence files (`dump.rdb`) appear in this directory after data is saved.
+
+**Clearing Graph Data:**
+```bash
+# Option A: Delete persistence files and restart (simplest)
+rm -rf ~/.agentic-memorizer/falkordb/*
+docker restart memorizer-falkordb
+
+# Option B: Clear and rebuild via daemon
+agentic-memorizer daemon rebuild --force
+
+# Option C: Remove and recreate container (also clears data)
+docker stop memorizer-falkordb && docker rm memorizer-falkordb
+agentic-memorizer graph start
+```
 
 ### Semantic Search
 
@@ -464,8 +491,30 @@ The project includes comprehensive E2E tests (`e2e/tests/`) covering complete wo
 - **Build Tags** - E2E tests use `//go:build e2e` to separate from unit tests
 - **Docker Integration** - FalkorDB runs in Docker container for realistic graph testing
 - **Isolation** - Each test runs in temporary directory with unique daemon instance
+- **Automatic Volume Cleanup** - All E2E test targets automatically remove Docker volumes after completion to prevent stale data from interfering with local development
 
 Run E2E tests with `make test-e2e` or specific suites with `-run` flag. See `docs/subsystems/e2e-tests/` for architecture details.
+
+**E2E Test Commands:**
+```bash
+# Run all E2E tests (with automatic volume cleanup)
+make test-e2e
+
+# Run quick smoke tests
+make test-e2e-quick
+
+# Run specific test suites
+cd e2e && make test-cli          # CLI command tests
+cd e2e && make test-daemon       # Daemon lifecycle tests
+cd e2e && make test-mcp          # MCP server tests
+cd e2e && make test-graph        # Graph operations tests
+
+# Preserve volumes for debugging (use sparingly)
+cd e2e && ./scripts/teardown.sh --keep-volumes
+
+# Manual volume cleanup
+cd e2e && docker-compose down -v
+```
 
 When writing tests:
 - Use `t.Run()` for subtests within table-driven tests

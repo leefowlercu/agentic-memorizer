@@ -319,6 +319,25 @@ FalkorDB includes a browser-based UI for exploring the graph:
 http://localhost:3000
 ```
 
+### Data Persistence
+
+FalkorDB stores data at `/data` inside the container, which is bind-mounted to `~/.agentic-memorizer/falkordb/`. Persistence files (`dump.rdb`) appear in this directory after data is saved.
+
+**Clearing graph data:**
+
+```bash
+# Option A: Delete persistence files and restart (simplest)
+rm -rf ~/.agentic-memorizer/falkordb/*
+docker restart memorizer-falkordb
+
+# Option B: Clear and rebuild via daemon
+agentic-memorizer daemon rebuild --force
+
+# Option C: Remove and recreate container
+docker stop memorizer-falkordb && docker rm memorizer-falkordb
+agentic-memorizer graph start
+```
+
 ### Graceful Degradation
 
 If FalkorDB is unavailable, the daemon will:
@@ -2424,6 +2443,34 @@ agentic-memorizer daemon restart
 ```
 
 **Legacy entries (v0.0.0):** Entries from before cache versioning was implemented. They will be re-analyzed automatically on next daemon rebuild.
+
+### Graph data issues
+
+If you need to reset the knowledge graph (e.g., seeing stale data, want to start fresh):
+
+**Clear graph data:**
+
+```bash
+# Stop daemon first
+agentic-memorizer daemon stop
+
+# Delete persistence files
+rm -rf ~/.agentic-memorizer/falkordb/*
+
+# Restart FalkorDB container
+docker restart memorizer-falkordb
+
+# Start daemon (will rebuild from memory files)
+agentic-memorizer daemon start
+```
+
+**Verify graph was cleared:**
+
+```bash
+agentic-memorizer graph status
+```
+
+This shows node/relationship counts. After clearing, you should see 5 nodes (category nodes) and 0 files.
 
 ## Contributing
 

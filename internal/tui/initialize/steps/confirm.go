@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
@@ -32,8 +33,33 @@ func (s *ConfirmStep) Init(cfg *config.Config) tea.Cmd {
 	s.config = cfg
 	s.err = nil
 
+	// Generate intelligent description based on NEW integrations being set up
+	description := "Write config, setup app directory"
+
+	// Check if any integrations are newly selected (not already configured)
+	hasNewIntegrations := false
+	if len(cfg.Integrations.Enabled) > 0 {
+		registry := integrations.GlobalRegistry()
+		for _, name := range cfg.Integrations.Enabled {
+			integration, err := registry.Get(name)
+			if err != nil {
+				continue
+			}
+			// Check if this integration is NOT already configured
+			alreadyConfigured, _ := integration.IsEnabled()
+			if !alreadyConfigured {
+				hasNewIntegrations = true
+				break
+			}
+		}
+	}
+
+	if hasNewIntegrations {
+		description += ", and enable integrations"
+	}
+
 	options := []components.RadioOption{
-		{Label: "Yes, create configuration", Description: "Write config and setup integrations"},
+		{Label: "Yes, create configuration", Description: description},
 		{Label: "No, go back", Description: "Return to previous steps"},
 	}
 

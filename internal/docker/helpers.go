@@ -94,6 +94,8 @@ func StartFalkorDB(opts StartOptions) error {
 
 	if opts.DataDir != "" {
 		dockerArgs = append(dockerArgs, "-v", fmt.Sprintf("%s:/data", opts.DataDir))
+		// Configure FalkorDB to use the bind mount for persistence
+		dockerArgs = append(dockerArgs, "-e", "FALKORDB_DATA_PATH=/data")
 	}
 
 	if opts.Detach {

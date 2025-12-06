@@ -3,9 +3,9 @@ package subcommands
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/servicemanager"
 	"github.com/spf13/cobra"
 )
 
@@ -32,16 +32,16 @@ func runSystemctl(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
-	// Get current binary path
-	binaryPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path; %w", err)
+	// Load config with defensive fallback
+	cfg, err := config.GetConfig()
+	if err != nil || cfg == nil {
+		cfg = &config.DefaultConfig
 	}
 
-	// Resolve symlinks
-	binaryPath, err = filepath.EvalSymlinks(binaryPath)
+	// Get binary path
+	binaryPath, err := servicemanager.GetBinaryPath()
 	if err != nil {
-		return fmt.Errorf("failed to resolve binary path; %w", err)
+		return fmt.Errorf("failed to get binary path; %w", err)
 	}
 
 	// Get user and home directory
@@ -55,64 +55,47 @@ func runSystemctl(cmd *cobra.Command, args []string) error {
 		home = "/home/" + user
 	}
 
-	// Generate systemd unit file
-	unitFile := fmt.Sprintf(`[Unit]
-Description=Agentic Memorizer Daemon
-Documentation=https://github.com/leefowlercu/agentic-memorizer
-After=network.target
+	// Build systemd config
+	systemdCfg := servicemanager.SystemdConfig{
+		BinaryPath: binaryPath,
+		User:       user,
+		Home:       home,
+		LogFile:    cfg.Daemon.LogFile,
+	}
 
-[Service]
-Type=notify
-User=%s
-Group=%s
-WorkingDirectory=%s
-ExecStart=%s daemon start
-Restart=on-failure
-RestartSec=5s
-TimeoutStartSec=60s
-TimeoutStopSec=30s
+	// Generate user unit file
+	userUnit := servicemanager.GenerateUserUnit(systemdCfg)
 
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
+	// Generate system unit file
+	systemUnit := servicemanager.GenerateSystemUnit(systemdCfg)
 
-# Environment
-Environment="HOME=%s"
+	// Print the user unit file (default)
+	fmt.Println("# User-level systemd unit file:")
+	fmt.Println(userUnit)
 
-# Logging (optional - remove if using journald)
-# StandardOutput=append:/var/log/agentic-memorizer/daemon.log
-# StandardError=append:/var/log/agentic-memorizer/daemon.log
+	// Get user unit path for instructions
+	userUnitPath, _ := servicemanager.GetUserUnitPath(home)
 
-[Install]
-WantedBy=multi-user.target
-`, user, user, home, binaryPath, home)
+	// Print user-level installation instructions
+	fmt.Println("\n# ========================================")
+	fmt.Println("# User-Level Installation (No Root Required)")
+	fmt.Println("# ========================================")
+	fmt.Println()
+	fmt.Printf("# 1. Install the unit file:\n")
+	fmt.Printf("   mkdir -p %s\n", home+"/.config/systemd/user")
+	fmt.Printf("   tee %s <<'EOF'\n", userUnitPath)
+	fmt.Print(userUnit)
+	fmt.Println("EOF")
+	fmt.Println()
+	fmt.Println("# 2. Enable and start:")
+	fmt.Println(servicemanager.GetSystemdUserInstructions(userUnitPath))
 
-	// Print the unit file
-	fmt.Println(unitFile)
-
-	// Print installation instructions
-	fmt.Println("\n# Installation Instructions:")
-	fmt.Println("#")
-	fmt.Println("# For system-wide installation (requires root):")
-	fmt.Printf("#   sudo tee /etc/systemd/system/agentic-memorizer.service <<'EOF'\n%sEOF\n", unitFile)
-	fmt.Println("#   sudo systemctl daemon-reload")
-	fmt.Println("#   sudo systemctl enable agentic-memorizer")
-	fmt.Println("#   sudo systemctl start agentic-memorizer")
-	fmt.Println("#")
-	fmt.Println("# For user-level installation (no root required):")
-	fmt.Println("#   mkdir -p ~/.config/systemd/user")
-	fmt.Printf("#   tee ~/.config/systemd/user/agentic-memorizer.service <<'EOF'\n%sEOF\n", unitFile)
-	fmt.Println("#   systemctl --user daemon-reload")
-	fmt.Println("#   systemctl --user enable agentic-memorizer")
-	fmt.Println("#   systemctl --user start agentic-memorizer")
-	fmt.Println("#")
-	fmt.Println("# Check status:")
-	fmt.Println("#   systemctl status agentic-memorizer  # system-wide")
-	fmt.Println("#   systemctl --user status agentic-memorizer  # user-level")
-	fmt.Println("#")
-	fmt.Println("# View logs:")
-	fmt.Println("#   journalctl -u agentic-memorizer -f  # system-wide")
-	fmt.Println("#   journalctl --user -u agentic-memorizer -f  # user-level")
+	// Print system-level installation instructions
+	fmt.Println("\n\n# ========================================")
+	fmt.Println("# System-Level Installation (Requires Root)")
+	fmt.Println("# ========================================")
+	fmt.Println()
+	fmt.Println(servicemanager.GetSystemdSystemInstructions(systemUnit))
 
 	return nil
 }

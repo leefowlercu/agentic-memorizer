@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/servicemanager"
 	"github.com/spf13/cobra"
 )
 
@@ -31,21 +32,16 @@ func runLaunchctl(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize config; %w", err)
 	}
 
+	// Load config with defensive fallback
 	cfg, err := config.GetConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config; %w", err)
+	if err != nil || cfg == nil {
+		cfg = &config.DefaultConfig
 	}
 
-	// Get current binary path
-	binaryPath, err := os.Executable()
+	// Get binary path
+	binaryPath, err := servicemanager.GetBinaryPath()
 	if err != nil {
-		return fmt.Errorf("failed to get executable path; %w", err)
-	}
-
-	// Resolve symlinks
-	binaryPath, err = filepath.EvalSymlinks(binaryPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve binary path; %w", err)
+		return fmt.Errorf("failed to get binary path; %w", err)
 	}
 
 	// Get user and home directory
@@ -65,86 +61,47 @@ func runLaunchctl(cmd *cobra.Command, args []string) error {
 		logFile = filepath.Join(home, ".agentic-memorizer", "daemon.log")
 	}
 
-	// Generate label from username
-	label := fmt.Sprintf("com.%s.agentic-memorizer", user)
+	// Build launchd config
+	launchdCfg := servicemanager.LaunchdConfig{
+		BinaryPath: binaryPath,
+		User:       user,
+		Home:       home,
+		LogFile:    logFile,
+	}
 
-	// Generate launchd plist
-	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>%s</string>
+	// Generate plist
+	plistContent := servicemanager.GeneratePlist(launchdCfg)
 
-	<key>ProgramArguments</key>
-	<array>
-		<string>%s</string>
-		<string>daemon</string>
-		<string>start</string>
-	</array>
-
-	<key>WorkingDirectory</key>
-	<string>%s</string>
-
-	<key>RunAtLoad</key>
-	<true/>
-
-	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
-
-	<key>StandardOutPath</key>
-	<string>%s</string>
-
-	<key>StandardErrorPath</key>
-	<string>%s</string>
-
-	<key>EnvironmentVariables</key>
-	<dict>
-		<key>HOME</key>
-		<string>%s</string>
-	</dict>
-
-	<key>ProcessType</key>
-	<string>Background</string>
-
-	<key>ThrottleInterval</key>
-	<integer>30</integer>
-</dict>
-</plist>
-`, label, binaryPath, home, logFile, logFile, home)
-
-	// Print the plist
+	// Print the user plist file (default)
+	fmt.Println("# User-level launchd plist file:")
 	fmt.Println(plistContent)
 
-	// Print installation instructions
-	plistPath := filepath.Join(home, "Library", "LaunchAgents", label+".plist")
-	fmt.Println("\n# Installation Instructions:")
-	fmt.Println("#")
-	fmt.Println("# 1. Create LaunchAgents directory if it doesn't exist:")
-	fmt.Printf("#    mkdir -p %s/Library/LaunchAgents\n", home)
-	fmt.Println("#")
-	fmt.Println("# 2. Save the plist file:")
-	fmt.Printf("#    agentic-memorizer daemon launchctl > %s\n", plistPath)
-	fmt.Println("#")
-	fmt.Println("# 3. Load the service:")
-	fmt.Printf("#    launchctl load %s\n", plistPath)
-	fmt.Println("#")
-	fmt.Println("# 4. Start the service:")
-	fmt.Printf("#    launchctl start %s\n", label)
-	fmt.Println("#")
-	fmt.Println("# Management commands:")
-	fmt.Printf("#   launchctl stop %s      # Stop the daemon\n", label)
-	fmt.Printf("#   launchctl start %s     # Start the daemon\n", label)
-	fmt.Printf("#   launchctl unload %s  # Disable autostart\n", plistPath)
-	fmt.Println("#")
-	fmt.Println("# View logs:")
-	fmt.Printf("#   tail -f %s\n", logFile)
-	fmt.Println("#")
-	fmt.Println("# Check if running:")
-	fmt.Printf("#   launchctl list | grep %s\n", label)
+	// Get user agent path
+	userPlistPath, _ := servicemanager.GetUserAgentPath(home, user)
+
+	// Print user-level installation instructions
+	fmt.Println("\n# ========================================")
+	fmt.Println("# User-Level Installation (No Root Required)")
+	fmt.Println("# ========================================")
+	fmt.Println()
+	fmt.Printf("# 1. Install the plist file:\n")
+	fmt.Printf("   mkdir -p %s/Library/LaunchAgents\n", home)
+	fmt.Printf("   tee %s <<'EOF'\n", userPlistPath)
+	fmt.Print(plistContent)
+	fmt.Println("EOF")
+	fmt.Println()
+	fmt.Println("# 2. Enable and start:")
+	fmt.Println(servicemanager.GetLaunchdUserInstructions(userPlistPath, user))
+
+	// Get system daemon path
+	systemPlistPath := servicemanager.GetSystemDaemonPath(user)
+
+	// Print system-level installation instructions
+	fmt.Println("\n\n# ========================================")
+	fmt.Println("# System-Level Installation (Requires Root)")
+	fmt.Println("# ========================================")
+	fmt.Println()
+	fmt.Println(servicemanager.GetLaunchdSystemInstructions(plistContent, systemPlistPath))
 
 	return nil
 }

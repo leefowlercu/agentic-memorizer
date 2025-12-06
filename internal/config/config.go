@@ -68,6 +68,9 @@ func InitConfig() error {
 	viper.SetDefault("graph.max_similar_files", DefaultConfig.Graph.MaxSimilarFiles)
 	viper.SetDefault("integrations.enabled", DefaultConfig.Integrations.Enabled)
 	viper.SetDefault("embeddings.enabled", DefaultConfig.Embeddings.Enabled)
+	viper.SetDefault("embeddings.provider", DefaultConfig.Embeddings.Provider)
+	viper.SetDefault("embeddings.model", DefaultConfig.Embeddings.Model)
+	viper.SetDefault("embeddings.dimensions", DefaultConfig.Embeddings.Dimensions)
 
 	viper.SetEnvPrefix("MEMORIZER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

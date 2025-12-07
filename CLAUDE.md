@@ -35,6 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - [Integration Adapter Versioning](#integration-adapter-versioning)
   - [CLI Error Handling Pattern](#cli-error-handling-pattern)
   - [Error Message Formatting](#error-message-formatting)
+  - [CLI Output Formatting](#cli-output-formatting)
   - [Releasing](#releasing)
 
 ## Project Overview
@@ -656,6 +657,271 @@ Error: failed to initialize config: configuration file not found
 ```
 
 This pattern provides consistent punctuation with only one colon in the entire error message chain.
+
+### CLI Output Formatting
+
+All CLI commands use the `internal/format` package for consistent, structured output. **Never use `fmt.Printf` or `fmt.Println` for command output** - always use format package builders.
+
+**Location:** `internal/format/` and `internal/format/formatters/`
+
+**Philosophy:**
+- Separate content from presentation
+- Structured data with multiple output formats (text, JSON, YAML, XML, markdown)
+- Reusable builders for common output patterns
+- Consistent styling across all commands
+
+**Available Builders:**
+
+1. **Status** - Success/error/warning/info messages
+2. **Section** - Hierarchical key-value data with subsections
+3. **Table** - Tabular data with headers and alignment
+4. **List** - Ordered/unordered lists with nesting
+5. **Progress** - Progress bars and percentages
+6. **Error** - Detailed error messages with suggestions
+7. **GraphContent** - Graph index output (special case)
+
+**When to Use Each Builder:**
+
+- **Status** - Command completion messages, state changes, notifications
+- **Section** - Configuration display, daemon status, structured information
+- **Table** - File lists, statistics, version distributions
+- **List** - Simple enumerations, steps, feature lists
+- **Progress** - Long-running operations (currently used in tests)
+- **Error** - Validation failures with field-level details
+- **GraphContent** - Graph index output in read/integration commands
+
+**Basic Usage Pattern:**
+
+```go
+import (
+    "github.com/leefowlercu/agentic-memorizer/internal/format"
+    _ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
+)
+
+// Helper function (usually in helpers.go or at package level)
+func outputStatus(status *format.Status) error {
+    formatter, err := format.GetFormatter("text")
+    if err != nil {
+        return fmt.Errorf("failed to get formatter; %w", err)
+    }
+    output, err := formatter.Format(status)
+    if err != nil {
+        return fmt.Errorf("failed to format status; %w", err)
+    }
+    fmt.Println(output)
+    return nil
+}
+
+// In command RunE function
+func runMyCommand(cmd *cobra.Command, args []string) error {
+    // ... command logic ...
+
+    status := format.NewStatus(format.StatusSuccess, "Operation completed successfully")
+    status.AddDetail("Files processed: 42")
+    status.AddDetail("Errors: 0")
+    return outputStatus(status)
+}
+```
+
+**Status Builder Examples:**
+
+```go
+// Success message
+status := format.NewStatus(format.StatusSuccess, "Cache cleared successfully")
+status.AddDetail("Run 'agentic-memorizer daemon rebuild' to regenerate")
+
+// Error message
+status := format.NewStatus(format.StatusError, "Configuration validation failed")
+status.AddDetail(err.Error())
+
+// Info message
+status := format.NewStatus(format.StatusInfo, "Daemon is not running")
+status.AddDetail("New configuration will be used on next daemon start")
+
+// Running/in-progress message
+status := format.NewStatus(format.StatusRunning, "Clearing 42 cache entries")
+
+// Warning message
+status := format.NewStatus(format.StatusWarning, "Cache is outdated")
+status.AddDetail("Run cache clear --old-versions")
+```
+
+**Section Builder Examples:**
+
+```go
+// Simple section with key-value pairs
+section := format.NewSection("Cache Status").AddDivider()
+section.AddKeyValue("Total Entries", format.FormatNumber(stats.TotalEntries))
+section.AddKeyValue("Total Size", format.FormatBytes(stats.TotalSize))
+
+// Hierarchical sections
+mainSection := format.NewSection("Configuration Schema")
+configSection := format.NewSection("Configurable Settings").SetLevel(1)
+configSection.AddKeyValue("claude.api_key", "API key for Claude")
+mainSection.AddSubsection(configSection)
+```
+
+**Table Builder Examples:**
+
+```go
+// Create table with headers
+table := format.NewTable([]string{"Version", "Count", "Size"})
+
+// Add rows
+for version, count := range versionCounts {
+    table.AddRow([]string{
+        version,
+        format.FormatNumber(int64(count)),
+        format.FormatBytes(sizes[version]),
+    })
+}
+
+// Set alignment (left, center, right)
+table.SetAlignments([]format.Alignment{
+    format.AlignLeft,
+    format.AlignRight,
+    format.AlignRight,
+})
+```
+
+**List Builder Examples:**
+
+```go
+// Unordered list
+list := format.NewList(format.ListTypeUnordered)
+list.AddItem("Documents: 10 files")
+list.AddItem("Images: 5 files")
+
+// Ordered list
+list := format.NewList(format.ListTypeOrdered)
+list.AddItem("Initialize configuration")
+list.AddItem("Start daemon")
+list.AddItem("Verify status")
+
+// Nested list
+mainList := format.NewList(format.ListTypeUnordered)
+item := mainList.AddItem("Features")
+nested := format.NewList(format.ListTypeUnordered)
+nested.AddItem("Semantic search")
+nested.AddItem("Graph relationships")
+item.Nested = nested
+```
+
+**GraphContent for Integration Output:**
+
+```go
+// Used in read command and integration adapters
+func formatGraph(index *types.GraphIndex, formatStr string) error {
+    formatter, err := format.GetFormatter(formatStr)
+    if err != nil {
+        return fmt.Errorf("failed to get formatter; %w", err)
+    }
+
+    graphContent := format.NewGraphContent(index)
+    content, err := formatter.Format(graphContent)
+    if err != nil {
+        return fmt.Errorf("failed to format output; %w", err)
+    }
+
+    fmt.Print(content)
+    return nil
+}
+```
+
+**Multiple Output Formats:**
+
+All builders support multiple formatters:
+- `text` - Plain text with symbols (default for CLI)
+- `json` - Structured JSON output
+- `yaml` - YAML format
+- `xml` - XML format
+- `markdown` - Rich markdown with emojis
+
+Most commands use `text` formatter. JSON/YAML/XML are available via flags in some commands (e.g., `config show-schema --format json`).
+
+**Helper Utilities:**
+
+```go
+format.FormatBytes(1024)           // "1.0 KB"
+format.FormatNumber(1000000)       // "1,000,000"
+format.Bold("Important")           // Bold text (if formatter supports colors)
+format.Green("Success")            // Green text (if formatter supports colors)
+format.Red("Error")                // Red text (if formatter supports colors)
+```
+
+**Migration from fmt.Printf:**
+
+```go
+// BEFORE (❌ Don't do this)
+fmt.Printf("✓ Configuration is valid\n")
+fmt.Printf("Cache cleared: %d entries\n", count)
+
+// AFTER (✅ Do this)
+status := format.NewStatus(format.StatusSuccess, "Configuration is valid")
+outputStatus(status)
+
+status := format.NewStatus(format.StatusSuccess, fmt.Sprintf("Cache cleared: %d entries", count))
+outputStatus(status)
+```
+
+**When Direct fmt.Print is Acceptable:**
+
+1. **Interactive prompts** in `cmd/initialize/` - User input/output during setup
+2. **File generation** in `systemctl.go`/`launchctl.go` - Writing service files
+3. **Helper functions** - Internal utilities that return formatted strings
+4. **Debug output** - Temporary debugging (should be removed before commit)
+
+**Testing with Format Package:**
+
+```go
+import (
+    "testing"
+    _ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
+)
+
+func TestMyCommand(t *testing.T) {
+    // Format package requires formatters to be registered
+    // The blank import above handles this
+
+    // ... test code ...
+}
+```
+
+**Common Patterns:**
+
+```go
+// Shared helper in subcommands package (see cmd/daemon/subcommands/helpers.go)
+func outputStatus(status *format.Status) error {
+    formatter, err := format.GetFormatter("text")
+    if err != nil {
+        return fmt.Errorf("failed to get formatter; %w", err)
+    }
+    output, err := formatter.Format(status)
+    if err != nil {
+        return fmt.Errorf("failed to format status; %w", err)
+    }
+    fmt.Println(output)
+    return nil
+}
+
+// Use in command
+status := format.NewStatus(format.StatusSuccess, "Operation completed")
+return outputStatus(status)
+```
+
+**Key Files:**
+
+- `internal/format/interface.go` - Core interfaces and types
+- `internal/format/builders.go` - Builder constructors (NewStatus, NewSection, etc.)
+- `internal/format/section.go` - Section builder implementation
+- `internal/format/table.go` - Table builder implementation
+- `internal/format/list.go` - List builder implementation
+- `internal/format/status.go` - Status builder implementation
+- `internal/format/formatters/text.go` - Text formatter (default)
+- `internal/format/formatters/json.go` - JSON formatter
+- `internal/format/formatters/xml.go` - XML formatter
+- `internal/format/formatters/markdown.go` - Markdown formatter
+- `internal/format/formatters/yaml.go` - YAML formatter
 
 ### Releasing
 

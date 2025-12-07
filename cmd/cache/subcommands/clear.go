@@ -6,6 +6,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
 	"github.com/spf13/cobra"
 )
 
@@ -69,20 +70,24 @@ func runClearAll(manager *cache.Manager) error {
 	}
 
 	if stats.TotalEntries == 0 {
-		fmt.Printf("Cache is already empty.\n")
-		return nil
+		status := format.NewStatus(format.StatusInfo, "Cache is already empty")
+		return outputStatus(status)
 	}
 
-	fmt.Printf("Clearing all %d cached entries (%s)...\n", stats.TotalEntries, format.FormatBytes(stats.TotalSize))
+	// Show what we're clearing
+	msg := fmt.Sprintf("Clearing all %d cached entries (%s)", stats.TotalEntries, format.FormatBytes(stats.TotalSize))
+	clearing := format.NewStatus(format.StatusRunning, msg)
+	if err := outputStatus(clearing); err != nil {
+		return err
+	}
 
 	if err := manager.Clear(); err != nil {
 		return fmt.Errorf("failed to clear cache; %w", err)
 	}
 
-	fmt.Printf("Cache cleared successfully.\n")
-	fmt.Printf("\nNote: Run 'agentic-memorizer daemon rebuild' to regenerate the cache.\n")
-
-	return nil
+	status := format.NewStatus(format.StatusSuccess, "Cache cleared successfully")
+	status.AddDetail("Run 'agentic-memorizer daemon rebuild' to regenerate the cache")
+	return outputStatus(status)
 }
 
 func runClearOldVersions(manager *cache.Manager) error {
@@ -102,21 +107,40 @@ func runClearOldVersions(manager *cache.Manager) error {
 	}
 
 	if entriesToClear == 0 {
-		fmt.Printf("No stale entries to clear. All %d entries are current version (%s).\n",
+		msg := fmt.Sprintf("No stale entries to clear. All %d entries are current version (%s)",
 			stats.TotalEntries, currentVersion)
-		return nil
+		status := format.NewStatus(format.StatusInfo, msg)
+		return outputStatus(status)
 	}
 
-	fmt.Printf("Clearing %d stale entries (keeping %d current entries)...\n",
+	// Show what we're clearing
+	msg := fmt.Sprintf("Clearing %d stale entries (keeping %d current entries)",
 		entriesToClear, stats.TotalEntries-entriesToClear)
+	clearing := format.NewStatus(format.StatusRunning, msg)
+	if err := outputStatus(clearing); err != nil {
+		return err
+	}
 
 	removed, err := manager.ClearOldVersions()
 	if err != nil {
 		return fmt.Errorf("failed to clear old versions; %w", err)
 	}
 
-	fmt.Printf("Removed %d stale cache entries.\n", removed)
-	fmt.Printf("\nNote: Affected files will be re-analyzed on next daemon rebuild.\n")
+	status := format.NewStatus(format.StatusSuccess, fmt.Sprintf("Removed %d stale cache entries", removed))
+	status.AddDetail("Affected files will be re-analyzed on next daemon rebuild")
+	return outputStatus(status)
+}
 
+// outputStatus formats and outputs a status message
+func outputStatus(status *format.Status) error {
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(status)
+	if err != nil {
+		return fmt.Errorf("failed to format status; %w", err)
+	}
+	fmt.Println(output)
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -82,14 +83,11 @@ func runShowSchema(cmd *cobra.Command, args []string) error {
 }
 
 func printSchemaTable(schema *config.ConfigSchema) error {
-	fmt.Println("Configuration Schema")
-	fmt.Println("===================")
-	fmt.Println()
+	// Build main section
+	mainSection := format.NewSection("Configuration Schema").AddDivider()
 
 	if !showSchemaHardcodedOnly {
-		fmt.Println("CONFIGURABLE SETTINGS")
-		fmt.Println("---------------------")
-		fmt.Println()
+		configurableSection := format.NewSection("CONFIGURABLE SETTINGS").SetLevel(1).AddDivider()
 
 		for _, section := range schema.Sections {
 			showSection := false
@@ -108,7 +106,7 @@ func printSchemaTable(schema *config.ConfigSchema) error {
 				continue
 			}
 
-			fmt.Printf("## %s\n\n", section.Name)
+			sectionGroup := format.NewSection(section.Name).SetLevel(2)
 
 			for _, field := range section.Fields {
 				if showSchemaAdvancedOnly && field.Tier != "advanced" {
@@ -120,28 +118,42 @@ func printSchemaTable(schema *config.ConfigSchema) error {
 					hotReloadStr = "yes"
 				}
 
-				fmt.Printf("  %s:\n", field.Name)
-				fmt.Printf("    Type:        %s\n", field.Type)
-				fmt.Printf("    Default:     %v\n", formatDefault(field.Default))
-				fmt.Printf("    Tier:        %s\n", field.Tier)
-				fmt.Printf("    Hot-Reload:  %s\n", hotReloadStr)
-				fmt.Printf("    Description: %s\n", field.Description)
-				fmt.Println()
+				fieldSection := format.NewSection(field.Name).SetLevel(3)
+				fieldSection.AddKeyValue("Type", field.Type)
+				fieldSection.AddKeyValue("Default", fmt.Sprintf("%v", formatDefault(field.Default)))
+				fieldSection.AddKeyValue("Tier", field.Tier)
+				fieldSection.AddKeyValue("Hot-Reload", hotReloadStr)
+				fieldSection.AddKeyValue("Description", field.Description)
+
+				sectionGroup.AddSubsection(fieldSection)
 			}
+
+			configurableSection.AddSubsection(sectionGroup)
 		}
+
+		mainSection.AddSubsection(configurableSection)
 	}
 
 	if !showSchemaAdvancedOnly {
-		fmt.Println("HARDCODED SETTINGS (not configurable)")
-		fmt.Println("--------------------------------------")
-		fmt.Println()
+		hardcodedSection := format.NewSection("HARDCODED SETTINGS (not configurable)").SetLevel(1).AddDivider()
 
 		for _, hc := range schema.Hardcoded {
-			fmt.Printf("  %s = %v\n", hc.Name, hc.Value)
-			fmt.Printf("    Reason: %s\n", hc.Reason)
-			fmt.Println()
+			hardcodedSection.AddKeyValue(hc.Name, fmt.Sprintf("%v (Reason: %s)", hc.Value, hc.Reason))
 		}
+
+		mainSection.AddSubsection(hardcodedSection)
 	}
+
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(mainSection)
+	if err != nil {
+		return fmt.Errorf("failed to format output; %w", err)
+	}
+	fmt.Println(output)
 
 	return nil
 }

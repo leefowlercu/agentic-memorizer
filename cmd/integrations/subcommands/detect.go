@@ -3,6 +3,7 @@ package subcommands
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
 )
@@ -28,38 +29,75 @@ func runDetect(cmd *cobra.Command, args []string) error {
 	detected := registry.DetectAvailable()
 
 	if len(detected) == 0 {
-		fmt.Println("No agent frameworks detected on this system")
-		fmt.Println()
-		fmt.Println("Supported frameworks:")
+		status := format.NewStatus(format.StatusInfo, "No agent frameworks detected on this system")
+
+		// Add supported frameworks as details
 		for _, integration := range registry.List() {
-			fmt.Printf("  - %s\n", integration.GetName())
+			status.AddDetail(fmt.Sprintf("- %s", integration.GetName()))
 		}
+
+		formatter, err := format.GetFormatter("text")
+		if err != nil {
+			return fmt.Errorf("failed to get formatter; %w", err)
+		}
+		output, err := formatter.Format(status)
+		if err != nil {
+			return fmt.Errorf("failed to format output; %w", err)
+		}
+		fmt.Println(output)
 		return nil
 	}
 
-	fmt.Println("Detected Agent Frameworks:")
-	fmt.Println()
+	section := format.NewSection("Detected Agent Frameworks")
+	list := format.NewList(format.ListTypeUnordered)
 
 	for _, integration := range detected {
 		enabled, _ := integration.IsEnabled()
-		statusSymbol := "○"
+		statusSymbol := format.SymbolInfo
 		statusText := "not configured"
 
 		if enabled {
-			statusSymbol = "✓"
+			statusSymbol = format.SymbolSuccess
 			statusText = "configured"
 		}
 
-		fmt.Printf("  %s %s - %s (%s)\n",
+		itemContent := fmt.Sprintf("%s %s - %s (%s)",
 			statusSymbol,
 			integration.GetName(),
 			integration.GetDescription(),
 			statusText)
+		list.AddItem(itemContent)
 	}
 
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+
+	// Format section header
+	sectionOutput, err := formatter.Format(section)
+	if err != nil {
+		return fmt.Errorf("failed to format section; %w", err)
+	}
+	fmt.Println(sectionOutput)
 	fmt.Println()
-	fmt.Println("To setup an integration, run:")
-	fmt.Println("  agentic-memorizer integrations setup <integration-name>")
+
+	// Format list
+	listOutput, err := formatter.Format(list)
+	if err != nil {
+		return fmt.Errorf("failed to format list; %w", err)
+	}
+	fmt.Println(listOutput)
+
+	// Add hint message
+	fmt.Println()
+	status := format.NewStatus(format.StatusInfo, "To setup an integration, run: agentic-memorizer integrations setup <integration-name>")
+	statusOutput, err := formatter.Format(status)
+	if err != nil {
+		return fmt.Errorf("failed to format status; %w", err)
+	}
+	fmt.Println(statusOutput)
 
 	return nil
 }

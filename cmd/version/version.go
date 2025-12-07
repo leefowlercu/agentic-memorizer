@@ -3,6 +3,7 @@ package version
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -34,7 +35,20 @@ func runVersion(cmd *cobra.Command, args []string) error {
 
 // PrintVersion outputs version information in a detailed multi-line format
 func PrintVersion() {
-	fmt.Printf("Version: %s\n", version.GetShortVersion())
-	fmt.Printf("Commit:  %s\n", version.GetGitCommit())
-	fmt.Printf("Built:   %s\n", version.GetBuildDate())
+	section := format.NewSection("Version Information")
+	section.AddKeyValue("Version", version.GetShortVersion())
+	section.AddKeyValue("Commit", version.GetGitCommit())
+	section.AddKeyValue("Built", version.GetBuildDate())
+
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	output, err := formatter.Format(section)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Println(output)
 }

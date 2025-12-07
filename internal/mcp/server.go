@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/transport"
 	"github.com/leefowlercu/agentic-memorizer/internal/search"
@@ -401,20 +401,32 @@ func (s *Server) handleResourcesUnsubscribe(ctx context.Context, id any, params 
 
 // formatIndexXML formats the index as XML
 func (s *Server) formatIndexXML() (string, error) {
-	formatter := output.NewXMLProcessor()
-	return formatter.FormatGraph(s.index)
+	formatter, err := format.GetFormatter("xml")
+	if err != nil {
+		return "", fmt.Errorf("failed to get formatter; %w", err)
+	}
+	graphContent := format.NewGraphContent(s.index)
+	return formatter.Format(graphContent)
 }
 
 // formatIndexMarkdown formats the index as Markdown
 func (s *Server) formatIndexMarkdown() (string, error) {
-	formatter := output.NewMarkdownProcessor()
-	return formatter.FormatGraph(s.index)
+	formatter, err := format.GetFormatter("markdown")
+	if err != nil {
+		return "", fmt.Errorf("failed to get formatter; %w", err)
+	}
+	graphContent := format.NewGraphContent(s.index)
+	return formatter.Format(graphContent)
 }
 
 // formatIndexJSON formats the index as JSON
 func (s *Server) formatIndexJSON() (string, error) {
-	formatter := output.NewJSONProcessor()
-	return formatter.FormatGraph(s.index)
+	formatter, err := format.GetFormatter("json")
+	if err != nil {
+		return "", fmt.Errorf("failed to get formatter; %w", err)
+	}
+	graphContent := format.NewGraphContent(s.index)
+	return formatter.Format(graphContent)
 }
 
 // handleSearchFiles performs semantic search across indexed files

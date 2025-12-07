@@ -37,6 +37,9 @@ func (f *JSONFormatter) Format(b format.Buildable) (string, error) {
 		data = f.statusToJSON(v)
 	case *format.Error:
 		data = f.errorToJSON(v)
+	case *format.GraphContent:
+		// GraphContent marshals the GraphIndex directly
+		return f.formatGraph(v)
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -248,6 +251,12 @@ func (f *JSONFormatter) errorToJSON(e *format.Error) *jsonError {
 		Details:    e.Details,
 		Suggestion: e.Suggestion,
 	}
+}
+
+// formatGraph renders GraphIndex as pretty-printed JSON (backward compatibility)
+func (f *JSONFormatter) formatGraph(gc *format.GraphContent) (string, error) {
+	// Marshal the GraphIndex directly with pretty-printing and no HTML escaping
+	return f.marshal(gc.Index)
 }
 
 // marshal converts data to JSON with proper formatting

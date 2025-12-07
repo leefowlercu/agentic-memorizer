@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
-	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -25,29 +25,33 @@ type HookSpecificOutput struct {
 }
 
 // formatSessionStartJSON wraps the formatted graph index in a Claude Code SessionStart JSON envelope
-func formatSessionStartJSON(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
-	// Step 1: Generate formatted content using the appropriate graph output processor
-	var processor output.GraphOutputProcessor
-	var content string
-	var err error
-
-	switch format {
+func formatSessionStartJSON(index *types.GraphIndex, outputFormat integrations.OutputFormat) (string, error) {
+	// Step 1: Get the appropriate formatter
+	var formatStr string
+	switch outputFormat {
 	case integrations.FormatXML:
-		processor = output.NewXMLProcessor()
+		formatStr = "xml"
 	case integrations.FormatMarkdown:
-		processor = output.NewMarkdownProcessor()
+		formatStr = "markdown"
 	case integrations.FormatJSON:
-		processor = output.NewJSONProcessor()
+		formatStr = "json"
 	default:
-		return "", fmt.Errorf("unsupported output format: %s", format)
+		return "", fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
 
-	content, err = processor.FormatGraph(index)
+	formatter, err := format.GetFormatter(formatStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to get formatter; %w", err)
+	}
+
+	// Step 2: Format the graph content
+	graphContent := format.NewGraphContent(index)
+	content, err := formatter.Format(graphContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to format index; %w", err)
 	}
 
-	// Step 2: Wrap the formatted content in SessionStart JSON envelope
+	// Step 3: Wrap the formatted content in SessionStart JSON envelope
 	wrapper := SessionStartOutput{
 		Continue:       true,
 		SuppressOutput: true,

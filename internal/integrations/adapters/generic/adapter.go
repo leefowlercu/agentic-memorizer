@@ -3,8 +3,8 @@ package generic
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
-	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -83,21 +83,29 @@ func (a *GenericAdapter) GetCommand(binaryPath string, format integrations.Outpu
 
 // FormatOutput formats the graph index without any framework-specific wrapping
 // Just returns the formatted content (XML, Markdown, or JSON)
-func (a *GenericAdapter) FormatOutput(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
-	var processor output.GraphOutputProcessor
-
-	switch format {
+func (a *GenericAdapter) FormatOutput(index *types.GraphIndex, outputFormat integrations.OutputFormat) (string, error) {
+	// Map OutputFormat enum to formatter name
+	var formatStr string
+	switch outputFormat {
 	case integrations.FormatXML:
-		processor = output.NewXMLProcessor()
+		formatStr = "xml"
 	case integrations.FormatMarkdown:
-		processor = output.NewMarkdownProcessor()
+		formatStr = "markdown"
 	case integrations.FormatJSON:
-		processor = output.NewJSONProcessor()
+		formatStr = "json"
 	default:
-		return "", fmt.Errorf("unsupported output format: %s", format)
+		return "", fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
 
-	return processor.FormatGraph(index)
+	// Get the appropriate formatter
+	formatter, err := format.GetFormatter(formatStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to get formatter; %w", err)
+	}
+
+	// Format the graph content
+	graphContent := format.NewGraphContent(index)
+	return formatter.Format(graphContent)
 }
 
 // Validate always returns an error for generic adapters

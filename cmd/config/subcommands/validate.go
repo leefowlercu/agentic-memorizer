@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -72,14 +73,34 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 	// Validate configuration
 	if err := config.ValidateConfig(cfg); err != nil {
-		fmt.Println("❌ Configuration validation failed:")
-		fmt.Println()
-		fmt.Println(err.Error())
+		// Format validation error using format package
+		status := format.NewStatus(format.StatusError, "Configuration validation failed")
+		status.AddDetail(err.Error())
+
+		formatter, fmtErr := format.GetFormatter("text")
+		if fmtErr != nil {
+			return fmt.Errorf("failed to get formatter; %w", fmtErr)
+		}
+		output, fmtErr := formatter.Format(status)
+		if fmtErr != nil {
+			return fmt.Errorf("failed to format output; %w", fmtErr)
+		}
+		fmt.Println(output)
 		return fmt.Errorf("validation failed")
 	}
 
-	// Simple success message
-	fmt.Println("✓ Configuration is valid")
+	// Format success message using format package
+	status := format.NewStatus(format.StatusSuccess, "Configuration is valid")
+
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(status)
+	if err != nil {
+		return fmt.Errorf("failed to format output; %w", err)
+	}
+	fmt.Println(output)
 
 	// If format specified, print full config
 	if validateFormat != "" {

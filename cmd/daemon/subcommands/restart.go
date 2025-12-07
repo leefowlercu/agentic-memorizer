@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +45,11 @@ func runRestart(cmd *cobra.Command, args []string) error {
 
 		process, err := os.FindProcess(pid)
 		if err == nil {
-			fmt.Printf("Stopping daemon (PID %d)...\n", pid)
+			status := format.NewStatus(format.StatusRunning, fmt.Sprintf("Stopping daemon (PID %d)", pid))
+			if outputErr := outputStatus(status); outputErr != nil {
+				return outputErr
+			}
+
 			if err := process.Signal(syscall.SIGTERM); err == nil {
 				// Wait for daemon to stop
 				for i := 0; i < 30; i++ {
@@ -59,6 +64,9 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start daemon
-	fmt.Println("Starting daemon...")
+	startStatus := format.NewStatus(format.StatusRunning, "Starting daemon")
+	if err := outputStatus(startStatus); err != nil {
+		return err
+	}
 	return runStart(cmd, args)
 }

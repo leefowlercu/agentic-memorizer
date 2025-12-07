@@ -7,6 +7,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +62,6 @@ func runStop(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to signal daemon; %w%s", err, daemon.GetSignalErrorHelp(pid))
 	}
 
-	fmt.Printf("Sent stop signal to daemon (PID %d)\n", pid)
-	return nil
+	status := format.NewStatus(format.StatusSuccess, fmt.Sprintf("Sent stop signal to daemon (PID %d)", pid))
+	return outputStatus(status)
 }

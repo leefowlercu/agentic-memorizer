@@ -3,6 +3,7 @@ package subcommands
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
 )
@@ -27,32 +28,74 @@ func runList(cmd *cobra.Command, args []string) error {
 	all := registry.List()
 
 	if len(all) == 0 {
-		fmt.Println("No integrations registered")
+		status := format.NewStatus(format.StatusInfo, "No integrations registered")
+		formatter, err := format.GetFormatter("text")
+		if err != nil {
+			return fmt.Errorf("failed to get formatter; %w", err)
+		}
+		output, err := formatter.Format(status)
+		if err != nil {
+			return fmt.Errorf("failed to format output; %w", err)
+		}
+		fmt.Println(output)
 		return nil
 	}
 
-	fmt.Println("Available Integrations:")
-	fmt.Println()
+	// Build main section
+	section := format.NewSection("Available Integrations")
+
+	// Create a list for integrations
+	list := format.NewList(format.ListTypeUnordered)
 
 	for _, integration := range all {
 		status := "not configured"
-		statusSymbol := "○"
+		var severity format.StatusSeverity
 
 		enabled, err := integration.IsEnabled()
 		if err != nil {
 			status = fmt.Sprintf("error: %v", err)
-			statusSymbol = "✗"
+			severity = format.StatusError
 		} else if enabled {
 			status = "configured"
-			statusSymbol = "✓"
+			severity = format.StatusSuccess
+		} else {
+			severity = format.StatusInfo
 		}
 
-		fmt.Printf("  %s %s\n", statusSymbol, integration.GetName())
-		fmt.Printf("    Description: %s\n", integration.GetDescription())
-		fmt.Printf("    Version:     %s\n", integration.GetVersion())
-		fmt.Printf("    Status:      %s\n", status)
-		fmt.Println()
+		// Get appropriate status symbol
+		statusSymbol := format.GetStatusSymbol(severity)
+
+		// Build multi-line item content
+		itemContent := fmt.Sprintf("%s %s\n    Description: %s\n    Version:     %s\n    Status:      %s",
+			statusSymbol,
+			integration.GetName(),
+			integration.GetDescription(),
+			integration.GetVersion(),
+			status)
+
+		list.AddItem(itemContent)
 	}
+
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+
+	// Format section header
+	sectionOutput, err := formatter.Format(section)
+	if err != nil {
+		return fmt.Errorf("failed to format section; %w", err)
+	}
+	fmt.Println(sectionOutput)
+	fmt.Println()
+
+	// Format list
+	listOutput, err := formatter.Format(list)
+	if err != nil {
+		return fmt.Errorf("failed to format list; %w", err)
+	}
+	fmt.Println(listOutput)
 
 	return nil
 }

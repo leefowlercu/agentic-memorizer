@@ -38,6 +38,8 @@ func (f *TextFormatter) Format(b format.Buildable) (string, error) {
 		return f.formatStatus(v), nil
 	case *format.Error:
 		return f.formatError(v), nil
+	case *format.GraphContent:
+		return f.formatGraph(v), nil
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -369,6 +371,115 @@ func (f *TextFormatter) formatError(e *format.Error) string {
 		}
 		sb.WriteString(suggestionText)
 		sb.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(sb.String(), "\n")
+}
+
+// formatGraph renders a GraphIndex as plain text
+func (f *TextFormatter) formatGraph(gc *format.GraphContent) string {
+	index := gc.Index
+	var sb strings.Builder
+
+	// Header
+	title := "Memory Index"
+	if f.useColors {
+		sb.WriteString(format.Bold(title))
+	} else {
+		sb.WriteString(title)
+	}
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("=", len(title)))
+	sb.WriteString("\n\n")
+
+	// Stats
+	sb.WriteString(fmt.Sprintf("Generated:  %s\n", index.Generated.Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("Files:      %s\n", format.FormatNumber(int64(index.Stats.TotalFiles))))
+	sb.WriteString(fmt.Sprintf("Total Size: %s\n", format.FormatBytes(index.Stats.TotalSize)))
+
+	if index.Stats.CachedFiles > 0 || index.Stats.AnalyzedFiles > 0 {
+		sb.WriteString(fmt.Sprintf("Cached:     %s\n", format.FormatNumber(int64(index.Stats.CachedFiles))))
+		sb.WriteString(fmt.Sprintf("Analyzed:   %s\n", format.FormatNumber(int64(index.Stats.AnalyzedFiles))))
+	}
+
+	// Knowledge summary (if present and verbose)
+	if index.Knowledge != nil {
+		sb.WriteString("\n")
+		sb.WriteString("Knowledge Summary\n")
+		sb.WriteString("-----------------\n")
+
+		// Top tags (show first 5)
+		if len(index.Knowledge.TopTags) > 0 {
+			sb.WriteString("Top Tags:\n")
+			limit := 5
+			if len(index.Knowledge.TopTags) < limit {
+				limit = len(index.Knowledge.TopTags)
+			}
+			for i := 0; i < limit; i++ {
+				tag := index.Knowledge.TopTags[i]
+				sb.WriteString(fmt.Sprintf("  %s (%d)\n", tag.Name, tag.Count))
+			}
+		}
+
+		// Top topics (show first 5)
+		if len(index.Knowledge.TopTopics) > 0 {
+			sb.WriteString("Top Topics:\n")
+			limit := 5
+			if len(index.Knowledge.TopTopics) < limit {
+				limit = len(index.Knowledge.TopTopics)
+			}
+			for i := 0; i < limit; i++ {
+				topic := index.Knowledge.TopTopics[i]
+				sb.WriteString(fmt.Sprintf("  %s (%d)\n", topic.Name, topic.Count))
+			}
+		}
+
+		// Top entities (show first 5)
+		if len(index.Knowledge.TopEntities) > 0 {
+			sb.WriteString("Top Entities:\n")
+			limit := 5
+			if len(index.Knowledge.TopEntities) < limit {
+				limit = len(index.Knowledge.TopEntities)
+			}
+			for i := 0; i < limit; i++ {
+				entity := index.Knowledge.TopEntities[i]
+				sb.WriteString(fmt.Sprintf("  %s (%d)\n", entity.Name, entity.Count))
+			}
+		}
+	}
+
+	// Group files by category
+	categories := groupFilesByCategory(index.Files)
+	categoryOrder := []string{"documents", "presentations", "images", "transcripts", "data", "code", "videos", "audio", "archives", "other"}
+
+	for _, category := range categoryOrder {
+		files, ok := categories[category]
+		if !ok || len(files) == 0 {
+			continue
+		}
+
+		sb.WriteString("\n")
+		categoryTitle := strings.ToUpper(category[:1]) + category[1:] // Capitalize
+		if f.useColors {
+			sb.WriteString(format.Bold(categoryTitle))
+		} else {
+			sb.WriteString(categoryTitle)
+		}
+		sb.WriteString(fmt.Sprintf(" (%d)\n", len(files)))
+		sb.WriteString(strings.Repeat("-", len(categoryTitle)+10))
+		sb.WriteString("\n")
+
+		for _, file := range files {
+			sb.WriteString(fmt.Sprintf("  %s\n", file.Name))
+			if file.Summary != "" {
+				// Truncate summary to 80 chars for text output
+				summary := file.Summary
+				if len(summary) > 80 {
+					summary = summary[:77] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("    %s\n", summary))
+			}
+		}
 	}
 
 	return strings.TrimSuffix(sb.String(), "\n")

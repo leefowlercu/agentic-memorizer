@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
-	"github.com/leefowlercu/agentic-memorizer/internal/integrations/output"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -197,29 +197,19 @@ func outputForIntegration(idx *types.GraphIndex, integrationName, formatStr stri
 	return nil
 }
 
-// outputGraph outputs the GraphIndex format using GraphOutputProcessor interface
+// outputGraph outputs the GraphIndex format using the format package
 func outputGraph(idx *types.GraphIndex, formatStr string) error {
-	// Parse output format
-	format, err := integrations.ParseOutputFormat(formatStr)
+	// Get the appropriate formatter
+	formatter, err := format.GetFormatter(formatStr)
 	if err != nil {
-		return fmt.Errorf("invalid format; %w", err)
+		return fmt.Errorf("failed to get formatter; %w", err)
 	}
 
-	// Create appropriate processor
-	var processor output.GraphOutputProcessor
-	switch format {
-	case integrations.FormatXML:
-		processor = output.NewXMLProcessor()
-	case integrations.FormatMarkdown:
-		processor = output.NewMarkdownProcessor()
-	case integrations.FormatJSON:
-		processor = output.NewJSONProcessor()
-	default:
-		return fmt.Errorf("unsupported format: %s", format)
-	}
+	// Wrap the GraphIndex in GraphContent
+	graphContent := format.NewGraphContent(idx)
 
-	// Format and output using new GraphIndex format
-	content, err := processor.FormatGraph(idx)
+	// Format and output
+	content, err := formatter.Format(graphContent)
 	if err != nil {
 		return fmt.Errorf("failed to format output; %w", err)
 	}

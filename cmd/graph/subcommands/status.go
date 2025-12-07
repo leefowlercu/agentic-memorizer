@@ -9,6 +9,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/docker"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/spf13/cobra"
 )
@@ -30,31 +31,55 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	fmt.Printf("FalkorDB Status\n")
-	fmt.Printf("===============\n\n")
+	section := format.NewSection("FalkorDB Status").AddDivider()
 
 	// Check Docker availability
 	if !docker.IsAvailable() {
-		fmt.Printf("Docker:     not installed or not running\n")
-		fmt.Printf("Container:  N/A\n")
+		section.AddKeyValue("Docker", "not installed or not running")
+		section.AddKeyValue("Container", "N/A")
+
+		formatter, err := format.GetFormatter("text")
+		if err != nil {
+			return fmt.Errorf("failed to get formatter; %w", err)
+		}
+		output, err := formatter.Format(section)
+		if err != nil {
+			return fmt.Errorf("failed to format output; %w", err)
+		}
+		fmt.Println(output)
 		fmt.Printf("\nInstall Docker to use the FalkorDB knowledge graph.\n")
 		return nil
 	}
 
-	fmt.Printf("Docker:     available\n")
+	section.AddKeyValue("Docker", "available")
 
 	// Check container status
-	if docker.IsFalkorDBRunning(0) {
-		fmt.Printf("Container:  running\n")
-	} else if docker.ContainerExists() {
-		fmt.Printf("Container:  stopped\n")
-		fmt.Printf("\nRun 'agentic-memorizer graph start' to start the container.\n")
-		return nil
-	} else {
-		fmt.Printf("Container:  not created\n")
-		fmt.Printf("\nRun 'agentic-memorizer graph start' to create and start the container.\n")
+	if !docker.IsFalkorDBRunning(0) {
+		if docker.ContainerExists() {
+			section.AddKeyValue("Container", "stopped")
+		} else {
+			section.AddKeyValue("Container", "not created")
+		}
+
+		formatter, err := format.GetFormatter("text")
+		if err != nil {
+			return fmt.Errorf("failed to get formatter; %w", err)
+		}
+		output, err := formatter.Format(section)
+		if err != nil {
+			return fmt.Errorf("failed to format output; %w", err)
+		}
+		fmt.Println(output)
+
+		if docker.ContainerExists() {
+			fmt.Printf("\nRun 'agentic-memorizer graph start' to start the container.\n")
+		} else {
+			fmt.Printf("\nRun 'agentic-memorizer graph start' to create and start the container.\n")
+		}
 		return nil
 	}
+
+	section.AddKeyValue("Container", "running")
 
 	// Connect to FalkorDB and get stats
 	if err := config.InitConfig(); err != nil {
@@ -82,44 +107,67 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	if err := manager.Initialize(ctx); err != nil {
-		fmt.Printf("Connection: failed (%s)\n", err)
+		section.AddKeyValue("Connection", fmt.Sprintf("failed (%s)", err))
+
+		formatter, err := format.GetFormatter("text")
+		if err != nil {
+			return fmt.Errorf("failed to get formatter; %w", err)
+		}
+		output, err := formatter.Format(section)
+		if err != nil {
+			return fmt.Errorf("failed to format output; %w", err)
+		}
+		fmt.Println(output)
 		return nil
 	}
 	defer manager.Close()
 
-	fmt.Printf("Connection: connected\n")
+	section.AddKeyValue("Connection", "connected")
 
 	// Get health status
 	health, err := manager.Health(ctx)
 	if err != nil {
-		fmt.Printf("Health:     error (%s)\n", err)
+		section.AddKeyValue("Health", fmt.Sprintf("error (%s)", err))
 	} else if health.Stats != nil {
-		fmt.Printf("Database:   %s\n", health.Database)
-		fmt.Printf("\nGraph Statistics\n")
-		fmt.Printf("----------------\n")
-		fmt.Printf("Nodes:         %d\n", health.Stats.NodeCount)
-		fmt.Printf("Relationships: %d\n", health.Stats.RelationshipCount)
+		section.AddKeyValue("Database", health.Database)
+
+		// Add graph statistics subsection
+		graphStats := format.NewSection("Graph Statistics").SetLevel(1).AddDivider()
+		graphStats.AddKeyValuef("Nodes", "%d", health.Stats.NodeCount)
+		graphStats.AddKeyValuef("Relationships", "%d", health.Stats.RelationshipCount)
+		section.AddSubsection(graphStats)
 	}
 
 	// Get detailed stats
 	stats, err := manager.GetStats(ctx)
 	if err == nil && stats != nil {
-		fmt.Printf("\nDetailed Statistics\n")
-		fmt.Printf("-------------------\n")
-		fmt.Printf("Files:    %d\n", stats.TotalFiles)
-		fmt.Printf("Tags:     %d\n", stats.TotalTags)
-		fmt.Printf("Topics:   %d\n", stats.TotalTopics)
-		fmt.Printf("Entities: %d\n", stats.TotalEntities)
-		fmt.Printf("Edges:    %d\n", stats.TotalEdges)
+		detailedStats := format.NewSection("Detailed Statistics").SetLevel(1).AddDivider()
+		detailedStats.AddKeyValuef("Files", "%d", stats.TotalFiles)
+		detailedStats.AddKeyValuef("Tags", "%d", stats.TotalTags)
+		detailedStats.AddKeyValuef("Topics", "%d", stats.TotalTopics)
+		detailedStats.AddKeyValuef("Entities", "%d", stats.TotalEntities)
+		detailedStats.AddKeyValuef("Edges", "%d", stats.TotalEdges)
+		section.AddSubsection(detailedStats)
 
 		if len(stats.Categories) > 0 {
-			fmt.Printf("\nCategories\n")
-			fmt.Printf("----------\n")
+			categories := format.NewSection("Categories").SetLevel(1).AddDivider()
 			for category, count := range stats.Categories {
-				fmt.Printf("  %s: %d\n", category, count)
+				categories.AddKeyValuef(category, "%d", count)
 			}
+			section.AddSubsection(categories)
 		}
 	}
+
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(section)
+	if err != nil {
+		return fmt.Errorf("failed to format output; %w", err)
+	}
+	fmt.Println(output)
 
 	fmt.Printf("\nBrowser UI: http://localhost:3000\n")
 

@@ -9,6 +9,8 @@ import (
 	"syscall"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
 	"github.com/spf13/cobra"
 )
 
@@ -59,42 +61,61 @@ func runReload(cmd *cobra.Command, args []string) error {
 
 	// Validate new configuration
 	if err := config.ValidateConfig(newCfg); err != nil {
-		fmt.Println("❌ Configuration validation failed:")
-		fmt.Println()
-		fmt.Println(err.Error())
+		status := format.NewStatus(format.StatusError, "Configuration validation failed")
+		status.AddDetail(err.Error())
+		if outputErr := outputStatus(status); outputErr != nil {
+			return outputErr
+		}
 		return fmt.Errorf("validation failed")
 	}
 
-	fmt.Println("✓ Configuration is valid")
-	fmt.Println()
+	validStatus := format.NewStatus(format.StatusSuccess, "Configuration is valid")
+	if err := outputStatus(validStatus); err != nil {
+		return err
+	}
 
 	// Check if daemon is running
 	pidFile := getPIDFilePath()
 	pid, running := isDaemonRunning(pidFile)
 
 	if !running {
-		fmt.Println("ℹ Daemon is not running")
-		fmt.Println("New configuration will be used on next daemon start")
-		return nil
+		status := format.NewStatus(format.StatusInfo, "Daemon is not running")
+		status.AddDetail("New configuration will be used on next daemon start")
+		return outputStatus(status)
 	}
 
-	fmt.Printf("ℹ Daemon is running (PID: %d)\n", pid)
-	fmt.Println("Sending SIGHUP signal to reload configuration...")
+	// Daemon is running - send reload signal
+	runningStatus := format.NewStatus(format.StatusInfo, fmt.Sprintf("Daemon is running (PID: %d)", pid))
+	runningStatus.AddDetail("Sending SIGHUP signal to reload configuration")
+	if err := outputStatus(runningStatus); err != nil {
+		return err
+	}
 
 	// Send SIGHUP to daemon
 	if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
 		return fmt.Errorf("failed to send SIGHUP signal; %w", err)
 	}
 
-	fmt.Println("✓ Configuration reload signal sent successfully")
-	fmt.Println()
-	fmt.Println("Check daemon logs for reload status:")
+	successStatus := format.NewStatus(format.StatusSuccess, "Configuration reload signal sent successfully")
 	if newCfg.Daemon.LogFile != "" {
-		fmt.Printf("  tail -f %s\n", newCfg.Daemon.LogFile)
+		successStatus.AddDetail(fmt.Sprintf("Check daemon logs: tail -f %s", newCfg.Daemon.LogFile))
 	} else {
-		fmt.Println("  (daemon logging to stdout)")
+		successStatus.AddDetail("Check daemon output (logging to stdout)")
 	}
+	return outputStatus(successStatus)
+}
 
+// outputStatus formats and outputs a status message
+func outputStatus(status *format.Status) error {
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(status)
+	if err != nil {
+		return fmt.Errorf("failed to format status; %w", err)
+	}
+	fmt.Println(output)
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/spf13/cobra"
 )
@@ -45,6 +46,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get PID path; %w", err)
 	}
 
+	// Build main section
+	section := format.NewSection("Daemon Status").AddDivider()
+
 	// Check if daemon is running
 	var pid int
 	var running bool
@@ -61,33 +65,19 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Println("Daemon Status")
-	fmt.Println("=============")
 	if running {
 		managed := daemon.IsServiceManaged()
 		if managed {
-			fmt.Printf("Status: Running (PID %d, service-managed)\n", pid)
+			section.AddKeyValue("Status", fmt.Sprintf("Running (PID %d, service-managed)", pid))
 		} else {
-			fmt.Printf("Status: Running (PID %d, foreground)\n", pid)
+			section.AddKeyValue("Status", fmt.Sprintf("Running (PID %d, foreground)", pid))
 		}
 	} else {
-		fmt.Println("Status: Not running")
-
-		// Add service manager check
-		sm := daemon.DetectServiceManager()
-		switch sm {
-		case "systemd":
-			fmt.Println("\nNote: Check if managed by systemd:")
-			fmt.Println("  systemctl --user status agentic-memorizer")
-		case "launchd":
-			fmt.Println("\nNote: Check if managed by launchd:")
-			fmt.Println("  launchctl list | grep agentic-memorizer")
-		}
+		section.AddKeyValue("Status", "Not running")
 	}
 
-	// Check graph status (FalkorDB is required)
-	fmt.Println("\nGraph Database")
-	fmt.Println("--------------")
+	// Add Graph Database subsection
+	graphSection := format.NewSection("Graph Database").SetLevel(1).AddDivider()
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
@@ -103,53 +93,83 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	graphManager := graph.NewManager(graphConfig, logger)
+	var graphNote string
 	if err := graphManager.Initialize(ctx); err != nil {
-		fmt.Printf("Status: Not connected (%s:%d)\n", cfg.Graph.Host, cfg.Graph.Port)
-		fmt.Printf("Error: %v\n", err)
-		fmt.Println("\nTo start FalkorDB: agentic-memorizer graph start")
+		graphSection.AddKeyValue("Status", fmt.Sprintf("Not connected (%s:%d)", cfg.Graph.Host, cfg.Graph.Port))
+		graphSection.AddKeyValue("Error", fmt.Sprintf("%v", err))
+		graphNote = "To start FalkorDB: agentic-memorizer graph start"
 	} else {
 		defer graphManager.Close()
 
 		stats, err := graphManager.GetStats(ctx)
 		if err != nil {
-			fmt.Println("Status: Connected (failed to get stats)")
+			graphSection.AddKeyValue("Status", "Connected (failed to get stats)")
 		} else {
-			fmt.Printf("Status: Connected (%s:%d)\n", cfg.Graph.Host, cfg.Graph.Port)
-			fmt.Printf("Database: %s\n", cfg.Graph.Database)
-			fmt.Printf("Files: %d\n", stats.TotalFiles)
-			fmt.Printf("Tags: %d\n", stats.TotalTags)
-			fmt.Printf("Topics: %d\n", stats.TotalTopics)
-			fmt.Printf("Entities: %d\n", stats.TotalEntities)
-			fmt.Printf("Edges: %d\n", stats.TotalEdges)
+			graphSection.AddKeyValue("Status", fmt.Sprintf("Connected (%s:%d)", cfg.Graph.Host, cfg.Graph.Port))
+			graphSection.AddKeyValue("Database", cfg.Graph.Database)
+			graphSection.AddKeyValuef("Files", "%d", stats.TotalFiles)
+			graphSection.AddKeyValuef("Tags", "%d", stats.TotalTags)
+			graphSection.AddKeyValuef("Topics", "%d", stats.TotalTopics)
+			graphSection.AddKeyValuef("Entities", "%d", stats.TotalEntities)
+			graphSection.AddKeyValuef("Edges", "%d", stats.TotalEdges)
 		}
 	}
+	section.AddSubsection(graphSection)
 
-	// Configuration
-	fmt.Println("\nConfiguration")
-	fmt.Println("-------------")
-	fmt.Printf("Memory Root: %s\n", cfg.MemoryRoot)
-	fmt.Printf("Cache Dir: %s\n", cfg.Analysis.CacheDir)
-	fmt.Printf("Rebuild Interval: %d minutes\n", cfg.Daemon.FullRebuildIntervalMinutes)
-	fmt.Printf("Workers: %d\n", cfg.Daemon.Workers)
-	fmt.Printf("Rate Limit: %d/min\n", cfg.Daemon.RateLimitPerMin)
+	// Add Configuration subsection
+	configSection := format.NewSection("Configuration").SetLevel(1).AddDivider()
+	configSection.AddKeyValue("Memory Root", cfg.MemoryRoot)
+	configSection.AddKeyValue("Cache Dir", cfg.Analysis.CacheDir)
+	configSection.AddKeyValuef("Rebuild Interval", "%d minutes", cfg.Daemon.FullRebuildIntervalMinutes)
+	configSection.AddKeyValuef("Workers", "%d", cfg.Daemon.Workers)
+	configSection.AddKeyValuef("Rate Limit", "%d/min", cfg.Daemon.RateLimitPerMin)
 	if cfg.Daemon.HTTPPort > 0 {
-		fmt.Printf("HTTP Server: http://localhost:%d\n", cfg.Daemon.HTTPPort)
+		configSection.AddKeyValuef("HTTP Server", "http://localhost:%d", cfg.Daemon.HTTPPort)
 	}
+	section.AddSubsection(configSection)
 
-	// Service Management
-	fmt.Println("\nService Management")
-	fmt.Println("------------------")
+	// Add Service Management subsection
+	serviceSection := format.NewSection("Service Management").SetLevel(1).AddDivider()
 	sm := daemon.DetectServiceManager()
 	switch sm {
 	case "systemd":
-		fmt.Println("Platform: Linux (systemd available)")
-		fmt.Println("Setup: agentic-memorizer daemon systemctl")
+		serviceSection.AddKeyValue("Platform", "Linux (systemd available)")
+		serviceSection.AddKeyValue("Setup", "agentic-memorizer daemon systemctl")
 	case "launchd":
-		fmt.Println("Platform: macOS (launchd available)")
-		fmt.Println("Setup: agentic-memorizer daemon launchctl")
+		serviceSection.AddKeyValue("Platform", "macOS (launchd available)")
+		serviceSection.AddKeyValue("Setup", "agentic-memorizer daemon launchctl")
 	default:
-		fmt.Printf("Platform: %s\n", runtime.GOOS)
-		fmt.Println("Manual management required")
+		serviceSection.AddKeyValue("Platform", runtime.GOOS)
+		serviceSection.AddKeyValue("Management", "Manual management required")
+	}
+	section.AddSubsection(serviceSection)
+
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(section)
+	if err != nil {
+		return fmt.Errorf("failed to format output; %w", err)
+	}
+	fmt.Println(output)
+
+	// Add notes
+	if !running {
+		sm := daemon.DetectServiceManager()
+		switch sm {
+		case "systemd":
+			fmt.Println("\nNote: Check if managed by systemd:")
+			fmt.Println("  systemctl --user status agentic-memorizer")
+		case "launchd":
+			fmt.Println("\nNote: Check if managed by launchd:")
+			fmt.Println("  launchctl list | grep agentic-memorizer")
+		}
+	}
+
+	if graphNote != "" {
+		fmt.Printf("\n%s\n", graphNote)
 	}
 
 	return nil

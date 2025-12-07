@@ -42,6 +42,7 @@ This documentation is intended for:
   - [Semantic Search](#semantic-search)
 - **Utilities**
   - [Walker](#walker)
+  - [Format](#format)
   - [Version](#version)
 - **Testing**
   - [E2E Tests](#e2e-tests)
@@ -370,6 +371,37 @@ Directory tree traversal with filtering and relative path computation.
 
 ---
 
+#### [Format](./format/)
+**Status:** ✅ Documented
+
+Centralized CLI output formatting with multi-format support and structured builders.
+
+**Key Features:**
+- Three-tier architecture (builders, formatters, writers)
+- Seven builder types for common CLI output patterns (status, section, table, list, progress, error, graph content)
+- Five output formats (text, JSON, YAML, XML, markdown)
+- Thread-safe formatter registry with extensible registration
+- Consistent styling with shared utilities (symbols, colors, number formatting)
+- Type-safe validation before rendering
+
+**Primary Components:**
+- `internal/format/builder.go` - Buildable interface and builder types
+- `internal/format/formatter.go` - Formatter interface and registry
+- `internal/format/writer.go` - Buffered I/O abstraction
+- `internal/format/status.go` - Status message builder
+- `internal/format/section.go` - Section builder with hierarchical key-value pairs
+- `internal/format/table.go` - Table builder with alignment support
+- `internal/format/list.go` - List builder with nesting
+- `internal/format/progress.go` - Progress indicator builder
+- `internal/format/error.go` - Structured error message builder
+- `internal/format/graph.go` - GraphContent builder for integration output
+- `internal/format/utils.go` - Shared formatting utilities
+- `internal/format/formatters/` - Format-specific renderers (text, JSON, YAML, XML, markdown)
+
+**See:** [format/README.md](./format/README.md)
+
+---
+
 #### [Version](./version/)
 **Status:** ✅ Documented
 
@@ -547,9 +579,10 @@ If you're looking for specific subsystem information:
 
 ---
 
-**Last Updated:** 2025-12-05
+**Last Updated:** 2025-12-06
 
 **Recent Updates:**
+- Added Format subsystem documentation (2025-12-06)
 - Comprehensive subsystems index accuracy review (2025-12-05)
   - Corrected Daemon description: "maintains FalkorDB knowledge graph" (not "precomputed memory index")
   - Updated Daemon key features: "Real-time graph updates via FalkorDB" (not "Atomic index updates")

@@ -3,6 +3,7 @@ package subcommands
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
 )
@@ -72,13 +73,21 @@ func runHealth(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(toCheck) == 0 {
-		fmt.Println("No integrations to check")
+		status := format.NewStatus(format.StatusInfo, "No integrations to check")
+		formatter, err := format.GetFormatter("text")
+		if err != nil {
+			return fmt.Errorf("failed to get formatter; %w", err)
+		}
+		output, err := formatter.Format(status)
+		if err != nil {
+			return fmt.Errorf("failed to format output; %w", err)
+		}
+		fmt.Println(output)
 		return nil
 	}
 
-	fmt.Println("Integration Health Check")
-	fmt.Println("========================")
-	fmt.Println()
+	// Build main section
+	section := format.NewSection("Integration Health Check").AddDivider()
 
 	hasIssues := false
 	healthyCount := 0
@@ -87,74 +96,108 @@ func runHealth(cmd *cobra.Command, args []string) error {
 
 	for _, integration := range toCheck {
 		name := integration.GetName()
-		fmt.Printf("Checking %s...\n", name)
+		integrationSection := format.NewSection(fmt.Sprintf("Checking %s", name)).SetLevel(1)
 
 		// Check if enabled
 		enabled, err := integration.IsEnabled()
 		if err != nil {
-			fmt.Printf("  ✗ Status check failed: %v\n", err)
+			integrationSection.AddKeyValue("Status", fmt.Sprintf("Status check failed: %v", err))
 			hasIssues = true
 			issueCount++
-			fmt.Println()
+
+			// Add to section as subsection
+			section.AddSubsection(integrationSection)
 			continue
 		}
 
 		if !enabled {
-			fmt.Printf("  ○ Not configured (skipping health checks)\n")
+			integrationSection.AddKeyValue("Status", "Not configured (skipping health checks)")
 			unconfiguredCount++
-			fmt.Println()
+
+			// Add to section
+			section.AddSubsection(integrationSection)
 			continue
 		}
 
 		// Perform health checks
 		issuesFound := false
+		var checks []string
 
 		// Check 1: Framework detection
 		detected, err := integration.Detect()
 		if err != nil {
-			fmt.Printf("  ✗ Detection failed: %v\n", err)
+			checks = append(checks, fmt.Sprintf("%s Detection failed: %v", format.SymbolError, err))
 			issuesFound = true
 		} else if !detected {
-			fmt.Printf("  ⚠ Framework not detected (may not be installed)\n")
+			checks = append(checks, fmt.Sprintf("%s Framework not detected (may not be installed)", format.SymbolWarning))
 			issuesFound = true
 		} else {
-			fmt.Printf("  ✓ Framework detected\n")
+			checks = append(checks, fmt.Sprintf("%s Framework detected", format.SymbolSuccess))
 		}
 
 		// Check 2: Configuration validation
 		if err := integration.Validate(); err != nil {
-			fmt.Printf("  ✗ Validation failed: %v\n", err)
+			checks = append(checks, fmt.Sprintf("%s Validation failed: %v", format.SymbolError, err))
 			issuesFound = true
 		} else {
-			fmt.Printf("  ✓ Configuration valid\n")
+			checks = append(checks, fmt.Sprintf("%s Configuration valid", format.SymbolSuccess))
+		}
+
+		// Add check results to integration section
+		for _, check := range checks {
+			integrationSection.AddKeyValue("", check)
 		}
 
 		// Summary for this integration
 		if issuesFound {
-			fmt.Printf("  Status: Issues found\n")
+			integrationSection.AddKeyValue("Status", "Issues found")
 			hasIssues = true
 			issueCount++
 		} else {
-			fmt.Printf("  Status: Healthy\n")
+			integrationSection.AddKeyValue("Status", "Healthy")
 			healthyCount++
 		}
 
-		fmt.Println()
+		section.AddSubsection(integrationSection)
 	}
 
-	// Overall summary
-	fmt.Println("Summary")
-	fmt.Println("-------")
-	fmt.Printf("Total checked: %d\n", len(toCheck))
-	fmt.Printf("Healthy: %d\n", healthyCount)
-	fmt.Printf("Issues: %d\n", issueCount)
-	fmt.Printf("Unconfigured: %d\n", unconfiguredCount)
+	// Add summary subsection
+	summarySection := format.NewSection("Summary").SetLevel(1).AddDivider()
+	summarySection.AddKeyValuef("Total checked", "%d", len(toCheck))
+	summarySection.AddKeyValuef("Healthy", "%d", healthyCount)
+	summarySection.AddKeyValuef("Issues", "%d", issueCount)
+	summarySection.AddKeyValuef("Unconfigured", "%d", unconfiguredCount)
+	section.AddSubsection(summarySection)
+
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+	output, err := formatter.Format(section)
+	if err != nil {
+		return fmt.Errorf("failed to format output; %w", err)
+	}
+	fmt.Println(output)
+
 	fmt.Println()
 
 	if hasIssues {
+		status := format.NewStatus(format.StatusError, fmt.Sprintf("Health check found %d integration(s) with issues", issueCount))
+		statusOutput, err := formatter.Format(status)
+		if err != nil {
+			return fmt.Errorf("failed to format status; %w", err)
+		}
+		fmt.Println(statusOutput)
 		return fmt.Errorf("health check found %d integration(s) with issues", issueCount)
 	}
 
-	fmt.Println("✓ All configured integrations are healthy")
+	status := format.NewStatus(format.StatusSuccess, "All configured integrations are healthy")
+	statusOutput, err := formatter.Format(status)
+	if err != nil {
+		return fmt.Errorf("failed to format status; %w", err)
+	}
+	fmt.Println(statusOutput)
+
 	return nil
 }

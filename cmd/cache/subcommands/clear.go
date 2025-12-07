@@ -5,6 +5,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/spf13/cobra"
 )
 
@@ -72,7 +73,7 @@ func runClearAll(manager *cache.Manager) error {
 		return nil
 	}
 
-	fmt.Printf("Clearing all %d cached entries (%s)...\n", stats.TotalEntries, formatBytes(stats.TotalSize))
+	fmt.Printf("Clearing all %d cached entries (%s)...\n", stats.TotalEntries, format.FormatBytes(stats.TotalSize))
 
 	if err := manager.Clear(); err != nil {
 		return fmt.Errorf("failed to clear cache; %w", err)

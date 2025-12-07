@@ -5,6 +5,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/spf13/cobra"
 )
 
@@ -40,21 +41,21 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get cache stats; %w", err)
 	}
 
-	fmt.Printf("Cache Status\n")
-	fmt.Printf("============\n\n")
+	// Build output using format package
+	section := format.NewSection("Cache Status").AddDivider()
+	section.AddKeyValue("Location", cfg.Analysis.CacheDir)
+	section.AddKeyValue("Current Version", cache.CacheVersion())
 
-	fmt.Printf("Location:       %s\n", cfg.Analysis.CacheDir)
-	fmt.Printf("Current Version: %s\n\n", cache.CacheVersion())
+	// Add statistics subsection
+	statsSection := format.NewSection("Statistics").SetLevel(1).AddDivider()
+	statsSection.AddKeyValuef("Total Entries", "%d", stats.TotalEntries)
+	statsSection.AddKeyValue("Total Size", format.FormatBytes(stats.TotalSize))
+	statsSection.AddKeyValuef("Legacy Entries", "%d", stats.LegacyEntries)
+	section.AddSubsection(statsSection)
 
-	fmt.Printf("Statistics\n")
-	fmt.Printf("----------\n")
-	fmt.Printf("Total Entries:  %d\n", stats.TotalEntries)
-	fmt.Printf("Total Size:     %s\n", formatBytes(stats.TotalSize))
-	fmt.Printf("Legacy Entries: %d\n", stats.LegacyEntries)
-
+	// Add version distribution if available
 	if len(stats.VersionCounts) > 0 {
-		fmt.Printf("\nVersion Distribution\n")
-		fmt.Printf("--------------------\n")
+		versionSection := format.NewSection("Version Distribution").SetLevel(1).AddDivider()
 		for version, count := range stats.VersionCounts {
 			marker := ""
 			if version == cache.CacheVersion() {
@@ -64,30 +65,31 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			} else {
 				marker = " (stale)"
 			}
-			fmt.Printf("  %s: %d%s\n", version, count, marker)
+			versionSection.AddKeyValuef(version, "%d%s", count, marker)
 		}
+		section.AddSubsection(versionSection)
 	}
 
+	// Format and write output
+	formatter, err := format.GetFormatter("text")
+	if err != nil {
+		return fmt.Errorf("failed to get formatter; %w", err)
+	}
+
+	output, err := formatter.Format(section)
+	if err != nil {
+		return fmt.Errorf("failed to format output; %w", err)
+	}
+
+	fmt.Println(output)
+
+	// Add note if there are stale entries
 	if stats.LegacyEntries > 0 || hasStaleEntries(stats) {
 		fmt.Printf("\nNote: Run 'agentic-memorizer cache clear --old-versions' to remove stale entries.\n")
 		fmt.Printf("      Stale entries will be re-analyzed automatically on next daemon rebuild.\n")
 	}
 
 	return nil
-}
-
-// formatBytes formats bytes into human-readable format
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 // hasStaleEntries checks if there are any non-current, non-legacy entries

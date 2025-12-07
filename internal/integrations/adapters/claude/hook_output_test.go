@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )

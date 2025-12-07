@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )

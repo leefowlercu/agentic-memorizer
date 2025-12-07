@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
 	"gopkg.in/yaml.v3"
 )
 

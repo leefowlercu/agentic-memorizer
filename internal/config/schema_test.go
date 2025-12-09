@@ -11,8 +11,8 @@ func TestGetConfigSchema(t *testing.T) {
 		t.Fatal("GetConfigSchema() returned nil")
 	}
 
-	// Test that all sections are present
-	expectedSections := []string{
+	// Test that all items are present (both RootFields and Sections)
+	expectedItems := []string{
 		"memory_root",
 		"claude",
 		"analysis",
@@ -23,16 +23,23 @@ func TestGetConfigSchema(t *testing.T) {
 		"integrations",
 	}
 
-	for _, expected := range expectedSections {
+	for _, expected := range expectedItems {
 		found := false
-		for _, section := range schema.Sections {
-			if section.Name == expected {
+		for _, item := range schema.Items {
+			var name string
+			switch v := item.(type) {
+			case RootField:
+				name = v.Name
+			case SchemaSection:
+				name = v.Name
+			}
+			if name == expected {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("expected section %q not found in schema", expected)
+			t.Errorf("expected item %q not found in schema", expected)
 		}
 	}
 }
@@ -40,10 +47,17 @@ func TestGetConfigSchema(t *testing.T) {
 func TestGetConfigSchema_AllFieldsHaveDescriptions(t *testing.T) {
 	schema := GetConfigSchema()
 
-	for _, section := range schema.Sections {
-		for _, field := range section.Fields {
-			if field.Description == "" {
-				t.Errorf("field %s.%s has no description", section.Name, field.Name)
+	for _, item := range schema.Items {
+		switch v := item.(type) {
+		case RootField:
+			if v.Description == "" {
+				t.Errorf("root field %s has no description", v.Name)
+			}
+		case SchemaSection:
+			for _, field := range v.Fields {
+				if field.Description == "" {
+					t.Errorf("field %s.%s has no description", v.Name, field.Name)
+				}
 			}
 		}
 	}
@@ -61,13 +75,23 @@ func TestGetConfigSchema_AllFieldsHaveTypes(t *testing.T) {
 		"[]string": true,
 	}
 
-	for _, section := range schema.Sections {
-		for _, field := range section.Fields {
-			if field.Type == "" {
-				t.Errorf("field %s.%s has no type", section.Name, field.Name)
+	for _, item := range schema.Items {
+		switch v := item.(type) {
+		case RootField:
+			if v.Type == "" {
+				t.Errorf("root field %s has no type", v.Name)
 			}
-			if !validTypes[field.Type] {
-				t.Errorf("field %s.%s has invalid type %q", section.Name, field.Name, field.Type)
+			if !validTypes[v.Type] {
+				t.Errorf("root field %s has invalid type %q", v.Name, v.Type)
+			}
+		case SchemaSection:
+			for _, field := range v.Fields {
+				if field.Type == "" {
+					t.Errorf("field %s.%s has no type", v.Name, field.Name)
+				}
+				if !validTypes[field.Type] {
+					t.Errorf("field %s.%s has invalid type %q", v.Name, field.Name, field.Type)
+				}
 			}
 		}
 	}
@@ -81,13 +105,23 @@ func TestGetConfigSchema_AllFieldsHaveTiers(t *testing.T) {
 		"advanced": true,
 	}
 
-	for _, section := range schema.Sections {
-		for _, field := range section.Fields {
-			if field.Tier == "" {
-				t.Errorf("field %s.%s has no tier", section.Name, field.Name)
+	for _, item := range schema.Items {
+		switch v := item.(type) {
+		case RootField:
+			if v.Tier == "" {
+				t.Errorf("root field %s has no tier", v.Name)
 			}
-			if !validTiers[field.Tier] {
-				t.Errorf("field %s.%s has invalid tier %q", section.Name, field.Name, field.Tier)
+			if !validTiers[v.Tier] {
+				t.Errorf("root field %s has invalid tier %q", v.Name, v.Tier)
+			}
+		case SchemaSection:
+			for _, field := range v.Fields {
+				if field.Tier == "" {
+					t.Errorf("field %s.%s has no tier", v.Name, field.Name)
+				}
+				if !validTiers[field.Tier] {
+					t.Errorf("field %s.%s has invalid tier %q", v.Name, field.Name, field.Tier)
+				}
 			}
 		}
 	}
@@ -114,9 +148,9 @@ func TestGetConfigSchema_ClaudeSectionHasNewFields(t *testing.T) {
 	schema := GetConfigSchema()
 
 	var claudeSection *SchemaSection
-	for i := range schema.Sections {
-		if schema.Sections[i].Name == "claude" {
-			claudeSection = &schema.Sections[i]
+	for _, item := range schema.Items {
+		if section, ok := item.(SchemaSection); ok && section.Name == "claude" {
+			claudeSection = &section
 			break
 		}
 	}
@@ -152,9 +186,9 @@ func TestGetConfigSchema_EmbeddingsSectionHasNewFields(t *testing.T) {
 	schema := GetConfigSchema()
 
 	var embeddingsSection *SchemaSection
-	for i := range schema.Sections {
-		if schema.Sections[i].Name == "embeddings" {
-			embeddingsSection = &schema.Sections[i]
+	for _, item := range schema.Items {
+		if section, ok := item.(SchemaSection); ok && section.Name == "embeddings" {
+			embeddingsSection = &section
 			break
 		}
 	}

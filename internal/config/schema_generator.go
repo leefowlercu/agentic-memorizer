@@ -12,14 +12,14 @@ func generateConfigSchema() *ConfigSchema {
 	// Build map of field paths that exist in MinimalConfig
 	minimalFields := buildMinimalFieldMap()
 
-	// Generate sections by walking Config struct
-	sections := generateConfigSections(minimalFields)
+	// Generate items (sections and root fields) by walking Config struct
+	items := generateConfigItems(minimalFields)
 
 	// Hardcoded settings (already correct, no changes needed)
 	hardcoded := getHardcodedSettings()
 
 	return &ConfigSchema{
-		Sections:  sections,
+		Items:     items,
 		Hardcoded: hardcoded,
 	}
 }
@@ -83,10 +83,11 @@ func walkMinimalStructFields(t reflect.Type, prefix string, paths map[string]boo
 	}
 }
 
-// generateConfigSections walks the Config struct and generates SchemaSection
+// generateConfigItems walks the Config struct and generates SchemaItem
 // for each top-level field, automatically deriving tier classifications.
-func generateConfigSections(minimalFields map[string]bool) []SchemaSection {
-	sections := []SchemaSection{}
+// Returns a mix of RootField (for simple types) and SchemaSection (for structs).
+func generateConfigItems(minimalFields map[string]bool) []SchemaItem {
+	items := []SchemaItem{}
 
 	configType := reflect.TypeOf(Config{})
 	defaultConfig := reflect.ValueOf(DefaultConfig)
@@ -95,49 +96,44 @@ func generateConfigSections(minimalFields map[string]bool) []SchemaSection {
 		field := configType.Field(i)
 		fieldValue := defaultConfig.Field(i)
 
-		// Get section name from mapstructure tag
-		sectionTag := field.Tag.Get("mapstructure")
-		if sectionTag == "" {
+		// Get field name from mapstructure tag
+		fieldTag := field.Tag.Get("mapstructure")
+		if fieldTag == "" {
 			continue
 		}
 
-		// Generate section
-		section := generateSection(sectionTag, field.Type, fieldValue, minimalFields)
-		sections = append(sections, section)
+		// Check if this is a simple type (root field) or nested struct (section)
+		item := generateSchemaItem(fieldTag, field.Type, fieldValue, minimalFields)
+		items = append(items, item)
 	}
 
-	return sections
+	return items
 }
 
-// generateSection generates a SchemaSection for a single config section
-// (e.g., "claude", "daemon", "graph") with auto-derived tier classifications.
-func generateSection(sectionName string, t reflect.Type, v reflect.Value, minimalFields map[string]bool) SchemaSection {
-	// Get section description
-	description, ok := sectionDescriptions[sectionName]
+// generateSchemaItem generates a SchemaItem for a single config field.
+// Returns RootField for simple types (string, int, bool, etc.) and
+// SchemaSection for nested struct types, automatically deriving tier classifications.
+func generateSchemaItem(name string, t reflect.Type, v reflect.Value, minimalFields map[string]bool) SchemaItem {
+	// Get description
+	description, ok := sectionDescriptions[name]
 	if !ok {
 		description = ""
 	}
 
-	// Special case: memory_root is a top-level string field (not a nested struct)
-	// Create a section with the field name matching the section name
-	if t.Kind() == reflect.String {
-		return SchemaSection{
-			Name:        sectionName,
-			Description: description,
-			Fields: []SchemaField{
-				{
-					Name:        sectionName,
-					Type:        "string",
-					Default:     v.Interface(),
-					Tier:        determineTier(sectionName, minimalFields),
-					HotReload:   getHotReload(sectionName),
-					Description: getFieldDescription(sectionName),
-				},
-			},
+	// For simple types: create RootField
+	switch t.Kind() {
+	case reflect.String, reflect.Int, reflect.Int64, reflect.Bool, reflect.Float64:
+		return RootField{
+			Name:        name,
+			Type:        getTypeString(t),
+			Default:     v.Interface(),
+			Tier:        determineTier(name, minimalFields),
+			HotReload:   getHotReload(name),
+			Description: getFieldDescription(name),
 		}
 	}
 
-	// Generate fields for struct sections
+	// For struct types: create SchemaSection with fields
 	fields := []SchemaField{}
 
 	for i := 0; i < t.NumField(); i++ {
@@ -156,7 +152,7 @@ func generateSection(sectionName string, t reflect.Type, v reflect.Value, minima
 		}
 
 		// Build field path for lookups
-		fieldPath := sectionName + "." + fieldTag
+		fieldPath := name + "." + fieldTag
 
 		// Skip derived fields (computed from other config, not user-configurable)
 		if isDerivedField(fieldPath) {
@@ -174,7 +170,7 @@ func generateSection(sectionName string, t reflect.Type, v reflect.Value, minima
 	}
 
 	return SchemaSection{
-		Name:        sectionName,
+		Name:        name,
 		Description: description,
 		Fields:      fields,
 	}
@@ -315,38 +311,38 @@ var sectionDescriptions = map[string]string{
 
 // Field descriptions (cannot be derived from reflection)
 var fieldDescriptions = map[string]string{
-	"memory_root":                              "Directory containing files to index (requires daemon restart)",
-	"claude.api_key":                           "Claude API key (or use ANTHROPIC_API_KEY env var)",
-	"claude.model":                             "Claude model to use for semantic analysis",
-	"claude.max_tokens":                        "Maximum tokens per API request (1-8192)",
-	"claude.timeout":                           "API request timeout in seconds (5-300)",
-	"claude.enable_vision":                     "Enable vision API for image analysis",
-	"analysis.max_file_size":                   "Maximum file size in bytes for analysis (default: 10MB)",
-	"analysis.skip_extensions":                 "File extensions to skip during analysis",
-	"analysis.skip_files":                      "Filenames to skip during analysis",
-	"analysis.cache_dir":                       "Directory for analysis cache (requires daemon restart)",
-	"daemon.http_port":                         "HTTP API port (0 to disable)",
-	"daemon.workers":                           "Number of concurrent worker threads (1-20)",
-	"daemon.rate_limit_per_min":                "Maximum Claude API calls per minute (1-200)",
-	"daemon.debounce_ms":                       "File change debounce delay in milliseconds (0-10000)",
-	"daemon.full_rebuild_interval_minutes":     "Minutes between full index rebuilds (0 to disable)",
-	"daemon.log_file":                          "Log file path (requires daemon restart)",
-	"daemon.log_level":                         "Log level (debug, info, warn, error)",
-	"mcp.log_file":                             "MCP server log file path (requires MCP restart)",
-	"mcp.log_level":                            "MCP server log level (requires MCP restart)",
-	"mcp.daemon_host":                          "Daemon HTTP host for MCP server (requires MCP restart)",
-	"mcp.daemon_port":                          "Daemon HTTP port for MCP server (requires MCP restart)",
-	"graph.host":                               "FalkorDB host (requires daemon restart)",
-	"graph.port":                               "FalkorDB port (default: 6379)",
-	"graph.database":                           "Graph database name",
-	"graph.password":                           "FalkorDB password (or use FALKORDB_PASSWORD env var)",
-	"graph.similarity_threshold":               "Similarity threshold for related files (0.0-1.0)",
-	"graph.max_similar_files":                  "Maximum related files to return (1-100)",
-	"embeddings.api_key":                       "OpenAI API key for embeddings (or use OPENAI_API_KEY env var)",
-	"embeddings.provider":                      "Embedding provider (only 'openai' currently supported)",
-	"embeddings.model":                         "Embedding model (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002)",
-	"embeddings.dimensions":                    "Vector dimensions (must match model: 1536 for small/ada-002, 3072 for large)",
-	"integrations.enabled":                     "List of enabled integrations (managed by setup/remove commands)",
+	"memory_root":                          "Directory containing files to index (requires daemon restart)",
+	"claude.api_key":                       "Claude API key (or use ANTHROPIC_API_KEY env var)",
+	"claude.model":                         "Claude model to use for semantic analysis",
+	"claude.max_tokens":                    "Maximum tokens per API request (1-8192)",
+	"claude.timeout":                       "API request timeout in seconds (5-300)",
+	"claude.enable_vision":                 "Enable vision API for image analysis",
+	"analysis.max_file_size":               "Maximum file size in bytes for analysis (default: 10MB)",
+	"analysis.skip_extensions":             "File extensions to skip during analysis",
+	"analysis.skip_files":                  "Filenames to skip during analysis",
+	"analysis.cache_dir":                   "Directory for analysis cache (requires daemon restart)",
+	"daemon.http_port":                     "HTTP API port (0 to disable)",
+	"daemon.workers":                       "Number of concurrent worker threads (1-20)",
+	"daemon.rate_limit_per_min":            "Maximum Claude API calls per minute (1-200)",
+	"daemon.debounce_ms":                   "File change debounce delay in milliseconds (0-10000)",
+	"daemon.full_rebuild_interval_minutes": "Minutes between full index rebuilds (0 to disable)",
+	"daemon.log_file":                      "Log file path (requires daemon restart)",
+	"daemon.log_level":                     "Log level (debug, info, warn, error)",
+	"mcp.log_file":                         "MCP server log file path (requires MCP restart)",
+	"mcp.log_level":                        "MCP server log level (requires MCP restart)",
+	"mcp.daemon_host":                      "Daemon HTTP host for MCP server (requires MCP restart)",
+	"mcp.daemon_port":                      "Daemon HTTP port for MCP server (requires MCP restart)",
+	"graph.host":                           "FalkorDB host (requires daemon restart)",
+	"graph.port":                           "FalkorDB port (default: 6379)",
+	"graph.database":                       "Graph database name",
+	"graph.password":                       "FalkorDB password (or use FALKORDB_PASSWORD env var)",
+	"graph.similarity_threshold":           "Similarity threshold for related files (0.0-1.0)",
+	"graph.max_similar_files":              "Maximum related files to return (1-100)",
+	"embeddings.api_key":                   "OpenAI API key for embeddings (or use OPENAI_API_KEY env var)",
+	"embeddings.provider":                  "Embedding provider (only 'openai' currently supported)",
+	"embeddings.model":                     "Embedding model (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002)",
+	"embeddings.dimensions":                "Vector dimensions (must match model: 1536 for small/ada-002, 3072 for large)",
+	"integrations.enabled":                 "List of enabled integrations (managed by setup/remove commands)",
 }
 
 // Hot-reload settings (cannot be derived from reflection)

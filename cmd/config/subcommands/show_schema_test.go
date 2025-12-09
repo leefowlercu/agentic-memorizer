@@ -27,7 +27,6 @@ func TestValidateShowSchema_ValidFormats(t *testing.T) {
 			// Reset flags
 			showSchemaFormat = tt.format
 			showSchemaAdvancedOnly = false
-			showSchemaHardcodedOnly = false
 
 			err := validateShowSchema(ShowSchemaCmd, []string{})
 			if err != nil {
@@ -40,7 +39,6 @@ func TestValidateShowSchema_ValidFormats(t *testing.T) {
 func TestValidateShowSchema_InvalidFormat(t *testing.T) {
 	showSchemaFormat = "invalid"
 	showSchemaAdvancedOnly = false
-	showSchemaHardcodedOnly = false
 
 	err := validateShowSchema(ShowSchemaCmd, []string{})
 	if err == nil {
@@ -52,25 +50,9 @@ func TestValidateShowSchema_InvalidFormat(t *testing.T) {
 	}
 }
 
-func TestValidateShowSchema_MutuallyExclusiveFlags(t *testing.T) {
-	showSchemaFormat = "text"
-	showSchemaAdvancedOnly = true
-	showSchemaHardcodedOnly = true
-
-	err := validateShowSchema(ShowSchemaCmd, []string{})
-	if err == nil {
-		t.Error("validateShowSchema() expected error for mutually exclusive flags, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "cannot use both") {
-		t.Errorf("error should mention 'cannot use both', got: %v", err)
-	}
-}
-
 func TestRunShowSchema_TextFormat(t *testing.T) {
 	showSchemaFormat = "text"
 	showSchemaAdvancedOnly = false
-	showSchemaHardcodedOnly = false
 
 	// Capture stdout
 	old := os.Stdout
@@ -93,8 +75,6 @@ func TestRunShowSchema_TextFormat(t *testing.T) {
 	// Check for expected content
 	expectedStrings := []string{
 		"Configuration Schema",
-		"CONFIGURABLE SETTINGS",
-		"HARDCODED SETTINGS",
 		"claude",
 		"daemon",
 	}
@@ -104,12 +84,42 @@ func TestRunShowSchema_TextFormat(t *testing.T) {
 			t.Errorf("text output should contain %q", expected)
 		}
 	}
+
+	// Verify "memory_root:" appears with proper formatting
+	if !strings.Contains(output, "memory_root:") {
+		t.Error("Should display 'memory_root:' section")
+	}
+
+	// Verify config sections have colons
+	if !strings.Contains(output, "claude:") {
+		t.Error("Config sections should have colons")
+	}
+
+	// Verify indentation: field titles at 2 spaces, field content at 4 spaces
+	lines := strings.Split(output, "\n")
+	found2SpaceTitle := false
+	found4SpaceContent := false
+	for _, line := range lines {
+		// Check for 2-space indent (field titles like "  api_key:")
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(strings.TrimSpace(line), ":") {
+			found2SpaceTitle = true
+		}
+		// Check for 4-space indent (field content like "    Type:")
+		if strings.HasPrefix(line, "    ") && strings.Contains(line, "Type:") {
+			found4SpaceContent = true
+		}
+	}
+	if !found2SpaceTitle {
+		t.Error("Should find 2-space indented field titles")
+	}
+	if !found4SpaceContent {
+		t.Error("Should find 4-space indented field content")
+	}
 }
 
 func TestRunShowSchema_YAMLFormat(t *testing.T) {
 	showSchemaFormat = "yaml"
 	showSchemaAdvancedOnly = false
-	showSchemaHardcodedOnly = false
 
 	// Capture stdout
 	old := os.Stdout
@@ -135,19 +145,18 @@ func TestRunShowSchema_YAMLFormat(t *testing.T) {
 		t.Errorf("output is not valid YAML: %v", err)
 	}
 
-	// Check structure
-	if _, ok := result["configurable"]; !ok {
-		t.Error("YAML output should have 'configurable' key")
+	// Check structure - should have direct keys for sections
+	if _, ok := result["claude"]; !ok {
+		t.Error("YAML output should have 'claude' key")
 	}
-	if _, ok := result["hardcoded"]; !ok {
-		t.Error("YAML output should have 'hardcoded' key")
+	if _, ok := result["daemon"]; !ok {
+		t.Error("YAML output should have 'daemon' key")
 	}
 }
 
 func TestRunShowSchema_JSONFormat(t *testing.T) {
 	showSchemaFormat = "json"
 	showSchemaAdvancedOnly = false
-	showSchemaHardcodedOnly = false
 
 	// Capture stdout
 	old := os.Stdout
@@ -173,19 +182,18 @@ func TestRunShowSchema_JSONFormat(t *testing.T) {
 		t.Errorf("output is not valid JSON: %v", err)
 	}
 
-	// Check structure
-	if _, ok := result["configurable"]; !ok {
-		t.Error("JSON output should have 'configurable' key")
+	// Check structure - should have direct keys for sections
+	if _, ok := result["claude"]; !ok {
+		t.Error("JSON output should have 'claude' key")
 	}
-	if _, ok := result["hardcoded"]; !ok {
-		t.Error("JSON output should have 'hardcoded' key")
+	if _, ok := result["daemon"]; !ok {
+		t.Error("JSON output should have 'daemon' key")
 	}
 }
 
 func TestRunShowSchema_AdvancedOnly(t *testing.T) {
 	showSchemaFormat = "text"
 	showSchemaAdvancedOnly = true
-	showSchemaHardcodedOnly = false
 
 	// Capture stdout
 	old := os.Stdout
@@ -203,16 +211,6 @@ func TestRunShowSchema_AdvancedOnly(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("runShowSchema() returned error: %v", err)
-	}
-
-	// Should have configurable section
-	if !strings.Contains(output, "CONFIGURABLE SETTINGS") {
-		t.Error("advanced-only output should have configurable settings")
-	}
-
-	// Should NOT have hardcoded section
-	if strings.Contains(output, "HARDCODED SETTINGS") {
-		t.Error("advanced-only output should NOT have hardcoded settings")
 	}
 
 	// Should show advanced tier fields
@@ -221,49 +219,9 @@ func TestRunShowSchema_AdvancedOnly(t *testing.T) {
 	}
 }
 
-func TestRunShowSchema_HardcodedOnly(t *testing.T) {
-	showSchemaFormat = "text"
-	showSchemaAdvancedOnly = false
-	showSchemaHardcodedOnly = true
-
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runShowSchema(ShowSchemaCmd, []string{})
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-
-	if err != nil {
-		t.Errorf("runShowSchema() returned error: %v", err)
-	}
-
-	// Should NOT have configurable section
-	if strings.Contains(output, "CONFIGURABLE SETTINGS") {
-		t.Error("hardcoded-only output should NOT have configurable settings")
-	}
-
-	// Should have hardcoded section
-	if !strings.Contains(output, "HARDCODED SETTINGS") {
-		t.Error("hardcoded-only output should have hardcoded settings")
-	}
-
-	// Should have hardcoded entries
-	if !strings.Contains(output, "Reason:") {
-		t.Error("hardcoded-only output should show reasons for hardcoded settings")
-	}
-}
-
 func TestRunShowSchema_AdvancedOnlyJSON(t *testing.T) {
 	showSchemaFormat = "json"
 	showSchemaAdvancedOnly = true
-	showSchemaHardcodedOnly = false
 
 	// Capture stdout
 	old := os.Stdout
@@ -289,54 +247,9 @@ func TestRunShowSchema_AdvancedOnlyJSON(t *testing.T) {
 		t.Errorf("output is not valid JSON: %v", err)
 	}
 
-	// Should have configurable
-	if _, ok := result["configurable"]; !ok {
-		t.Error("JSON output should have 'configurable' key")
-	}
-
-	// Should NOT have hardcoded
-	if _, ok := result["hardcoded"]; ok {
-		t.Error("advanced-only JSON output should NOT have 'hardcoded' key")
-	}
-}
-
-func TestRunShowSchema_HardcodedOnlyYAML(t *testing.T) {
-	showSchemaFormat = "yaml"
-	showSchemaAdvancedOnly = false
-	showSchemaHardcodedOnly = true
-
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runShowSchema(ShowSchemaCmd, []string{})
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-
-	if err != nil {
-		t.Errorf("runShowSchema() returned error: %v", err)
-	}
-
-	// Verify YAML structure
-	var result map[string]any
-	if err := yaml.Unmarshal([]byte(output), &result); err != nil {
-		t.Errorf("output is not valid YAML: %v", err)
-	}
-
-	// Should NOT have configurable
-	if _, ok := result["configurable"]; ok {
-		t.Error("hardcoded-only YAML output should NOT have 'configurable' key")
-	}
-
-	// Should have hardcoded
-	if _, ok := result["hardcoded"]; !ok {
-		t.Error("hardcoded-only YAML output should have 'hardcoded' key")
+	// Should have some settings (check for common advanced settings)
+	if len(result) == 0 {
+		t.Error("JSON output should have some settings")
 	}
 }
 

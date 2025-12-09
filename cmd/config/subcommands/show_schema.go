@@ -13,15 +13,14 @@ import (
 )
 
 var (
-	showSchemaFormat        string
-	showSchemaAdvancedOnly  bool
-	showSchemaHardcodedOnly bool
+	showSchemaFormat       string
+	showSchemaAdvancedOnly bool
 )
 
 var ShowSchemaCmd = &cobra.Command{
 	Use:   "show-schema",
 	Short: "Show all configuration settings",
-	Long: "\nDisplay complete configuration schema including minimal, advanced, and hardcoded settings.\n\n" +
+	Long: "\nDisplay complete configuration schema including minimal and advanced settings.\n\n" +
 		"This command shows all possible configuration options with their types, defaults, " +
 		"and whether they appear in the initialized config file. Use this to discover " +
 		"advanced settings not shown during initialization.",
@@ -32,10 +31,7 @@ var ShowSchemaCmd = &cobra.Command{
   agentic-memorizer config show-schema --format yaml
 
   # Show only advanced (hidden) settings
-  agentic-memorizer config show-schema --advanced-only
-
-  # Show only hardcoded (non-configurable) settings
-  agentic-memorizer config show-schema --hardcoded-only`,
+  agentic-memorizer config show-schema --advanced-only`,
 	PreRunE: validateShowSchema,
 	RunE:    runShowSchema,
 }
@@ -45,8 +41,6 @@ func init() {
 		"Output format (text, yaml, json)")
 	ShowSchemaCmd.Flags().BoolVar(&showSchemaAdvancedOnly, "advanced-only", false,
 		"Show only advanced settings not in minimal config")
-	ShowSchemaCmd.Flags().BoolVar(&showSchemaHardcodedOnly, "hardcoded-only", false,
-		"Show only hardcoded (non-configurable) settings")
 }
 
 func validateShowSchema(cmd *cobra.Command, args []string) error {
@@ -55,11 +49,6 @@ func validateShowSchema(cmd *cobra.Command, args []string) error {
 	found := slices.Contains(validFormats, showSchemaFormat)
 	if !found {
 		return fmt.Errorf("invalid format %q; valid formats are: %s", showSchemaFormat, strings.Join(validFormats, ", "))
-	}
-
-	// Validate mutually exclusive flags
-	if showSchemaAdvancedOnly && showSchemaHardcodedOnly {
-		return fmt.Errorf("cannot use both --advanced-only and --hardcoded-only")
 	}
 
 	// All errors after this are runtime errors
@@ -86,13 +75,32 @@ func printSchemaText(schema *config.ConfigSchema) error {
 	// Build main section
 	mainSection := format.NewSection("Configuration Schema").AddDivider()
 
-	if !showSchemaHardcodedOnly {
-		configurableSection := format.NewSection("CONFIGURABLE SETTINGS").SetLevel(1).AddDivider()
+	for _, item := range schema.Items {
+		switch v := item.(type) {
+		case config.RootField:
+			// Handle root field directly
+			if showSchemaAdvancedOnly && v.Tier != "advanced" {
+				continue
+			}
 
-		for _, section := range schema.Sections {
+			fieldSection := format.NewSection(v.Name).SetLevel(0)
+			hotReloadStr := "no"
+			if v.HotReload {
+				hotReloadStr = "yes"
+			}
+			fieldSection.AddKeyValue("Type", v.Type)
+			fieldSection.AddKeyValue("Default", fmt.Sprintf("%v", formatDefault(v.Default)))
+			fieldSection.AddKeyValue("Tier", v.Tier)
+			fieldSection.AddKeyValue("Hot-Reload", hotReloadStr)
+			fieldSection.AddKeyValue("Description", v.Description)
+
+			mainSection.AddSubsection(fieldSection)
+
+		case config.SchemaSection:
+			// Handle section (existing logic)
 			showSection := false
 			if showSchemaAdvancedOnly {
-				for _, field := range section.Fields {
+				for _, field := range v.Fields {
 					if field.Tier == "advanced" {
 						showSection = true
 						break
@@ -106,9 +114,9 @@ func printSchemaText(schema *config.ConfigSchema) error {
 				continue
 			}
 
-			sectionGroup := format.NewSection(section.Name).SetLevel(2)
+			sectionGroup := format.NewSection(v.Name).SetLevel(0)
 
-			for _, field := range section.Fields {
+			for _, field := range v.Fields {
 				if showSchemaAdvancedOnly && field.Tier != "advanced" {
 					continue
 				}
@@ -118,7 +126,7 @@ func printSchemaText(schema *config.ConfigSchema) error {
 					hotReloadStr = "yes"
 				}
 
-				fieldSection := format.NewSection(field.Name).SetLevel(3)
+				fieldSection := format.NewSection(field.Name).SetLevel(1)
 				fieldSection.AddKeyValue("Type", field.Type)
 				fieldSection.AddKeyValue("Default", fmt.Sprintf("%v", formatDefault(field.Default)))
 				fieldSection.AddKeyValue("Tier", field.Tier)
@@ -128,20 +136,8 @@ func printSchemaText(schema *config.ConfigSchema) error {
 				sectionGroup.AddSubsection(fieldSection)
 			}
 
-			configurableSection.AddSubsection(sectionGroup)
+			mainSection.AddSubsection(sectionGroup)
 		}
-
-		mainSection.AddSubsection(configurableSection)
-	}
-
-	if !showSchemaAdvancedOnly {
-		hardcodedSection := format.NewSection("HARDCODED SETTINGS (not configurable)").SetLevel(1).AddDivider()
-
-		for _, hc := range schema.Hardcoded {
-			hardcodedSection.AddKeyValue(hc.Name, fmt.Sprintf("%v (Reason: %s)", hc.Value, hc.Reason))
-		}
-
-		mainSection.AddSubsection(hardcodedSection)
 	}
 
 	// Format and write output
@@ -179,13 +175,27 @@ func formatDefault(v any) string {
 func printSchemaYAML(schema *config.ConfigSchema) error {
 	output := make(map[string]any)
 
-	if !showSchemaHardcodedOnly {
-		configurable := make(map[string]any)
-		for _, section := range schema.Sections {
+	for _, item := range schema.Items {
+		switch v := item.(type) {
+		case config.RootField:
+			if showSchemaAdvancedOnly && v.Tier != "advanced" {
+				continue
+			}
+
+			fieldData := map[string]any{
+				"type":        v.Type,
+				"default":     v.Default,
+				"tier":        v.Tier,
+				"hot_reload":  v.HotReload,
+				"description": v.Description,
+			}
+			output[v.Name] = fieldData
+
+		case config.SchemaSection:
 			sectionData := make(map[string]any)
 			hasFields := false
 
-			for _, field := range section.Fields {
+			for _, field := range v.Fields {
 				if showSchemaAdvancedOnly && field.Tier != "advanced" {
 					continue
 				}
@@ -202,21 +212,9 @@ func printSchemaYAML(schema *config.ConfigSchema) error {
 			}
 
 			if hasFields {
-				configurable[section.Name] = sectionData
+				output[v.Name] = sectionData
 			}
 		}
-		output["configurable"] = configurable
-	}
-
-	if !showSchemaAdvancedOnly {
-		hardcoded := make(map[string]any)
-		for _, hc := range schema.Hardcoded {
-			hardcoded[hc.Name] = map[string]any{
-				"value":  hc.Value,
-				"reason": hc.Reason,
-			}
-		}
-		output["hardcoded"] = hardcoded
 	}
 
 	data, err := yaml.Marshal(output)
@@ -231,13 +229,27 @@ func printSchemaYAML(schema *config.ConfigSchema) error {
 func printSchemaJSON(schema *config.ConfigSchema) error {
 	output := make(map[string]any)
 
-	if !showSchemaHardcodedOnly {
-		configurable := make(map[string]any)
-		for _, section := range schema.Sections {
+	for _, item := range schema.Items {
+		switch v := item.(type) {
+		case config.RootField:
+			if showSchemaAdvancedOnly && v.Tier != "advanced" {
+				continue
+			}
+
+			fieldData := map[string]any{
+				"type":        v.Type,
+				"default":     v.Default,
+				"tier":        v.Tier,
+				"hot_reload":  v.HotReload,
+				"description": v.Description,
+			}
+			output[v.Name] = fieldData
+
+		case config.SchemaSection:
 			sectionData := make(map[string]any)
 			hasFields := false
 
-			for _, field := range section.Fields {
+			for _, field := range v.Fields {
 				if showSchemaAdvancedOnly && field.Tier != "advanced" {
 					continue
 				}
@@ -254,21 +266,9 @@ func printSchemaJSON(schema *config.ConfigSchema) error {
 			}
 
 			if hasFields {
-				configurable[section.Name] = sectionData
+				output[v.Name] = sectionData
 			}
 		}
-		output["configurable"] = configurable
-	}
-
-	if !showSchemaAdvancedOnly {
-		hardcoded := make(map[string]any)
-		for _, hc := range schema.Hardcoded {
-			hardcoded[hc.Name] = map[string]any{
-				"value":  hc.Value,
-				"reason": hc.Reason,
-			}
-		}
-		output["hardcoded"] = hardcoded
 	}
 
 	data, err := json.MarshalIndent(output, "", "  ")

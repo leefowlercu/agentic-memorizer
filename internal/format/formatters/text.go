@@ -74,10 +74,17 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 
 	// Render title
 	if s.Title != "" {
+		titleText := s.Title
+
+		// Add colon after title UNLESS section has a divider
+		if !s.WithDivider {
+			titleText += ":"
+		}
+
 		if f.useColors {
-			sb.WriteString(format.Bold(s.Title))
+			sb.WriteString(format.Bold(titleText))
 		} else {
-			sb.WriteString(s.Title)
+			sb.WriteString(titleText)
 		}
 		sb.WriteString("\n")
 
@@ -89,6 +96,10 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 			}
 			sb.WriteString(strings.Repeat(string(dividerChar), len(s.Title)))
 			sb.WriteString("\n")
+			// Add blank line after divider if section has content
+			if len(s.Items) > 0 {
+				sb.WriteString("\n")
+			}
 		}
 	}
 
@@ -106,7 +117,10 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 			switch item.Type {
 			case format.SectionItemKeyValue:
 				// Format: "Key:    Value"
+				// Indent key-value pairs by (section.Level + 1) * 2 spaces
+				indent := strings.Repeat("  ", s.Level+1)
 				padding := maxKeyWidth - len(item.Key)
+				sb.WriteString(indent)
 				sb.WriteString(item.Key)
 				sb.WriteString(":")
 				sb.WriteString(strings.Repeat(" ", padding+1))
@@ -118,9 +132,15 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 					sb.WriteString("\n")
 				}
 				// Render subsection with indentation
-				subsectionText := f.formatSection(item.Subsection)
+				// To avoid compounding indentation, temporarily render subsection at level 0
+				// and apply its original level as external indentation
+				originalLevel := item.Subsection.Level
+				tempSection := *item.Subsection
+				tempSection.Level = 0
+
+				subsectionText := f.formatSection(&tempSection)
 				lines := strings.Split(subsectionText, "\n")
-				indent := strings.Repeat("  ", s.Level+1)
+				indent := strings.Repeat("  ", originalLevel)
 				for _, line := range lines {
 					if line != "" {
 						sb.WriteString(indent)

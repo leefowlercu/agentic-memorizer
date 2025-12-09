@@ -29,10 +29,12 @@ func TestTextFormatter_FormatSection(t *testing.T) {
 	output, err := formatter.Format(section)
 	require.NoError(t, err)
 
-	expected := `Test Section
-Name: John Doe
-Age:  30
-City: New York`
+	// Section without divider should have colon
+	// Key-values should be indented by (level+1)*2 = 2 spaces for level 0
+	expected := `Test Section:
+  Name: John Doe
+  Age:  30
+  City: New York`
 
 	assert.Equal(t, expected, output)
 }
@@ -47,16 +49,20 @@ func TestTextFormatter_FormatSectionWithDivider(t *testing.T) {
 	output, err := formatter.Format(section)
 	require.NoError(t, err)
 
-	assert.Contains(t, output, "Status")
-	assert.Contains(t, output, "======")
-	assert.Contains(t, output, "Running: Yes")
-	assert.Contains(t, output, "PID:     12345")
+	// Section with divider should NOT have colon
+	assert.NotContains(t, output, "Status:")
+	assert.Contains(t, output, "Status\n======")
+	// Key-values should be indented by 2 spaces
+	assert.Contains(t, output, "  Running: Yes")
+	assert.Contains(t, output, "  PID:     12345")
+	// Should have blank line after divider section
+	assert.Contains(t, output, "\n\n")
 }
 
 func TestTextFormatter_FormatSectionNested(t *testing.T) {
 	formatter := NewTextFormatter(false)
 
-	subsection := format.NewSection("Subsection")
+	subsection := format.NewSection("Subsection").SetLevel(1)
 	subsection.AddKeyValue("Detail", "Value")
 
 	section := format.NewSection("Main")
@@ -66,10 +72,33 @@ func TestTextFormatter_FormatSectionNested(t *testing.T) {
 	output, err := formatter.Format(section)
 	require.NoError(t, err)
 
-	assert.Contains(t, output, "Main")
-	assert.Contains(t, output, "Field1: Value1")
-	assert.Contains(t, output, "  Subsection")
-	assert.Contains(t, output, "  Detail: Value")
+	// Main section (level 0) should have colon, content indented by 2
+	assert.Contains(t, output, "Main:")
+	assert.Contains(t, output, "  Field1: Value1")
+	// Subsection (level 1) title indented by 2, content indented by 4
+	assert.Contains(t, output, "  Subsection:")
+	assert.Contains(t, output, "    Detail: Value")
+}
+
+func TestTextFormatter_FormatSectionDividerSpacing(t *testing.T) {
+	formatter := NewTextFormatter(false)
+
+	section := format.NewSection("Header").AddDivider()
+	section.AddKeyValue("Key1", "Value1")
+	section.AddKeyValue("Key2", "Value2")
+
+	output, err := formatter.Format(section)
+	require.NoError(t, err)
+
+	// Verify blank line appears after section with divider
+	// Should have: title, divider, key1, key2, blank line
+	// The blank line will be at the end before TrimSuffix, so check for it
+	assert.Contains(t, output, "\n\n")
+
+	// Verify the structure: title, divider, content
+	assert.Contains(t, output, "Header\n======")
+	assert.Contains(t, output, "  Key1: Value1")
+	assert.Contains(t, output, "  Key2: Value2")
 }
 
 func TestTextFormatter_FormatTable(t *testing.T) {

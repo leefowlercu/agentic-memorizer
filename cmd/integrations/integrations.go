@@ -26,8 +26,8 @@ var IntegrationsCmd = &cobra.Command{
   # Remove an integration
   agentic-memorizer integrations remove claude-code-hook
 
-  # Validate configuration
-  agentic-memorizer integrations validate`,
+  # Check integration health
+  agentic-memorizer integrations health`,
 }
 
 func init() {
@@ -35,6 +35,5 @@ func init() {
 	IntegrationsCmd.AddCommand(subcommands.DetectCmd)
 	IntegrationsCmd.AddCommand(subcommands.SetupCmd)
 	IntegrationsCmd.AddCommand(subcommands.RemoveCmd)
-	IntegrationsCmd.AddCommand(subcommands.ValidateCmd)
 	IntegrationsCmd.AddCommand(subcommands.HealthCmd)
 }

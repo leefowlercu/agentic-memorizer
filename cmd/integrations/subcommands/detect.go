@@ -48,7 +48,7 @@ func runDetect(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	section := format.NewSection("Detected Agent Frameworks")
+	section := format.NewSection("Detected Integrations").AddDivider()
 	list := format.NewList(format.ListTypeUnordered)
 
 	for _, integration := range detected {
@@ -81,7 +81,6 @@ func runDetect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to format section; %w", err)
 	}
 	fmt.Println(sectionOutput)
-	fmt.Println()
 
 	// Format list
 	listOutput, err := formatter.Format(list)
@@ -92,12 +91,7 @@ func runDetect(cmd *cobra.Command, args []string) error {
 
 	// Add hint message
 	fmt.Println()
-	status := format.NewStatus(format.StatusInfo, "To setup an integration, run: agentic-memorizer integrations setup <integration-name>")
-	statusOutput, err := formatter.Format(status)
-	if err != nil {
-		return fmt.Errorf("failed to format status; %w", err)
-	}
-	fmt.Println(statusOutput)
+	fmt.Println("To setup an integration, run: agentic-memorizer integrations setup <integration-name>")
 
 	return nil
 }

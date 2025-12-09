@@ -17,7 +17,6 @@ var HealthCmd = &cobra.Command{
 		"- Settings validity\n" +
 		"- Binary path verification\n" +
 		"- Integration-specific checks\n\n" +
-		"This is more thorough than 'validate' and includes runtime checks.\n\n" +
 		"Exit codes:\n" +
 		"  0 - All checked integrations are healthy\n" +
 		"  1 - One or more integrations have issues (useful for CI/CD scripts)",
@@ -145,7 +144,7 @@ func runHealth(cmd *cobra.Command, args []string) error {
 
 		// Add check results to integration section
 		for _, check := range checks {
-			integrationSection.AddKeyValue("", check)
+			integrationSection.AddTextLine(check)
 		}
 
 		// Summary for this integration

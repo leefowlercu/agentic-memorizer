@@ -42,7 +42,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build main section
-	section := format.NewSection("Available Integrations")
+	section := format.NewSection("Available Integrations").AddDivider()
 
 	// Create a list for integrations
 	list := format.NewList(format.ListTypeUnordered)
@@ -66,7 +66,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		statusSymbol := format.GetStatusSymbol(severity)
 
 		// Build multi-line item content
-		itemContent := fmt.Sprintf("%s %s\n    Description: %s\n    Version:     %s\n    Status:      %s",
+		itemContent := fmt.Sprintf("%s %s\nDescription: %s\nVersion:     %s\nStatus:      %s",
 			statusSymbol,
 			integration.GetName(),
 			integration.GetDescription(),
@@ -88,7 +88,6 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to format section; %w", err)
 	}
 	fmt.Println(sectionOutput)
-	fmt.Println()
 
 	// Format list
 	listOutput, err := formatter.Format(list)

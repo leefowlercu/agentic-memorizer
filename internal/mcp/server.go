@@ -223,7 +223,7 @@ func (s *Server) handleInitialize(ctx context.Context, id any, params json.RawMe
 	resp := protocol.InitializeResponse{
 		ProtocolVersion: req.ProtocolVersion, // Echo back client's requested version
 		ServerInfo: protocol.ServerInfo{
-			Name:    "agentic-memorizer",
+			Name:    "memorizer",
 			Version: version.GetShortVersion(),
 		},
 		Capabilities: protocol.ServerCapabilities{

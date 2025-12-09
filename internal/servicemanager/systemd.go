@@ -17,7 +17,7 @@ type SystemdConfig struct {
 // GenerateUserUnit generates a systemd user-level unit file
 func GenerateUserUnit(cfg SystemdConfig) string {
 	return fmt.Sprintf(`[Unit]
-Description=Memorizer Daemon
+Description=Agentic Memorizer Daemon
 Documentation=https://github.com/leefowlercu/agentic-memorizer
 After=network.target
 
@@ -47,7 +47,7 @@ WantedBy=default.target
 // GenerateSystemUnit generates a systemd system-level unit file
 func GenerateSystemUnit(cfg SystemdConfig) string {
 	return fmt.Sprintf(`[Unit]
-Description=Memorizer Daemon
+Description=Agentic Memorizer Daemon
 Documentation=https://github.com/leefowlercu/agentic-memorizer
 After=network.target
 

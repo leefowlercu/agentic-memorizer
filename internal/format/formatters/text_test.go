@@ -52,11 +52,11 @@ func TestTextFormatter_FormatSectionWithDivider(t *testing.T) {
 	// Section with divider should NOT have colon
 	assert.NotContains(t, output, "Status:")
 	assert.Contains(t, output, "Status\n======")
-	// Key-values should be indented by 2 spaces
-	assert.Contains(t, output, "  Running: Yes")
-	assert.Contains(t, output, "  PID:     12345")
-	// Should have blank line after divider section
-	assert.Contains(t, output, "\n\n")
+	// Key-values in divider sections have no indentation
+	assert.Contains(t, output, "Running: Yes")
+	assert.Contains(t, output, "PID:     12345")
+	// No blank line after section (TrimSuffix removes it)
+	assert.NotContains(t, output, "\n\n")
 }
 
 func TestTextFormatter_FormatSectionNested(t *testing.T) {
@@ -90,15 +90,13 @@ func TestTextFormatter_FormatSectionDividerSpacing(t *testing.T) {
 	output, err := formatter.Format(section)
 	require.NoError(t, err)
 
-	// Verify blank line appears after section with divider
-	// Should have: title, divider, key1, key2, blank line
-	// The blank line will be at the end before TrimSuffix, so check for it
-	assert.Contains(t, output, "\n\n")
-
-	// Verify the structure: title, divider, content
+	// Verify structure: title, divider, content (no blank line due to TrimSuffix)
 	assert.Contains(t, output, "Header\n======")
-	assert.Contains(t, output, "  Key1: Value1")
-	assert.Contains(t, output, "  Key2: Value2")
+	// Key-values in divider sections have no indentation
+	assert.Contains(t, output, "Key1: Value1")
+	assert.Contains(t, output, "Key2: Value2")
+	// No blank line after section (TrimSuffix removes it)
+	assert.NotContains(t, output, "\n\n")
 }
 
 func TestTextFormatter_FormatTable(t *testing.T) {

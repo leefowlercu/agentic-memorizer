@@ -142,7 +142,7 @@ func TestGenerateSystemUnit(t *testing.T) {
 
 func TestGetUserUnitPath(t *testing.T) {
 	home := "/home/testuser"
-	expected := filepath.Join(home, ".config", "systemd", "user", "agentic-memorizer.service")
+	expected := filepath.Join(home, ".config", "systemd", "user", "memorizer.service")
 
 	path, err := GetUserUnitPath(home)
 	if err != nil {
@@ -174,7 +174,7 @@ func TestInstallUserUnit(t *testing.T) {
 	}
 
 	// Verify file was created
-	expectedPath := filepath.Join(tempDir, ".config", "systemd", "user", "agentic-memorizer.service")
+	expectedPath := filepath.Join(tempDir, ".config", "systemd", "user", "memorizer.service")
 	content, err := os.ReadFile(expectedPath)
 	if err != nil {
 		t.Fatalf("Failed to read installed unit file: %v", err)

@@ -280,7 +280,7 @@ func (s *StartupStep) performUserInstall() error {
 
 	logFile := cfg.Daemon.LogFile
 	if logFile == "" {
-		logFile = filepath.Join(home, ".agentic-memorizer", "daemon.log")
+		logFile = filepath.Join(home, ".memorizer", "daemon.log")
 	}
 
 	// Install based on platform
@@ -366,7 +366,7 @@ func (s *StartupStep) generateSystemInstructions() error {
 
 	logFile := cfg.Daemon.LogFile
 	if logFile == "" {
-		logFile = filepath.Join(home, ".agentic-memorizer", "daemon.log")
+		logFile = filepath.Join(home, ".memorizer", "daemon.log")
 	}
 
 	// Generate instructions based on platform

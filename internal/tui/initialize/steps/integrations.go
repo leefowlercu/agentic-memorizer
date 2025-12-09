@@ -148,7 +148,7 @@ func (s *IntegrationsStep) View() string {
 		b.WriteString("\n")
 		b.WriteString(styles.MutedText.Render("  - Cline"))
 		b.WriteString("\n\n")
-		b.WriteString(styles.MutedText.Render("Install a framework and run 'agentic-memorizer integrations setup <name>' later."))
+		b.WriteString(styles.MutedText.Render("Install a framework and run 'memorizer integrations setup <name>' later."))
 	} else {
 		// Show note if some integrations are already configured
 		alreadyConfigured := s.countConfiguredIntegrations()

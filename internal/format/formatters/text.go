@@ -69,7 +69,8 @@ func (f *TextFormatter) SupportsColors() bool {
 }
 
 // formatSection renders a section
-func (f *TextFormatter) formatSection(s *format.Section) string {
+// parentIndent is the cumulative indentation from parent sections
+func (f *TextFormatter) formatSectionWithIndent(s *format.Section, parentIndent int) string {
 	var sb strings.Builder
 
 	// Render title
@@ -96,10 +97,6 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 			}
 			sb.WriteString(strings.Repeat(string(dividerChar), len(s.Title)))
 			sb.WriteString("\n")
-			// Add blank line after divider if section has content
-			if len(s.Items) > 0 {
-				sb.WriteString("\n")
-			}
 		}
 	}
 
@@ -113,12 +110,19 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 			}
 		}
 
+		// Calculate indentation based on divider presence
+		// Sections with dividers: no indentation for items
+		// Sections without dividers: indent by (level + 1) * 2
+		itemIndent := 0
+		if !s.WithDivider {
+			itemIndent = (s.Level + 1) * 2
+		}
+		indent := strings.Repeat("  ", itemIndent/2)
+
 		for i, item := range s.Items {
 			switch item.Type {
 			case format.SectionItemKeyValue:
 				// Format: "Key:    Value"
-				// Indent key-value pairs by (section.Level + 1) * 2 spaces
-				indent := strings.Repeat("  ", s.Level+1)
 				padding := maxKeyWidth - len(item.Key)
 				sb.WriteString(indent)
 				sb.WriteString(item.Key)
@@ -126,24 +130,36 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 				sb.WriteString(strings.Repeat(" ", padding+1))
 				sb.WriteString(item.Value)
 				sb.WriteString("\n")
+			case format.SectionItemText:
+				// Format: plain text line with indentation
+				sb.WriteString(indent)
+				sb.WriteString(item.Text)
+				sb.WriteString("\n")
 			case format.SectionItemSubsection:
 				// Add spacing before subsection
 				if i > 0 {
 					sb.WriteString("\n")
 				}
-				// Render subsection with indentation
-				// To avoid compounding indentation, temporarily render subsection at level 0
-				// and apply its original level as external indentation
-				originalLevel := item.Subsection.Level
-				tempSection := *item.Subsection
-				tempSection.Level = 0
-
-				subsectionText := f.formatSection(&tempSection)
+				// Calculate indent for subsection title
+				// If parent has divider, no additional indent
+				// If parent has no divider, add (level + 1) * 2 spaces
+				nextTitleIndent := parentIndent
+				if !s.WithDivider {
+					nextTitleIndent += (s.Level + 1) * 2
+				}
+				// Render subsection
+				subsectionText := f.formatSectionWithIndent(item.Subsection, nextTitleIndent)
+				// Apply indent only to title/divider lines, not item lines
+				// Count lines: first line is title, second (if present) is divider
 				lines := strings.Split(subsectionText, "\n")
-				indent := strings.Repeat("  ", originalLevel)
-				for _, line := range lines {
+				titleIndentStr := strings.Repeat("  ", nextTitleIndent/2)
+				for lineIdx, line := range lines {
 					if line != "" {
-						sb.WriteString(indent)
+						// First 2 lines are title + divider (if present)
+						// Everything else is items (which have their own indentation)
+						if lineIdx < 2 && (lineIdx == 0 || item.Subsection.WithDivider) {
+							sb.WriteString(titleIndentStr)
+						}
 						sb.WriteString(line)
 						sb.WriteString("\n")
 					}
@@ -153,6 +169,11 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 	}
 
 	return strings.TrimSuffix(sb.String(), "\n")
+}
+
+// formatSection renders a section (wrapper for backward compatibility)
+func (f *TextFormatter) formatSection(s *format.Section) string {
+	return f.formatSectionWithIndent(s, 0)
 }
 
 // formatTable renders a table
@@ -248,8 +269,21 @@ func (f *TextFormatter) formatList(l *format.List, depth int) string {
 			sb.WriteString(fmt.Sprintf("%d. ", i+1))
 		}
 
-		sb.WriteString(item.Content)
-		sb.WriteString("\n")
+		// Handle multi-line content
+		lines := strings.Split(item.Content, "\n")
+		for lineIdx, line := range lines {
+			if lineIdx == 0 {
+				// First line appears after bullet
+				sb.WriteString(line)
+				sb.WriteString("\n")
+			} else {
+				// Continuation lines indented to align with first line
+				sb.WriteString(indent)
+				sb.WriteString("  ")
+				sb.WriteString(line)
+				sb.WriteString("\n")
+			}
+		}
 
 		// Render nested list if present
 		if item.Nested != nil {

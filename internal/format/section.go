@@ -14,6 +14,9 @@ const (
 
 	// SectionItemSubsection represents a nested subsection
 	SectionItemSubsection SectionItemType = "subsection"
+
+	// SectionItemText represents a plain text line
+	SectionItemText SectionItemType = "text"
 )
 
 // SectionItem represents an item in a section
@@ -21,6 +24,7 @@ type SectionItem struct {
 	Type       SectionItemType
 	Key        string
 	Value      string
+	Text       string   // For SectionItemText type
 	Subsection *Section
 }
 
@@ -75,6 +79,15 @@ func (s *Section) AddSubsection(sub *Section) *Section {
 	s.Items = append(s.Items, SectionItem{
 		Type:       SectionItemSubsection,
 		Subsection: sub,
+	})
+	return s
+}
+
+// AddTextLine adds a plain text line to the section
+func (s *Section) AddTextLine(text string) *Section {
+	s.Items = append(s.Items, SectionItem{
+		Type: SectionItemText,
+		Text: text,
 	})
 	return s
 }

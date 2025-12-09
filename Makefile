@@ -1,6 +1,6 @@
 .PHONY: build install test test-integration test-all test-e2e test-e2e-quick clean uninstall help coverage coverage-html lint fmt vet check test-race ci-lint ci-test ci-all daemon-start daemon-stop daemon-status daemon-logs clean-cache validate-config goreleaser-check goreleaser-snapshot release-check release-major release-minor release-patch
 
-BINARY_NAME=agentic-memorizer
+BINARY_NAME=memorizer
 INSTALL_DIR=$(HOME)/.local/bin
 INSTALL_PATH=$(INSTALL_DIR)/$(BINARY_NAME)
 
@@ -15,7 +15,7 @@ LDFLAGS := -X github.com/leefowlercu/agentic-memorizer/internal/version.Version=
            -X github.com/leefowlercu/agentic-memorizer/internal/version.BuildDate=$(BUILD_DATE)
 
 help: ## Show this help message
-	@echo "Agentic Memorizer - Build and Installation"
+	@echo "Memorizer - Build and Installation"
 	@echo ""
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
@@ -73,7 +73,7 @@ clean: ## Remove build artifacts
 
 clean-cache: ## Remove cache files only
 	@echo "Removing cache files..."
-	@rm -rf $(HOME)/.agentic-memorizer/.cache/*
+	@rm -rf $(HOME)/.memorizer/.cache/*
 	@echo "✅ Cache cleaned"
 
 uninstall: ## Remove installed binary
@@ -166,7 +166,7 @@ daemon-status: ## Check daemon status
 
 daemon-logs: ## Tail daemon logs
 	@echo "Tailing daemon logs (Ctrl+C to exit)..."
-	@tail -f $(HOME)/.agentic-memorizer/daemon.log
+	@tail -f $(HOME)/.memorizer/daemon.log
 
 validate-config: build ## Validate configuration file
 	@echo "Validating configuration..."

@@ -7,9 +7,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: agentic-memorizer
+  - id: memorizer
     main: ./main.go
-    binary: agentic-memorizer
+    binary: memorizer
     env:
       - CGO_ENABLED=0
     goos:
@@ -91,7 +91,7 @@ release:
     Extract and install:
     ```bash
     tar -xzf agentic-memorizer_{{.Tag}}_*.tar.gz
-    sudo mv agentic-memorizer /usr/local/bin/
+    sudo mv memorizer /usr/local/bin/
     ```
 
     Or use `go install`:

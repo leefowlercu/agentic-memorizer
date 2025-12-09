@@ -2,7 +2,7 @@ package config
 
 // Application directory and file names
 const (
-	AppDirName    = ".agentic-memorizer"
+	AppDirName    = ".memorizer"
 	MemoryDirName = "memory"
 	CacheDirName  = ".cache"
 	ConfigFile    = "config.yaml"
@@ -45,7 +45,7 @@ const (
 
 // Default skip patterns for analysis
 var DefaultSkipExtensions = []string{".zip", ".tar", ".gz", ".exe", ".bin", ".dmg", ".iso"}
-var DefaultSkipFiles = []string{"agentic-memorizer"}
+var DefaultSkipFiles = []string{"memorizer"}
 
 // DefaultConfig provides sensible defaults for all configuration settings.
 // INTERNAL settings (not shown in initialized config but available for power users):

@@ -46,7 +46,7 @@ func IsPlatformSupported() bool {
 	return DetectPlatform() != PlatformUnknown
 }
 
-// GetBinaryPath attempts to locate the agentic-memorizer binary
+// GetBinaryPath attempts to locate the memorizer binary
 // Tries in order: os.Executable(), ~/.local/bin, PATH
 func GetBinaryPath() (string, error) {
 	// Try to get the current executable path
@@ -54,7 +54,7 @@ func GetBinaryPath() (string, error) {
 	if err == nil {
 		// Resolve symlinks
 		resolvedPath, err := filepath.EvalSymlinks(execPath)
-		if err == nil && filepath.Base(resolvedPath) == "agentic-memorizer" {
+		if err == nil && filepath.Base(resolvedPath) == "memorizer" {
 			return resolvedPath, nil
 		}
 	}
@@ -62,17 +62,17 @@ func GetBinaryPath() (string, error) {
 	// Try common installation paths
 	home, err := os.UserHomeDir()
 	if err == nil {
-		commonPath := filepath.Join(home, ".local", "bin", "agentic-memorizer")
+		commonPath := filepath.Join(home, ".local", "bin", "memorizer")
 		if _, err := os.Stat(commonPath); err == nil {
 			return commonPath, nil
 		}
 	}
 
 	// Try PATH
-	pathBinary, err := exec.LookPath("agentic-memorizer")
+	pathBinary, err := exec.LookPath("memorizer")
 	if err == nil {
 		return pathBinary, nil
 	}
 
-	return "", fmt.Errorf("could not locate agentic-memorizer binary")
+	return "", fmt.Errorf("could not locate memorizer binary")
 }

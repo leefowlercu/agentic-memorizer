@@ -17,7 +17,7 @@ type SystemdConfig struct {
 // GenerateUserUnit generates a systemd user-level unit file
 func GenerateUserUnit(cfg SystemdConfig) string {
 	return fmt.Sprintf(`[Unit]
-Description=Agentic Memorizer Daemon
+Description=Memorizer Daemon
 Documentation=https://github.com/leefowlercu/agentic-memorizer
 After=network.target
 
@@ -47,7 +47,7 @@ WantedBy=default.target
 // GenerateSystemUnit generates a systemd system-level unit file
 func GenerateSystemUnit(cfg SystemdConfig) string {
 	return fmt.Sprintf(`[Unit]
-Description=Agentic Memorizer Daemon
+Description=Memorizer Daemon
 Documentation=https://github.com/leefowlercu/agentic-memorizer
 After=network.target
 
@@ -74,13 +74,13 @@ WantedBy=multi-user.target
 
 // GetUserUnitPath returns the path for a user-level systemd unit file
 func GetUserUnitPath(home string) (string, error) {
-	path := filepath.Join(home, ".config", "systemd", "user", "agentic-memorizer.service")
+	path := filepath.Join(home, ".config", "systemd", "user", "memorizer.service")
 	return path, nil
 }
 
 // GetSystemUnitPath returns the path for a system-level systemd unit file
 func GetSystemUnitPath() string {
-	return "/etc/systemd/system/agentic-memorizer.service"
+	return "/etc/systemd/system/memorizer.service"
 }
 
 // InstallUserUnit writes a user-level systemd unit file
@@ -111,14 +111,14 @@ func GetSystemdUserInstructions(unitPath string) string {
 
 To enable and start the service:
   systemctl --user daemon-reload
-  systemctl --user enable agentic-memorizer
-  systemctl --user start agentic-memorizer
+  systemctl --user enable memorizer
+  systemctl --user start memorizer
 
 To check status:
-  systemctl --user status agentic-memorizer
+  systemctl --user status memorizer
 
 To view logs:
-  journalctl --user -u agentic-memorizer -f`, unitPath)
+  journalctl --user -u memorizer -f`, unitPath)
 }
 
 // GetSystemdSystemInstructions returns formatted instructions for system-level systemd setup
@@ -132,12 +132,12 @@ func GetSystemdSystemInstructions(unitContent string) string {
 
 2. Reload systemd and enable the service:
    sudo systemctl daemon-reload
-   sudo systemctl enable agentic-memorizer
-   sudo systemctl start agentic-memorizer
+   sudo systemctl enable memorizer
+   sudo systemctl start memorizer
 
 3. Check status:
-   sudo systemctl status agentic-memorizer
+   sudo systemctl status memorizer
 
 4. View logs:
-   journalctl -u agentic-memorizer -f`, systemPath, unitContent)
+   journalctl -u memorizer -f`, systemPath, unitContent)
 }

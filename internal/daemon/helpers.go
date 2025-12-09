@@ -27,13 +27,13 @@ func GetServiceManagerHint(sm string) string {
 	switch sm {
 	case "systemd":
 		return "\nTip: For automatic management, set up as a systemd service:\n" +
-			"  agentic-memorizer daemon systemctl\n"
+			"  memorizer daemon systemctl\n"
 	case "launchd":
 		return "\nTip: For automatic management, set up as a launchd service:\n" +
-			"  agentic-memorizer daemon launchctl\n"
+			"  memorizer daemon launchctl\n"
 	case "linux":
 		return "\nTip: Consider running in background:\n" +
-			"  nohup agentic-memorizer daemon start &\n"
+			"  nohup memorizer daemon start &\n"
 	default:
 		return ""
 	}
@@ -60,19 +60,19 @@ func GetAlreadyRunningHelp() string {
 
 	baseHelp := "The daemon appears to be already running.\n\n" +
 		"If this is incorrect (stale PID file), try:\n" +
-		"  1. Check status: agentic-memorizer daemon status\n" +
-		"  2. Stop daemon: agentic-memorizer daemon stop\n" +
-		"  3. Remove stale PID file: rm ~/.agentic-memorizer/daemon.pid"
+		"  1. Check status: memorizer daemon status\n" +
+		"  2. Stop daemon: memorizer daemon stop\n" +
+		"  3. Remove stale PID file: rm ~/.memorizer/daemon.pid"
 
 	switch sm {
 	case "systemd":
 		baseHelp += "\n\nIf managed by systemd, use:\n" +
-			"  systemctl --user status agentic-memorizer\n" +
-			"  systemctl --user stop agentic-memorizer"
+			"  systemctl --user status memorizer\n" +
+			"  systemctl --user stop memorizer"
 	case "launchd":
 		baseHelp += "\n\nIf managed by launchd, use:\n" +
-			"  launchctl list | grep agentic-memorizer\n" +
-			"  launchctl stop com.$USER.agentic-memorizer"
+			"  launchctl list | grep memorizer\n" +
+			"  launchctl stop com.$USER.memorizer"
 	}
 
 	return baseHelp
@@ -85,10 +85,10 @@ func GetNotRunningHelp() string {
 	switch sm {
 	case "systemd":
 		return "\n\nIf managed by systemd, check:\n" +
-			"  systemctl --user status agentic-memorizer"
+			"  systemctl --user status memorizer"
 	case "launchd":
 		return "\n\nIf managed by launchd, check:\n" +
-			"  launchctl list | grep agentic-memorizer"
+			"  launchctl list | grep memorizer"
 	}
 
 	return ""
@@ -103,9 +103,9 @@ func GetSignalErrorHelp(pid int) string {
 
 	switch sm {
 	case "systemd":
-		msg += "\nTry: systemctl --user stop agentic-memorizer"
+		msg += "\nTry: systemctl --user stop memorizer"
 	case "launchd":
-		msg += "\nTry: launchctl stop com.$USER.agentic-memorizer"
+		msg += "\nTry: launchctl stop com.$USER.memorizer"
 	}
 
 	return msg

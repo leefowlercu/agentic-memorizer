@@ -16,7 +16,7 @@ type LaunchdConfig struct {
 
 // GeneratePlist generates a launchd property list (plist) file
 func GeneratePlist(cfg LaunchdConfig) string {
-	label := fmt.Sprintf("com.%s.agentic-memorizer", cfg.User)
+	label := fmt.Sprintf("com.%s.memorizer", cfg.User)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -68,13 +68,13 @@ func GeneratePlist(cfg LaunchdConfig) string {
 
 // GetUserAgentPath returns the path for a user-level launchd agent plist
 func GetUserAgentPath(home, user string) (string, error) {
-	path := filepath.Join(home, "Library", "LaunchAgents", fmt.Sprintf("com.%s.agentic-memorizer.plist", user))
+	path := filepath.Join(home, "Library", "LaunchAgents", fmt.Sprintf("com.%s.memorizer.plist", user))
 	return path, nil
 }
 
 // GetSystemDaemonPath returns the path for a system-level launchd daemon plist
 func GetSystemDaemonPath(user string) string {
-	return fmt.Sprintf("/Library/LaunchDaemons/com.%s.agentic-memorizer.plist", user)
+	return fmt.Sprintf("/Library/LaunchDaemons/com.%s.memorizer.plist", user)
 }
 
 // InstallUserAgent writes a user-level launchd agent plist file
@@ -95,7 +95,7 @@ func InstallUserAgent(plistContent, plistPath string) error {
 
 // GetLaunchdUserInstructions returns formatted instructions for user-level launchd setup
 func GetLaunchdUserInstructions(plistPath, user string) string {
-	label := fmt.Sprintf("com.%s.agentic-memorizer", user)
+	label := fmt.Sprintf("com.%s.memorizer", user)
 
 	return fmt.Sprintf(`User-level launchd agent installed at:
   %s
@@ -130,7 +130,7 @@ func GetLaunchdSystemInstructions(plistContent, plistPath string) string {
    sudo launchctl kickstart -k system/%s
 
 4. Check if running:
-   sudo launchctl list | grep agentic-memorizer
+   sudo launchctl list | grep memorizer
 
 5. To stop and unload:
    sudo launchctl bootout system/%s`, plistPath, plistContent, plistPath, plistPath, plistPath,

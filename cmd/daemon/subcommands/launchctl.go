@@ -58,7 +58,7 @@ func runLaunchctl(cmd *cobra.Command, args []string) error {
 	// Get log file path from config
 	logFile := cfg.Daemon.LogFile
 	if logFile == "" {
-		logFile = filepath.Join(home, ".agentic-memorizer", "daemon.log")
+		logFile = filepath.Join(home, ".memorizer", "daemon.log")
 	}
 
 	// Build launchd config

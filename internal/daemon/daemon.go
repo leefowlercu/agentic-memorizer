@@ -143,7 +143,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	skipDirs := []string{".cache", ".git"}
 	skipFiles := cfg.Analysis.SkipFiles
 	if len(skipFiles) == 0 {
-		skipFiles = []string{"agentic-memorizer"}
+		skipFiles = []string{"memorizer"}
 	}
 	skipExtensions := cfg.Analysis.SkipExtensions
 
@@ -416,7 +416,7 @@ func (d *Daemon) rebuildIndex() error {
 	skipDirs := []string{".cache", ".git"}
 	skipFiles := cfg.Analysis.SkipFiles
 	if len(skipFiles) == 0 {
-		skipFiles = []string{"agentic-memorizer"}
+		skipFiles = []string{"memorizer"}
 	}
 	skipExtensions := cfg.Analysis.SkipExtensions
 

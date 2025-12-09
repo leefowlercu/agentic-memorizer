@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	clearAll         bool
-	clearOldVersions bool
+	clearAll   bool
+	clearStale bool
 )
 
 var ClearCmd = &cobra.Command{
@@ -20,8 +20,8 @@ var ClearCmd = &cobra.Command{
 	Short: "Clear the semantic analysis cache",
 	Long: "\nClear entries from the semantic analysis cache.\n\n" +
 		"By default, this command requires a flag to specify what to clear:\n" +
-		"  --all          Clear all cached entries\n" +
-		"  --old-versions Clear only stale entries (non-current versions)\n\n" +
+		"  --all    Clear all cached entries\n" +
+		"  --stale  Clear only stale entries (non-current versions)\n\n" +
 		"Cleared entries will be re-analyzed on next daemon rebuild or when " +
 		"the corresponding files are modified.",
 	PreRunE: validateClear,
@@ -30,15 +30,15 @@ var ClearCmd = &cobra.Command{
 
 func init() {
 	ClearCmd.Flags().BoolVar(&clearAll, "all", false, "Clear all cached entries")
-	ClearCmd.Flags().BoolVar(&clearOldVersions, "old-versions", false, "Clear only stale/legacy entries")
+	ClearCmd.Flags().BoolVar(&clearStale, "stale", false, "Clear only stale/legacy entries")
 }
 
 func validateClear(cmd *cobra.Command, args []string) error {
-	if !clearAll && !clearOldVersions {
-		return fmt.Errorf("please specify --all or --old-versions")
+	if !clearAll && !clearStale {
+		return fmt.Errorf("please specify --all or --stale")
 	}
-	if clearAll && clearOldVersions {
-		return fmt.Errorf("cannot use both --all and --old-versions")
+	if clearAll && clearStale {
+		return fmt.Errorf("cannot use both --all and --stale")
 	}
 	cmd.SilenceUsage = true
 	return nil
@@ -59,7 +59,7 @@ func runClear(cmd *cobra.Command, args []string) error {
 		return runClearAll(manager)
 	}
 
-	return runClearOldVersions(manager)
+	return runClearStale(manager)
 }
 
 func runClearAll(manager *cache.Manager) error {
@@ -90,7 +90,7 @@ func runClearAll(manager *cache.Manager) error {
 	return outputStatus(status)
 }
 
-func runClearOldVersions(manager *cache.Manager) error {
+func runClearStale(manager *cache.Manager) error {
 	// Get stats first to show what versions exist
 	stats, err := manager.GetStats()
 	if err != nil {

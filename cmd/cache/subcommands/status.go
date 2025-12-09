@@ -83,22 +83,30 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(output)
 
-	// Add note if there are stale entries
-	if stats.LegacyEntries > 0 || hasStaleEntries(stats) {
-		fmt.Printf("\nNote: Run 'agentic-memorizer cache clear --old-versions' to remove stale entries.\n")
-		fmt.Printf("      Stale entries will be re-analyzed automatically on next daemon rebuild.\n")
+	// Add note based on cache state
+	if stats.TotalEntries > 0 {
+		// Calculate total stale entries (legacy + other stale versions)
+		staleCount := stats.LegacyEntries
+		currentVersion := cache.CacheVersion()
+		for version, count := range stats.VersionCounts {
+			if version != currentVersion && version != "v0.0.0" {
+				staleCount += count
+			}
+		}
+
+		if staleCount == 0 {
+			// No stale entries - all entries are current
+			fmt.Printf("\nTo clear the cache, run: agentic-memorizer cache clear --all\n")
+		} else if staleCount < stats.TotalEntries {
+			// Some entries are stale
+			fmt.Printf("\nTo clear stale entries, run: agentic-memorizer cache clear --stale\n")
+			fmt.Printf("To clear all entries, run: agentic-memorizer cache clear --all\n")
+		} else {
+			// All entries are stale
+			fmt.Printf("\nAll cache entries are stale.\n")
+			fmt.Printf("To clear the cache, run: agentic-memorizer cache clear {--all|--stale}\n")
+		}
 	}
 
 	return nil
-}
-
-// hasStaleEntries checks if there are any non-current, non-legacy entries
-func hasStaleEntries(stats *cache.CacheStats) bool {
-	currentVersion := cache.CacheVersion()
-	for version, count := range stats.VersionCounts {
-		if version != currentVersion && version != "v0.0.0" && count > 0 {
-			return true
-		}
-	}
-	return false
 }

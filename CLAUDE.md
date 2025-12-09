@@ -119,65 +119,65 @@ make validate-config
 
 ```bash
 # Initialize with interactive prompts
-./agentic-memorizer initialize
+./memorizer initialize
 
 # Initialize with automated setup
-./agentic-memorizer initialize --setup-integrations
+./memorizer initialize --setup-integrations
 
 # Start FalkorDB (required before daemon)
-./agentic-memorizer graph start
+./memorizer graph start
 
 # Check graph status
-./agentic-memorizer graph status
+./memorizer graph status
 
 # Start the daemon
-./agentic-memorizer daemon start
+./memorizer daemon start
 
 # Check daemon status
-./agentic-memorizer daemon status
+./memorizer daemon status
 
 # Stop the daemon
-./agentic-memorizer daemon stop
+./memorizer daemon stop
 
 # Stop FalkorDB
-./agentic-memorizer graph stop
+./memorizer graph stop
 
 # Read the precomputed index
-./agentic-memorizer read
+./memorizer read
 
 # Validate configuration
-./agentic-memorizer config validate
+./memorizer config validate
 
 # Hot-reload configuration (non-structural settings)
-./agentic-memorizer config reload
+./memorizer config reload
 
 # Start MCP server (for Claude Code integration)
-./agentic-memorizer mcp start
+./memorizer mcp start
 
 # Rebuild index (use --force to clear graph first)
-./agentic-memorizer daemon rebuild
+./memorizer daemon rebuild
 
 # Rebuild with stale cache clearing
-./agentic-memorizer daemon rebuild --clear-old-cache
+./memorizer daemon rebuild --clear-old-cache
 
 # Clear graph data by deleting persistence files
-rm -rf ~/.agentic-memorizer/falkordb/*
+rm -rf ~/.memorizer/falkordb/*
 docker restart memorizer-falkordb
 
 # Check cache status
-./agentic-memorizer cache status
+./memorizer cache status
 
 # Clear stale cache entries
-./agentic-memorizer cache clear --old-versions
+./memorizer cache clear --old-versions
 
 # Clear all cache entries
-./agentic-memorizer cache clear --all
+./memorizer cache clear --all
 
 # Generate systemd unit file (Linux)
-./agentic-memorizer daemon systemctl
+./memorizer daemon systemctl
 
 # Generate launchd plist file (macOS)
-./agentic-memorizer daemon launchctl
+./memorizer daemon launchctl
 ```
 
 ### Service Manager Integration
@@ -206,15 +206,15 @@ The daemon follows modern Go best practices by running in foreground mode and de
 - **Command**: `daemon launchctl` - Generates launchd plist files
 - **Features**: KeepAlive with SuccessfulExit=false, RunAtLoad, ThrottleInterval=30s
 - **Plist Generation**: Uses config.GetConfig() to read log file path, detects binary path
-- **Label Format**: `com.<username>.agentic-memorizer` for proper macOS service identification
+- **Label Format**: `com.<username>.memorizer` for proper macOS service identification
 
 #### Testing Commands
 ```bash
 # Test systemd unit generation
-./agentic-memorizer daemon systemctl
+./memorizer daemon systemctl
 
 # Test launchd plist generation
-./agentic-memorizer daemon launchctl
+./memorizer daemon launchctl
 
 # Test Type=notify integration (requires systemd)
 systemd-notify --status="Testing notification"
@@ -308,20 +308,20 @@ To rebuild the graph, use `daemon rebuild [--force]`.
 When FalkorDB is unavailable, the daemon logs warnings but continues operating. Graph queries return empty results rather than errors.
 
 **Data Persistence:**
-FalkorDB stores data at `/data` inside the container, which is bind-mounted to `~/.agentic-memorizer/falkordb/`. Persistence files (`dump.rdb`) appear in this directory after data is saved.
+FalkorDB stores data at `/data` inside the container, which is bind-mounted to `~/.memorizer/falkordb/`. Persistence files (`dump.rdb`) appear in this directory after data is saved.
 
 **Clearing Graph Data:**
 ```bash
 # Option A: Delete persistence files and restart (simplest)
-rm -rf ~/.agentic-memorizer/falkordb/*
+rm -rf ~/.memorizer/falkordb/*
 docker restart memorizer-falkordb
 
 # Option B: Clear and rebuild via daemon
-agentic-memorizer daemon rebuild --force
+memorizer daemon rebuild --force
 
 # Option C: Remove and recreate container (also clears data)
 docker stop memorizer-falkordb && docker rm memorizer-falkordb
-agentic-memorizer graph start
+memorizer graph start
 ```
 
 ### Semantic Search
@@ -403,10 +403,10 @@ Configuration is organized into tiers:
 
 Use `config show-schema` to discover all available settings:
 ```bash
-agentic-memorizer config show-schema                  # Show all settings
-agentic-memorizer config show-schema --advanced-only  # Show advanced settings
-agentic-memorizer config show-schema --hardcoded-only # Show hardcoded conventions
-agentic-memorizer config show-schema --format yaml    # Output as YAML
+memorizer config show-schema                  # Show all settings
+memorizer config show-schema --advanced-only  # Show advanced settings
+memorizer config show-schema --hardcoded-only # Show hardcoded conventions
+memorizer config show-schema --format yaml    # Output as YAML
 ```
 
 Key configuration sections:
@@ -728,7 +728,7 @@ func runMyCommand(cmd *cobra.Command, args []string) error {
 ```go
 // Success message
 status := format.NewStatus(format.StatusSuccess, "Cache cleared successfully")
-status.AddDetail("Run 'agentic-memorizer daemon rebuild' to regenerate")
+status.AddDetail("Run 'memorizer daemon rebuild' to regenerate")
 
 // Error message
 status := format.NewStatus(format.StatusError, "Configuration validation failed")

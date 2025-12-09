@@ -76,16 +76,16 @@ These values are hardcoded for consistency and operational correctness:
 Users can explore all available settings using the `config show-schema` command:
 ```bash
 # Show all settings with defaults and descriptions
-agentic-memorizer config show-schema
+memorizer config show-schema
 
 # Show only advanced settings
-agentic-memorizer config show-schema --advanced-only
+memorizer config show-schema --advanced-only
 
 # Show only hardcoded conventions
-agentic-memorizer config show-schema --hardcoded-only
+memorizer config show-schema --hardcoded-only
 
 # Output as YAML or JSON
-agentic-memorizer config show-schema --format yaml
+memorizer config show-schema --format yaml
 ```
 
 ### Layered Configuration Priority
@@ -94,7 +94,7 @@ The Config Manager implements a multi-layer configuration system where settings 
 
 **Configuration Layers (lowest to highest priority):**
 1. **Default Values**: Hardcoded defaults from constants ensuring zero-configuration operation
-2. **Configuration File**: YAML file in `~/.agentic-memorizer/config.yaml` or current directory
+2. **Configuration File**: YAML file in `~/.memorizer/config.yaml` or current directory
 3. **Environment Variables**: Variables prefixed with `MEMORIZER_` override file settings
 4. **Command-Line Flags**: Explicit flags take highest precedence (when bound via Viper)
 
@@ -144,7 +144,7 @@ Consider a configuration with three invalid fields. Traditional validation would
 The Config Manager implements comprehensive path handling that balances user convenience with security. Path expansion enables portable configurations using tilde notation, while safety validation prevents directory traversal attacks.
 
 **Home Directory Expansion:**
-The subsystem automatically expands tilde (`~`) prefix in paths to the user's home directory. This expansion enables portable configuration files that work across different user accounts and operating systems without hardcoding absolute paths. Paths like `~/.agentic-memorizer/memory` work consistently whether the user is `/home/alice` or `/Users/bob`.
+The subsystem automatically expands tilde (`~`) prefix in paths to the user's home directory. This expansion enables portable configuration files that work across different user accounts and operating systems without hardcoding absolute paths. Paths like `~/.memorizer/memory` work consistently whether the user is `/home/alice` or `/Users/bob`.
 
 **Security Validation:**
 All paths undergo security validation to prevent directory traversal attacks. The `SafePath()` function checks for parent directory references (`..`) that could enable accessing files outside intended boundaries. Configuration containing paths like `~/memory/../../etc/passwd` would be rejected with a clear security-focused error message.
@@ -194,7 +194,7 @@ The Configuration Loading component (`internal/config/config.go`) manages the li
 **Initialization Process:**
 The `InitConfig()` function performs the complete configuration bootstrap sequence:
 1. Sets configuration name to "config" and type to "yaml"
-2. Adds search paths (`~/.agentic-memorizer` and current directory)
+2. Adds search paths (`~/.memorizer` and current directory)
 3. Loads all default values from `DefaultConfig` constant
 4. Configures environment variable prefix (`MEMORIZER_`)
 5. Enables automatic environment variable binding with dot-to-underscore transformation
@@ -222,7 +222,7 @@ The `WriteMinimalConfig()` function writes only user-facing settings:
 4. Used by initialize command to create approachable default configuration files
 
 **Path Helper Functions:**
-- `GetAppDir()` - Returns app directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.agentic-memorizer`)
+- `GetAppDir()` - Returns app directory path (respects `MEMORIZER_APP_DIR` environment variable, defaults to `~/.memorizer`)
 - `GetPIDPath()` - Returns path to daemon PID file (uses app directory)
 - `ExpandHome()` - Expands tilde in arbitrary paths
 - `GetConfigPath()` - Returns path to loaded configuration file
@@ -234,7 +234,7 @@ The `MEMORIZER_APP_DIR` environment variable allows customization of where the a
 - **Containers**: Custom paths in Docker or other containerized deployments
 - **CI/CD**: Isolated build/test environments
 
-When `MEMORIZER_APP_DIR` is set, it overrides the default `~/.agentic-memorizer` location. The path undergoes:
+When `MEMORIZER_APP_DIR` is set, it overrides the default `~/.memorizer` location. The path undergoes:
 1. **Home expansion**: Tilde (`~`) prefix expanded to user's home directory
 2. **Security validation**: Path safety checks prevent directory traversal
 3. **Search path update**: Configuration file search uses custom app directory
@@ -295,10 +295,10 @@ The `ValidateReload()` function (`internal/config/reload.go`) compares old and n
 **Usage Example:**
 ```bash
 # Edit configuration file
-vim ~/.agentic-memorizer/config.yaml
+vim ~/.memorizer/config.yaml
 
 # Validate and reload without restarting daemon
-agentic-memorizer config reload
+memorizer config reload
 ```
 
 ### Configuration Types
@@ -341,7 +341,7 @@ Configures semantic analysis behavior:
 - `MaxFileSize` - Maximum file size for analysis in bytes (default: 10MB)
 - `SkipExtensions` - File extensions to exclude from analysis
 - `SkipFiles` - Specific filenames to exclude
-- `CacheDir` - Cache storage location (default: `~/.agentic-memorizer/.cache`)
+- `CacheDir` - Cache storage location (default: `~/.memorizer/.cache`)
 
 Note: The `Parallel` field has been deprecated. Worker concurrency is now controlled by `daemon.workers` configuration.
 
@@ -352,14 +352,14 @@ Configures background daemon operation:
 - `RateLimitPerMin` - Maximum API calls per minute (default: 20)
 - `FullRebuildIntervalMinutes` - Periodic complete rebuild interval (default: 60)
 - `HTTPPort` - Unified HTTP server port for health check and SSE endpoints (default: 0 for disabled)
-- `LogFile` - Daemon log file path (default: `~/.agentic-memorizer/daemon.log`)
+- `LogFile` - Daemon log file path (default: `~/.memorizer/daemon.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
 
 Note: Daemon operation is controlled via CLI commands (`daemon start`, `daemon stop`) or service managers, not through configuration.
 
 **MCPConfig Structure:**
 Configures Model Context Protocol server:
-- `LogFile` - MCP server log file path (default: `~/.agentic-memorizer/mcp.log`)
+- `LogFile` - MCP server log file path (default: `~/.memorizer/mcp.log`)
 - `LogLevel` - Logging verbosity: debug, info, warn, error (default: info)
 - `DaemonHost` - Host for daemon's HTTP API (default: "localhost")
 - `DaemonPort` - Port for daemon's HTTP API (default: 0 for disabled)
@@ -542,21 +542,21 @@ A complete `Config` instance with all fields populated with production-ready def
 - Basis for generating default configuration files
 
 **Default Values Summary:**
-- Memory root: `~/.agentic-memorizer/memory`
+- Memory root: `~/.memorizer/memory`
 - Claude model: `claude-sonnet-4-5-20250929`
 - Claude max tokens: 1500
 - Claude timeout: 30 seconds
 - Claude enable vision: true
 - Max file size: 10485760 (10 MB)
-- Cache directory: `~/.agentic-memorizer/.cache`
+- Cache directory: `~/.memorizer/.cache`
 - Daemon workers: 3
 - Debounce delay: 500 ms
 - Rate limit: 20 calls/minute
 - Rebuild interval: 60 minutes
 - HTTP port: 0 (disabled)
-- Daemon log file: `~/.agentic-memorizer/daemon.log`
+- Daemon log file: `~/.memorizer/daemon.log`
 - Daemon log level: info
-- MCP log file: `~/.agentic-memorizer/mcp.log`
+- MCP log file: `~/.memorizer/mcp.log`
 - MCP log level: info
 - MCP daemon host: localhost
 - MCP daemon port: 0 (disabled)
@@ -782,9 +782,9 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 
 ## Glossary
 
-**Memory Root**: The directory where users store files they want indexed and analyzed, separate from the application configuration directory (typically `~/.agentic-memorizer/memory`).
+**Memory Root**: The directory where users store files they want indexed and analyzed, separate from the application configuration directory (typically `~/.memorizer/memory`).
 
-**Cache Directory**: Storage location for semantic analysis results keyed by file content hash to avoid redundant API calls (typically `~/.agentic-memorizer/.cache`).
+**Cache Directory**: Storage location for semantic analysis results keyed by file content hash to avoid redundant API calls (typically `~/.memorizer/.cache`).
 
 **Debounce**: Time delay in milliseconds to batch rapid file changes together, preventing excessive rebuilds during bulk file operations like git checkouts or mass edits.
 
@@ -818,11 +818,11 @@ The root command defines a `PersistentPreRunE` hook that calls `config.InitConfi
 
 **Health Check Port**: Optional HTTP endpoint port for daemon monitoring, exposing metrics and health status for operational observability (0 disables the endpoint).
 
-**App Directory**: Location where the application stores its own files (configuration, index, PID file, logs), defaulting to `~/.agentic-memorizer` but configurable via `MEMORIZER_APP_DIR` environment variable for testing and multi-instance deployments.
+**App Directory**: Location where the application stores its own files (configuration, index, PID file, logs), defaulting to `~/.memorizer` but configurable via `MEMORIZER_APP_DIR` environment variable for testing and multi-instance deployments.
 
 **MEMORIZER_APP_DIR**: Environment variable that overrides the default app directory location, enabling isolated test environments, multiple instances, and custom paths in containerized deployments.
 
-**MCP Log File**: Path to the Model Context Protocol (MCP) server log output, separate from daemon logs, enabling independent logging configuration for MCP integrations (typically `~/.agentic-memorizer/mcp.log`).
+**MCP Log File**: Path to the Model Context Protocol (MCP) server log output, separate from daemon logs, enabling independent logging configuration for MCP integrations (typically `~/.memorizer/mcp.log`).
 
 **MCP Log Level**: Logging verbosity control for MCP server operations (debug, info, warn, error), allows independent configuration from daemon logging for troubleshooting MCP integration issues.
 

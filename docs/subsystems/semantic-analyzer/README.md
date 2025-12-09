@@ -390,7 +390,7 @@ After metadata extraction, the daemon or worker computes a SHA-256 hash of the f
 6. Subsequent files with identical content skip analysis
 
 **Cache Structure**:
-Cached entries are stored as JSON files in `~/.agentic-memorizer/.cache/summaries/` with filenames derived from the first 16 characters of the content hash and version information. Each entry contains:
+Cached entries are stored as JSON files in `~/.memorizer/.cache/summaries/` with filenames derived from the first 16 characters of the content hash and version information. Each entry contains:
 - Schema version, metadata version, semantic version (for staleness detection)
 - File path (for reference, not cache key)
 - Content hash (actual cache key)

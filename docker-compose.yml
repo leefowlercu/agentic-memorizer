@@ -1,6 +1,6 @@
 # FalkorDB Knowledge Graph for Agentic Memorizer
 #
-# This docker-compose file provides an alternative to the `agentic-memorizer graph start`
+# This docker-compose file provides an alternative to the `memorizer graph start`
 # command for running FalkorDB. Use this if you prefer docker-compose over direct Docker commands.
 #
 # Usage:
@@ -18,7 +18,7 @@ services:
       - "${FALKORDB_PORT:-6379}:6379"  # Redis protocol
       - "${FALKORDB_UI_PORT:-3000}:3000"  # Browser UI
     volumes:
-      - ${MEMORIZER_APP_DIR:-~/.agentic-memorizer}/falkordb:/data
+      - ${MEMORIZER_APP_DIR:-~/.memorizer}/falkordb:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

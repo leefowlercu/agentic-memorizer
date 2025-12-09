@@ -120,7 +120,7 @@ The Integration interface (`internal/integrations/interface.go`) defines the con
 - `Reload()` - Reloads configuration from disk after external changes
 
 **Command Generation:**
-- `GetCommand()` - Generates the shell command that frameworks should invoke to access the index (e.g., `agentic-memorizer read --format xml --integration claude-code-hook`)
+- `GetCommand()` - Generates the shell command that frameworks should invoke to access the index (e.g., `memorizer read --format xml --integration claude-code-hook`)
 
 **Output Formatting:**
 - `FormatOutput()` - Transforms base index format into framework-specific output, applying any necessary wrapping or envelope structures (optional for MCP-style integrations that provide tools/resources instead of formatted output)
@@ -167,7 +167,7 @@ Checks for the existence of the `~/.claude` directory and `~/.claude/settings.js
 1. Locates or creates `~/.claude/settings.json` file
 2. Reads existing settings, preserving all unknown fields
 3. Adds or updates SessionStart hooks with default matchers (startup, resume, clear, compact)
-4. Configures hook to run `agentic-memorizer read --format xml --integration claude-code-hook`
+4. Configures hook to run `memorizer read --format xml --integration claude-code-hook`
 5. Writes modified settings atomically with temporary backup creation
 6. Returns detailed success/failure information
 
@@ -207,7 +207,7 @@ Both must be present for successful detection.
 1. Locates or creates `~/.claude.json` file (different from hook adapter's settings.json)
 2. Reads existing MCP server configurations
 3. Registers the `agentic-memorizer` MCP server with:
-   - Command: `agentic-memorizer mcp start`
+   - Command: `memorizer mcp start`
    - Environment variables: `MEMORIZER_MEMORY_ROOT` (path to memory directory)
 4. Writes modified configuration atomically with temporary backup creation
 5. Verifies registration using `claude mcp get agentic-memorizer`
@@ -243,7 +243,7 @@ Both must be present for successful detection.
 1. Locates or creates `~/.gemini/settings.json` file
 2. Reads existing MCP server configurations
 3. Registers the `agentic-memorizer` MCP server with:
-   - Command: `agentic-memorizer mcp start`
+   - Command: `memorizer mcp start`
    - Environment variables: `MEMORIZER_MEMORY_ROOT` (path to memory directory)
    - Note: No explicit `type` field needed (Gemini defaults to stdio transport)
 4. Writes modified configuration atomically with temporary backup creation
@@ -276,7 +276,7 @@ Both must be present for successful detection.
 1. Locates or creates `~/.codex/config.toml` file
 2. Reads existing MCP server configurations (TOML format)
 3. Registers the `agentic-memorizer` MCP server with:
-   - Command: `agentic-memorizer mcp start`
+   - Command: `memorizer mcp start`
    - Args: `["mcp", "start"]`
    - Environment variables: `MEMORIZER_MEMORY_ROOT` (path to memory directory)
    - Enabled: `true` (explicit flag to activate the server)

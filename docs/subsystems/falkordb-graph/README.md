@@ -550,7 +550,7 @@ graph:
 |----------|-------------|---------|
 | `FALKORDB_PORT` | Redis protocol port | 6379 |
 | `FALKORDB_UI_PORT` | Browser UI port | 3000 |
-| `MEMORIZER_APP_DIR` | Data directory | ~/.agentic-memorizer |
+| `MEMORIZER_APP_DIR` | Data directory | ~/.memorizer |
 
 ### Docker Compose
 
@@ -566,7 +566,7 @@ services:
       - "${FALKORDB_PORT:-6379}:6379"
       - "${FALKORDB_UI_PORT:-3000}:3000"
     volumes:
-      - ${MEMORIZER_APP_DIR:-~/.agentic-memorizer}/falkordb:/data
+      - ${MEMORIZER_APP_DIR:-~/.memorizer}/falkordb:/data
     restart: unless-stopped
 ```
 
@@ -577,10 +577,10 @@ services:
 **Option 1: CLI Command**
 ```bash
 # Start container
-agentic-memorizer graph start
+memorizer graph start
 
 # Verify status
-agentic-memorizer graph status
+memorizer graph status
 ```
 
 **Option 2: Docker Compose**
@@ -598,7 +598,7 @@ docker run -d \
   --name memorizer-falkordb \
   -p 6379:6379 \
   -p 3000:3000 \
-  -v ~/.agentic-memorizer/falkordb:/data \
+  -v ~/.memorizer/falkordb:/data \
   falkordb/falkordb:latest
 ```
 
@@ -606,7 +606,7 @@ docker run -d \
 
 **Graph Status Command:**
 ```bash
-agentic-memorizer graph status
+memorizer graph status
 ```
 
 Output:
@@ -658,8 +658,8 @@ docker ps -a | grep memorizer-falkordb
 docker logs memorizer-falkordb
 
 # Remove and restart
-agentic-memorizer graph stop
-agentic-memorizer graph start
+memorizer graph stop
+memorizer graph start
 ```
 
 #### Connection Failures
@@ -672,17 +672,17 @@ lsof -i :6379
 redis-cli -h localhost -p 6379 ping
 
 # Check daemon logs
-tail -f ~/.agentic-memorizer/logs/daemon.log
+tail -f ~/.memorizer/logs/daemon.log
 ```
 
 #### Graph Data Issues
 
 ```bash
 # Rebuild index (updates existing entries)
-agentic-memorizer daemon rebuild
+memorizer daemon rebuild
 
 # Force rebuild (clears graph first, then rebuilds)
-agentic-memorizer daemon rebuild --force
+memorizer daemon rebuild --force
 
 # Or via API directly
 curl -X POST "http://localhost:8765/api/v1/rebuild?force=true"
@@ -690,10 +690,10 @@ curl -X POST "http://localhost:8765/api/v1/rebuild?force=true"
 
 #### Disk Space
 
-FalkorDB stores data in `~/.agentic-memorizer/falkordb/`. Monitor disk usage:
+FalkorDB stores data in `~/.memorizer/falkordb/`. Monitor disk usage:
 
 ```bash
-du -sh ~/.agentic-memorizer/falkordb/
+du -sh ~/.memorizer/falkordb/
 ```
 
 ## API Reference

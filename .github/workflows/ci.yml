@@ -138,10 +138,10 @@ jobs:
         run: make build
 
       - name: Test binary version
-        run: ./agentic-memorizer version
+        run: ./memorizer version
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agentic-memorizer-${{ matrix.os }}
-          path: agentic-memorizer
+          name: memorizer-${{ matrix.os }}
+          path: memorizer

@@ -222,16 +222,16 @@ This enables proactive cache maintenance during upgrades without full cache clea
 Users can inspect and manage cache versions via CLI:
 ```bash
 # View cache statistics including version distribution
-agentic-memorizer cache status
+memorizer cache status
 
 # Clear only stale entries (preserves current version)
-agentic-memorizer cache clear --old-versions
+memorizer cache clear --old-versions
 
 # Clear all entries
-agentic-memorizer cache clear --all
+memorizer cache clear --all
 
 # Clear stale cache during daemon rebuild
-agentic-memorizer daemon rebuild --clear-old-cache
+memorizer daemon rebuild --clear-old-cache
 ```
 
 **Version Bump Workflow:**
@@ -249,7 +249,7 @@ When making changes that require a version bump:
 The Manager struct (`internal/cache/manager.go`) provides the central interface for cache operations, maintaining configuration state and implementing storage/retrieval logic.
 
 **Core State:**
-- `cacheDir string` - Base directory path for cache storage (typically `~/.agentic-memorizer/.cache`)
+- `cacheDir string` - Base directory path for cache storage (typically `~/.memorizer/.cache`)
 
 The manager maintains minimal state, holding only the cache directory path. All other information (cached analyses, metadata, timestamps) is stored in individual JSON files within the cache directory structure.
 
@@ -325,7 +325,7 @@ Once computed, the file hash serves multiple purposes:
 The Daemon subsystem (`internal/daemon/daemon.go`) creates and manages the Cache Manager as an optional component that's only initialized when semantic analysis is enabled.
 
 **Initialization:**
-During daemon startup, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.agentic-memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enabled`).
+During daemon startup, the daemon creates a cache manager using `cache.NewManager(cfg.Analysis.CacheDir)` unconditionally, regardless of whether semantic analysis is enabled. The cache directory path comes from configuration (default: `~/.memorizer/.cache`). The cache manager is always initialized, but is only used when the semantic analyzer exists (controlled by `cfg.Analysis.Enabled`).
 
 **Worker Pool Distribution:**
 The daemon passes the cache manager instance to the worker pool during initialization. All worker threads share this single cache manager instance, enabling coordinated cache access across parallel processing. The cache manager's stateless design ensures this sharing is safe without explicit synchronization.
@@ -428,7 +428,7 @@ The `FileHash` field in `CachedAnalysis` serves as both the cache key and a stor
 
 **Hash Prefix**: First 16 characters of the full hash string (including "sha256:" prefix) used as cache filename, yielding 9 hex characters after the prefix and providing manageable filename lengths while maintaining negligible collision probability.
 
-**Cache Directory**: Designated file system location for storing cache files (default: `~/.agentic-memorizer/.cache`), containing `summaries` subdirectory with JSON files.
+**Cache Directory**: Designated file system location for storing cache files (default: `~/.memorizer/.cache`), containing `summaries` subdirectory with JSON files.
 
 **Durability**: Property where cached entries persist across daemon restarts through file-based storage, avoiding redundant API calls during index rebuilds.
 

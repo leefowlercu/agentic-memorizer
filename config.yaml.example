@@ -5,7 +5,7 @@
 # For advanced configuration, see docs/configuration.md
 
 # Root directory for memory files
-memory_root: ~/.agentic-memorizer/memory
+memory_root: ~/.memorizer/memory
 
 # Claude API Configuration
 claude:
@@ -35,10 +35,10 @@ analysis:
 
   # Specific files to skip by name (system files)
   skip_files:
-    - agentic-memorizer
+    - memorizer
 
   # Cache directory for semantic analysis results
-  cache_dir: ~/.agentic-memorizer/.cache
+  cache_dir: ~/.memorizer/.cache
 
 # Background Daemon Configuration
 daemon:
@@ -59,7 +59,7 @@ daemon:
   http_port: 0
 
   # Log file location
-  log_file: ~/.agentic-memorizer/daemon.log
+  log_file: ~/.memorizer/daemon.log
 
   # Log level: debug, info, warn, error
   log_level: info
@@ -67,7 +67,7 @@ daemon:
 # MCP Server Configuration
 mcp:
   # Log file for MCP server
-  log_file: ~/.agentic-memorizer/mcp.log
+  log_file: ~/.memorizer/mcp.log
 
   # Log level for MCP server: debug, info, warn, error
   log_level: info

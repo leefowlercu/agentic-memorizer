@@ -330,7 +330,7 @@ Built:   2025-11-22T14:30:00Z
 
 **Usage:**
 ```bash
-agentic-memorizer version
+memorizer version
 agentic-memorizer --version  # Alternative using root command flag
 ```
 

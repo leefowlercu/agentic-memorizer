@@ -414,7 +414,7 @@ MCP clients discover prompts via `prompts/list` request and invoke them using `p
 The MCP subsystem uses dedicated configuration settings separate from the daemon:
 
 **MCP Configuration** (`internal/config/types.go`)
-- `log_file`: Path to MCP server log file (default: `~/.agentic-memorizer/mcp.log`)
+- `log_file`: Path to MCP server log file (default: `~/.memorizer/mcp.log`)
 - `log_level`: Logging verbosity - debug, info, warn, error (default: `info`)
 - `daemon_host`: Daemon hostname for API integration (default: `localhost`)
 - `daemon_port`: Daemon HTTP port (default: `0` - disables daemon integration when 0)
@@ -430,7 +430,7 @@ The MCP subsystem uses dedicated configuration settings separate from the daemon
 **Config File Example** (`.agentic-memorizer/config.yaml`):
 ```yaml
 mcp:
-  log_file: ~/.agentic-memorizer/mcp.log
+  log_file: ~/.memorizer/mcp.log
   log_level: info
   daemon_host: localhost
   daemon_port: 8080  # Set to 0 to disable daemon integration
@@ -439,10 +439,10 @@ mcp:
 **Command-Line Override**:
 ```bash
 # Start with debug logging (overrides config file)
-agentic-memorizer mcp start --log-level debug
+memorizer mcp start --log-level debug
 
 # View logs in real-time
-tail -f ~/.agentic-memorizer/mcp.log
+tail -f ~/.memorizer/mcp.log
 ```
 
 **Dual Output**:
@@ -454,7 +454,7 @@ tail -f ~/.agentic-memorizer/mcp.log
 **Environment Variables**:
 Configuration values can also be set via environment variables:
 ```bash
-export MEMORIZER_MCP_LOG_FILE=~/.agentic-memorizer/mcp.log
+export MEMORIZER_MCP_LOG_FILE=~/.memorizer/mcp.log
 export MEMORIZER_MCP_LOG_LEVEL=debug
 ```
 
@@ -542,10 +542,10 @@ The MCP server integrates with the daemon through a sophisticated real-time arch
   - Subscriptions tracked but never notified
 
 **User Workflow (Connected Mode)**
-1. Start daemon: `agentic-memorizer daemon start`
+1. Start daemon: `memorizer daemon start`
 2. Daemon builds initial index and starts HTTP API
 3. Configure MCP: Set `daemon_port` to daemon's HTTP port (e.g., 8080)
-4. Start MCP server: `agentic-memorizer mcp start` (invoked by AI tool)
+4. Start MCP server: `memorizer mcp start` (invoked by AI tool)
 5. MCP fetches current index from daemon API
 6. SSE client begins streaming daemon notifications
 7. Index updates propagate in real-time to MCP clients
@@ -559,7 +559,7 @@ The MCP server exposes a standard interface for AI tool integration:
 
 **GitHub Copilot CLI**
 - Configuration: `~/.github-copilot/config.json` MCP servers section
-- Invocation: Copilot spawns `agentic-memorizer mcp start` as subprocess
+- Invocation: Copilot spawns `memorizer mcp start` as subprocess
 - Transport: Stdio (line-delimited JSON over stdin/stdout)
 - Capabilities: Can list resources, read index, call search tools
 - Use case: "@memorizer find all Terraform modules" during CLI chat
@@ -597,12 +597,12 @@ The MCP server maintains detailed logs for debugging protocol issues and client 
 **Log Configuration** (`.agentic-memorizer/config.yaml`):
 ```yaml
 mcp:
-  log_file: ~/.agentic-memorizer/mcp.log  # Log file path
+  log_file: ~/.memorizer/mcp.log  # Log file path
   log_level: info                          # debug, info, warn, error
 ```
 
 **Log Output**:
-- **File**: `~/.agentic-memorizer/mcp.log` (structured logs for debugging and analysis)
+- **File**: `~/.memorizer/mcp.log` (structured logs for debugging and analysis)
 - **Stderr**: Real-time logs visible to MCP client (text format, live feedback)
 - **Rotation**: Automatic at 10MB file size, keeps 3 backup files, 28-day retention, compression enabled
 
@@ -615,16 +615,16 @@ mcp:
 **Viewing Logs**:
 ```bash
 # Tail live logs
-tail -f ~/.agentic-memorizer/mcp.log
+tail -f ~/.memorizer/mcp.log
 
 # View with filtering
-grep -i error ~/.agentic-memorizer/mcp.log
+grep -i error ~/.memorizer/mcp.log
 
 # Search for specific client session
-grep "client=claude-code" ~/.agentic-memorizer/mcp.log
+grep "client=claude-code" ~/.memorizer/mcp.log
 
 # Start server with debug logging
-agentic-memorizer mcp start --log-level debug
+memorizer mcp start --log-level debug
 ```
 
 **Common Debugging Scenarios**:
@@ -632,28 +632,28 @@ agentic-memorizer mcp start --log-level debug
 *Protocol handshake failures*:
 ```bash
 # Check for initialize request and protocol version compatibility
-grep "Received initialize request" ~/.agentic-memorizer/mcp.log
+grep "Received initialize request" ~/.memorizer/mcp.log
 ```
 Look for protocol version mismatches or missing client info.
 
 *Tool call errors*:
 ```bash
 # Find tool invocations and their results
-grep "Calling tool" ~/.agentic-memorizer/mcp.log
+grep "Calling tool" ~/.memorizer/mcp.log
 ```
 Check for invalid arguments, missing index data, or search failures.
 
 *Client disconnects*:
 ```bash
 # Search for disconnect events
-grep -E "(Client disconnected|EOF)" ~/.agentic-memorizer/mcp.log
+grep -E "(Client disconnected|EOF)" ~/.memorizer/mcp.log
 ```
 Unexpected disconnects may indicate protocol errors or client-side issues.
 
 *Performance issues*:
 ```bash
 # Enable debug logging to see message timing
-agentic-memorizer mcp start --log-level debug 2>&1 | grep -E "(Received|Sending)"
+memorizer mcp start --log-level debug 2>&1 | grep -E "(Received|Sending)"
 ```
 Watch for slow handlers or large response payloads.
 

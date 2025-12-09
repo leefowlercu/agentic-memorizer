@@ -35,7 +35,7 @@ func runVersion(cmd *cobra.Command, args []string) error {
 
 // PrintVersion outputs version information in a detailed multi-line format
 func PrintVersion() {
-	section := format.NewSection("Version Information")
+	section := format.NewSection("Version Information").AddDivider()
 	section.AddKeyValue("Version", version.GetShortVersion())
 	section.AddKeyValue("Commit", version.GetGitCommit())
 	section.AddKeyValue("Built", version.GetBuildDate())

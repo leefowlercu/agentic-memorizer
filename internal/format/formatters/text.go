@@ -103,7 +103,8 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 		}
 
 		for i, item := range s.Items {
-			if item.Type == format.SectionItemKeyValue {
+			switch item.Type {
+			case format.SectionItemKeyValue:
 				// Format: "Key:    Value"
 				padding := maxKeyWidth - len(item.Key)
 				sb.WriteString(item.Key)
@@ -111,7 +112,7 @@ func (f *TextFormatter) formatSection(s *format.Section) string {
 				sb.WriteString(strings.Repeat(" ", padding+1))
 				sb.WriteString(item.Value)
 				sb.WriteString("\n")
-			} else if item.Type == format.SectionItemSubsection {
+			case format.SectionItemSubsection:
 				// Add spacing before subsection
 				if i > 0 {
 					sb.WriteString("\n")

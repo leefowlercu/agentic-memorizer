@@ -3,6 +3,7 @@ package read
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 
@@ -95,7 +96,10 @@ func runRead(cmd *cobra.Command, args []string) error {
 
 	// Connect to FalkorDB
 	ctx := context.Background()
-	logger := slog.Default()
+
+	// Use a discarded logger to suppress graph manager initialization logs
+	// The read command outputs clean data for consumption by integrations
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	graphConfig := graph.ManagerConfig{
 		Client: graph.ClientConfig{

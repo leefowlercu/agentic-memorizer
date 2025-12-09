@@ -17,7 +17,7 @@ func TestValidateShowSchema_ValidFormats(t *testing.T) {
 		name   string
 		format string
 	}{
-		{"table format", "table"},
+		{"text format", "text"},
 		{"yaml format", "yaml"},
 		{"json format", "json"},
 	}
@@ -53,7 +53,7 @@ func TestValidateShowSchema_InvalidFormat(t *testing.T) {
 }
 
 func TestValidateShowSchema_MutuallyExclusiveFlags(t *testing.T) {
-	showSchemaFormat = "table"
+	showSchemaFormat = "text"
 	showSchemaAdvancedOnly = true
 	showSchemaHardcodedOnly = true
 
@@ -67,8 +67,8 @@ func TestValidateShowSchema_MutuallyExclusiveFlags(t *testing.T) {
 	}
 }
 
-func TestRunShowSchema_TableFormat(t *testing.T) {
-	showSchemaFormat = "table"
+func TestRunShowSchema_TextFormat(t *testing.T) {
+	showSchemaFormat = "text"
 	showSchemaAdvancedOnly = false
 	showSchemaHardcodedOnly = false
 
@@ -101,7 +101,7 @@ func TestRunShowSchema_TableFormat(t *testing.T) {
 
 	for _, expected := range expectedStrings {
 		if !strings.Contains(output, expected) {
-			t.Errorf("table output should contain %q", expected)
+			t.Errorf("text output should contain %q", expected)
 		}
 	}
 }
@@ -183,7 +183,7 @@ func TestRunShowSchema_JSONFormat(t *testing.T) {
 }
 
 func TestRunShowSchema_AdvancedOnly(t *testing.T) {
-	showSchemaFormat = "table"
+	showSchemaFormat = "text"
 	showSchemaAdvancedOnly = true
 	showSchemaHardcodedOnly = false
 
@@ -222,7 +222,7 @@ func TestRunShowSchema_AdvancedOnly(t *testing.T) {
 }
 
 func TestRunShowSchema_HardcodedOnly(t *testing.T) {
-	showSchemaFormat = "table"
+	showSchemaFormat = "text"
 	showSchemaAdvancedOnly = false
 	showSchemaHardcodedOnly = true
 

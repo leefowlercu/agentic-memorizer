@@ -25,7 +25,7 @@ var ShowSchemaCmd = &cobra.Command{
 		"This command shows all possible configuration options with their types, defaults, " +
 		"and whether they appear in the initialized config file. Use this to discover " +
 		"advanced settings not shown during initialization.",
-	Example: `  # Show schema in table format
+	Example: `  # Show schema in text format
   agentic-memorizer config show-schema
 
   # Show schema in YAML format with examples
@@ -41,8 +41,8 @@ var ShowSchemaCmd = &cobra.Command{
 }
 
 func init() {
-	ShowSchemaCmd.Flags().StringVar(&showSchemaFormat, "format", "table",
-		"Output format (table, yaml, json)")
+	ShowSchemaCmd.Flags().StringVar(&showSchemaFormat, "format", "text",
+		"Output format (text, yaml, json)")
 	ShowSchemaCmd.Flags().BoolVar(&showSchemaAdvancedOnly, "advanced-only", false,
 		"Show only advanced settings not in minimal config")
 	ShowSchemaCmd.Flags().BoolVar(&showSchemaHardcodedOnly, "hardcoded-only", false,
@@ -51,7 +51,7 @@ func init() {
 
 func validateShowSchema(cmd *cobra.Command, args []string) error {
 	// Validate format
-	validFormats := []string{"table", "yaml", "json"}
+	validFormats := []string{"text", "yaml", "json"}
 	found := slices.Contains(validFormats, showSchemaFormat)
 	if !found {
 		return fmt.Errorf("invalid format %q; valid formats are: %s", showSchemaFormat, strings.Join(validFormats, ", "))
@@ -71,8 +71,8 @@ func runShowSchema(cmd *cobra.Command, args []string) error {
 	schema := config.GetConfigSchema()
 
 	switch showSchemaFormat {
-	case "table":
-		return printSchemaTable(schema)
+	case "text":
+		return printSchemaText(schema)
 	case "yaml":
 		return printSchemaYAML(schema)
 	case "json":
@@ -82,7 +82,7 @@ func runShowSchema(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func printSchemaTable(schema *config.ConfigSchema) error {
+func printSchemaText(schema *config.ConfigSchema) error {
 	// Build main section
 	mainSection := format.NewSection("Configuration Schema").AddDivider()
 

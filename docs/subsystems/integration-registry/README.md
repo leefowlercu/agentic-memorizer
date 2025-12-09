@@ -16,7 +16,6 @@
       - [Claude Code MCP Adapter](#claude-code-mcp-adapter)
       - [Gemini CLI MCP Adapter](#gemini-cli-mcp-adapter)
       - [Codex CLI MCP Adapter](#codex-cli-mcp-adapter)
-      - [Generic Adapters](#generic-adapters)
    - [Output Processors](#output-processors)
 4. [Integration Points](#integration-points)
    - [CLI Commands](#cli-commands)
@@ -26,11 +25,11 @@
 
 ## Overview
 
-The Integration Registry subsystem provides a framework-agnostic integration system that connects agentic-memorizer with various AI agent platforms including Claude Code, Continue.dev, Cline, Aider, and Cursor AI. It enables automatic or manual setup of memory index integration, allowing agent frameworks to access the precomputed memory index during their sessions through framework-specific output formatting and command generation.
+The Integration Registry subsystem provides a framework-agnostic integration system that connects agentic-memorizer with various AI agent platforms including Claude Code, Gemini CLI, and Codex CLI. It enables automatic setup of memory index integration, allowing agent frameworks to access the precomputed memory index during their sessions through framework-specific output formatting and command generation.
 
 The subsystem follows a plugin-based architecture with three main layers: a thread-safe Registry that manages adapter registration and lookup, Adapter implementations that provide framework-specific integration logic, and Output Processors that handle rendering the index in different formats (XML, Markdown, JSON). This layered design separates concerns cleanly, enabling independent evolution of output formatting, integration wrapping, and registry management.
 
-The Integration Registry distinguishes between specialized adapters (like Claude Code) that provide automatic detection, setup, and framework-specific output wrapping, and generic adapters (for Continue, Cline, Aider, Cursor, and custom integrations) that provide manual setup instructions and plain output formatting. This dual approach balances sophisticated automation for supported platforms with extensibility for emerging frameworks.
+The Integration Registry provides specialized adapters (Claude Code, Gemini CLI, Codex CLI) that offer automatic detection, setup, and framework-specific output wrapping. This approach provides sophisticated automation for all supported platforms.
 
 ## Design Principles
 
@@ -42,7 +41,7 @@ The Integration Registry implements the classic Adapter pattern to provide a uni
 All integrations implement a shared `Integration` interface that defines metadata methods (name, description, version), detection methods (checking if framework is installed), lifecycle methods (setup, update, remove), command generation, output formatting, and validation. This common interface enables the registry to manage integrations polymorphically without knowing implementation details.
 
 **Framework-Specific Implementations:**
-Each adapter encapsulates the specific requirements of its target framework. The Claude Code adapter understands Claude's settings.json format and SessionStart hook mechanism. Generic adapters provide manual setup instructions tailored to their framework's configuration approach. This encapsulation shields the rest of the system from framework-specific complexity.
+Each adapter encapsulates the specific requirements of its target framework. The Claude Code adapter understands Claude's settings.json format and SessionStart hook mechanism, while MCP adapters configure their respective frameworks' MCP server settings. This encapsulation shields the rest of the system from framework-specific complexity.
 
 **Pluggable Architecture:**
 New integrations can be added by implementing the Integration interface and registering with the global registry, typically through an init() function. The registry handles discovery, validation, and lifecycle management automatically. This pluggability enables the system to support new frameworks without modifying existing code or the registry implementation.
@@ -153,7 +152,7 @@ The registry maintains a map from integration name (string) to Integration inter
 
 ### Adapter Implementations
 
-The Integration Registry includes two categories of adapter implementations: specialized adapters for frameworks with deep integration support, and generic adapters for frameworks requiring manual setup.
+The Integration Registry includes specialized adapter implementations for frameworks with deep integration support and automatic setup capabilities.
 
 #### Claude Code Hook Adapter
 
@@ -297,26 +296,6 @@ Unlike Claude Code and Gemini CLI which use JSON, Codex CLI uses TOML format (`~
 **When to Use:**
 The Codex CLI MCP adapter is the only integration option for Codex CLI users. It provides on-demand file discovery and metadata retrieval through MCP tools during Codex CLI chat sessions.
 
-#### Generic Adapters
-
-Generic adapters (`internal/integrations/adapters/generic/`) provide basic integration support for frameworks without specialized implementation, returning manual setup instructions rather than performing automatic configuration.
-
-**Supported Frameworks:**
-- Continue (Markdown output default, registered as "continue")
-- Cline (Markdown output default)
-- Aider (Markdown output default)
-- Cursor AI (Markdown output default, registered as "cursor")
-- Custom (XML output default)
-
-**Behavior:**
-- `Detect()` always returns false (no automatic detection)
-- `IsEnabled()` always returns false (no automatic enablement check)
-- `Setup()` returns error with detailed manual setup instructions specific to the framework
-- `FormatOutput()` uses plain output processors without integration-specific wrapping
-
-**Manual Setup Instructions:**
-Each generic adapter provides tailored instructions for configuring its target framework. These instructions guide users through adding the memory index command to their framework's configuration, typically in settings files or command palettes.
-
 **Configuration Files Modified by Integrations:**
 
 | Integration | Config File | Section |
@@ -400,7 +379,7 @@ Lists all registered integrations with their names, descriptions, versions, and 
 Scans the system for installed frameworks and reports which ones are detected. Useful for discovering what integrations are possible on the current system.
 
 **`integrations setup <name>`:**
-Configures the specified integration. For specialized adapters like Claude Code, performs automatic setup including config file modification. For generic adapters, displays detailed manual setup instructions. Updates `integrations.enabled` list in config.yaml to track configured integrations.
+Configures the specified integration. Performs automatic setup including config file modification and validation. Updates `integrations.enabled` list in config.yaml to track configured integrations.
 
 **`integrations remove <name>`:**
 Removes the specified integration configuration, cleaning up hooks and settings modifications. Restores frameworks to their pre-integration state. Removes integration from `integrations.enabled` list in config.yaml.
@@ -493,8 +472,6 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Global Registry**: Singleton registry instance accessible throughout the application via `GlobalRegistry()`, managing all registered integration adapters.
 
-**Generic Adapter**: Fallback adapter implementation for frameworks without specialized support, providing manual setup instructions instead of automatic configuration.
-
 **Gemini CLI Integration**: MCP-based integration with Google's Gemini CLI tool through stdio transport configuration in `~/.gemini/settings.json`, providing on-demand file search and metadata retrieval via MCP tools.
 
 **Codex CLI Integration**: MCP-based integration with OpenAI's Codex CLI tool through stdio transport configuration in `~/.codex/config.toml` (TOML format), providing on-demand file search and metadata retrieval via MCP tools.
@@ -510,5 +487,3 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 **Settings Preservation**: Practice of reading complete settings files, modifying only specific sections, and writing back all fields to maintain compatibility with unknown features.
 
 **Integration Health Check**: Comprehensive validation process checking framework installation, configuration validity, binary accessibility, and settings file integrity.
-
-**Manual Setup Instructions**: Detailed guidance provided by generic adapters for configuring frameworks that don't support automatic integration setup.

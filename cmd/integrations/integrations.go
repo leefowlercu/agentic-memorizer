@@ -2,19 +2,18 @@ package integrations
 
 import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations/subcommands"
-	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude"  // Register Claude adapter
-	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/codex"   // Register Codex adapter
-	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/gemini"  // Register Gemini adapter
-	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/generic" // Register generic adapters
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/codex"  // Register Codex adapter
+	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/gemini" // Register Gemini adapter
 	"github.com/spf13/cobra"
 )
 
 var IntegrationsCmd = &cobra.Command{
 	Use:   "integrations",
 	Short: "Manage agent framework integrations",
-	Long: "\nManage integrations with agent frameworks like Claude Code, Continue.dev, Cline, etc.\n\n" +
+	Long: "\nManage integrations with various AI agent frameworks.\n\n" +
 		"The integrations command group provides tools for discovering, configuring, and managing " +
-		"integrations with various AI agent frameworks.",
+		"integrations with AI agent frameworks.",
 	Example: `  # List all available integrations
   agentic-memorizer integrations list
 

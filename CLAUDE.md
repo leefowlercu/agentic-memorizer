@@ -356,7 +356,7 @@ Internal types (processing pipeline): FileMetadata, SemanticAnalysis, IndexEntry
 
 The Integration Registry (`internal/integrations/`) provides framework-agnostic integration through:
 
-- **Adapter Pattern** - Common Integration interface with specialized (Claude Code, Gemini CLI, Codex CLI) and generic (Continue, Cline, Aider, Cursor) implementations
+- **Adapter Pattern** - Common Integration interface with specialized implementations (Claude Code, Gemini CLI, Codex CLI)
 - **Registry Pattern** - Thread-safe singleton managing adapter registration and lookup
 - **Output Processors** - Independent formatters (XML, Markdown, JSON) separate from integration wrapping
 - **Auto-registration** - Adapters register via init() functions

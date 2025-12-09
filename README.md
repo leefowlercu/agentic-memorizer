@@ -7,7 +7,7 @@
 [![CI](https://github.com/leefowlercu/agentic-memorizer/workflows/CI/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/ci.yml)
 [![E2E Tests](https://github.com/leefowlercu/agentic-memorizer/workflows/E2E%20Tests/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/e2e-tests.yml)
 
-A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code, Gemini CLI, and OpenAI Codex CLI, plus manual integration support for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks.
+A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code, Gemini CLI, and OpenAI Codex CLI.
 
 **Current Version**: v0.12.1 ([CHANGELOG.md](CHANGELOG.md))
 
@@ -18,8 +18,7 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
   - [Key Capabilities](#key-capabilities)
 - [Why Use This?](#why-use-this)
 - [Supported AI Agent Frameworks](#supported-ai-agent-frameworks)
-  - [Automatic Integration (Native Support)](#automatic-integration-native-support)
-  - [Manual Integration (Configuration Required)](#manual-integration-configuration-required)
+  - [Automatic Integration](#automatic-integration)
   - [Framework Comparison](#framework-comparison)
 - [Architecture](#architecture)
 - [FalkorDB Knowledge Graph](#falkordb-knowledge-graph)
@@ -35,11 +34,6 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
   - [Claude Code Integration (Automatic)](#claude-code-integration-automatic)
   - [Claude Code MCP Integration (Automatic)](#claude-code-mcp-integration-automatic)
   - [OpenAI Codex CLI Integration (Automatic)](#openai-codex-cli-integration-automatic)
-  - [Cursor AI Integration (Manual)](#cursor-ai-integration-manual)
-  - [Continue.dev Integration (Manual)](#continuedev-integration-manual)
-  - [Aider Integration (Manual)](#aider-integration-manual)
-  - [Cline Integration (Manual)](#cline-integration-manual)
-  - [Custom Framework Integration](#custom-framework-integration)
 - [Managing Integrations](#managing-integrations)
 - [Usage](#usage)
   - [Background Daemon (Required)](#background-daemon-required)
@@ -68,7 +62,7 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
 
 Agentic Memorizer provides AI agents with persistent, semantic awareness of your local files. Instead of manually managing which files to include in context or repeatedly explaining what files exist, your AI agent automatically receives a comprehensive, AI-powered index showing what files you have, what they contain, their purpose, and how to access them.
 
-Works seamlessly with Claude Code (automatic setup), Cursor AI, Continue.dev, Aider, Cline, and any custom framework that can execute shell commands.
+Works seamlessly with Claude Code, Gemini CLI, and Codex CLI with automatic setup.
 
 ### How It Works
 
@@ -110,8 +104,7 @@ Your AI agent can then:
 
 **Integration:**
 - Framework-agnostic with native support for multiple AI agent frameworks
-- Automatic setup for Claude Code via SessionStart hooks
-- Manual integration for Cursor AI, Continue.dev, Aider, Cline, and custom frameworks
+- Automatic setup for Claude Code, Gemini CLI, and Codex CLI
 - Configurable output formats (XML, Markdown, JSON)
 - Integration management commands for detection, setup, validation, and health checks
 - Optional health monitoring and logging
@@ -133,9 +126,9 @@ Your AI agent can then:
 
 ## Supported AI Agent Frameworks
 
-Agentic Memorizer integrates with multiple AI agent frameworks, providing either automatic setup or manual integration instructions.
+Agentic Memorizer integrates with multiple AI agent frameworks, providing automatic setup for all supported frameworks.
 
-### Automatic Integration (Native Support)
+### Automatic Integration
 
 **Claude Code** - Full automatic integration with one-command setup
 - Automatic framework detection and configuration
@@ -160,44 +153,15 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing either
 - Full lifecycle management (setup, update, remove, validate)
 - Verification via `/mcp` command in Codex TUI
 
-### Manual Integration (Configuration Required)
-
-The following frameworks require manual configuration file editing. The `integrations setup` command provides detailed, framework-specific instructions:
-
-**Cursor AI** - Manual configuration with context file or custom commands
-- Command: `agentic-memorizer integrations setup cursor`
-- Provides setup instructions for context files or custom commands
-- Markdown output (optimized for readability)
-
-**Continue.dev** - Manual configuration via context providers
-- Command: `agentic-memorizer integrations setup continue`
-- Provides setup instructions for Continue config file (`~/.continue/config.json`)
-- Markdown output (optimized for readability)
-
-**Aider** - Manual integration via shell alias or command execution
-- Command: `agentic-memorizer integrations setup aider`
-- Provides setup instructions for shell aliases or pre-session commands
-- Markdown output (optimized for readability)
-
-**Cline** - Manual configuration via VS Code settings
-- Command: `agentic-memorizer integrations setup cline`
-- Provides setup instructions for Cline extension settings
-- Markdown output (optimized for readability)
-
-**Custom Frameworks** - Generic integration for any framework
-- Works with any agent that can execute shell commands
-- XML, Markdown, or JSON output formats available
-- Just needs ability to execute commands and capture output
-
 ### Framework Comparison
 
-| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (MCP) | Codex CLI (MCP) | Other Frameworks |
-|---------|-------------------|-------------------|------------------|-----------------|------------------|
-| **Setup Type** | Automatic | Automatic | Automatic | Automatic | Manual |
-| **Delivery** | SessionStart injection | On-demand tools | On-demand tools | On-demand tools | User-configured |
-| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) | N/A (tool-based) | Markdown |
-| **Best For** | Complete awareness | Large directories | Large directories | Large directories | Flexibility |
-| **Validation** | Automatic | Automatic | Automatic | Automatic | Manual |
+| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (MCP) | Codex CLI (MCP) |
+|---------|-------------------|-------------------|------------------|-----------------|
+| **Setup Type** | Automatic | Automatic | Automatic | Automatic |
+| **Delivery** | SessionStart injection | On-demand tools | On-demand tools | On-demand tools |
+| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) | N/A (tool-based) |
+| **Best For** | Complete awareness | Large directories | Large directories | Large directories |
+| **Validation** | Automatic | Automatic | Automatic | Automatic |
 
 ## Architecture
 
@@ -236,7 +200,7 @@ The following frameworks require manual configuration file editing. The `integra
 - Tag and topic filtering
 
 **Integration Framework** (`internal/integrations/`):
-- Adapter pattern for Claude Code (hook + MCP), Gemini CLI, Codex CLI, Cursor, Continue, Aider, Cline, custom
+- Adapter pattern for Claude Code (hook + MCP), Gemini CLI, Codex CLI
 - Independent output processors (XML, Markdown, JSON)
 
 **MCP Server** (`internal/mcp/`):
@@ -393,32 +357,6 @@ agentic-memorizer daemon systemctl  # Linux
 agentic-memorizer daemon launchctl  # macOS
 ```
 
-**Skip to step 5 below.**
-
-#### Path B: Other Frameworks (Manual Integration)
-
-For Cursor AI, Continue.dev, Aider, or Cline:
-
-```bash
-# Initialize
-agentic-memorizer initialize
-
-# Start daemon
-agentic-memorizer daemon start
-```
-
-Then get framework-specific setup instructions:
-
-```bash
-# Get setup instructions for your framework
-agentic-memorizer integrations setup cursor      # For Cursor AI
-agentic-memorizer integrations setup continue    # For Continue.dev
-agentic-memorizer integrations setup aider       # For Aider
-agentic-memorizer integrations setup cline       # For Cline
-```
-
-Each command provides detailed instructions on where to add the memory index command in your framework's configuration. **Follow those instructions before proceeding to step 5.**
-
 ### 5. Add Files to Memory
 
 ```bash
@@ -455,7 +393,7 @@ For detailed installation options, configuration, and advanced usage, see the se
 - Go 1.25.1 or later
 - Docker (for FalkorDB knowledge graph)
 - Claude API key ([get one here](https://console.anthropic.com/))
-- An AI agent framework: Claude Code, Cursor AI, Continue.dev, Aider, or Cline
+- An AI agent framework: Claude Code, Gemini CLI, or Codex CLI
 
 ### Build and Install
 
@@ -806,253 +744,6 @@ Remove the MCP integration:
 agentic-memorizer integrations remove codex-cli-mcp
 ```
 
-### Cursor AI Integration (Manual)
-
-Cursor AI requires manual configuration.
-
-#### Setup Instructions
-
-Get framework-specific instructions:
-
-```bash
-agentic-memorizer integrations setup cursor
-```
-
-#### Option A: Context File Generation
-
-Configure a script to regenerate context file:
-
-```bash
-#!/bin/bash
-agentic-memorizer read --format markdown > ~/.cursor/memory-context.md
-```
-
-Add to Cursor's context sources:
-- File path: `~/.cursor/memory-context.md`
-- Auto-reload: Enabled
-
-#### Option B: Custom Command
-
-If Cursor supports custom commands, add:
-
-```json
-{
-  "customCommands": [
-    {
-      "name": "Load Memory",
-      "command": "agentic-memorizer read --format markdown"
-    }
-  ]
-}
-```
-
-**Output Format**: Cursor works best with **Markdown** output (default for this integration).
-
-### Continue.dev Integration (Manual)
-
-Continue.dev requires manual configuration file editing.
-
-#### Setup Instructions
-
-Get framework-specific instructions:
-
-```bash
-agentic-memorizer integrations setup continue
-```
-
-#### Configuration
-
-1. Locate your Continue configuration (typically `~/.continue/config.json` or `.continue/config.json` in your workspace)
-
-2. Add a context provider for agentic-memorizer:
-
-```json
-{
-  "contextProviders": [
-    {
-      "name": "agentic-memory",
-      "params": {
-        "command": "agentic-memorizer read --format markdown"
-      }
-    }
-  ]
-}
-```
-
-3. Restart Continue.dev
-
-#### Usage in Continue
-
-In Continue chat, reference the memory index:
-
-```
-@agentic-memory What files do I have about API design?
-```
-
-**Output Format**: Continue works best with **Markdown** output (default for this integration).
-
-### Aider Integration (Manual)
-
-Aider can access the memory index via shell integration.
-
-#### Setup Instructions
-
-Get framework-specific instructions:
-
-```bash
-agentic-memorizer integrations setup aider
-```
-
-#### Option A: Shell Alias (Recommended)
-
-Add to your shell profile (`~/.bashrc`, `~/.zshrc`):
-
-```bash
-alias aider-with-memory='agentic-memorizer read --format markdown && aider'
-```
-
-Usage:
-
-```bash
-aider-with-memory
-```
-
-#### Option B: Manual Command
-
-Before starting Aider, run:
-
-```bash
-agentic-memorizer read --format markdown > /tmp/memory-index.md
-```
-
-Then in Aider:
-
-```
-/add /tmp/memory-index.md
-```
-
-**Output Format**: Aider works best with **Markdown** output (default for this integration).
-
-### Cline Integration (Manual)
-
-Cline requires manual configuration via VS Code settings.
-
-#### Setup Instructions
-
-Get framework-specific instructions:
-
-```bash
-agentic-memorizer integrations setup cline
-```
-
-#### Configuration
-
-1. Locate your Cline configuration (typically in VS Code settings under Cline extension)
-
-2. Add a startup command or context provider:
-
-```json
-{
-  "cline.contextCommands": [
-    {
-      "name": "Load Memory Index",
-      "command": "agentic-memorizer read --format markdown"
-    }
-  ]
-}
-```
-
-3. Configure Cline to run this command on session start or manually trigger it
-
-#### Usage in Cline
-
-Run the memory index command via Cline's command palette or configure it to run automatically on startup.
-
-**Output Format**: Cline works best with **Markdown** output (default for this integration).
-
-### Custom Framework Integration
-
-Any AI agent framework that can execute shell commands can integrate with agentic-memorizer.
-
-#### Requirements
-
-Your framework must be able to:
-1. Execute shell commands
-2. Capture command output (stdout)
-3. Add output to the agent's context
-
-#### Setup
-
-1. Determine how your framework executes commands at startup or on-demand
-
-2. Configure it to run:
-
-```bash
-agentic-memorizer read --format <xml|markdown|json>
-```
-
-3. Choose output format based on your framework:
-   - **XML**: Best for programmatic parsing, structured data
-   - **Markdown**: Best for human readability, LLM consumption
-   - **JSON**: Best for programmatic integration, custom parsing
-
-#### Example Integration Patterns
-
-**Pattern 1: Startup Hook**
-
-```json
-{
-  "onStartup": {
-    "commands": [
-      "agentic-memorizer read --format markdown"
-    ]
-  }
-}
-```
-
-**Pattern 2: Context Provider**
-
-```json
-{
-  "contextProviders": [
-    {
-      "name": "memory",
-      "command": "agentic-memorizer read --format markdown"
-    }
-  ]
-}
-```
-
-**Pattern 3: Manual Command**
-
-Add a custom agent command that runs:
-
-```bash
-agentic-memorizer read --format markdown
-```
-
-Then invoke it when needed:
-
-```
-@memory What files do I have?
-```
-
-#### Testing Your Integration
-
-1. Ensure daemon is running:
-
-```bash
-agentic-memorizer daemon status
-```
-
-2. Test command output:
-
-```bash
-agentic-memorizer read --format markdown
-```
-
-3. Verify your framework captures and displays the output
-
 ## Managing Integrations
 
 The `integrations` command group provides comprehensive tools for managing integrations with various AI agent frameworks.
@@ -1078,25 +769,15 @@ Shows all registered integrations with their status and configuration:
   Version:     1.0.0
   Status:      configured
 
-○ cursor
-  Description: Cursor AI integration (manual setup required)
+✓ gemini-cli-mcp
+  Description: Gemini CLI MCP server integration
   Version:     1.0.0
-  Status:      not configured
+  Status:      configured
 
-○ continue
-  Description: Continue.dev integration (manual setup required)
+✓ codex-cli-mcp
+  Description: Codex CLI MCP server integration
   Version:     1.0.0
-  Status:      not configured
-
-○ aider
-  Description: Aider integration (manual setup required)
-  Version:     1.0.0
-  Status:      not configured
-
-○ cline
-  Description: Cline integration (manual setup required)
-  Version:     1.0.0
-  Status:      not configured
+  Status:      configured
 ```
 
 ### Detect Installed Frameworks
@@ -1118,40 +799,32 @@ Checks for framework-specific configuration directories and files.
 
 ### Setup an Integration
 
-#### Claude Code (Automatic)
+#### Automatic Setup
+
+All supported integrations offer automatic setup:
 
 ```bash
-# SessionStart hooks setup
+# Claude Code SessionStart hooks
 agentic-memorizer integrations setup claude-code-hook
 
-# MCP server setup
+# Claude Code MCP server
 agentic-memorizer integrations setup claude-code-mcp
+
+# Gemini CLI MCP server
+agentic-memorizer integrations setup gemini-cli-mcp
+
+# Codex CLI MCP server
+agentic-memorizer integrations setup codex-cli-mcp
 
 # With custom binary path
 agentic-memorizer integrations setup claude-code-hook --binary-path /custom/path/agentic-memorizer
 ```
 
-For Claude Code, this automatically:
-- Detects the Claude settings file (`~/.claude/settings.json`)
-- Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
-- Configures the correct command with `--integration claude-code-hook` flag
+Setup automatically:
+- Detects the framework's configuration file
+- Adds appropriate integration configuration
 - Preserves existing settings and creates backup
-
-#### Other Frameworks (Manual Instructions)
-
-```bash
-# Get framework-specific setup instructions
-agentic-memorizer integrations setup cursor      # Cursor AI
-agentic-memorizer integrations setup continue    # Continue.dev
-agentic-memorizer integrations setup aider       # Aider
-agentic-memorizer integrations setup cline       # Cline
-```
-
-Each command provides detailed manual setup instructions specific to that framework, including:
-- Where to find the framework's configuration file
-- What configuration to add
-- Example configuration snippets
-- Recommended output format
+- Validates the configuration
 
 ### Remove an Integration
 

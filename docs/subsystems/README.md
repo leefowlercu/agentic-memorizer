@@ -239,11 +239,6 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 - Claude Code MCP (claude-code-mcp) - MCP server for on-demand tools
 - Gemini CLI MCP (gemini-cli-mcp) - MCP server for Google Gemini CLI
 - Codex CLI MCP (codex-cli-mcp) - MCP server for Codex CLI
-- Continue.dev (manual setup)
-- Cline (manual setup)
-- Aider (manual setup)
-- Cursor AI (manual setup)
-- Custom integrations
 
 **Primary Components:**
 - `internal/integrations/registry.go` - Integration registry
@@ -251,7 +246,6 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 - `internal/integrations/adapters/claude/` - Claude Code adapters (hook & MCP)
 - `internal/integrations/adapters/gemini/` - Gemini CLI MCP adapter
 - `internal/integrations/adapters/codex/` - Codex CLI MCP adapter
-- `internal/integrations/adapters/generic/` - Generic adapter for manual integrations
 - `internal/integrations/output/` - Output processors (XML, Markdown, JSON)
 
 **See:** [integration-registry/README.md](./integration-registry/README.md)

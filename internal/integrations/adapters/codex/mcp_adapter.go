@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
@@ -16,10 +17,10 @@ const (
 	MCPIntegrationName = "codex-cli-mcp"
 
 	// MCPIntegrationVersion is the adapter version
-	MCPIntegrationVersion = "1.0.0"
+	MCPIntegrationVersion = "2.0.0"
 
 	// MCPServerName is the identifier used in ~/.codex/config.toml
-	MCPServerName = "agentic-memorizer"
+	MCPServerName = "memorizer"
 )
 
 // CodexCLIMCPAdapter implements the Integration interface for Codex CLI MCP server
@@ -203,6 +204,12 @@ func (a *CodexCLIMCPAdapter) Validate() error {
 
 	if len(server.Args) == 0 || server.Args[0] != "mcp" {
 		return fmt.Errorf("MCP server has invalid arguments")
+	}
+
+	// Check for old binary name and reject
+	if strings.Contains(server.Command, "agentic-memorizer") {
+		return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
+			MCPIntegrationName, MCPIntegrationName)
 	}
 
 	// Check if binary exists

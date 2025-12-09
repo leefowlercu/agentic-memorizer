@@ -15,7 +15,7 @@ const (
 	IntegrationName = "claude-code-hook"
 
 	// IntegrationVersion is the adapter version
-	IntegrationVersion = "1.0.1"
+	IntegrationVersion = "2.0.0"
 
 	// SessionStartEvent is the hook event name for Claude Code
 	SessionStartEvent = "SessionStart"
@@ -89,10 +89,14 @@ func (a *ClaudeCodeAdapter) IsEnabled() (bool, error) {
 		return false, nil
 	}
 
-	// Look for at least one agentic-memorizer hook
+	// Look for memorizer hook (not old agentic-memorizer)
 	for _, event := range sessionStartEvents {
 		for _, hook := range event.Hooks {
 			if strings.Contains(hook.Command, "agentic-memorizer") {
+				// Found old binary name - report as not enabled
+				return false, nil
+			}
+			if strings.Contains(hook.Command, "memorizer") {
 				return true, nil
 			}
 		}
@@ -148,12 +152,12 @@ func (a *ClaudeCodeAdapter) Remove() error {
 		return nil // Nothing to remove
 	}
 
-	// Filter out agentic-memorizer hooks
+	// Filter out memorizer and old agentic-memorizer hooks
 	filtered := []HookEvent{}
 	for _, event := range sessionStartEvents {
 		filteredHooks := []Hook{}
 		for _, hook := range event.Hooks {
-			if !strings.Contains(hook.Command, "agentic-memorizer") {
+			if !strings.Contains(hook.Command, "agentic-memorizer") && !strings.Contains(hook.Command, "memorizer") {
 				filteredHooks = append(filteredHooks, hook)
 			}
 		}
@@ -205,18 +209,28 @@ func (a *ClaudeCodeAdapter) Validate() error {
 		return fmt.Errorf("no SessionStart hooks configured")
 	}
 
-	// Verify agentic-memorizer hooks exist
-	foundHooks := 0
+	// Check for old binary name and reject
 	for _, event := range sessionStartEvents {
 		for _, hook := range event.Hooks {
 			if strings.Contains(hook.Command, "agentic-memorizer") {
+				return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
+					IntegrationName, IntegrationName)
+			}
+		}
+	}
+
+	// Verify memorizer hooks exist
+	foundHooks := 0
+	for _, event := range sessionStartEvents {
+		for _, hook := range event.Hooks {
+			if strings.Contains(hook.Command, "memorizer") {
 				foundHooks++
 			}
 		}
 	}
 
 	if foundHooks == 0 {
-		return fmt.Errorf("no agentic-memorizer hooks found in SessionStart events")
+		return fmt.Errorf("no memorizer hooks found in SessionStart events")
 	}
 
 	return nil

@@ -17,10 +17,10 @@ const (
 	MCPIntegrationName = "gemini-cli-mcp"
 
 	// MCPIntegrationVersion is the adapter version
-	MCPIntegrationVersion = "1.0.0"
+	MCPIntegrationVersion = "2.0.0"
 
 	// MCPServerName is the identifier used in ~/.gemini/settings.json
-	MCPServerName = "agentic-memorizer"
+	MCPServerName = "memorizer"
 )
 
 // GeminiCLIMCPAdapter implements the Integration interface for Gemini CLI MCP server
@@ -188,6 +188,12 @@ func (a *GeminiCLIMCPAdapter) Validate() error {
 
 	if len(server.Args) == 0 || server.Args[0] != "mcp" {
 		return fmt.Errorf("MCP server has invalid arguments")
+	}
+
+	// Check for old binary name and reject
+	if strings.Contains(server.Command, "agentic-memorizer") {
+		return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
+			MCPIntegrationName, MCPIntegrationName)
 	}
 
 	// Check if binary exists

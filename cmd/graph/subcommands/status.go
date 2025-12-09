@@ -18,9 +18,7 @@ var StatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Check FalkorDB status",
 	Long: "\nCheck the health and status of the FalkorDB knowledge graph.\n\n" +
-		"This command checks if the FalkorDB container is running and connects to it " +
-		"to retrieve statistics about the knowledge graph including node counts, " +
-		"relationship counts, and category distribution.",
+		"Displays whether the FalkorDB container is running and configuration details.",
 	PreRunE: validateStatus,
 	RunE:    runStatus,
 }
@@ -31,12 +29,39 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	section := format.NewSection("FalkorDB Status").AddDivider()
+	// Load config first
+	if err := config.InitConfig(); err != nil {
+		return fmt.Errorf("failed to initialize config; %w", err)
+	}
+
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config; %w", err)
+	}
+
+	section := format.NewSection("Graph Status").AddDivider()
 
 	// Check Docker availability
 	if !docker.IsAvailable() {
 		section.AddKeyValue("Docker", "not installed or not running")
 		section.AddKeyValue("Container", "N/A")
+
+		// Add Configuration subsection
+		configSection := format.NewSection("Configuration").SetLevel(1).AddDivider()
+		configSection.AddKeyValue("Host", cfg.Graph.Host)
+		configSection.AddKeyValuef("Port", "%d", cfg.Graph.Port)
+		configSection.AddKeyValue("Database", cfg.Graph.Database)
+
+		// Mask password
+		passwordValue := "(not set)"
+		if cfg.Graph.Password != "" {
+			passwordValue = "********"
+		}
+		configSection.AddKeyValue("Password", passwordValue)
+
+		configSection.AddKeyValuef("Similarity Threshold", "%.1f", cfg.Graph.SimilarityThreshold)
+		configSection.AddKeyValuef("Max Similar Files", "%d", cfg.Graph.MaxSimilarFiles)
+		section.AddSubsection(configSection)
 
 		formatter, err := format.GetFormatter("text")
 		if err != nil {
@@ -54,12 +79,30 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	section.AddKeyValue("Docker", "available")
 
 	// Check container status
-	if !docker.IsFalkorDBRunning(0) {
+	containerRunning := docker.IsFalkorDBRunning(0)
+	if !containerRunning {
 		if docker.ContainerExists() {
 			section.AddKeyValue("Container", "stopped")
 		} else {
 			section.AddKeyValue("Container", "not created")
 		}
+
+		// Add Configuration subsection
+		configSection := format.NewSection("Configuration").SetLevel(1).AddDivider()
+		configSection.AddKeyValue("Host", cfg.Graph.Host)
+		configSection.AddKeyValuef("Port", "%d", cfg.Graph.Port)
+		configSection.AddKeyValue("Database", cfg.Graph.Database)
+
+		// Mask password
+		passwordValue := "(not set)"
+		if cfg.Graph.Password != "" {
+			passwordValue = "********"
+		}
+		configSection.AddKeyValue("Password", passwordValue)
+
+		configSection.AddKeyValuef("Similarity Threshold", "%.1f", cfg.Graph.SimilarityThreshold)
+		configSection.AddKeyValuef("Max Similar Files", "%d", cfg.Graph.MaxSimilarFiles)
+		section.AddSubsection(configSection)
 
 		formatter, err := format.GetFormatter("text")
 		if err != nil {
@@ -72,25 +115,33 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Println(output)
 
 		if docker.ContainerExists() {
-			fmt.Printf("\nRun 'agentic-memorizer graph start' to start the container.\n")
+			fmt.Printf("\nTo start the graph, run: agentic-memorizer graph start\n")
 		} else {
-			fmt.Printf("\nRun 'agentic-memorizer graph start' to create and start the container.\n")
+			fmt.Printf("\nTo create and start the graph, run: agentic-memorizer graph start\n")
 		}
 		return nil
 	}
 
 	section.AddKeyValue("Container", "running")
 
+	// Add Configuration subsection
+	configSection := format.NewSection("Configuration").SetLevel(1).AddDivider()
+	configSection.AddKeyValue("Host", cfg.Graph.Host)
+	configSection.AddKeyValuef("Port", "%d", cfg.Graph.Port)
+	configSection.AddKeyValue("Database", cfg.Graph.Database)
+
+	// Mask password
+	passwordValue := "(not set)"
+	if cfg.Graph.Password != "" {
+		passwordValue = "********"
+	}
+	configSection.AddKeyValue("Password", passwordValue)
+
+	configSection.AddKeyValuef("Similarity Threshold", "%.1f", cfg.Graph.SimilarityThreshold)
+	configSection.AddKeyValuef("Max Similar Files", "%d", cfg.Graph.MaxSimilarFiles)
+	section.AddSubsection(configSection)
+
 	// Connect to FalkorDB and get stats
-	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config; %w", err)
-	}
-
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config; %w", err)
-	}
-
 	managerConfig := graph.ManagerConfig{
 		Client: graph.ClientConfig{
 			Host:     cfg.Graph.Host,
@@ -169,7 +220,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(output)
 
-	fmt.Printf("\nBrowser UI: http://localhost:3000\n")
+	fmt.Printf("\nBrowser UI: http://%s:3000\n", cfg.Graph.Host)
 
 	return nil
 }

@@ -66,7 +66,7 @@ Works seamlessly with Claude Code, Gemini CLI, and Codex CLI with automatic setu
 
 ### How It Works
 
-A background daemon continuously watches your designated memory directory (`~/.agentic-memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
+A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
 
 When you launch your AI agent, the precomputed index is loaded into its context:
 - **Claude Code**: SessionStart hooks automatically load the index
@@ -132,14 +132,14 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 
 **Claude Code** - Full automatic integration with one-command setup
 - Automatic framework detection and configuration
-- One-command setup: `agentic-memorizer integrations setup claude-code-hook`
+- One-command setup: `memorizer integrations setup claude-code-hook`
 - SessionStart hook configuration with all matchers (startup, resume, clear, compact)
 - Default XML output with JSON envelope wrapping for proper hook formatting
 - Full lifecycle management (setup, update, remove, validate)
 
 **Gemini CLI** - MCP server integration with automatic setup
 - Automatic framework detection and configuration
-- One-command setup: `agentic-memorizer integrations setup gemini-cli-mcp`
+- One-command setup: `memorizer integrations setup gemini-cli-mcp`
 - MCP server configuration in `~/.gemini/settings.json`
 - Provides three on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`
 - Full lifecycle management (setup, update, remove, validate)
@@ -147,7 +147,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 
 **OpenAI Codex CLI** - MCP server integration with automatic setup
 - Automatic framework detection and configuration
-- One-command setup: `agentic-memorizer integrations setup codex-cli-mcp`
+- One-command setup: `memorizer integrations setup codex-cli-mcp`
 - MCP server configuration in `~/.codex/config.toml` (TOML format)
 - Provides three on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`
 - Full lifecycle management (setup, update, remove, validate)
@@ -232,13 +232,13 @@ FalkorDB runs as a Docker container. Start it before the daemon:
 
 ```bash
 # Start FalkorDB container (pulls image on first run)
-agentic-memorizer graph start
+memorizer graph start
 
 # Check status
-agentic-memorizer graph status
+memorizer graph status
 
 # Stop when done
-agentic-memorizer graph stop
+memorizer graph stop
 ```
 
 Or use docker-compose:
@@ -252,20 +252,20 @@ docker-compose down       # Stop FalkorDB
 
 ```bash
 # Start FalkorDB Docker container
-agentic-memorizer graph start [--detach]
+memorizer graph start [--detach]
 
 # Stop FalkorDB container
-agentic-memorizer graph stop [--remove]
+memorizer graph stop [--remove]
 
 # Check FalkorDB status and graph statistics
-agentic-memorizer graph status
+memorizer graph status
 ```
 
-To rebuild the graph, use `agentic-memorizer daemon rebuild [--force]`.
+To rebuild the graph, use `memorizer daemon rebuild [--force]`.
 
 ### Graph Configuration
 
-In `~/.agentic-memorizer/config.yaml`:
+In `~/.memorizer/config.yaml`:
 
 ```yaml
 graph:
@@ -285,21 +285,21 @@ http://localhost:3000
 
 ### Data Persistence
 
-FalkorDB stores data at `/data` inside the container, which is bind-mounted to `~/.agentic-memorizer/falkordb/`. Persistence files (`dump.rdb`) appear in this directory after data is saved.
+FalkorDB stores data at `/data` inside the container, which is bind-mounted to `~/.memorizer/falkordb/`. Persistence files (`dump.rdb`) appear in this directory after data is saved.
 
 **Clearing graph data:**
 
 ```bash
 # Option A: Delete persistence files and restart (simplest)
-rm -rf ~/.agentic-memorizer/falkordb/*
+rm -rf ~/.memorizer/falkordb/*
 docker restart memorizer-falkordb
 
 # Option B: Clear and rebuild via daemon
-agentic-memorizer daemon rebuild --force
+memorizer daemon rebuild --force
 
 # Option C: Remove and recreate container
 docker stop memorizer-falkordb && docker rm memorizer-falkordb
-agentic-memorizer graph start
+memorizer graph start
 ```
 
 ### Graceful Degradation
@@ -331,7 +331,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 
 ```bash
 # Start the knowledge graph database (requires Docker)
-agentic-memorizer graph start
+memorizer graph start
 ```
 
 ### 4. Choose Your Integration Path
@@ -341,28 +341,28 @@ agentic-memorizer graph start
 For Claude Code users, automatic setup configures everything for you:
 
 ```bash
-agentic-memorizer initialize --setup-integrations
+memorizer initialize --setup-integrations
 ```
 
 This will:
-- Create config at `~/.agentic-memorizer/config.yaml`
-- Create memory directory at `~/.agentic-memorizer/memory/`
+- Create config at `~/.memorizer/config.yaml`
+- Create memory directory at `~/.memorizer/memory/`
 - **Automatically configure Claude Code SessionStart hooks and MCP Server integration** (no manual editing required)
 
 Then start the daemon:
 ```bash
-agentic-memorizer daemon start
+memorizer daemon start
 # OR set up as system service (recommended):
-agentic-memorizer daemon systemctl  # Linux
-agentic-memorizer daemon launchctl  # macOS
+memorizer daemon systemctl  # Linux
+memorizer daemon launchctl  # macOS
 ```
 
 ### 5. Add Files to Memory
 
 ```bash
 # Add any files you want your AI agent to be aware of
-cp ~/important-notes.md ~/.agentic-memorizer/memory/
-cp ~/project-docs/*.pdf ~/.agentic-memorizer/memory/documents/
+cp ~/important-notes.md ~/.memorizer/memory/
+cp ~/project-docs/*.pdf ~/.memorizer/memory/documents/
 ```
 
 The daemon will automatically detect and index these files.
@@ -407,26 +407,26 @@ Then run the initialize command to set up configuration:
 
 ```bash
 # Interactive setup (prompts for integrations)
-agentic-memorizer initialize
+memorizer initialize
 
 # Or with flags for automated setup
-agentic-memorizer initialize --setup-integrations
+memorizer initialize --setup-integrations
 ```
 
 This creates:
-- Config file at `~/.agentic-memorizer/config.yaml`
-- Memory directory at `~/.agentic-memorizer/memory/`
-- Cache directory at `~/.agentic-memorizer/.cache/` (for semantic analysis cache)
-- Index file at `~/.agentic-memorizer/index.json` (created by daemon on first run)
+- Config file at `~/.memorizer/config.yaml`
+- Memory directory at `~/.memorizer/memory/`
+- Cache directory at `~/.memorizer/.cache/` (for semantic analysis cache)
+- Index file at `~/.memorizer/index.json` (created by daemon on first run)
 
 The initialize command can optionally configure Claude Code SessionStart hooks automatically with `--setup-integrations`.
 
 After initialization, start the daemon:
 ```bash
-agentic-memorizer daemon start
+memorizer daemon start
 # OR set up as system service (recommended for production):
-agentic-memorizer daemon systemctl  # Linux
-agentic-memorizer daemon launchctl  # macOS
+memorizer daemon systemctl  # Linux
+memorizer daemon launchctl  # macOS
 ```
 
 #### Option 2: Using Makefile
@@ -437,8 +437,8 @@ make install
 ```
 
 This will:
-- Build the `agentic-memorizer` binary with version info from git
-- Install it to `~/.local/bin/agentic-memorizer`
+- Build the `memorizer` binary with version info from git
+- Install it to `~/.local/bin/memorizer`
 
 The build automatically injects version information from git tags and commits, providing accurate version tracking in logs and index files.
 
@@ -450,7 +450,7 @@ Set your API key via environment variable (recommended):
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-Or edit `~/.agentic-memorizer/config.yaml`:
+Or edit `~/.memorizer/config.yaml`:
 
 ```yaml
 claude:
@@ -461,13 +461,13 @@ claude:
 
 ```bash
 # Custom memory directory
-agentic-memorizer initialize --memory-root ~/my-memory
+memorizer initialize --memory-root ~/my-memory
 
 # Custom cache directory
-agentic-memorizer initialize --cache-dir ~/my-memory/.cache
+memorizer initialize --cache-dir ~/my-memory/.cache
 
 # Force overwrite existing config
-agentic-memorizer initialize --force
+memorizer initialize --force
 ```
 
 ## Integration Setup
@@ -479,7 +479,7 @@ Claude Code enjoys full automatic integration support with one-command setup.
 #### Automatic Setup (Recommended)
 
 ```bash
-agentic-memorizer integrations setup claude-code-hook
+memorizer integrations setup claude-code-hook
 ```
 
 This command automatically:
@@ -487,14 +487,14 @@ This command automatically:
 2. Creates or updates `~/.claude/settings.json`
 3. Preserves existing settings (won't overwrite other configurations)
 4. Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
-5. Configures the command: `agentic-memorizer read --format xml --integration claude-code-hook`
+5. Configures the command: `memorizer read --format xml --integration claude-code-hook`
 6. Creates backup at `~/.claude/settings.json.backup`
 
 You can also use the `--setup-integrations` flag during initialization:
 
 ```bash
-agentic-memorizer initialize --setup-integrations
-agentic-memorizer daemon start
+memorizer initialize --setup-integrations
+memorizer daemon start
 ```
 
 #### Manual Setup (Alternative)
@@ -510,7 +510,7 @@ If you prefer manual configuration, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/agentic-memorizer read --format xml --integration claude-code-hook"
+            "command": "/path/to/memorizer read --format xml --integration claude-code-hook"
           }
         ]
       }
@@ -527,7 +527,7 @@ If you prefer manual configuration, add to `~/.claude/settings.json`:
 Verify your setup:
 
 ```bash
-agentic-memorizer integrations validate
+memorizer integrations validate
 ```
 
 #### Removal
@@ -535,7 +535,7 @@ agentic-memorizer integrations validate
 Remove the integration:
 
 ```bash
-agentic-memorizer integrations remove claude-code-hook
+memorizer integrations remove claude-code-hook
 ```
 
 ### Claude Code MCP Integration (Automatic)
@@ -545,13 +545,13 @@ Claude Code also supports integration via the Model Context Protocol (MCP), prov
 #### Automatic Setup (Recommended)
 
 ```bash
-agentic-memorizer integrations setup claude-code-mcp
+memorizer integrations setup claude-code-mcp
 ```
 
 This command automatically:
 1. Detects your Claude Code installation (`~/.claude/` directory)
 2. Creates or updates `~/.claude.json` (MCP server configuration)
-3. Registers the `agentic-memorizer` MCP server
+3. Registers the `memorizer` MCP server
 4. Configures environment variables (`MEMORIZER_MEMORY_ROOT`)
 5. Sets the binary command path
 6. Creates backup at `~/.claude.json.backup`
@@ -614,7 +614,7 @@ The MCP server has dedicated configuration in `config.yaml`:
 
 ```yaml
 mcp:
-  log_file: ~/.agentic-memorizer/mcp.log  # MCP server logs
+  log_file: ~/.memorizer/mcp.log  # MCP server logs
   log_level: info                          # Log level (debug/info/warn/error)
 ```
 
@@ -624,13 +624,13 @@ The MCP server is automatically started by Claude Code when configured. You can 
 
 ```bash
 # Start MCP server in stdio mode
-agentic-memorizer mcp start
+memorizer mcp start
 
 # Start with debug logging
-agentic-memorizer mcp start --log-level debug
+memorizer mcp start --log-level debug
 
 # View MCP logs
-tail -f ~/.agentic-memorizer/mcp.log
+tail -f ~/.memorizer/mcp.log
 ```
 
 The server communicates via stdin/stdout using JSON-RPC 2.0 protocol.
@@ -654,8 +654,8 @@ Many users enable both for maximum flexibility.
 Verify your MCP setup:
 
 ```bash
-agentic-memorizer integrations validate
-agentic-memorizer integrations health
+memorizer integrations validate
+memorizer integrations health
 ```
 
 #### Removal
@@ -663,7 +663,7 @@ agentic-memorizer integrations health
 Remove the MCP integration:
 
 ```bash
-agentic-memorizer integrations remove claude-code-mcp
+memorizer integrations remove claude-code-mcp
 ```
 
 ### OpenAI Codex CLI Integration (Automatic)
@@ -675,7 +675,7 @@ OpenAI Codex CLI supports integration via the Model Context Protocol (MCP), prov
 One-command automatic setup:
 
 ```bash
-agentic-memorizer integrations setup codex-cli-mcp
+memorizer integrations setup codex-cli-mcp
 ```
 
 **What it does:**
@@ -690,12 +690,12 @@ agentic-memorizer integrations setup codex-cli-mcp
 The setup command adds an MCP server entry to your Codex CLI configuration:
 
 ```toml
-[mcp_servers.agentic-memorizer]
-command = "/path/to/agentic-memorizer"
+[mcp_servers.memorizer]
+command = "/path/to/memorizer"
 args = ["mcp", "start"]
 enabled = true
 
-[mcp_servers.agentic-memorizer.env]
+[mcp_servers.memorizer.env]
 MEMORIZER_MEMORY_ROOT = "/path/to/memory"
 ```
 
@@ -728,12 +728,12 @@ codex
 /mcp
 ```
 
-You should see `agentic-memorizer` listed as an active MCP server.
+You should see `memorizer` listed as an active MCP server.
 
 Alternatively, validate via CLI:
 
 ```bash
-agentic-memorizer integrations validate
+memorizer integrations validate
 ```
 
 **Removal:**
@@ -741,7 +741,7 @@ agentic-memorizer integrations validate
 Remove the MCP integration:
 
 ```bash
-agentic-memorizer integrations remove codex-cli-mcp
+memorizer integrations remove codex-cli-mcp
 ```
 
 ## Managing Integrations
@@ -751,7 +751,7 @@ The `integrations` command group provides comprehensive tools for managing integ
 ### List Available Integrations
 
 ```bash
-agentic-memorizer integrations list
+memorizer integrations list
 ```
 
 Shows all registered integrations with their status and configuration:
@@ -785,7 +785,7 @@ Shows all registered integrations with their status and configuration:
 Automatically detect which agent frameworks are installed on your system:
 
 ```bash
-agentic-memorizer integrations detect
+memorizer integrations detect
 ```
 
 **Example Output:**
@@ -805,19 +805,19 @@ All supported integrations offer automatic setup:
 
 ```bash
 # Claude Code SessionStart hooks
-agentic-memorizer integrations setup claude-code-hook
+memorizer integrations setup claude-code-hook
 
 # Claude Code MCP server
-agentic-memorizer integrations setup claude-code-mcp
+memorizer integrations setup claude-code-mcp
 
 # Gemini CLI MCP server
-agentic-memorizer integrations setup gemini-cli-mcp
+memorizer integrations setup gemini-cli-mcp
 
 # Codex CLI MCP server
-agentic-memorizer integrations setup codex-cli-mcp
+memorizer integrations setup codex-cli-mcp
 
 # With custom binary path
-agentic-memorizer integrations setup claude-code-hook --binary-path /custom/path/agentic-memorizer
+memorizer integrations setup claude-code-hook --binary-path /custom/path/memorizer
 ```
 
 Setup automatically:
@@ -829,12 +829,12 @@ Setup automatically:
 ### Remove an Integration
 
 ```bash
-agentic-memorizer integrations remove claude-code-hook
-agentic-memorizer integrations remove claude-code-mcp
+memorizer integrations remove claude-code-hook
+memorizer integrations remove claude-code-mcp
 ```
 
 Removes the integration configuration from the framework's settings file. For Claude Code, this:
-- Removes SessionStart hooks added by agentic-memorizer
+- Removes SessionStart hooks added by memorizer
 - Preserves other hooks and settings
 - Creates backup before modification
 
@@ -843,7 +843,7 @@ Removes the integration configuration from the framework's settings file. For Cl
 Check that all configured integrations are properly set up:
 
 ```bash
-agentic-memorizer integrations validate
+memorizer integrations validate
 ```
 
 **Example Output:**
@@ -863,7 +863,7 @@ Validates:
 Comprehensive health check including both detection and validation:
 
 ```bash
-agentic-memorizer integrations health
+memorizer integrations health
 ```
 
 **Example Output:**
@@ -894,42 +894,42 @@ The background daemon is the core of Agentic Memorizer. It maintains a precomput
 
 ```bash
 # Start the daemon (run in foreground - use Ctrl+C to stop)
-agentic-memorizer daemon start
+memorizer daemon start
 
 # OR set up as system service for automatic management (recommended):
-agentic-memorizer daemon systemctl  # Linux
-agentic-memorizer daemon launchctl  # macOS
+memorizer daemon systemctl  # Linux
+memorizer daemon launchctl  # macOS
 ```
 
-**Note**: If you used `initialize --setup-integrations`, the integration is already configured. Otherwise, configure your AI agent framework to call `agentic-memorizer read` (see Integration Setup section above).
+**Note**: If you used `initialize --setup-integrations`, the integration is already configured. Otherwise, configure your AI agent framework to call `memorizer read` (see Integration Setup section above).
 
 #### Daemon Commands
 
 ```bash
 # Start daemon (runs in foreground - press Ctrl+C to stop)
-agentic-memorizer daemon start
+memorizer daemon start
 
 # Check daemon status
-agentic-memorizer daemon status
+memorizer daemon status
 
 # Stop daemon
-agentic-memorizer daemon stop
+memorizer daemon stop
 
 # Restart daemon
-agentic-memorizer daemon restart
+memorizer daemon restart
 
 # Force immediate rebuild
-agentic-memorizer daemon rebuild                    # Rebuild index
-agentic-memorizer daemon rebuild --force            # Clear graph first, then rebuild
-agentic-memorizer daemon rebuild --clear-old-cache  # Clear stale cache entries before rebuild
+memorizer daemon rebuild                    # Rebuild index
+memorizer daemon rebuild --force            # Clear graph first, then rebuild
+memorizer daemon rebuild --clear-old-cache  # Clear stale cache entries before rebuild
 
 # View daemon logs
-agentic-memorizer daemon logs              # Last 50 lines
-agentic-memorizer daemon logs -f           # Follow logs
-agentic-memorizer daemon logs -n 100       # Last 100 lines
+memorizer daemon logs              # Last 50 lines
+memorizer daemon logs -f           # Follow logs
+memorizer daemon logs -n 100       # Last 100 lines
 
 # Hot-reload configuration without daemon restart
-agentic-memorizer config reload
+memorizer config reload
 ```
 
 #### How It Works
@@ -942,11 +942,11 @@ The daemon:
 5. **Updates** the index automatically when files are added/modified/deleted
 6. **Supports** hot-reload of most configuration settings via `config reload` command
 
-When you run `agentic-memorizer read`, it simply loads the precomputed index from disk instead of analyzing all files.
+When you run `memorizer read`, it simply loads the precomputed index from disk instead of analyzing all files.
 
 #### Daemon Configuration
 
-In `~/.agentic-memorizer/config.yaml`:
+In `~/.memorizer/config.yaml`:
 
 ```yaml
 daemon:
@@ -956,11 +956,11 @@ daemon:
   rate_limit_per_min: 20                 # API rate limit
   full_rebuild_interval_minutes: 60      # Periodic full rebuild interval
   http_port: 0                           # HTTP server for health + SSE (0 = disabled)
-  log_file: ~/.agentic-memorizer/daemon.log
+  log_file: ~/.memorizer/daemon.log
   log_level: info                        # debug, info, warn, error
 ```
 
-**Hot-Reloading**: Most settings can be hot-reloaded using `agentic-memorizer config reload` without restarting the daemon:
+**Hot-Reloading**: Most settings can be hot-reloaded using `memorizer config reload` without restarting the daemon:
 - ✓ `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`
 - ✓ `daemon.full_rebuild_interval_minutes`, `daemon.http_port`
 - ✓ `analysis.*` settings, `claude.*` settings
@@ -982,7 +982,7 @@ For production use, run the daemon as a system service that starts automatically
 Generate a systemd unit file:
 
 ```bash
-agentic-memorizer daemon systemctl
+memorizer daemon systemctl
 ```
 
 This command outputs a complete systemd unit file. To install:
@@ -994,62 +994,62 @@ This command outputs a complete systemd unit file. To install:
 mkdir -p ~/.config/systemd/user
 
 # Generate and save unit file
-agentic-memorizer daemon systemctl > ~/.config/systemd/user/agentic-memorizer.service
+memorizer daemon systemctl > ~/.config/systemd/user/memorizer.service
 
 # Reload systemd
 systemctl --user daemon-reload
 
 # Enable autostart
-systemctl --user enable agentic-memorizer
+systemctl --user enable memorizer
 
 # Start service
-systemctl --user start agentic-memorizer
+systemctl --user start memorizer
 
 # Check status
-systemctl --user status agentic-memorizer
+systemctl --user status memorizer
 
 # View logs
-journalctl --user -u agentic-memorizer -f
+journalctl --user -u memorizer -f
 ```
 
 **Option B: System-Wide Service (Requires root)**
 
 ```bash
 # Generate and save unit file (requires sudo)
-agentic-memorizer daemon systemctl | sudo tee /etc/systemd/system/agentic-memorizer.service
+memorizer daemon systemctl | sudo tee /etc/systemd/system/memorizer.service
 
 # Reload systemd
 sudo systemctl daemon-reload
 
 # Enable autostart
-sudo systemctl enable agentic-memorizer
+sudo systemctl enable memorizer
 
 # Start service
-sudo systemctl start agentic-memorizer
+sudo systemctl start memorizer
 
 # Check status
-systemctl status agentic-memorizer
+systemctl status memorizer
 
 # View logs
-journalctl -u agentic-memorizer -f
+journalctl -u memorizer -f
 ```
 
 **Managing the service:**
 
 ```bash
 # Stop service
-systemctl --user stop agentic-memorizer
+systemctl --user stop memorizer
 
 # Restart service
-systemctl --user restart agentic-memorizer
+systemctl --user restart memorizer
 
 # Disable autostart
-systemctl --user disable agentic-memorizer
+systemctl --user disable memorizer
 
 # Remove service
-systemctl --user stop agentic-memorizer
-systemctl --user disable agentic-memorizer
-rm ~/.config/systemd/user/agentic-memorizer.service
+systemctl --user stop memorizer
+systemctl --user disable memorizer
+rm ~/.config/systemd/user/memorizer.service
 systemctl --user daemon-reload
 ```
 
@@ -1058,7 +1058,7 @@ systemctl --user daemon-reload
 Generate a launchd property list:
 
 ```bash
-agentic-memorizer daemon launchctl
+memorizer daemon launchctl
 ```
 
 This command outputs a complete launchd plist file. To install:
@@ -1068,41 +1068,41 @@ This command outputs a complete launchd plist file. To install:
 mkdir -p ~/Library/LaunchAgents
 
 # Generate and save plist
-agentic-memorizer daemon launchctl > ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+memorizer daemon launchctl > ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
 
 # Load service
-launchctl load ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+launchctl load ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
 
 # Start service (if not running)
-launchctl start com.$(whoami).agentic-memorizer
+launchctl start com.$(whoami).memorizer
 
 # Check if running
-launchctl list | grep agentic-memorizer
+launchctl list | grep memorizer
 ```
 
 **Managing the service:**
 
 ```bash
 # Stop service
-launchctl stop com.$(whoami).agentic-memorizer
+launchctl stop com.$(whoami).memorizer
 
 # Restart service
-launchctl stop com.$(whoami).agentic-memorizer
-launchctl start com.$(whoami).agentic-memorizer
+launchctl stop com.$(whoami).memorizer
+launchctl start com.$(whoami).memorizer
 
 # Disable autostart (unload)
-launchctl unload ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+launchctl unload ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
 
 # Remove service
-launchctl unload ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
-rm ~/Library/LaunchAgents/com.$(whoami).agentic-memorizer.plist
+launchctl unload ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
+rm ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
 ```
 
 **View logs:**
 
 ```bash
 # Tail daemon log
-tail -f ~/.agentic-memorizer/daemon.log
+tail -f ~/.memorizer/daemon.log
 
 # Check Console.app for system messages (macOS)
 open /Applications/Utilities/Console.app
@@ -1127,18 +1127,18 @@ pip install supervisor
 
 **Configure:**
 
-Create `/etc/supervisor/conf.d/agentic-memorizer.conf`:
+Create `/etc/supervisor/conf.d/memorizer.conf`:
 
 ```ini
-[program:agentic-memorizer]
-command=/home/youruser/.local/bin/agentic-memorizer daemon start
+[program:memorizer]
+command=/home/youruser/.local/bin/memorizer daemon start
 directory=/home/youruser
 autostart=true
 autorestart=true
 startretries=3
 user=youruser
 redirect_stderr=true
-stdout_logfile=/var/log/agentic-memorizer/daemon.log
+stdout_logfile=/var/log/memorizer/daemon.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 environment=HOME="/home/youruser"
@@ -1154,19 +1154,19 @@ sudo supervisorctl reread
 sudo supervisorctl update
 
 # Start service
-sudo supervisorctl start agentic-memorizer
+sudo supervisorctl start memorizer
 
 # Check status
-sudo supervisorctl status agentic-memorizer
+sudo supervisorctl status memorizer
 
 # Stop service
-sudo supervisorctl stop agentic-memorizer
+sudo supervisorctl stop memorizer
 
 # Restart service
-sudo supervisorctl restart agentic-memorizer
+sudo supervisorctl restart memorizer
 
 # View logs
-sudo supervisorctl tail -f agentic-memorizer
+sudo supervisorctl tail -f memorizer
 ```
 
 ### Upgrading
@@ -1179,18 +1179,18 @@ When upgrading to a new version, the upgrade process depends on how you're runni
 
 ```bash
 # Stop service
-systemctl --user stop agentic-memorizer
+systemctl --user stop memorizer
 
 # Upgrade binary
 go install github.com/leefowlercu/agentic-memorizer@latest
 # OR: cd /path/to/repo && make install
 
 # Start service
-systemctl --user start agentic-memorizer
+systemctl --user start memorizer
 
 # Verify
-systemctl --user status agentic-memorizer
-agentic-memorizer version
+systemctl --user status memorizer
+memorizer version
 ```
 
 **Or use restart for one command:**
@@ -1199,41 +1199,41 @@ agentic-memorizer version
 make install
 
 # Restart service
-systemctl --user restart agentic-memorizer
+systemctl --user restart memorizer
 ```
 
 **launchd (macOS):**
 
 ```bash
 # Stop service
-launchctl stop com.$(whoami).agentic-memorizer
+launchctl stop com.$(whoami).memorizer
 
 # Upgrade binary
 go install github.com/leefowlercu/agentic-memorizer@latest
 # OR: cd /path/to/repo && make install
 
 # Start service
-launchctl start com.$(whoami).agentic-memorizer
+launchctl start com.$(whoami).memorizer
 
 # Verify
-launchctl list | grep agentic-memorizer
-agentic-memorizer version
+launchctl list | grep memorizer
+memorizer version
 ```
 
 **Supervisor:**
 
 ```bash
 # Stop service
-sudo supervisorctl stop agentic-memorizer
+sudo supervisorctl stop memorizer
 
 # Upgrade binary
 go install github.com/leefowlercu/agentic-memorizer@latest
 
 # Start service
-sudo supervisorctl start agentic-memorizer
+sudo supervisorctl start memorizer
 
 # Verify
-sudo supervisorctl status agentic-memorizer
+sudo supervisorctl status memorizer
 ```
 
 #### Upgrading Manual Daemon
@@ -1242,17 +1242,17 @@ If running daemon manually (not as service):
 
 ```bash
 # Stop daemon
-agentic-memorizer daemon stop
+memorizer daemon stop
 
 # Upgrade
 go install github.com/leefowlercu/agentic-memorizer@latest
 # OR: cd /path/to/repo && make install
 
 # Start daemon
-agentic-memorizer daemon start
+memorizer daemon start
 
 # Verify
-agentic-memorizer version
+memorizer version
 ```
 
 **Note:** The Makefile install target automatically stops the daemon before replacing the binary:
@@ -1270,7 +1270,7 @@ Service files typically **do not need to be regenerated** when upgrading unless:
 
 Service files reference the binary by path, not version:
 ```ini
-ExecStart=/home/user/.local/bin/agentic-memorizer daemon start
+ExecStart=/home/user/.local/bin/memorizer daemon start
 ```
 
 The service manager automatically uses whatever binary exists at that path after upgrade.
@@ -1307,24 +1307,24 @@ Response includes uptime, files processed, API calls, errors, and build status.
 
 **Check daemon status:**
 ```bash
-./agentic-memorizer daemon status
+./memorizer daemon status
 ```
 
 **Common issues:**
 
 1. **Daemon won't start - "daemon already running"**
-   - Check if daemon is actually running: `./agentic-memorizer daemon status`
-   - If not running but PID file exists: `rm ~/.agentic-memorizer/daemon.pid`
+   - Check if daemon is actually running: `./memorizer daemon status`
+   - If not running but PID file exists: `rm ~/.memorizer/daemon.pid`
    - Try starting again
 
 2. **Daemon crashes or exits immediately**
-   - Check logs: `tail -f ~/.agentic-memorizer/daemon.log`
-   - Verify config file: `cat ~/.agentic-memorizer/config.yaml`
+   - Check logs: `tail -f ~/.memorizer/daemon.log`
+   - Verify config file: `cat ~/.memorizer/config.yaml`
    - Ensure Claude API key is set (in config or `ANTHROPIC_API_KEY` env var)
    - Check file permissions on cache directory
 
 3. **Index not updating after file changes**
-   - Verify daemon is running: `./agentic-memorizer daemon status`
+   - Verify daemon is running: `./memorizer daemon status`
    - Check watcher is active in status output
    - Review daemon logs for file watcher errors
    - Ensure files aren't in skipped directories (`.cache`, `.git`)
@@ -1337,12 +1337,12 @@ Response includes uptime, files processed, API calls, errors, and build status.
 
 5. **Index corruption after crash**
    - Daemon automatically loads last good index on startup
-   - Force rebuild: `./agentic-memorizer daemon stop && ./agentic-memorizer daemon start`
-   - If still corrupted: `rm ~/.agentic-memorizer/index.json` and restart
+   - Force rebuild: `./memorizer daemon stop && ./memorizer daemon start`
+   - If still corrupted: `rm ~/.memorizer/index.json` and restart
 
 6. **Service won't start (macOS/Linux)**
    - **macOS**: Check Console.app for launchd errors
-   - **Linux**: Check systemd logs: `journalctl -u agentic-memorizer.service -n 50`
+   - **Linux**: Check systemd logs: `journalctl -u memorizer.service -n 50`
    - Verify binary path in service config matches installation location
    - Check user permissions on config and cache directories
 
@@ -1354,11 +1354,11 @@ daemon:
 
 ### Adding Files to Memory
 
-Simply add files to `~/.agentic-memorizer/memory/` (or the directory you've configured as the `memory_root` in `config.yaml`):
+Simply add files to `~/.memorizer/memory/` (or the directory you've configured as the `memory_root` in `config.yaml`):
 
 ```bash
 # Organize however you like
-~/.agentic-memorizer/memory/
+~/.memorizer/memory/
 ├── documents/
 │   └── project-plan.md
 ├── presentations/
@@ -1375,10 +1375,10 @@ View the precomputed index:
 
 ```bash
 # Start daemon if not already running
-agentic-memorizer daemon start
+memorizer daemon start
 
 # In another terminal, read the index
-agentic-memorizer read
+memorizer read
 ```
 
 This outputs the index (XML by default) that AI agents receive. The daemon must be running (or have completed at least one indexing cycle) for the index file to exist.
@@ -1389,51 +1389,51 @@ This outputs the index (XML by default) that AI agents receive. The daemon must 
 
 ```bash
 # Initialize config and memory directory
-agentic-memorizer initialize [flags]
+memorizer initialize [flags]
 
 # Manage background daemon
-agentic-memorizer daemon start
-agentic-memorizer daemon stop
-agentic-memorizer daemon status
-agentic-memorizer daemon systemctl      # Generate systemd unit file
-agentic-memorizer daemon launchctl      # Generate launchd plist
+memorizer daemon start
+memorizer daemon stop
+memorizer daemon status
+memorizer daemon systemctl      # Generate systemd unit file
+memorizer daemon launchctl      # Generate launchd plist
 
 # Manage FalkorDB knowledge graph
-agentic-memorizer graph start           # Start FalkorDB container
-agentic-memorizer graph stop            # Stop FalkorDB container
-agentic-memorizer graph status          # Check graph health and stats
-agentic-memorizer daemon rebuild        # Rebuild index/graph (use --force to clear first)
+memorizer graph start           # Start FalkorDB container
+memorizer graph stop            # Stop FalkorDB container
+memorizer graph status          # Check graph health and stats
+memorizer daemon rebuild        # Rebuild index/graph (use --force to clear first)
 
 # Manage semantic analysis cache
-agentic-memorizer cache status          # Show cache statistics and version info
-agentic-memorizer cache clear --old-versions  # Clear stale cache entries
-agentic-memorizer cache clear --all     # Clear all cache entries
+memorizer cache status          # Show cache statistics and version info
+memorizer cache clear --old-versions  # Clear stale cache entries
+memorizer cache clear --all     # Clear all cache entries
 
 # Read precomputed index (for SessionStart hooks)
-agentic-memorizer read [flags]
+memorizer read [flags]
 
 # Manage agent framework integrations
-agentic-memorizer integrations list
-agentic-memorizer integrations detect
-agentic-memorizer integrations setup <integration-name>
-agentic-memorizer integrations remove <integration-name>
-agentic-memorizer integrations validate
-agentic-memorizer integrations health
+memorizer integrations list
+memorizer integrations detect
+memorizer integrations setup <integration-name>
+memorizer integrations remove <integration-name>
+memorizer integrations validate
+memorizer integrations health
 
 # MCP server
-agentic-memorizer mcp start
+memorizer mcp start
 
 # Manage configuration
-agentic-memorizer config validate
-agentic-memorizer config reload
+memorizer config validate
+memorizer config reload
 
 # Get help
-agentic-memorizer --help
-agentic-memorizer initialize --help
-agentic-memorizer daemon --help
-agentic-memorizer read --help
-agentic-memorizer integrations --help
-agentic-memorizer config --help
+memorizer --help
+memorizer initialize --help
+memorizer daemon --help
+memorizer read --help
+memorizer integrations --help
+memorizer config --help
 ```
 
 **Common Flags:**
@@ -1456,52 +1456,52 @@ agentic-memorizer config --help
 
 ```bash
 # Initialize (interactive prompts for API key, HTTP port, integrations)
-agentic-memorizer initialize
+memorizer initialize
 
 # Initialize with HTTP API enabled on port 7600 (scripted, no prompt)
-agentic-memorizer initialize --http-port 7600 --setup-integrations
+memorizer initialize --http-port 7600 --setup-integrations
 
 # Read index (XML format)
-agentic-memorizer read
+memorizer read
 
 # Read index (Markdown format)
-agentic-memorizer read --format markdown
+memorizer read --format markdown
 
 # Read index (JSON format)
-agentic-memorizer read --format json
+memorizer read --format json
 
 # Read with Claude Code hook integration (SessionStart)
-agentic-memorizer read --format xml --integration claude-code-hook
+memorizer read --format xml --integration claude-code-hook
 
 # Note: MCP integration uses tools, not read command
 
 # Start daemon
-agentic-memorizer daemon start
+memorizer daemon start
 
 # Check daemon status
-agentic-memorizer daemon status
+memorizer daemon status
 
 # Force rebuild index
-agentic-memorizer daemon rebuild
+memorizer daemon rebuild
 
 # List available integrations
-agentic-memorizer integrations list
+memorizer integrations list
 
 # Detect installed agent frameworks
-agentic-memorizer integrations detect
+memorizer integrations detect
 
 # Setup Claude Code SessionStart hooks
-agentic-memorizer integrations setup claude-code-hook
+memorizer integrations setup claude-code-hook
 
 # Setup Claude Code MCP server
-agentic-memorizer integrations setup claude-code-mcp
+memorizer integrations setup claude-code-mcp
 
 # Remove integrations
-agentic-memorizer integrations remove claude-code-hook
-agentic-memorizer integrations remove claude-code-mcp
+memorizer integrations remove claude-code-hook
+memorizer integrations remove claude-code-mcp
 
 # Validate integration configurations
-agentic-memorizer integrations validate
+memorizer integrations validate
 ```
 
 ### Controlling Semantic Analysis
@@ -1564,8 +1564,8 @@ claude:
 analysis:
   max_file_size: 10485760    # 10MB - files larger than this skip semantic analysis
   skip_extensions: [.zip, .tar, .gz, .exe, .bin, .dmg, .iso]
-  skip_files: [agentic-memorizer]
-  cache_dir: ~/.agentic-memorizer/.cache
+  skip_files: [memorizer]
+  cache_dir: ~/.memorizer/.cache
 
 # Daemon performance tuning
 daemon:
@@ -1573,11 +1573,11 @@ daemon:
   workers: 3                 # Parallel processing workers
   rate_limit_per_min: 20     # Claude API rate limit
   full_rebuild_interval_minutes: 60
-  log_file: ~/.agentic-memorizer/daemon.log
+  log_file: ~/.memorizer/daemon.log
 
 # MCP server settings
 mcp:
-  log_file: ~/.agentic-memorizer/mcp.log
+  log_file: ~/.memorizer/mcp.log
   daemon_host: localhost
   daemon_port: 0             # Set to match daemon.http_port for MCP integration
 
@@ -1596,7 +1596,7 @@ graph:
 To discover all available settings:
 
 ```bash
-agentic-memorizer config show-schema --advanced-only
+memorizer config show-schema --advanced-only
 ```
 
 **Derived Settings** (computed automatically):
@@ -1610,14 +1610,14 @@ See `config.yaml.example` for a complete reference with all available options
 The indexer automatically excludes:
 - Hidden files and directories (starting with `.`)
 - The `.cache/` directory (where analyses are cached)
-- The `agentic-memorizer` binary itself (if located in the memory directory)
+- The `memorizer` binary itself (if located in the memory directory)
 
 You can exclude additional files by name or extension in `config.yaml`:
 
 ```yaml
 analysis:
   skip_files:
-    - agentic-memorizer  # Default
+    - memorizer  # Default
     - my-private-notes.md
     - temp-file.txt
   skip_extensions:
@@ -1633,15 +1633,15 @@ Files matching skip patterns are completely ignored during indexing and won't ap
 
 #### MEMORIZER_APP_DIR
 
-By default, configuration and data files are stored in `~/.agentic-memorizer/`. You can customize this location by setting the `MEMORIZER_APP_DIR` environment variable:
+By default, configuration and data files are stored in `~/.memorizer/`. You can customize this location by setting the `MEMORIZER_APP_DIR` environment variable:
 
 ```bash
 # Use a custom app directory
 export MEMORIZER_APP_DIR=/path/to/custom/location
-agentic-memorizer initialize
+memorizer initialize
 
 # Or for a single command
-MEMORIZER_APP_DIR=/tmp/test-instance agentic-memorizer daemon start
+MEMORIZER_APP_DIR=/tmp/test-instance memorizer daemon start
 ```
 
 Files stored in the app directory:
@@ -1667,9 +1667,9 @@ The memorizer supports three output formats:
 Highly structured XML following Anthropic's recommendations for Claude [prompt engineering](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags):
 
 ```bash
-agentic-memorizer read
+memorizer read
 # or explicitly:
-agentic-memorizer read --format xml
+memorizer read --format xml
 ```
 
 #### Markdown
@@ -1677,7 +1677,7 @@ agentic-memorizer read --format xml
 Human-readable markdown, formatted for direct viewing:
 
 ```bash
-agentic-memorizer read --format markdown
+memorizer read --format markdown
 ```
 
 #### JSON Format
@@ -1685,7 +1685,7 @@ agentic-memorizer read --format markdown
 Pretty-printed JSON representation of the index:
 
 ```bash
-agentic-memorizer read --format json
+memorizer read --format json
 ```
 
 #### Integration-Specific Output
@@ -1694,10 +1694,10 @@ Use the `--integration` flag to format output for specific agent frameworks. Thi
 
 ```bash
 # Claude Code hook integration (SessionStart injection)
-agentic-memorizer read --format xml --integration claude-code-hook
+memorizer read --format xml --integration claude-code-hook
 
 # Can also use markdown or json formats
-agentic-memorizer read --format markdown --integration claude-code-hook
+memorizer read --format markdown --integration claude-code-hook
 
 # Note: MCP integration doesn't use read - uses tools instead
 ```
@@ -2059,20 +2059,20 @@ export ANTHROPIC_API_KEY="your-key-here"
 
 ### Index not appearing in AI agent
 
-1. Verify daemon is running: `agentic-memorizer daemon status`
+1. Verify daemon is running: `memorizer daemon status`
 2. Check your framework's integration configuration:
    - **Claude Code**: Check `~/.claude/settings.json` has SessionStart hooks configured
-   - **Other frameworks**: Verify you followed the setup instructions from `agentic-memorizer integrations setup <framework-name>`
-3. Verify binary path is correct (`~/.local/bin/agentic-memorizer` or `~/go/bin/agentic-memorizer`)
-4. Test manually: `agentic-memorizer read`
+   - **Other frameworks**: Verify you followed the setup instructions from `memorizer integrations setup <framework-name>`
+3. Verify binary path is correct (`~/.local/bin/memorizer` or `~/go/bin/memorizer`)
+4. Test manually: `memorizer read`
 5. Check your AI agent's output/logs for errors
 
 ### Config reload not applying changes
 
 1. Some settings require daemon restart (see Daemon Configuration section)
-2. Validate config syntax: `agentic-memorizer config validate`
-3. Check daemon logs: `tail -f ~/.agentic-memorizer/daemon.log`
-4. If reload fails, restart: `agentic-memorizer daemon restart`
+2. Validate config syntax: `memorizer config validate`
+3. Check daemon logs: `tail -f ~/.memorizer/daemon.log`
+4. If reload fails, restart: `memorizer daemon restart`
 
 ### Reducing resource usage
 
@@ -2088,7 +2088,7 @@ The semantic analysis cache uses versioning to detect stale entries after applic
 **Check cache status:**
 
 ```bash
-agentic-memorizer cache status
+memorizer cache status
 ```
 
 This shows:
@@ -2101,18 +2101,18 @@ This shows:
 
 ```bash
 # Clear only stale/legacy entries
-agentic-memorizer cache clear --old-versions
+memorizer cache clear --old-versions
 
 # Or include with rebuild
-agentic-memorizer daemon rebuild --clear-old-cache
+memorizer daemon rebuild --clear-old-cache
 ```
 
 **Force re-analysis of all files:**
 
 ```bash
 # Clear all cache entries
-agentic-memorizer cache clear --all
-agentic-memorizer daemon restart
+memorizer cache clear --all
+memorizer daemon restart
 ```
 
 **Legacy entries (v0.0.0):** Entries from before cache versioning was implemented. They will be re-analyzed automatically on next daemon rebuild.
@@ -2125,22 +2125,22 @@ If you need to reset the knowledge graph (e.g., seeing stale data, want to start
 
 ```bash
 # Stop daemon first
-agentic-memorizer daemon stop
+memorizer daemon stop
 
 # Delete persistence files
-rm -rf ~/.agentic-memorizer/falkordb/*
+rm -rf ~/.memorizer/falkordb/*
 
 # Restart FalkorDB container
 docker restart memorizer-falkordb
 
 # Start daemon (will rebuild from memory files)
-agentic-memorizer daemon start
+memorizer daemon start
 ```
 
 **Verify graph was cleared:**
 
 ```bash
-agentic-memorizer graph status
+memorizer graph status
 ```
 
 This shows node/relationship counts. After clearing, you should see 5 nodes (category nodes) and 0 files.

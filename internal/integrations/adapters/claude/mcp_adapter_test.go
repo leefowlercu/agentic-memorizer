@@ -156,7 +156,7 @@ func TestClaudeCodeMCPAdapter_Setup(t *testing.T) {
 		serverName: MCPServerName,
 	}
 
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 	err := adapter.Setup(binaryPath)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -219,7 +219,7 @@ func TestClaudeCodeMCPAdapter_Update(t *testing.T) {
 		serverName: MCPServerName,
 	}
 
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 	err := adapter.Update(binaryPath)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -287,7 +287,7 @@ func TestClaudeCodeMCPAdapter_Remove(t *testing.T) {
 
 func TestClaudeCodeMCPAdapter_GetCommand(t *testing.T) {
 	adapter := NewClaudeCodeMCPAdapter()
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 
 	command := adapter.GetCommand(binaryPath, integrations.FormatXML)
 	if command == "" {

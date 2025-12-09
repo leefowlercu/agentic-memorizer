@@ -161,7 +161,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 	metadataExtractor := metadata.NewExtractor()
 
 	skipDirs := []string{".cache", ".git"}
-	skipFiles := []string{"agentic-memorizer"}
+	skipFiles := []string{"memorizer"}
 
 	fileWatcher, err := watcher.New(
 		e.Config.MemoryRoot,

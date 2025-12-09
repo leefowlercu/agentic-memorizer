@@ -70,18 +70,18 @@ func TestGetBinaryPath(t *testing.T) {
 		t.Error("GetBinaryPath() returned empty path without error")
 	}
 
-	// If path is returned, it should contain "agentic-memorizer"
-	if err == nil && !strings.Contains(path, "agentic-memorizer") {
+	// If path is returned, it should contain "memorizer"
+	if err == nil && !strings.Contains(path, "memorizer") {
 		t.Errorf("GetBinaryPath() returned unexpected path: %s", path)
 	}
 }
 
 func TestGenerateUserUnit(t *testing.T) {
 	cfg := SystemdConfig{
-		BinaryPath: "/usr/local/bin/agentic-memorizer",
+		BinaryPath: "/usr/local/bin/memorizer",
 		User:       "testuser",
 		Home:       "/home/testuser",
-		LogFile:    "/home/testuser/.agentic-memorizer/daemon.log",
+		LogFile:    "/home/testuser/.memorizer/daemon.log",
 	}
 
 	unit := GenerateUserUnit(cfg)
@@ -93,7 +93,7 @@ func TestGenerateUserUnit(t *testing.T) {
 		"User=testuser",
 		"Group=testuser",
 		"WorkingDirectory=/home/testuser",
-		"ExecStart=/usr/local/bin/agentic-memorizer daemon start",
+		"ExecStart=/usr/local/bin/memorizer daemon start",
 		"NoNewPrivileges=true",
 		"PrivateTmp=true",
 		`Environment="HOME=/home/testuser"`,
@@ -108,10 +108,10 @@ func TestGenerateUserUnit(t *testing.T) {
 
 func TestGenerateSystemUnit(t *testing.T) {
 	cfg := SystemdConfig{
-		BinaryPath: "/usr/local/bin/agentic-memorizer",
+		BinaryPath: "/usr/local/bin/memorizer",
 		User:       "testuser",
 		Home:       "/home/testuser",
-		LogFile:    "/home/testuser/.agentic-memorizer/daemon.log",
+		LogFile:    "/home/testuser/.memorizer/daemon.log",
 	}
 
 	unit := GenerateSystemUnit(cfg)
@@ -121,7 +121,7 @@ func TestGenerateSystemUnit(t *testing.T) {
 		"Description=Agentic Memorizer Daemon",
 		"Type=notify",
 		"WorkingDirectory=/home/testuser",
-		"ExecStart=/usr/local/bin/agentic-memorizer daemon start",
+		"ExecStart=/usr/local/bin/memorizer daemon start",
 		"WantedBy=multi-user.target",
 	}
 
@@ -155,7 +155,7 @@ func TestGetUserUnitPath(t *testing.T) {
 }
 
 func TestGetSystemUnitPath(t *testing.T) {
-	expected := "/etc/systemd/system/agentic-memorizer.service"
+	expected := "/etc/systemd/system/memorizer.service"
 	path := GetSystemUnitPath()
 
 	if path != expected {
@@ -196,16 +196,16 @@ func TestInstallUserUnit(t *testing.T) {
 }
 
 func TestGetSystemdUserInstructions(t *testing.T) {
-	unitPath := "/home/testuser/.config/systemd/user/agentic-memorizer.service"
+	unitPath := "/home/testuser/.config/systemd/user/memorizer.service"
 	instructions := GetSystemdUserInstructions(unitPath)
 
 	expectedStrings := []string{
 		unitPath,
 		"systemctl --user daemon-reload",
-		"systemctl --user enable agentic-memorizer",
-		"systemctl --user start agentic-memorizer",
-		"systemctl --user status agentic-memorizer",
-		"journalctl --user -u agentic-memorizer -f",
+		"systemctl --user enable memorizer",
+		"systemctl --user start memorizer",
+		"systemctl --user status memorizer",
+		"journalctl --user -u memorizer -f",
 	}
 
 	for _, expected := range expectedStrings {
@@ -221,10 +221,10 @@ func TestGetSystemdSystemInstructions(t *testing.T) {
 
 	expectedStrings := []string{
 		"sudo",
-		"/etc/systemd/system/agentic-memorizer.service",
+		"/etc/systemd/system/memorizer.service",
 		"systemctl daemon-reload",
-		"systemctl enable agentic-memorizer",
-		"systemctl start agentic-memorizer",
+		"systemctl enable memorizer",
+		"systemctl start memorizer",
 		unitContent,
 	}
 
@@ -237,10 +237,10 @@ func TestGetSystemdSystemInstructions(t *testing.T) {
 
 func TestGeneratePlist(t *testing.T) {
 	cfg := LaunchdConfig{
-		BinaryPath: "/usr/local/bin/agentic-memorizer",
+		BinaryPath: "/usr/local/bin/memorizer",
 		User:       "testuser",
 		Home:       "/Users/testuser",
-		LogFile:    "/Users/testuser/.agentic-memorizer/daemon.log",
+		LogFile:    "/Users/testuser/.memorizer/daemon.log",
 	}
 
 	plist := GeneratePlist(cfg)
@@ -249,9 +249,9 @@ func TestGeneratePlist(t *testing.T) {
 		"<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
 		"<!DOCTYPE plist",
 		"<key>Label</key>",
-		"<string>com.testuser.agentic-memorizer</string>",
+		"<string>com.testuser.memorizer</string>",
 		"<key>ProgramArguments</key>",
-		"<string>/usr/local/bin/agentic-memorizer</string>",
+		"<string>/usr/local/bin/memorizer</string>",
 		"<string>daemon</string>",
 		"<string>start</string>",
 		"<key>WorkingDirectory</key>",
@@ -259,7 +259,7 @@ func TestGeneratePlist(t *testing.T) {
 		"<key>RunAtLoad</key>",
 		"<key>KeepAlive</key>",
 		"<key>StandardOutPath</key>",
-		"<string>/Users/testuser/.agentic-memorizer/daemon.log</string>",
+		"<string>/Users/testuser/.memorizer/daemon.log</string>",
 		"<key>StandardErrorPath</key>",
 		"<key>ThrottleInterval</key>",
 		"<integer>30</integer>",
@@ -275,7 +275,7 @@ func TestGeneratePlist(t *testing.T) {
 func TestGetUserAgentPath(t *testing.T) {
 	home := "/Users/testuser"
 	user := "testuser"
-	expected := filepath.Join(home, "Library", "LaunchAgents", "com.testuser.agentic-memorizer.plist")
+	expected := filepath.Join(home, "Library", "LaunchAgents", "com.testuser.memorizer.plist")
 
 	path, err := GetUserAgentPath(home, user)
 	if err != nil {
@@ -289,7 +289,7 @@ func TestGetUserAgentPath(t *testing.T) {
 
 func TestGetSystemDaemonPath(t *testing.T) {
 	user := "testuser"
-	expected := "/Library/LaunchDaemons/com.testuser.agentic-memorizer.plist"
+	expected := "/Library/LaunchDaemons/com.testuser.memorizer.plist"
 
 	path := GetSystemDaemonPath(user)
 
@@ -302,7 +302,7 @@ func TestInstallUserAgent(t *testing.T) {
 	// Use temp directory for testing
 	tempDir := t.TempDir()
 	plistContent := "test plist content"
-	plistPath := filepath.Join(tempDir, "Library", "LaunchAgents", "com.testuser.agentic-memorizer.plist")
+	plistPath := filepath.Join(tempDir, "Library", "LaunchAgents", "com.testuser.memorizer.plist")
 
 	err := InstallUserAgent(plistContent, plistPath)
 	if err != nil {
@@ -331,16 +331,16 @@ func TestInstallUserAgent(t *testing.T) {
 }
 
 func TestGetLaunchdUserInstructions(t *testing.T) {
-	plistPath := "/Users/testuser/Library/LaunchAgents/com.testuser.agentic-memorizer.plist"
+	plistPath := "/Users/testuser/Library/LaunchAgents/com.testuser.memorizer.plist"
 	user := "testuser"
 	instructions := GetLaunchdUserInstructions(plistPath, user)
 
 	expectedStrings := []string{
 		plistPath,
 		"launchctl bootstrap gui/$(id -u)",
-		"launchctl enable gui/$(id -u)/com.testuser.agentic-memorizer",
-		"launchctl kickstart -k gui/$(id -u)/com.testuser.agentic-memorizer",
-		"launchctl list | grep com.testuser.agentic-memorizer",
+		"launchctl enable gui/$(id -u)/com.testuser.memorizer",
+		"launchctl kickstart -k gui/$(id -u)/com.testuser.memorizer",
+		"launchctl list | grep com.testuser.memorizer",
 		"launchctl bootout gui/$(id -u)",
 	}
 
@@ -353,7 +353,7 @@ func TestGetLaunchdUserInstructions(t *testing.T) {
 
 func TestGetLaunchdSystemInstructions(t *testing.T) {
 	plistContent := "test plist content"
-	plistPath := "/Library/LaunchDaemons/com.testuser.agentic-memorizer.plist"
+	plistPath := "/Library/LaunchDaemons/com.testuser.memorizer.plist"
 	instructions := GetLaunchdSystemInstructions(plistContent, plistPath)
 
 	expectedStrings := []string{

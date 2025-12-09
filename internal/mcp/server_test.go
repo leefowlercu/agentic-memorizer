@@ -194,8 +194,8 @@ func TestServer_Initialize(t *testing.T) {
 					t.Errorf("ProtocolVersion = %s, want %s", initResp.ProtocolVersion, initReq.ProtocolVersion)
 				}
 
-				if initResp.ServerInfo.Name != "agentic-memorizer" {
-					t.Errorf("ServerInfo.Name = %s, want agentic-memorizer", initResp.ServerInfo.Name)
+				if initResp.ServerInfo.Name != "memorizer" {
+					t.Errorf("ServerInfo.Name = %s, want memorizer", initResp.ServerInfo.Name)
 				}
 
 				if initResp.Capabilities.Resources == nil {

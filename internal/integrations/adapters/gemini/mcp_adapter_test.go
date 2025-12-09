@@ -155,7 +155,7 @@ func TestGeminiCLIMCPAdapter_Setup(t *testing.T) {
 		serverName: MCPServerName,
 	}
 
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 	err := adapter.Setup(binaryPath)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -226,7 +226,7 @@ func TestGeminiCLIMCPAdapter_Setup_PreservesExistingServers(t *testing.T) {
 		serverName: MCPServerName,
 	}
 
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 	err := adapter.Setup(binaryPath)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -280,7 +280,7 @@ func TestGeminiCLIMCPAdapter_Update(t *testing.T) {
 		serverName: MCPServerName,
 	}
 
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 	err := adapter.Update(binaryPath)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -368,7 +368,7 @@ func TestGeminiCLIMCPAdapter_Remove_ServerNotExists(t *testing.T) {
 
 func TestGeminiCLIMCPAdapter_GetCommand(t *testing.T) {
 	adapter := NewGeminiCLIMCPAdapter()
-	binaryPath := "/usr/local/bin/agentic-memorizer"
+	binaryPath := "/usr/local/bin/memorizer"
 
 	command := adapter.GetCommand(binaryPath, integrations.FormatXML)
 	if command == "" {

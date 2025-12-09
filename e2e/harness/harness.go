@@ -282,30 +282,30 @@ func findBinary(t testing.TB) string {
 	t.Helper()
 
 	// Check if binary exists in /usr/local/bin (Docker environment)
-	if _, err := os.Stat("/usr/local/bin/agentic-memorizer"); err == nil {
-		return "/usr/local/bin/agentic-memorizer"
+	if _, err := os.Stat("/usr/local/bi./memorizer"); err == nil {
+		return "/usr/local/bi./memorizer"
 	}
 
 	// Check if binary exists in workspace root (Docker environment)
-	if _, err := os.Stat("/workspace/agentic-memorizer"); err == nil {
-		return "/workspace/agentic-memorizer"
+	if _, err := os.Stat("/workspac./memorizer"); err == nil {
+		return "/workspac./memorizer"
 	}
 
 	// Check if binary exists in project root from e2e/tests/ directory
-	if _, err := os.Stat("../../agentic-memorizer"); err == nil {
-		abs, _ := filepath.Abs("../../agentic-memorizer")
+	if _, err := os.Stat("../../memorizer"); err == nil {
+		abs, _ := filepath.Abs("../../memorizer")
 		return abs
 	}
 
 	// Check if binary exists in project root from e2e/ directory
-	if _, err := os.Stat("../agentic-memorizer"); err == nil {
-		abs, _ := filepath.Abs("../agentic-memorizer")
+	if _, err := os.Stat("../memorizer"); err == nil {
+		abs, _ := filepath.Abs("../memorizer")
 		return abs
 	}
 
 	// Check in current directory
-	if _, err := os.Stat("./agentic-memorizer"); err == nil {
-		abs, _ := filepath.Abs("./agentic-memorizer")
+	if _, err := os.Stat("./memorizer"); err == nil {
+		abs, _ := filepath.Abs("./memorizer")
 		return abs
 	}
 

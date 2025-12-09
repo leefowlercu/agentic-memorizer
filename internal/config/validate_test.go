@@ -155,7 +155,7 @@ func TestValidateMCP(t *testing.T) {
 		{
 			name: "valid MCP config",
 			mcp: MCPConfig{
-				LogFile:  "~/.agentic-memorizer/mcp.log",
+				LogFile:  "~/.memorizer/mcp.log",
 				LogLevel: "info",
 			},
 			wantErrors: false,
@@ -163,7 +163,7 @@ func TestValidateMCP(t *testing.T) {
 		{
 			name: "valid debug log level",
 			mcp: MCPConfig{
-				LogFile:  "~/.agentic-memorizer/mcp.log",
+				LogFile:  "~/.memorizer/mcp.log",
 				LogLevel: "debug",
 			},
 			wantErrors: false,
@@ -171,7 +171,7 @@ func TestValidateMCP(t *testing.T) {
 		{
 			name: "valid warn log level",
 			mcp: MCPConfig{
-				LogFile:  "~/.agentic-memorizer/mcp.log",
+				LogFile:  "~/.memorizer/mcp.log",
 				LogLevel: "warn",
 			},
 			wantErrors: false,
@@ -179,7 +179,7 @@ func TestValidateMCP(t *testing.T) {
 		{
 			name: "valid error log level",
 			mcp: MCPConfig{
-				LogFile:  "~/.agentic-memorizer/mcp.log",
+				LogFile:  "~/.memorizer/mcp.log",
 				LogLevel: "error",
 			},
 			wantErrors: false,
@@ -187,7 +187,7 @@ func TestValidateMCP(t *testing.T) {
 		{
 			name: "invalid log level",
 			mcp: MCPConfig{
-				LogFile:  "~/.agentic-memorizer/mcp.log",
+				LogFile:  "~/.memorizer/mcp.log",
 				LogLevel: "trace",
 			},
 			wantErrors:  true,
@@ -265,7 +265,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 		{
 			name: "valid config with MCP",
 			cfg: &Config{
-				MemoryRoot: "~/.agentic-memorizer/memory",
+				MemoryRoot: "~/.memorizer/memory",
 				Claude: ClaudeConfig{
 					Model:        "claude-sonnet-4-5-20250929",
 					MaxTokens:    1500,
@@ -273,16 +273,16 @@ func TestValidateConfig_MCP(t *testing.T) {
 					EnableVision: true,
 				},
 				Analysis: AnalysisConfig{
-					CacheDir: "~/.agentic-memorizer/.cache",
+					CacheDir: "~/.memorizer/.cache",
 				},
 				Daemon: DaemonConfig{
 					Workers:         3,
 					RateLimitPerMin: 20,
-					LogFile:         "~/.agentic-memorizer/daemon.log",
+					LogFile:         "~/.memorizer/daemon.log",
 					LogLevel:        "info",
 				},
 				MCP: MCPConfig{
-					LogFile:  "~/.agentic-memorizer/mcp.log",
+					LogFile:  "~/.memorizer/mcp.log",
 					LogLevel: "info",
 				},
 				Graph: GraphConfig{
@@ -297,7 +297,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 		{
 			name: "invalid MCP log level",
 			cfg: &Config{
-				MemoryRoot: "~/.agentic-memorizer/memory",
+				MemoryRoot: "~/.memorizer/memory",
 				Claude: ClaudeConfig{
 					Model:        "claude-sonnet-4-5-20250929",
 					MaxTokens:    1500,
@@ -305,16 +305,16 @@ func TestValidateConfig_MCP(t *testing.T) {
 					EnableVision: true,
 				},
 				Analysis: AnalysisConfig{
-					CacheDir: "~/.agentic-memorizer/.cache",
+					CacheDir: "~/.memorizer/.cache",
 				},
 				Daemon: DaemonConfig{
 					Workers:         3,
 					RateLimitPerMin: 20,
-					LogFile:         "~/.agentic-memorizer/daemon.log",
+					LogFile:         "~/.memorizer/daemon.log",
 					LogLevel:        "info",
 				},
 				MCP: MCPConfig{
-					LogFile:  "~/.agentic-memorizer/mcp.log",
+					LogFile:  "~/.memorizer/mcp.log",
 					LogLevel: "verbose",
 				},
 				Graph: GraphConfig{
@@ -330,7 +330,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 		{
 			name: "unsafe MCP log file path",
 			cfg: &Config{
-				MemoryRoot: "~/.agentic-memorizer/memory",
+				MemoryRoot: "~/.memorizer/memory",
 				Claude: ClaudeConfig{
 					Model:        "claude-sonnet-4-5-20250929",
 					MaxTokens:    1500,
@@ -338,12 +338,12 @@ func TestValidateConfig_MCP(t *testing.T) {
 					EnableVision: true,
 				},
 				Analysis: AnalysisConfig{
-					CacheDir: "~/.agentic-memorizer/.cache",
+					CacheDir: "~/.memorizer/.cache",
 				},
 				Daemon: DaemonConfig{
 					Workers:         3,
 					RateLimitPerMin: 20,
-					LogFile:         "~/.agentic-memorizer/daemon.log",
+					LogFile:         "~/.memorizer/daemon.log",
 					LogLevel:        "info",
 				},
 				MCP: MCPConfig{

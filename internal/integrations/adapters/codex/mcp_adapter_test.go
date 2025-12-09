@@ -141,7 +141,7 @@ func TestCodexCLIMCPAdapter_IsEnabled_ServerExists(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.toml")
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 command = "/usr/bin/test"
 args = ["mcp", "start"]
 enabled = true
@@ -195,7 +195,7 @@ func TestCodexCLIMCPAdapter_IsEnabled_ExplicitlyDisabled(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.toml")
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 command = "/usr/bin/test"
 args = ["mcp", "start"]
 enabled = false
@@ -221,7 +221,7 @@ enabled = false
 func TestCodexCLIMCPAdapter_Setup(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.toml")
-	binaryPath := "/usr/bin/agentic-memorizer"
+	binaryPath := "/usr/bin/memorizer"
 
 	adapter := NewCodexCLIMCPAdapter()
 	adapter.configPath = configPath
@@ -279,7 +279,7 @@ args = ["arg1"]
 
 	adapter := NewCodexCLIMCPAdapter()
 	adapter.configPath = configPath
-	binaryPath := "/usr/bin/agentic-memorizer"
+	binaryPath := "/usr/bin/memorizer"
 
 	err := adapter.Setup(binaryPath)
 	if err != nil {
@@ -408,11 +408,11 @@ func TestCodexCLIMCPAdapter_Remove_ServerNotExists(t *testing.T) {
 
 func TestCodexCLIMCPAdapter_GetCommand(t *testing.T) {
 	adapter := NewCodexCLIMCPAdapter()
-	binaryPath := "/usr/bin/agentic-memorizer"
+	binaryPath := "/usr/bin/memorizer"
 
 	cmd := adapter.GetCommand(binaryPath, integrations.FormatXML)
 
-	expected := "/usr/bin/agentic-memorizer mcp start"
+	expected := "/usr/bin/memorizer mcp start"
 	if cmd != expected {
 		t.Errorf("Expected command %q, got %q", expected, cmd)
 	}
@@ -468,7 +468,7 @@ func TestCodexCLIMCPAdapter_Validate_Disabled(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.toml")
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 command = "/usr/bin/test"
 args = ["mcp", "start"]
 enabled = false
@@ -492,7 +492,7 @@ func TestCodexCLIMCPAdapter_Validate_MissingCommand(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.toml")
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 args = ["mcp", "start"]
 `
 
@@ -514,7 +514,7 @@ func TestCodexCLIMCPAdapter_Validate_InvalidArgs(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.toml")
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 command = "/usr/bin/test"
 args = ["wrong", "args"]
 `
@@ -537,7 +537,7 @@ func TestCodexCLIMCPAdapter_Validate_BinaryNotFound(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.toml")
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 command = "/nonexistent/binary"
 args = ["mcp", "start"]
 `
@@ -566,12 +566,12 @@ func TestCodexCLIMCPAdapter_Validate_Success(t *testing.T) {
 	}
 
 	tomlContent := `
-[mcp_servers.agentic-memorizer]
+[mcp_servers.memorizer]
 command = "` + binaryPath + `"
 args = ["mcp", "start"]
 enabled = true
 
-[mcp_servers.agentic-memorizer.env]
+[mcp_servers.memorizer.env]
 MEMORIZER_MEMORY_ROOT = "/path/to/memory"
 `
 

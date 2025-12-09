@@ -249,7 +249,7 @@ func TestOutputFormats_EmptyIndex(t *testing.T) {
 	// The test reads from the global user memory which may have files,
 	// so we just verify the command runs successfully rather than checking emptiness
 
-	// Read index (may not be empty if user has files in ~/.agentic-memorizer/memory)
+	// Read index (may not be empty if user has files in ~/.memorizer/memory)
 	stdout, stderr, exitCode := h.RunCommand("read", "--format", "json")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)

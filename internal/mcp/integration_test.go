@@ -103,8 +103,8 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 			t.Fatalf("Failed to unmarshal initialize response: %v", err)
 		}
 
-		if initResp.ServerInfo.Name != "agentic-memorizer" {
-			t.Errorf("Server name = %s, want agentic-memorizer", initResp.ServerInfo.Name)
+		if initResp.ServerInfo.Name != "memorizer" {
+			t.Errorf("Server name = %s, want memorizer", initResp.ServerInfo.Name)
 		}
 
 		writeBuf.Reset()

@@ -288,9 +288,9 @@ func TestIntegrations_ClaudeMCP_Setup(t *testing.T) {
 		return
 	}
 
-	agenticMemorizer, ok := mcpServers["agentic-memorizer"].(map[string]any)
+	agenticMemorizer, ok := mcpServers["memorizer"].(map[string]any)
 	if !ok {
-		t.Log("agentic-memorizer server not configured in mcpServers")
+		t.Log("memorizer server not configured in mcpServers")
 		return
 	}
 
@@ -322,7 +322,7 @@ func TestIntegrations_ClaudeMCP_Remove(t *testing.T) {
 	settingsPath := filepath.Join(claudeDir, "settings.json")
 	settings := map[string]any{
 		"mcpServers": map[string]any{
-			"agentic-memorizer": map[string]any{
+			"memorizer": map[string]any{
 				"command": h.BinaryPath + " mcp start",
 			},
 		},
@@ -356,10 +356,10 @@ func TestIntegrations_ClaudeMCP_Remove(t *testing.T) {
 
 	// Check mcpServers section
 	if mcpServers, ok := updatedSettings["mcpServers"].(map[string]any); ok {
-		if _, exists := mcpServers["agentic-memorizer"]; exists {
-			t.Log("agentic-memorizer MCP server still present (may not have been configured)")
+		if _, exists := mcpServers["memorizer"]; exists {
+			t.Log("memorizer MCP server still present (may not have been configured)")
 		} else {
-			t.Log("agentic-memorizer MCP server removed successfully")
+			t.Log("memorizer MCP server removed successfully")
 		}
 	} else {
 		t.Log("mcpServers section not present")
@@ -421,9 +421,9 @@ func TestIntegrations_GeminiMCP_Setup(t *testing.T) {
 		return
 	}
 
-	agenticMemorizer, ok := mcpServers["agentic-memorizer"].(map[string]any)
+	agenticMemorizer, ok := mcpServers["memorizer"].(map[string]any)
 	if !ok {
-		t.Log("agentic-memorizer server not configured in mcpServers")
+		t.Log("memorizer server not configured in mcpServers")
 		return
 	}
 
@@ -495,9 +495,9 @@ func TestIntegrations_CodexMCP_Setup(t *testing.T) {
 		return
 	}
 
-	agenticMemorizer, ok := mcpServers["agentic-memorizer"].(map[string]any)
+	agenticMemorizer, ok := mcpServers["memorizer"].(map[string]any)
 	if !ok {
-		t.Log("agentic-memorizer server not configured in mcpServers")
+		t.Log("memorizer server not configured in mcpServers")
 		return
 	}
 

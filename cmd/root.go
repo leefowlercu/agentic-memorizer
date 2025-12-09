@@ -23,9 +23,8 @@ var memorizerCmd = &cobra.Command{
 	Short: "Local file memorizer for AI agent frameworks",
 	Long: "\nA local file 'memorizer' for AI agent frameworks that provides automatic " +
 		"awareness and understanding of files in your memory directory through AI-powered semantic analysis.\n\n" +
-		"The background daemon continuously maintains a knowledge graph of your memory directory, enabling " +
-		"quick startup for agent sessions. Files are automatically indexed, semantically analyzed, " +
-		"and stored in FalkorDB with relationship information. The graph is available via the 'read' command for framework hooks or tools.",
+		"The background daemon continuously maintains a knowledge graph of your memory directory. Files are automatically indexed and semantically analyzed. " +
+		"The analysis is stored in a graph database with relationship information.",
 	PersistentPreRunE: runInit,
 	// Set custom version output
 	Version: getVersionString(),

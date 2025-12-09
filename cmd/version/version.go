@@ -11,12 +11,12 @@ import (
 var VersionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Display version information",
-	Long: "\nDisplay version information for the agentic-memorizer binary.\n\n" +
+	Long: "\nDisplay version information for the memorizer binary.\n\n" +
 		"Shows the semantic version number, git commit hash, and build timestamp. " +
 		"Version information is injected at build time using ldflags when building " +
 		"with 'make build-release' or 'make install-release'.",
 	Example: `  # Display version information
-  agentic-memorizer version`,
+  memorizer version`,
 	PreRunE: validateVersion,
 	RunE:    runVersion,
 }

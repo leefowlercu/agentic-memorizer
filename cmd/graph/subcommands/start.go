@@ -15,7 +15,7 @@ var StartCmd = &cobra.Command{
 	Short: "Start the FalkorDB container",
 	Long: "\nStart the FalkorDB Docker container for knowledge graph storage.\n\n" +
 		"FalkorDB is required for the daemon to store file metadata, semantic analysis results, " +
-		"and embeddings. The container is started using Docker and persists data in ~/.agentic-memorizer/falkordb/.\n\n" +
+		"and embeddings. The container is started using Docker and persists data in ~/.memorizer/falkordb/.\n\n" +
 		"Use --detach to run the container in the background (default). Without --detach, " +
 		"the container runs in foreground mode and can be stopped with Ctrl+C.",
 	PreRunE: validateStart,

@@ -26,22 +26,22 @@ var InitializeCmd = &cobra.Command{
 		"The initialize command sets up the Agentic Memorizer by creating a default configuration " +
 		"file and the memory directory where you'll store files for analysis and indexing.\n\n" +
 		"By default, runs an interactive TUI wizard. Use --unattended for scripted setup.\n\n" +
-		"After initialization, start the daemon manually with 'agentic-memorizer daemon start' " +
+		"After initialization, start the daemon manually with 'memorizer daemon start' " +
 		"or set up as a system service for automatic management (recommended for production).\n\n" +
-		"By default, configuration and data files are stored in ~/.agentic-memorizer/. " +
+		"By default, configuration and data files are stored in ~/.memorizer/. " +
 		"You can customize this location by setting the MEMORIZER_APP_DIR environment variable " +
 		"before running initialize.",
 	Example: `  # Interactive initialization (TUI wizard)
-  agentic-memorizer initialize
+  memorizer initialize
 
   # Unattended initialization with required flags
-  agentic-memorizer initialize --unattended \
+  memorizer initialize --unattended \
     --use-env-anthropic-api-key \
     --start-falkordb \
     --integrations claude-code-hook,claude-code-mcp
 
   # Unattended with explicit API keys
-  agentic-memorizer initialize --unattended \
+  memorizer initialize --unattended \
     --anthropic-api-key sk-ant-... \
     --openai-api-key sk-... \
     --enable-embeddings \
@@ -49,7 +49,7 @@ var InitializeCmd = &cobra.Command{
     --graph-port 6379
 
   # Force overwrite existing config
-  agentic-memorizer initialize --force`,
+  memorizer initialize --force`,
 	PreRunE: validateInit,
 	RunE:    runInit,
 }
@@ -356,10 +356,10 @@ func handleStartupChoices(result *tuiinit.WizardResult) error {
 				if err := runCommand("systemctl", "--user", "daemon-reload"); err != nil {
 					return fmt.Errorf("failed to reload systemd daemon; %w", err)
 				}
-				if err := runCommand("systemctl", "--user", "enable", "agentic-memorizer"); err != nil {
+				if err := runCommand("systemctl", "--user", "enable", "memorizer"); err != nil {
 					return fmt.Errorf("failed to enable service; %w", err)
 				}
-				if err := runCommand("systemctl", "--user", "start", "agentic-memorizer"); err != nil {
+				if err := runCommand("systemctl", "--user", "start", "memorizer"); err != nil {
 					return fmt.Errorf("failed to start service; %w", err)
 				}
 				fmt.Println("✓ Daemon enabled and started via systemd")
@@ -380,8 +380,8 @@ func handleStartupChoices(result *tuiinit.WizardResult) error {
 				}
 				uid := strings.TrimSpace(string(uidOutput))
 
-				plistPath := fmt.Sprintf("%s/Library/LaunchAgents/com.%s.agentic-memorizer.plist", home, user)
-				serviceName := fmt.Sprintf("gui/%s/com.%s.agentic-memorizer", uid, user)
+				plistPath := fmt.Sprintf("%s/Library/LaunchAgents/com.%s.memorizer.plist", home, user)
+				serviceName := fmt.Sprintf("gui/%s/com.%s.memorizer", uid, user)
 
 				// Bootstrap (load) the agent
 				if err := runCommand("launchctl", "bootstrap", fmt.Sprintf("gui/%s", uid), plistPath); err != nil {
@@ -574,24 +574,24 @@ func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 			// InstallUser + StartLater: service is installed but not started
 			fmt.Printf("   # Service installed - enable and start it:\n")
 			if runtime.GOOS == "linux" {
-				fmt.Printf("   systemctl --user enable agentic-memorizer\n")
-				fmt.Printf("   systemctl --user start agentic-memorizer\n\n")
+				fmt.Printf("   systemctl --user enable memorizer\n")
+				fmt.Printf("   systemctl --user start memorizer\n\n")
 			} else if runtime.GOOS == "darwin" {
 				user := os.Getenv("USER")
-				fmt.Printf("   launchctl enable gui/$(id -u)/com.%s.agentic-memorizer\n", user)
-				fmt.Printf("   launchctl kickstart -k gui/$(id -u)/com.%s.agentic-memorizer\n\n", user)
+				fmt.Printf("   launchctl enable gui/$(id -u)/com.%s.memorizer\n", user)
+				fmt.Printf("   launchctl kickstart -k gui/$(id -u)/com.%s.memorizer\n\n", user)
 			}
 			fmt.Printf("   # Or manually (foreground):\n")
-			fmt.Printf("   agentic-memorizer daemon start\n")
+			fmt.Printf("   memorizer daemon start\n")
 		} else {
 			// InstallSkip or unattended mode: show all options
 			fmt.Printf("   # Option A: Manual (foreground)\n")
-			fmt.Printf("   agentic-memorizer daemon start\n\n")
+			fmt.Printf("   memorizer daemon start\n\n")
 			fmt.Printf("   # Option B: Manual (background)\n")
-			fmt.Printf("   nohup agentic-memorizer daemon start &\n\n")
+			fmt.Printf("   nohup memorizer daemon start &\n\n")
 			fmt.Printf("   # Option C: System service (background, recommended)\n")
-			fmt.Printf("   agentic-memorizer daemon systemctl  # Linux\n")
-			fmt.Printf("   agentic-memorizer daemon launchctl  # macOS\n")
+			fmt.Printf("   memorizer daemon systemctl  # Linux\n")
+			fmt.Printf("   memorizer daemon launchctl  # macOS\n")
 		}
 	}
 }
@@ -611,7 +611,7 @@ func findBinaryPath() (string, error) {
 	// Try to get the current executable path
 	execPath, err := os.Executable()
 	if err == nil {
-		if filepath.Base(execPath) == "agentic-memorizer" {
+		if filepath.Base(execPath) == "memorizer" {
 			return execPath, nil
 		}
 	}
@@ -619,17 +619,17 @@ func findBinaryPath() (string, error) {
 	// Try common installation paths
 	home, err := os.UserHomeDir()
 	if err == nil {
-		commonPath := filepath.Join(home, ".local", "bin", "agentic-memorizer")
+		commonPath := filepath.Join(home, ".local", "bin", "memorizer")
 		if _, err := os.Stat(commonPath); err == nil {
 			return commonPath, nil
 		}
 	}
 
 	// Try PATH
-	pathBinary, err := exec.LookPath("agentic-memorizer")
+	pathBinary, err := exec.LookPath("memorizer")
 	if err == nil {
 		return pathBinary, nil
 	}
 
-	return "", fmt.Errorf("could not locate agentic-memorizer binary")
+	return "", fmt.Errorf("could not locate memorizer binary")
 }

@@ -34,10 +34,10 @@ var ReloadCmd = &cobra.Command{
 		"- analysis.cache_dir\n" +
 		"- daemon.log_file",
 	Example: `  # Reload configuration
-  agentic-memorizer config reload
+  memorizer config reload
 
   # Check what's changed without applying
-  agentic-memorizer config validate`,
+  memorizer config validate`,
 	PreRunE: validateReload,
 	RunE:    runReload,
 }
@@ -125,7 +125,7 @@ func getPIDFilePath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(homeDir, ".agentic-memorizer", "daemon.pid")
+	return filepath.Join(homeDir, ".memorizer", "daemon.pid")
 }
 
 // isDaemonRunning checks if the daemon is running by checking PID file

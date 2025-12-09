@@ -15,19 +15,19 @@ var IntegrationsCmd = &cobra.Command{
 		"The integrations command group provides tools for discovering, configuring, and managing " +
 		"integrations with AI agent frameworks.",
 	Example: `  # List all available integrations
-  agentic-memorizer integrations list
+  memorizer integrations list
 
   # Detect installed agent frameworks
-  agentic-memorizer integrations detect
+  memorizer integrations detect
 
   # Setup a specific integration
-  agentic-memorizer integrations setup claude-code-hook
+  memorizer integrations setup claude-code-hook
 
   # Remove an integration
-  agentic-memorizer integrations remove claude-code-hook
+  memorizer integrations remove claude-code-hook
 
   # Check integration health
-  agentic-memorizer integrations health`,
+  memorizer integrations health`,
 }
 
 func init() {

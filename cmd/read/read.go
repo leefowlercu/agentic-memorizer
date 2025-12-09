@@ -25,19 +25,19 @@ var ReadCmd = &cobra.Command{
 		"SessionStart hooks) to load the memory index into the agent's context.\n\n" +
 		"Uses the graph-native format with flattened FileEntry structures.",
 	Example: `  # Plain XML output (structured format)
-  agentic-memorizer read
+  memorizer read
 
   # Plain markdown output (human-readable)
-  agentic-memorizer read --format markdown
+  memorizer read --format markdown
 
   # Plain JSON output (programmatic access)
-  agentic-memorizer read --format json
+  memorizer read --format json
 
   # Verbose output with insights and related files
-  agentic-memorizer read -v
+  memorizer read -v
 
   # Output wrapped for Claude Code SessionStart hook
-  agentic-memorizer read --integration claude-code-hook`,
+  memorizer read --integration claude-code-hook`,
 	PreRunE: validateRead,
 	RunE:    runRead,
 }
@@ -165,9 +165,9 @@ The graph database is empty or not connected. Ensure:
    docker run -p 6379:6379 falkordb/falkordb
 
 2. The daemon is started to populate the graph:
-   agentic-memorizer daemon start
+   memorizer daemon start
 
-3. Graph is enabled in config (~/.agentic-memorizer/config.yaml):
+3. Graph is enabled in config (~/.memorizer/config.yaml):
    graph:
      enabled: true
 

@@ -13,21 +13,21 @@ var SetupCmd = &cobra.Command{
 	Use:   "setup <integration-name>",
 	Short: "Setup a specific integration",
 	Long: "\nSetup integration with a specific agent framework.\n\n" +
-		"Configures the framework to use agentic-memorizer for memory indexing. The setup process " +
+		"Configures the framework to use memorizer for memory indexing. The setup process " +
 		"varies by framework but typically involves adding hooks or tools to the framework's " +
 		"configuration files.",
 	Example: `  # Setup Claude Code integration
-  agentic-memorizer integrations setup claude-code-hook
+  memorizer integrations setup claude-code-hook
 
   # Setup with custom binary path
-  agentic-memorizer integrations setup claude-code-hook --binary-path /custom/path/agentic-memorizer`,
+  memorizer integrations setup claude-code-hook --binary-path /custom/path/memorizer`,
 	Args:    cobra.ExactArgs(1),
 	PreRunE: validateSetup,
 	RunE:    runSetup,
 }
 
 func init() {
-	SetupCmd.Flags().String("binary-path", "", "Custom path to agentic-memorizer binary (auto-detected if not specified)")
+	SetupCmd.Flags().String("binary-path", "", "Custom path to memorizer binary (auto-detected if not specified)")
 }
 
 func validateSetup(cmd *cobra.Command, args []string) error {
@@ -36,7 +36,7 @@ func validateSetup(cmd *cobra.Command, args []string) error {
 	// Validate integration exists
 	registry := integrations.GlobalRegistry()
 	if _, err := registry.Get(integrationName); err != nil {
-		return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w\n\nRun 'memorizer integrations list' to see available integrations", integrationName, err)
 	}
 
 	// Validate binary path if provided
@@ -73,7 +73,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	registry := integrations.GlobalRegistry()
 	integration, err := registry.Get(integrationName)
 	if err != nil {
-		return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w\n\nRun 'memorizer integrations list' to see available integrations", integrationName, err)
 	}
 
 	// Check if framework is installed (skip for generic adapters)
@@ -92,9 +92,9 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	if enabled {
 		fmt.Printf("%s is already configured.\n", integration.GetName())
 		fmt.Printf("To reconfigure, first remove the integration:\n")
-		fmt.Printf("  agentic-memorizer integrations remove %s\n", integrationName)
+		fmt.Printf("  memorizer integrations remove %s\n", integrationName)
 		fmt.Printf("Then setup again:\n")
-		fmt.Printf("  agentic-memorizer integrations setup %s\n", integrationName)
+		fmt.Printf("  memorizer integrations setup %s\n", integrationName)
 		return nil
 	}
 

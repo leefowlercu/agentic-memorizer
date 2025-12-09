@@ -19,7 +19,7 @@ import (
 )
 
 var memorizerCmd = &cobra.Command{
-	Use:   "agentic-memorizer",
+	Use:   "memorizer",
 	Short: "Local file memorizer for AI agent frameworks",
 	Long: "\nA local file 'memorizer' for AI agent frameworks that provides automatic " +
 		"awareness and understanding of files in your memory directory through AI-powered semantic analysis.\n\n" +

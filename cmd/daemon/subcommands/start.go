@@ -18,7 +18,7 @@ var StartCmd = &cobra.Command{
 	Long: "\nStart the background indexing daemon in foreground mode.\n\n" +
 		"The daemon will continuously monitor the memory directory and rebuild " +
 		"the index as needed. Press Ctrl+C to stop the daemon.\n\n" +
-		"A PID file is created at ~/.agentic-memorizer/daemon.pid to track the running " +
+		"A PID file is created at ~/.memorizer/daemon.pid to track the running " +
 		"daemon. If you encounter 'daemon already running' errors, check the PID file.",
 	PreRunE: validateStart,
 	RunE:    runStart,

@@ -31,13 +31,13 @@ var StartCmd = &cobra.Command{
 		"The server gets data from the daemon HTTP API. Ensure the daemon is running " +
 		"with HTTP port enabled for full functionality.",
 	Example: `  # Start MCP server (typically invoked by AI tool, not manually)
-  agentic-memorizer mcp start
+  memorizer mcp start
 
-  # Start with debug logging (logs to both stderr and ~/.agentic-memorizer/mcp.log)
-  agentic-memorizer mcp start --log-level debug
+  # Start with debug logging (logs to both stderr and ~/.memorizer/mcp.log)
+  memorizer mcp start --log-level debug
 
   # View MCP logs
-  tail -f ~/.agentic-memorizer/mcp.log`,
+  tail -f ~/.memorizer/mcp.log`,
 	PreRunE: validateStart,
 	RunE:    runStart,
 }

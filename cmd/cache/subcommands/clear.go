@@ -86,7 +86,7 @@ func runClearAll(manager *cache.Manager) error {
 	}
 
 	status := format.NewStatus(format.StatusSuccess, "Cache cleared successfully")
-	status.AddDetail("Run 'agentic-memorizer daemon rebuild' to regenerate the cache")
+	status.AddDetail("Run 'memorizer daemon rebuild' to regenerate the cache")
 	return outputStatus(status)
 }
 

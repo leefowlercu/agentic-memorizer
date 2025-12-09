@@ -14,7 +14,7 @@ var RemoveCmd = &cobra.Command{
 	Long: "\nRemove integration configuration from an agent framework.\n\n" +
 		"Removes hooks, tools, or other configuration entries that were added by the setup command.",
 	Example: `  # Remove Claude Code integration
-  agentic-memorizer integrations remove claude-code-hook`,
+  memorizer integrations remove claude-code-hook`,
 	Args:    cobra.ExactArgs(1),
 	PreRunE: validateRemove,
 	RunE:    runRemove,
@@ -26,7 +26,7 @@ func validateRemove(cmd *cobra.Command, args []string) error {
 	// Validate integration exists
 	registry := integrations.GlobalRegistry()
 	if _, err := registry.Get(integrationName); err != nil {
-		return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", integrationName, err)
+		return fmt.Errorf("integration %q not found; %w\n\nRun 'memorizer integrations list' to see available integrations", integrationName, err)
 	}
 
 	// All validation passed - errors after this are runtime errors

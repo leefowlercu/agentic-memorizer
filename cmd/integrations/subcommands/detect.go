@@ -91,7 +91,7 @@ func runDetect(cmd *cobra.Command, args []string) error {
 
 	// Add hint message
 	fmt.Println()
-	fmt.Println("To setup an integration, run: agentic-memorizer integrations setup <integration-name>")
+	fmt.Println("To setup an integration, run: memorizer integrations setup <integration-name>")
 
 	return nil
 }

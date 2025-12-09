@@ -21,10 +21,10 @@ var HealthCmd = &cobra.Command{
 		"  0 - All checked integrations are healthy\n" +
 		"  1 - One or more integrations have issues (useful for CI/CD scripts)",
 	Example: `  # Check health of all integrations
-  agentic-memorizer integrations health
+  memorizer integrations health
 
   # Check health of specific integration
-  agentic-memorizer integrations health claude-code-hook`,
+  memorizer integrations health claude-code-hook`,
 	PreRunE: validateHealth,
 	RunE:    runHealth,
 }
@@ -41,7 +41,7 @@ func validateHealth(cmd *cobra.Command, args []string) error {
 		registry := integrations.GlobalRegistry()
 		for _, name := range specificIntegrations {
 			if _, err := registry.Get(name); err != nil {
-				return fmt.Errorf("integration %q not found; %w\n\nRun 'agentic-memorizer integrations list' to see available integrations", name, err)
+				return fmt.Errorf("integration %q not found; %w\n\nRun 'memorizer integrations list' to see available integrations", name, err)
 			}
 		}
 	}

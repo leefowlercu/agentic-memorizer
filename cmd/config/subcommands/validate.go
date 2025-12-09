@@ -23,13 +23,13 @@ var ValidateCmd = &cobra.Command{
 		"- Enums have valid values\n" +
 		"- Cross-field dependencies are satisfied",
 	Example: `  # Validate current configuration
-  agentic-memorizer config validate
+  memorizer config validate
 
   # Validate and show full config in YAML
-  agentic-memorizer config validate --format yaml
+  memorizer config validate --format yaml
 
   # Validate and show full config in JSON
-  agentic-memorizer config validate --format json`,
+  memorizer config validate --format json`,
 	PreRunE: validateValidate,
 	RunE:    runValidate,
 }

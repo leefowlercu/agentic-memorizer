@@ -96,15 +96,15 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 		if staleCount == 0 {
 			// No stale entries - all entries are current
-			fmt.Printf("\nTo clear the cache, run: agentic-memorizer cache clear --all\n")
+			fmt.Printf("\nTo clear the cache, run: memorizer cache clear --all\n")
 		} else if staleCount < stats.TotalEntries {
 			// Some entries are stale
-			fmt.Printf("\nTo clear stale entries, run: agentic-memorizer cache clear --stale\n")
-			fmt.Printf("To clear all entries, run: agentic-memorizer cache clear --all\n")
+			fmt.Printf("\nTo clear stale entries, run: memorizer cache clear --stale\n")
+			fmt.Printf("To clear all entries, run: memorizer cache clear --all\n")
 		} else {
 			// All entries are stale
 			fmt.Printf("\nAll cache entries are stale.\n")
-			fmt.Printf("To clear the cache, run: agentic-memorizer cache clear {--all|--stale}\n")
+			fmt.Printf("To clear the cache, run: memorizer cache clear {--all|--stale}\n")
 		}
 	}
 

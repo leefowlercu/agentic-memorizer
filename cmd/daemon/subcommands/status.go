@@ -102,7 +102,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Add note if daemon is not running
 	if !running {
-		fmt.Printf("\nTo start the daemon, run: agentic-memorizer daemon start\n")
+		fmt.Printf("\nTo start the daemon, run: memorizer daemon start\n")
 	}
 
 	return nil

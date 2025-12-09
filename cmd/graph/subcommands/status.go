@@ -115,9 +115,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Println(output)
 
 		if docker.ContainerExists() {
-			fmt.Printf("\nTo start the graph, run: agentic-memorizer graph start\n")
+			fmt.Printf("\nTo start the graph, run: memorizer graph start\n")
 		} else {
-			fmt.Printf("\nTo create and start the graph, run: agentic-memorizer graph start\n")
+			fmt.Printf("\nTo create and start the graph, run: memorizer graph start\n")
 		}
 		return nil
 	}

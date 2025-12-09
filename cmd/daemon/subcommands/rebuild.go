@@ -99,7 +99,7 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("daemon is not running; start with 'agentic-memorizer daemon start'")
+		return fmt.Errorf("daemon is not running; start with 'memorizer daemon start'")
 	}
 	defer resp.Body.Close()
 
@@ -136,7 +136,7 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	case http.StatusOK, http.StatusAccepted:
 		fmt.Printf("Rebuild started successfully\n")
 		fmt.Printf("\nThe daemon is now rebuilding the index in the background.\n")
-		fmt.Printf("Use 'agentic-memorizer daemon status' to check progress.\n")
+		fmt.Printf("Use 'memorizer daemon status' to check progress.\n")
 	case http.StatusConflict:
 		fmt.Printf("A rebuild is already in progress\n")
 	default:

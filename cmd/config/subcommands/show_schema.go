@@ -25,13 +25,13 @@ var ShowSchemaCmd = &cobra.Command{
 		"and whether they appear in the initialized config file. Use this to discover " +
 		"advanced settings not shown during initialization.",
 	Example: `  # Show schema in text format
-  agentic-memorizer config show-schema
+  memorizer config show-schema
 
   # Show schema in YAML format with examples
-  agentic-memorizer config show-schema --format yaml
+  memorizer config show-schema --format yaml
 
   # Show only advanced (hidden) settings
-  agentic-memorizer config show-schema --advanced-only`,
+  memorizer config show-schema --advanced-only`,
 	PreRunE: validateShowSchema,
 	RunE:    runShowSchema,
 }

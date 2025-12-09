@@ -64,11 +64,12 @@ func GetAlreadyRunningHelp() string {
 		"  2. Stop daemon: agentic-memorizer daemon stop\n" +
 		"  3. Remove stale PID file: rm ~/.agentic-memorizer/daemon.pid"
 
-	if sm == "systemd" {
+	switch sm {
+	case "systemd":
 		baseHelp += "\n\nIf managed by systemd, use:\n" +
 			"  systemctl --user status agentic-memorizer\n" +
 			"  systemctl --user stop agentic-memorizer"
-	} else if sm == "launchd" {
+	case "launchd":
 		baseHelp += "\n\nIf managed by launchd, use:\n" +
 			"  launchctl list | grep agentic-memorizer\n" +
 			"  launchctl stop com.$USER.agentic-memorizer"
@@ -81,10 +82,11 @@ func GetAlreadyRunningHelp() string {
 func GetNotRunningHelp() string {
 	sm := DetectServiceManager()
 
-	if sm == "systemd" {
+	switch sm {
+	case "systemd":
 		return "\n\nIf managed by systemd, check:\n" +
 			"  systemctl --user status agentic-memorizer"
-	} else if sm == "launchd" {
+	case "launchd":
 		return "\n\nIf managed by launchd, check:\n" +
 			"  launchctl list | grep agentic-memorizer"
 	}
@@ -99,9 +101,10 @@ func GetSignalErrorHelp(pid int) string {
 	msg := fmt.Sprintf("\n\nFailed to signal daemon (PID %d).\n"+
 		"This may indicate the daemon is managed by a service manager.\n", pid)
 
-	if sm == "systemd" {
+	switch sm {
+	case "systemd":
 		msg += "\nTry: systemctl --user stop agentic-memorizer"
-	} else if sm == "launchd" {
+	case "launchd":
 		msg += "\nTry: launchctl stop com.$USER.agentic-memorizer"
 	}
 

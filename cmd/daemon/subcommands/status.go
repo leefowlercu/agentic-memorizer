@@ -1,17 +1,13 @@
 package subcommands
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"os"
-	"runtime"
 	"syscall"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
-	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/spf13/cobra"
 )
 
@@ -19,8 +15,7 @@ var StatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show daemon status",
 	Long: "\nShow the current status of the background indexing daemon.\n\n" +
-		"Displays whether the daemon is running, graph database statistics (queried directly from FalkorDB), " +
-		"and configuration details.",
+		"Displays whether the daemon is running and configuration details.",
 	PreRunE: validateStatus,
 	RunE:    runStatus,
 }
@@ -76,73 +71,23 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		section.AddKeyValue("Status", "Not running")
 	}
 
-	// Add Graph Database subsection
-	graphSection := format.NewSection("Graph Database").SetLevel(1).AddDivider()
-	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-
-	graphConfig := graph.ManagerConfig{
-		Client: graph.ClientConfig{
-			Host:     cfg.Graph.Host,
-			Port:     cfg.Graph.Port,
-			Database: cfg.Graph.Database,
-			Password: cfg.Graph.Password,
-		},
-		Schema:     graph.DefaultSchemaConfig(),
-		MemoryRoot: cfg.MemoryRoot,
-	}
-
-	graphManager := graph.NewManager(graphConfig, logger)
-	var graphNote string
-	if err := graphManager.Initialize(ctx); err != nil {
-		graphSection.AddKeyValue("Status", fmt.Sprintf("Not connected (%s:%d)", cfg.Graph.Host, cfg.Graph.Port))
-		graphSection.AddKeyValue("Error", fmt.Sprintf("%v", err))
-		graphNote = "To start FalkorDB: agentic-memorizer graph start"
-	} else {
-		defer graphManager.Close()
-
-		stats, err := graphManager.GetStats(ctx)
-		if err != nil {
-			graphSection.AddKeyValue("Status", "Connected (failed to get stats)")
-		} else {
-			graphSection.AddKeyValue("Status", fmt.Sprintf("Connected (%s:%d)", cfg.Graph.Host, cfg.Graph.Port))
-			graphSection.AddKeyValue("Database", cfg.Graph.Database)
-			graphSection.AddKeyValuef("Files", "%d", stats.TotalFiles)
-			graphSection.AddKeyValuef("Tags", "%d", stats.TotalTags)
-			graphSection.AddKeyValuef("Topics", "%d", stats.TotalTopics)
-			graphSection.AddKeyValuef("Entities", "%d", stats.TotalEntities)
-			graphSection.AddKeyValuef("Edges", "%d", stats.TotalEdges)
-		}
-	}
-	section.AddSubsection(graphSection)
-
 	// Add Configuration subsection
 	configSection := format.NewSection("Configuration").SetLevel(1).AddDivider()
-	configSection.AddKeyValue("Memory Root", cfg.MemoryRoot)
-	configSection.AddKeyValue("Cache Dir", cfg.Analysis.CacheDir)
-	configSection.AddKeyValuef("Rebuild Interval", "%d minutes", cfg.Daemon.FullRebuildIntervalMinutes)
+	configSection.AddKeyValuef("Debounce Period", "%d ms", cfg.Daemon.DebounceMs)
 	configSection.AddKeyValuef("Workers", "%d", cfg.Daemon.Workers)
 	configSection.AddKeyValuef("Rate Limit", "%d/min", cfg.Daemon.RateLimitPerMin)
-	if cfg.Daemon.HTTPPort > 0 {
-		configSection.AddKeyValuef("HTTP Server", "http://localhost:%d", cfg.Daemon.HTTPPort)
-	}
-	section.AddSubsection(configSection)
+	configSection.AddKeyValuef("Rebuild Interval", "%d minutes", cfg.Daemon.FullRebuildIntervalMinutes)
 
-	// Add Service Management subsection
-	serviceSection := format.NewSection("Service Management").SetLevel(1).AddDivider()
-	sm := daemon.DetectServiceManager()
-	switch sm {
-	case "systemd":
-		serviceSection.AddKeyValue("Platform", "Linux (systemd available)")
-		serviceSection.AddKeyValue("Setup", "agentic-memorizer daemon systemctl")
-	case "launchd":
-		serviceSection.AddKeyValue("Platform", "macOS (launchd available)")
-		serviceSection.AddKeyValue("Setup", "agentic-memorizer daemon launchctl")
-	default:
-		serviceSection.AddKeyValue("Platform", runtime.GOOS)
-		serviceSection.AddKeyValue("Management", "Manual management required")
+	// HTTP Port with "(disabled)" if 0
+	httpPortValue := fmt.Sprintf("%d", cfg.Daemon.HTTPPort)
+	if cfg.Daemon.HTTPPort == 0 {
+		httpPortValue = "0 (disabled)"
 	}
-	section.AddSubsection(serviceSection)
+	configSection.AddKeyValue("HTTP Port", httpPortValue)
+
+	configSection.AddKeyValue("Log File", cfg.Daemon.LogFile)
+	configSection.AddKeyValue("Log Level", cfg.Daemon.LogLevel)
+	section.AddSubsection(configSection)
 
 	// Format and write output
 	formatter, err := format.GetFormatter("text")
@@ -155,21 +100,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(output)
 
-	// Add notes
+	// Add note if daemon is not running
 	if !running {
-		sm := daemon.DetectServiceManager()
-		switch sm {
-		case "systemd":
-			fmt.Println("\nNote: Check if managed by systemd:")
-			fmt.Println("  systemctl --user status agentic-memorizer")
-		case "launchd":
-			fmt.Println("\nNote: Check if managed by launchd:")
-			fmt.Println("  launchctl list | grep agentic-memorizer")
-		}
-	}
-
-	if graphNote != "" {
-		fmt.Printf("\n%s\n", graphNote)
+		fmt.Printf("\nTo start the daemon, run: agentic-memorizer daemon start\n")
 	}
 
 	return nil

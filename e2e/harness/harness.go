@@ -282,13 +282,13 @@ func findBinary(t testing.TB) string {
 	t.Helper()
 
 	// Check if binary exists in /usr/local/bin (Docker environment)
-	if _, err := os.Stat("/usr/local/bi./memorizer"); err == nil {
-		return "/usr/local/bi./memorizer"
+	if _, err := os.Stat("/usr/local/bin/memorizer"); err == nil {
+		return "/usr/local/bin/memorizer"
 	}
 
 	// Check if binary exists in workspace root (Docker environment)
-	if _, err := os.Stat("/workspac./memorizer"); err == nil {
-		return "/workspac./memorizer"
+	if _, err := os.Stat("/workspace/memorizer"); err == nil {
+		return "/workspace/memorizer"
 	}
 
 	// Check if binary exists in project root from e2e/tests/ directory

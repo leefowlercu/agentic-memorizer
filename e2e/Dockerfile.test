@@ -34,7 +34,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary for testing (into /usr/local/bin so it survives volume mount)
-RUN make build && mv ./agentic-memorizer /usr/local/bin/agentic-memorizer
+RUN make build && mv ./memorizer /usr/local/bin/memorizer
 
 # Set up test environment
 ENV PATH="/usr/local/bin:${PATH}"

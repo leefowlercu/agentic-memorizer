@@ -34,6 +34,7 @@ The FalkorDB Knowledge Graph subsystem provides persistent graph-based storage f
 - Store file metadata and semantic analysis in a graph structure
 - Enable relationship traversal for "related files" queries
 - Support graph-powered semantic search via Cypher queries
+- Provide vector similarity search using embeddings (HNSW algorithm)
 - Provide persistent storage that survives daemon restarts
 - Enable rich queries across file relationships
 
@@ -44,8 +45,8 @@ The FalkorDB Knowledge Graph subsystem provides persistent graph-based storage f
 4. **Scalability** - FalkorDB handles large file collections efficiently
 5. **Future Extensibility** - Graph model supports adding new node/edge types
 6. **Hierarchical Organization** - Directory structure and topic hierarchies
-7. **Similarity Search** - Embedding-based vector search for semantic similarity
-8. **Entity Disambiguation** - Normalized entity names for deduplication
+7. **Similarity Search** - Embedding-based vector search for semantic similarity using HNSW index with cosine similarity (1536 dimensions for OpenAI embeddings)
+8. **Entity Disambiguation** - Normalized entity names for deduplication via disambiguation subsystem
 
 ## Design Principles
 
@@ -126,8 +127,10 @@ func (m *Manager) Close() error
 func (m *Manager) IsConnected() bool
 func (m *Manager) Search(ctx context.Context, query string, limit int, categoryFilter string) ([]SearchResult, error)
 func (m *Manager) VectorSearch(ctx context.Context, embedding []float32, limit int) ([]SearchResult, error)
-func (m *Manager) GetRecommendations(ctx context.Context, filePath string, limit int) ([]Recommendation, error)
-func (m *Manager) DetectClusters(ctx context.Context) ([]Cluster, error)
+func (m *Manager) RecommendRelated(ctx context.Context, filePath string, limit int) ([]Recommendation, error)
+func (m *Manager) DetectTopicClusters(ctx context.Context, minSize int) ([]Cluster, error)
+func (m *Manager) DetectEntityClusters(ctx context.Context, minSize int) ([]Cluster, error)
+func (m *Manager) DetectTagClusters(ctx context.Context, minSize int) ([]Cluster, error)
 ```
 
 **Initialization Flow:**
@@ -250,14 +253,27 @@ type Exporter struct {
     logger  *slog.Logger
 }
 
-func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string) (*types.GraphIndex, error)
+// Primary export methods
+func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string, verbose ...bool) (*types.GraphIndex, error)
+func (e *Exporter) ToSummary(ctx context.Context, memoryRoot string, recentDays int, topN int) (*ExportSummary, error)
+func (e *Exporter) GetFileEntry(ctx context.Context, path string, relatedLimit int) (*types.FileEntry, error)
 ```
 
-**Export Process:**
+**ToGraphIndex Export Process:**
 1. Query all File nodes from graph
 2. For each file, retrieve connections (tags, topics, entities)
 3. Build FileEntry from file properties and connections
-4. Assemble GraphIndex with metadata
+4. Assemble GraphIndex with metadata and knowledge summary
+5. In verbose mode: include related files per entry and graph insights (recommendations, clusters, gaps)
+
+**ToSummary Export:**
+- Produces condensed summary with top tags, topics, entities
+- Includes recent files within specified time window
+- Optimized for context window constraints
+
+**GetFileEntry:**
+- Retrieves single file with related files
+- Used by HTTP API for file-specific queries
 
 ### HTTP API
 
@@ -467,7 +483,12 @@ Hierarchical relationships between Topics or Directories.
 - `File.summary` - Full-text search on file summaries
 
 *Vector Index*:
-- `File.embedding` - Similarity search using embeddings (HNSW algorithm, cosine similarity)
+- `File.embedding` - Similarity search using embeddings
+  - Algorithm: HNSW (Hierarchical Navigable Small World)
+  - Similarity function: Cosine similarity
+  - Dimensions: 1536 (default for OpenAI text-embedding-3-small)
+  - M parameter: 16 (HNSW connectivity)
+  - efConstruction: 200 (HNSW build quality)
 
 ## Integration Points
 
@@ -806,7 +827,7 @@ Trigger index rebuild.
 
 ---
 
-**Last Updated:** 2025-12-05
+**Last Updated:** 2025-12-09
 
 **Related Documentation:**
 - [Daemon Subsystem](../daemon/README.md)

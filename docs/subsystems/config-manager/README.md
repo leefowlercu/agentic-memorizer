@@ -81,9 +81,6 @@ memorizer config show-schema
 # Show only advanced settings
 memorizer config show-schema --advanced-only
 
-# Show only hardcoded conventions
-memorizer config show-schema --hardcoded-only
-
 # Output as YAML or JSON
 memorizer config show-schema --format yaml
 ```
@@ -332,8 +329,6 @@ The following settings are hardcoded constants in `internal/config/constants.go`
 - `EmbeddingsCacheEnabled` = true - Embedding caching is always enabled
 - `EmbeddingsBatchSize` = 100 - Batch size for embedding generation
 - `OutputShowRecentDays` = 7 - Days for recent file display
-
-Use `config show-schema --hardcoded-only` to view all hardcoded settings with their reasons.
 
 **AnalysisConfig Structure:**
 Configures semantic analysis behavior:

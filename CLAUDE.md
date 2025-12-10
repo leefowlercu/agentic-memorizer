@@ -405,7 +405,6 @@ Use `config show-schema` to discover all available settings:
 ```bash
 memorizer config show-schema                  # Show all settings
 memorizer config show-schema --advanced-only  # Show advanced settings
-memorizer config show-schema --hardcoded-only # Show hardcoded conventions
 memorizer config show-schema --format yaml    # Output as YAML
 ```
 

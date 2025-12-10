@@ -381,14 +381,21 @@ Then start the daemon:
 memorizer daemon start
 ```
 
-#### Path C: Manual Setup (All Other Frameworks)
+#### Path C: Interactive Setup (All Frameworks)
 
-For other frameworks or manual configuration:
+For any framework, use interactive setup which will prompt you to select integrations:
 
 ```bash
 memorizer initialize
-# Then manually configure your agent framework (see Integration Setup section)
+# Interactive TUI will prompt for integration setup
+# Or skip integration prompts with: memorizer initialize --skip-integrations
 ```
+
+This will:
+- Create config at `~/.memorizer/config.yaml`
+- Create memory directory at `~/.memorizer/memory/`
+- **Prompt you to select which integrations to configure** (Claude Code, Gemini CLI, Codex CLI, or skip)
+- Automatically configure selected integrations (no manual editing required)
 
 ### 5. Add Files to Memory
 

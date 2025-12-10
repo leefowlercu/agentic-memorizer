@@ -224,11 +224,11 @@ Integration adapters use formatters to generate framework-specific output. The `
 
 **Integration Output Paths:**
 
-1. **Claude Code Hook** (`internal/integrations/adapters/claude/hook_output.go`): Uses XML formatter for SessionStart hook injection. Wraps XML in JSON envelope with systemMessage field.
+1. **Claude Code Hook** (`internal/integrations/adapters/claude/hook_output.go`): Supports multiple formatters (XML, Markdown, JSON) for SessionStart hook injection. Defaults to XML format. Wraps formatted output in JSON envelope with systemMessage field.
 
-2. **Generic Adapters** (`internal/integrations/adapters/generic/adapter.go`): Uses markdown formatter for integration output. Provides rich formatting with emojis and tables.
+2. **MCP Server** (`internal/mcp/server.go`): Provides all three formatters (XML, Markdown, JSON) via resource URIs (`memorizer://index`, `memorizer://index/markdown`, `memorizer://index/json`). Tool responses use JSON-RPC 2.0 structure with formatted content.
 
-3. **MCP Server** (`internal/mcp/server.go`): Uses JSON formatter for tool responses. Ensures proper JSON-RPC 2.0 structure.
+3. **MCP Adapters** (`internal/integrations/adapters/*/mcp_adapter.go`): Do not use formatters directly. Output is provided through MCP protocol resources and tool responses rather than via FormatOutput method.
 
 **Why GraphContent Builder?**
 
@@ -271,3 +271,7 @@ The daemon serves formatted graph content via the `/api/v1/graph` endpoint, usin
 **GraphContent**: Special builder wrapping `types.GraphIndex` for integration output, preserving backward compatibility with legacy XML/markdown formats.
 
 **init() Registration**: Go pattern where packages register components during initialization, making systems self-configuring without explicit wiring.
+
+---
+
+**Last Updated:** 2025-12-09

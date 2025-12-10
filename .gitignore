@@ -1,5 +1,6 @@
 # Binaries
-/agentic-memorizer
+agentic-memorizer
+memorizer
 *.exe
 *.dll
 *.so

@@ -389,7 +389,7 @@ func TestCache_ClearRequiresFlag(t *testing.T) {
 
 	output := stdout + stderr
 	harness.AssertContains(t, output, "--all")
-	harness.AssertContains(t, output, "--old-versions")
+	harness.AssertContains(t, output, "--stale")
 }
 
 // TestCache_ClearAll tests the cache clear --all command
@@ -417,8 +417,8 @@ func TestCache_ClearAll(t *testing.T) {
 	harness.AssertContains(t, stdout2, "Total Entries:  0")
 }
 
-// TestCache_ClearOldVersions tests the cache clear --old-versions command
-func TestCache_ClearOldVersions(t *testing.T) {
+// TestCache_ClearStale tests the cache clear --stale command
+func TestCache_ClearStale(t *testing.T) {
 	h := harness.New(t)
 	if err := h.Setup(); err != nil {
 		t.Fatalf("Setup failed: %v", err)
@@ -426,8 +426,8 @@ func TestCache_ClearOldVersions(t *testing.T) {
 	cleanup := harness.MustCleanup(t, h)
 	defer cleanup.CleanupAll()
 
-	// Clear old versions (should have no effect on empty/current-only cache)
-	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--old-versions")
+	// Clear stale entries (should have no effect on empty/current-only cache)
+	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--stale")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 	// Should indicate no stale entries to clear
@@ -437,7 +437,7 @@ func TestCache_ClearOldVersions(t *testing.T) {
 	}
 }
 
-// TestCache_ClearMutuallyExclusive tests that --all and --old-versions are mutually exclusive
+// TestCache_ClearMutuallyExclusive tests that --all and --stale are mutually exclusive
 func TestCache_ClearMutuallyExclusive(t *testing.T) {
 	h := harness.New(t)
 	if err := h.Setup(); err != nil {
@@ -447,7 +447,7 @@ func TestCache_ClearMutuallyExclusive(t *testing.T) {
 	defer cleanup.CleanupAll()
 
 	// Try to use both flags
-	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--all", "--old-versions")
+	stdout, stderr, exitCode := h.RunCommand("cache", "clear", "--all", "--stale")
 
 	// Should fail
 	if exitCode == 0 {

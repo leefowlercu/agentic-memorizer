@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/steps"
@@ -124,13 +123,8 @@ func (m WizardModel) View() string {
 	stepContent := m.steps[m.currentStep].View()
 	b.WriteString(stepContent)
 
-	// Apply container styling
+	// Apply container styling (horizontal padding only)
 	content := styles.Container.Render(b.String())
-
-	// Center if terminal is wide enough
-	if m.width > 100 {
-		content = lipgloss.PlaceHorizontal(m.width, lipgloss.Center, content)
-	}
 
 	return content
 }

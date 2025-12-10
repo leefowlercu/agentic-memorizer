@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	forceRebuild  bool
-	clearOldCache bool
+	forceRebuild bool
+	clearStale   bool
 )
 
 var RebuildCmd = &cobra.Command{
@@ -25,7 +25,7 @@ var RebuildCmd = &cobra.Command{
 		"analysis, and rebuilding all graph relationships.\n\n" +
 		"Use --force to clear the graph before rebuilding (otherwise, existing entries " +
 		"are updated in place).\n\n" +
-		"Use --clear-old-cache to remove stale cache entries before rebuilding. This ensures " +
+		"Use --clear-stale to remove stale cache entries before rebuilding. This ensures " +
 		"files are re-analyzed with the current analysis version.",
 	PreRunE: validateRebuild,
 	RunE:    runRebuild,
@@ -33,7 +33,7 @@ var RebuildCmd = &cobra.Command{
 
 func init() {
 	RebuildCmd.Flags().BoolVarP(&forceRebuild, "force", "f", false, "Clear graph before rebuilding")
-	RebuildCmd.Flags().BoolVar(&clearOldCache, "clear-old-cache", false, "Clear stale cache entries before rebuilding")
+	RebuildCmd.Flags().BoolVar(&clearStale, "clear-stale", false, "Clear stale cache entries before rebuilding")
 }
 
 func validateRebuild(cmd *cobra.Command, args []string) error {
@@ -53,7 +53,7 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	// Clear stale cache entries if requested
-	if clearOldCache {
+	if clearStale {
 		cacheManager, err := cache.NewManager(cfg.Analysis.CacheDir)
 		if err != nil {
 			return fmt.Errorf("failed to initialize cache manager; %w", err)

@@ -158,7 +158,7 @@ make validate-config
 ./memorizer daemon rebuild
 
 # Rebuild with stale cache clearing
-./memorizer daemon rebuild --clear-old-cache
+./memorizer daemon rebuild --clear-stale
 
 # Clear graph data by deleting persistence files
 rm -rf ~/.memorizer/falkordb/*
@@ -466,7 +466,7 @@ Example: `sha256:abc12345def67890-v1-1-1.json`
 - `cache status` - Show version distribution and entry counts
 - `cache clear --stale` - Remove stale entries
 - `cache clear --all` - Remove all entries
-- `daemon rebuild --clear-old-cache` - Clear stale entries before rebuild
+- `daemon rebuild --clear-stale` - Clear stale entries before rebuild
 
 ### Handler/Adapter Patterns
 

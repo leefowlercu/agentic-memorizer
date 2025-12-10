@@ -231,7 +231,7 @@ memorizer cache clear --stale
 memorizer cache clear --all
 
 # Clear stale cache during daemon rebuild
-memorizer daemon rebuild --clear-old-cache
+memorizer daemon rebuild --clear-stale
 ```
 
 **Version Bump Workflow:**

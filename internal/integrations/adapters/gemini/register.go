@@ -2,7 +2,8 @@ package gemini
 
 import "github.com/leefowlercu/agentic-memorizer/internal/integrations"
 
-// init registers the Gemini CLI MCP adapter with the global registry
+// init registers all Gemini CLI adapters with the global registry
 func init() {
+	integrations.GlobalRegistry().Register(NewGeminiCLIHookAdapter())
 	integrations.GlobalRegistry().Register(NewGeminiCLIMCPAdapter())
 }

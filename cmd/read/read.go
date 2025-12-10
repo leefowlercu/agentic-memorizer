@@ -37,7 +37,10 @@ var ReadCmd = &cobra.Command{
   memorizer read -v
 
   # Output wrapped for Claude Code SessionStart hook
-  memorizer read --integration claude-code-hook`,
+  memorizer read --integration claude-code-hook
+
+  # Output wrapped for Gemini CLI SessionStart hook
+  memorizer read --integration gemini-cli-hook`,
 	PreRunE: validateRead,
 	RunE:    runRead,
 }

@@ -365,13 +365,14 @@ Claude Code integration uses two methods:
 1. **SessionStart hooks** (`claude-code-hook`) - Inject full index at session start via hooks with matchers (startup, resume, clear, compact)
 2. **MCP server** (`claude-code-mcp`) - Provide on-demand tools for semantic search and metadata retrieval
 
-Gemini CLI integration uses:
-- **MCP server** (`gemini-cli-mcp`) - Provide on-demand tools via stdio transport configured in `~/.gemini/settings.json`
+Gemini CLI integration uses two methods:
+1. **SessionStart hooks** (`gemini-cli-hook`) - Inject full index at session start via hooks with matchers (startup, resume, clear)
+2. **MCP server** (`gemini-cli-mcp`) - Provide on-demand tools via stdio transport configured in `~/.gemini/settings.json`
 
 Codex CLI integration uses:
 - **MCP server** (`codex-cli-mcp`) - Provide on-demand tools via stdio transport configured in `~/.codex/config.toml` (TOML format)
 
-All integrations wrap output appropriately: SessionStart hooks use JSON envelope with systemMessage and additionalContext fields; MCP uses JSON-RPC 2.0 protocol responses.
+All integrations wrap output appropriately: SessionStart hooks use JSON envelope with hookSpecificOutput containing hookEventName and additionalContext fields; MCP uses JSON-RPC 2.0 protocol responses.
 
 **Configuration Formats:**
 - Claude Code & Gemini CLI use JSON configuration files
@@ -586,6 +587,7 @@ Integration adapters use semantic versioning (MAJOR.MINOR.PATCH) to track change
 **Version Constants Location:**
 - Claude Code Hook: `internal/integrations/adapters/claude/hook_adapter.go` → `IntegrationVersion`
 - Claude Code MCP: `internal/integrations/adapters/claude/mcp_adapter.go` → `MCPIntegrationVersion`
+- Gemini CLI Hook: `internal/integrations/adapters/gemini/hook_adapter.go` → `HookIntegrationVersion`
 - Gemini CLI MCP: `internal/integrations/adapters/gemini/mcp_adapter.go` → `MCPIntegrationVersion`
 - Codex CLI MCP: `internal/integrations/adapters/codex/mcp_adapter.go` → `MCPIntegrationVersion`
 

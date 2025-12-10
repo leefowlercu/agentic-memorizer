@@ -7,7 +7,7 @@
 [![CI](https://github.com/leefowlercu/agentic-memorizer/workflows/CI/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/ci.yml)
 [![E2E Tests](https://github.com/leefowlercu/agentic-memorizer/workflows/E2E%20Tests/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/e2e-tests.yml)
 
-A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code, Gemini CLI, and OpenAI Codex CLI.
+A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code (hooks + MCP), Gemini CLI (hooks + MCP), and OpenAI Codex CLI (MCP).
 
 **Current Version**: v0.12.1 ([CHANGELOG.md](CHANGELOG.md))
 
@@ -33,8 +33,9 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
 - [Integration Setup](#integration-setup)
   - [Claude Code Integration (Automatic)](#claude-code-integration-automatic)
   - [Claude Code MCP Integration (Automatic)](#claude-code-mcp-integration-automatic)
+  - [Gemini CLI SessionStart Hook Integration (Automatic)](#gemini-cli-sessionstart-hook-integration-automatic)
+  - [Gemini CLI MCP Integration (Automatic)](#gemini-cli-mcp-integration-automatic)
   - [OpenAI Codex CLI Integration (Automatic)](#openai-codex-cli-integration-automatic)
-  - [Gemini CLI Integration (Automatic)](#gemini-cli-integration-automatic)
 - [Managing Integrations](#managing-integrations)
 - [Usage](#usage)
   - [Background Daemon (Required)](#background-daemon-required)
@@ -71,7 +72,7 @@ Works seamlessly with Claude Code, Gemini CLI, and Codex CLI with automatic setu
 A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
 
 When you launch your AI agent, the precomputed index is loaded into its context:
-- **Claude Code**: SessionStart hooks automatically load the index
+- **Claude Code & Gemini CLI**: SessionStart hooks automatically load the index
 - **Other frameworks**: Configure your agent to run the read command on startup
 
 Your AI agent can then:
@@ -139,11 +140,12 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 - Default XML output with JSON envelope wrapping for proper hook formatting
 - Full lifecycle management (setup, update, remove, validate)
 
-**Gemini CLI** - MCP server integration with automatic setup
+**Gemini CLI** - Full automatic integration with SessionStart hooks and MCP server
 - Automatic framework detection and configuration
-- One-command setup: `memorizer integrations setup gemini-cli-mcp`
-- MCP server configuration in `~/.gemini/settings.json`
-- Provides five on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`, `get_related_files`, `search_entities`
+- SessionStart hook setup: `memorizer integrations setup gemini-cli-hook`
+- MCP server setup: `memorizer integrations setup gemini-cli-mcp`
+- Hook configuration with matchers (startup, resume, clear)
+- MCP server provides five on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`, `get_related_files`, `search_entities`
 - Full lifecycle management (setup, update, remove, validate)
 - Works with both user and project-level Gemini CLI configurations
 
@@ -157,13 +159,13 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 
 ### Framework Comparison
 
-| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (MCP) | Codex CLI (MCP) |
-|---------|-------------------|-------------------|------------------|-----------------|
-| **Setup Type** | Automatic | Automatic | Automatic | Automatic |
-| **Delivery** | SessionStart injection | On-demand tools | On-demand tools | On-demand tools |
-| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) | N/A (tool-based) |
-| **Best For** | Complete awareness | Large directories | Large directories | Large directories |
-| **Validation** | Automatic | Automatic | Automatic | Automatic |
+| Feature | Claude Code (Hook) | Claude Code (MCP) | Gemini CLI (Hook) | Gemini CLI (MCP) | Codex CLI (MCP) |
+|---------|-------------------|-------------------|-------------------|------------------|-----------------|
+| **Setup Type** | Automatic | Automatic | Automatic | Automatic | Automatic |
+| **Delivery** | SessionStart injection | On-demand tools | SessionStart injection | On-demand tools | On-demand tools |
+| **Output Format** | XML (JSON-wrapped) | N/A (tool-based) | XML (JSON-wrapped) | N/A (tool-based) | N/A (tool-based) |
+| **Best For** | Complete awareness | Large directories | Complete awareness | Large directories | Large directories |
+| **Validation** | Automatic | Automatic | Automatic | Automatic | Automatic |
 
 ## Architecture
 
@@ -361,6 +363,33 @@ memorizer daemon systemctl  # Linux
 memorizer daemon launchctl  # macOS
 ```
 
+#### Path B: Gemini CLI (Automatic Integration)
+
+For Gemini CLI users, automatic setup works the same way:
+
+```bash
+memorizer initialize --integrations gemini-cli-hook,gemini-cli-mcp
+```
+
+This will:
+- Create config at `~/.memorizer/config.yaml`
+- Create memory directory at `~/.memorizer/memory/`
+- **Automatically configure Gemini CLI SessionStart hooks and MCP Server integration** (no manual editing required)
+
+Then start the daemon:
+```bash
+memorizer daemon start
+```
+
+#### Path C: Manual Setup (All Other Frameworks)
+
+For other frameworks or manual configuration:
+
+```bash
+memorizer initialize
+# Then manually configure your agent framework (see Integration Setup section)
+```
+
 ### 5. Add Files to Memory
 
 ```bash
@@ -378,11 +407,16 @@ The daemon will automatically detect and index these files.
 claude
 ```
 
-Claude automatically loads the memory index via SessionStart hooks.
+**Gemini CLI:**
+```bash
+gemini
+```
+
+Both frameworks automatically load the memory index via SessionStart hooks.
 
 **Other Frameworks:**
 
-Start your agent normally. The memory index will load based on the configuration you set up in step 3.
+Start your agent normally. The memory index will load based on the configuration you set up in step 4.
 
 ---
 
@@ -634,6 +668,90 @@ Remove the MCP integration:
 memorizer integrations remove claude-code-mcp
 ```
 
+### Gemini CLI SessionStart Hook Integration (Automatic)
+
+Gemini CLI supports SessionStart hook integration for automatic memory index loading, similar to Claude Code.
+
+#### Automatic Setup (Recommended)
+
+```bash
+memorizer integrations setup gemini-cli-hook
+```
+
+This command automatically:
+1. Detects your Gemini CLI installation (`~/.gemini/` directory)
+2. Creates or updates `~/.gemini/settings.json`
+3. Preserves existing settings (won't overwrite other configurations)
+4. Adds SessionStart hooks for all matchers (startup, resume, clear)
+5. Configures the command: `memorizer read --format xml --integration gemini-cli-hook`
+6. Creates backup at `~/.gemini/settings.json.backup`
+
+You can also use the `--integrations` flag during initialization:
+
+```bash
+memorizer initialize --integrations gemini-cli-hook
+memorizer daemon start
+```
+
+#### Manual Setup (Alternative)
+
+If you prefer manual configuration, add to `~/.gemini/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "name": "memorizer-hook",
+            "type": "command",
+            "command": "/path/to/memorizer read --format xml --integration gemini-cli-hook",
+            "description": "Load agentic memory index"
+          }
+        ]
+      }
+      // Repeat for "resume" and "clear" matchers
+    ]
+  }
+}
+```
+
+**Note**: Gemini CLI supports three SessionStart matchers: `startup`, `resume`, and `clear`.
+
+#### Hook Output Format
+
+The Gemini CLI hook integration uses a simpler JSON envelope compared to Claude Code:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "<memory_index>...</memory_index>"
+  }
+}
+```
+
+- **hookEventName**: Always "SessionStart"
+- **additionalContext**: Contains the full index (XML, Markdown, or JSON) that Gemini CLI adds to the context window
+
+#### Validation
+
+Verify your setup:
+
+```bash
+memorizer integrations health
+```
+
+#### Removal
+
+Remove the integration:
+
+```bash
+memorizer integrations remove gemini-cli-hook
+```
+
 ### OpenAI Codex CLI Integration (Automatic)
 
 OpenAI Codex CLI supports integration via the Model Context Protocol (MCP), providing semantic search and metadata retrieval tools.
@@ -722,7 +840,7 @@ Remove the MCP integration:
 memorizer integrations remove codex-cli-mcp
 ```
 
-### Gemini CLI Integration (Automatic)
+### Gemini CLI MCP Integration (Automatic)
 
 Gemini CLI supports integration via the Model Context Protocol (MCP), providing semantic search and metadata retrieval tools.
 
@@ -821,22 +939,27 @@ Shows all registered integrations with their status and configuration:
 ```
 ✓ claude-code-hook
   Description: Claude Code SessionStart hooks integration
-  Version:     1.0.0
+  Version:     2.0.0
   Status:      configured
 
 ✓ claude-code-mcp
   Description: Claude Code MCP server integration
+  Version:     2.0.0
+  Status:      configured
+
+✓ gemini-cli-hook
+  Description: Gemini CLI SessionStart hook integration
   Version:     1.0.0
   Status:      configured
 
 ✓ gemini-cli-mcp
   Description: Gemini CLI MCP server integration
-  Version:     1.0.0
+  Version:     2.0.0
   Status:      configured
 
 ✓ codex-cli-mcp
-  Description: Codex CLI MCP server integration
-  Version:     1.0.0
+  Description: OpenAI Codex CLI MCP server integration
+  Version:     2.0.0
   Status:      configured
 ```
 
@@ -870,6 +993,9 @@ memorizer integrations setup claude-code-hook
 # Claude Code MCP server
 memorizer integrations setup claude-code-mcp
 
+# Gemini CLI SessionStart hooks
+memorizer integrations setup gemini-cli-hook
+
 # Gemini CLI MCP server
 memorizer integrations setup gemini-cli-mcp
 
@@ -891,9 +1017,11 @@ Setup automatically:
 ```bash
 memorizer integrations remove claude-code-hook
 memorizer integrations remove claude-code-mcp
+memorizer integrations remove gemini-cli-hook
+memorizer integrations remove gemini-cli-mcp
 ```
 
-Removes the integration configuration from the framework's settings file. For Claude Code, this:
+Removes the integration configuration from the framework's settings file. For hook integrations, this:
 - Removes SessionStart hooks added by memorizer
 - Preserves other hooks and settings
 - Creates backup before modification
@@ -1754,9 +1882,16 @@ memorizer integrations setup claude-code-hook
 # Setup Claude Code MCP server
 memorizer integrations setup claude-code-mcp
 
+# Setup Gemini CLI SessionStart hooks
+memorizer integrations setup gemini-cli-hook
+
+# Setup Gemini CLI MCP server
+memorizer integrations setup gemini-cli-mcp
+
 # Remove integrations
 memorizer integrations remove claude-code-hook
 memorizer integrations remove claude-code-mcp
+memorizer integrations remove gemini-cli-hook
 
 # Validate integration configurations
 memorizer integrations health
@@ -2007,8 +2142,12 @@ Use the `--integration` flag to format output for specific agent frameworks. Thi
 # Claude Code hook integration (SessionStart injection)
 memorizer read --format xml --integration claude-code-hook
 
+# Gemini CLI hook integration (SessionStart injection)
+memorizer read --format xml --integration gemini-cli-hook
+
 # Can also use markdown or json formats
 memorizer read --format markdown --integration claude-code-hook
+memorizer read --format markdown --integration gemini-cli-hook
 
 # Note: MCP integration doesn't use read - uses tools instead
 ```
@@ -2244,7 +2383,7 @@ agentic-memorizer/
 │   ├── integrations/         # Integration framework and adapters
 │   │   └── adapters/         # Framework-specific adapters
 │   │       ├── claude/       # Hook and MCP adapters for Claude Code
-│   │       ├── gemini/       # MCP adapter for Gemini CLI
+│   │       ├── gemini/       # Hook and MCP adapters for Gemini CLI
 │   │       └── codex/        # MCP adapter for Codex CLI
 │   ├── docker/               # Docker container management utilities
 │   ├── servicemanager/       # Service manager integration (systemd, launchd)

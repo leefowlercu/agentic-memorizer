@@ -237,6 +237,7 @@ Framework-agnostic integration system for connecting with AI agent platforms.
 **Supported Integrations:**
 - Claude Code Hook (claude-code-hook) - SessionStart hooks for context injection
 - Claude Code MCP (claude-code-mcp) - MCP server for on-demand tools
+- Gemini CLI Hook (gemini-cli-hook) - SessionStart hooks for context injection
 - Gemini CLI MCP (gemini-cli-mcp) - MCP server for Google Gemini CLI
 - Codex CLI MCP (codex-cli-mcp) - MCP server for Codex CLI
 

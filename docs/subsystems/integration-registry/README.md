@@ -16,6 +16,7 @@
    - [Adapter Implementations](#adapter-implementations)
       - [Claude Code Hook Adapter](#claude-code-hook-adapter)
       - [Claude Code MCP Adapter](#claude-code-mcp-adapter)
+      - [Gemini CLI Hook Adapter](#gemini-cli-hook-adapter)
       - [Gemini CLI MCP Adapter](#gemini-cli-mcp-adapter)
       - [Codex CLI MCP Adapter](#codex-cli-mcp-adapter)
    - [Output Formatting](#output-formatting)
@@ -27,11 +28,11 @@
 
 ## Overview
 
-The Integration Registry subsystem provides a framework-agnostic integration system that connects agentic-memorizer with various AI agent platforms including Claude Code, Gemini CLI, and Codex CLI. It enables automatic setup of memory index integration, allowing agent frameworks to access the precomputed memory index during their sessions through framework-specific output formatting and command generation.
+The Integration Registry subsystem provides a framework-agnostic integration system that connects agentic-memorizer with various AI agent platforms including Claude Code (hooks + MCP), Gemini CLI (hooks + MCP), and Codex CLI (MCP). It enables automatic setup of memory index integration, allowing agent frameworks to access the precomputed memory index during their sessions through framework-specific output formatting and command generation.
 
 The subsystem follows a plugin-based architecture with three main layers: a thread-safe Registry that manages adapter registration and lookup, Adapter implementations that provide framework-specific integration logic, and the unified Format package that handles rendering the index in different formats (XML, Markdown, JSON). This layered design separates concerns cleanly, enabling independent evolution of output formatting, integration wrapping, and registry management.
 
-The Integration Registry provides specialized adapters (Claude Code, Gemini CLI, Codex CLI) that offer automatic detection, setup, and framework-specific output wrapping. Integration adapters collaborate with the unified format package (internal/format/) to produce base formats (XML, Markdown, JSON) and then apply integration-specific wrapping when needed.
+The Integration Registry provides specialized adapters (Claude Code hooks + MCP, Gemini CLI hooks + MCP, Codex CLI MCP) that offer automatic detection, setup, and framework-specific output wrapping. Integration adapters collaborate with the unified format package (internal/format/) to produce base formats (XML, Markdown, JSON) and then apply integration-specific wrapping when needed.
 
 ## Design Principles
 
@@ -228,6 +229,54 @@ The MCP adapter **does not use `FormatOutput()`**. Instead of formatting the ent
 
 Many users enable both integrations for maximum flexibility.
 
+#### Gemini CLI Hook Adapter
+
+The Gemini CLI Hook adapter (`internal/integrations/adapters/gemini/hook_adapter.go`) provides automatic integration with Gemini CLI through SessionStart hooks that inject the memory index at session initialization.
+
+**Integration Name:** `gemini-cli-hook`
+
+**Detection:**
+Checks for the existence of the `~/.gemini` directory, indicating Gemini CLI is installed. If the directory exists but no settings file is present, the adapter creates a minimal settings file during setup.
+
+**Setup Process:**
+1. Locates or creates `~/.gemini/settings.json` file
+2. Reads existing settings, preserving all unknown fields
+3. Adds or updates SessionStart hooks with default matchers (startup, resume, clear)
+4. Configures hook to run `memorizer read --format xml --integration gemini-cli-hook`
+5. Includes hook metadata: name ("memorizer-hook") and description ("Load agentic memory index")
+6. Writes modified settings atomically with temporary backup creation
+7. Returns detailed success/failure information
+
+**Output Wrapping:**
+The adapter wraps the base format (XML, Markdown, or JSON) in a simpler SessionStart JSON envelope compared to Claude Code:
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "<memory_index>...</memory_index>"
+  }
+}
+```
+
+The `hookSpecificOutput.additionalContext` field contains the complete formatted index, which Gemini CLI adds to the context window. Unlike Claude Code, Gemini CLI's envelope does not include `continue`, `suppressOutput`, or `systemMessage` fields at the top level.
+
+**Settings Management:**
+Uses atomic file operations with temporary files and renames to prevent corruption. Creates temporary backups before modification that are automatically removed on successful write. Only on write failure does the backup persist for manual recovery. Preserves unknown settings fields to maintain compatibility when Gemini CLI adds new features.
+
+**Matchers:**
+Gemini CLI supports three SessionStart matchers:
+- `startup` - Triggered on fresh session start
+- `resume` - Triggered when resuming a previous session
+- `clear` - Triggered when clearing session context
+
+Note that Gemini CLI does not support the `compact` matcher that Claude Code uses.
+
+**When to Use:**
+- **Hook adapter (gemini-cli-hook)**: Best for complete file awareness, smaller memory directories, always-available context
+- **MCP adapter (gemini-cli-mcp)**: Best for large directories, selective file discovery, reduced initial context size
+
+Users can enable both integrations for maximum flexibility.
+
 #### Gemini CLI MCP Adapter
 
 The Gemini CLI MCP adapter (`internal/integrations/adapters/gemini/mcp_adapter.go`) provides integration with Google's Gemini CLI through the Model Context Protocol, exposing on-demand tools for semantic search.
@@ -259,7 +308,7 @@ Like the Claude Code MCP adapter, the Gemini CLI MCP adapter **does not use `For
 - `search_entities` - Find files mentioning specific entities
 
 **When to Use:**
-The Gemini CLI MCP adapter is the only integration option for Gemini CLI users. It provides on-demand file discovery and metadata retrieval through MCP tools during Gemini CLI chat sessions.
+The Gemini CLI MCP adapter works alongside the hook adapter to provide on-demand file discovery and metadata retrieval through MCP tools during Gemini CLI chat sessions. Users can enable both for maximum flexibility.
 
 #### Codex CLI MCP Adapter
 
@@ -304,6 +353,7 @@ The Codex CLI MCP adapter is the only integration option for Codex CLI users. It
 |-------------|-------------|---------|
 | `claude-code-hook` | `~/.claude/settings.json` | `hooks.SessionStart` |
 | `claude-code-mcp` | `~/.claude.json` | `mcpServers.agentic-memorizer` |
+| `gemini-cli-hook` | `~/.gemini/settings.json` | `hooks.SessionStart` |
 | `gemini-cli-mcp` | `~/.gemini/settings.json` | `mcpServers.agentic-memorizer` |
 | `codex-cli-mcp` | `~/.codex/config.toml` | `mcp_servers.agentic-memorizer` |
 
@@ -506,7 +556,9 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Global Registry**: Singleton registry instance accessible throughout the application via `GlobalRegistry()`, managing all registered integration adapters.
 
-**Gemini CLI Integration**: MCP-based integration with Google's Gemini CLI tool through stdio transport configuration in `~/.gemini/settings.json`, providing on-demand file search and metadata retrieval via MCP tools.
+**Gemini CLI Hook Integration**: SessionStart hook integration with Google's Gemini CLI tool through configuration in `~/.gemini/settings.json`, providing automatic memory index loading at session initialization via hook envelope with matchers (startup, resume, clear).
+
+**Gemini CLI MCP Integration**: MCP-based integration with Google's Gemini CLI tool through stdio transport configuration in `~/.gemini/settings.json`, providing on-demand file search and metadata retrieval via MCP tools.
 
 **Codex CLI Integration**: MCP-based integration with OpenAI's Codex CLI tool through stdio transport configuration in `~/.codex/config.toml` (TOML format), providing on-demand file search and metadata retrieval via MCP tools.
 

@@ -1406,7 +1406,7 @@ memorizer daemon rebuild        # Rebuild index/graph (use --force to clear firs
 
 # Manage semantic analysis cache
 memorizer cache status          # Show cache statistics and version info
-memorizer cache clear --old-versions  # Clear stale cache entries
+memorizer cache clear --stale   # Clear stale cache entries
 memorizer cache clear --all     # Clear all cache entries
 
 # Read precomputed index (for SessionStart hooks)
@@ -2101,7 +2101,7 @@ This shows:
 
 ```bash
 # Clear only stale/legacy entries
-memorizer cache clear --old-versions
+memorizer cache clear --stale
 
 # Or include with rebuild
 memorizer daemon rebuild --clear-old-cache

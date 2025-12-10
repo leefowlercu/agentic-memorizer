@@ -225,7 +225,7 @@ Users can inspect and manage cache versions via CLI:
 memorizer cache status
 
 # Clear only stale entries (preserves current version)
-memorizer cache clear --old-versions
+memorizer cache clear --stale
 
 # Clear all entries
 memorizer cache clear --all
@@ -240,7 +240,7 @@ When making changes that require a version bump:
 2. Increment the appropriate constant in `internal/cache/version.go`
 3. Document the change in commit message
 4. Run `cache status` to verify version change
-5. Optionally run `cache clear --old-versions` to remove stale entries
+5. Optionally run `cache clear --stale` to remove stale entries
 
 ## Key Components
 
@@ -293,7 +293,7 @@ The `GetStats()` method returns comprehensive statistics about cache contents wi
 This operation supports the `cache status` CLI command and health metrics reporting.
 
 **Selective Clear Operation:**
-The `ClearOldVersions()` method removes cache entries that are not the current version while preserving valid entries. It iterates through all cache files, checks each entry's version against `IsCurrentVersion()`, and deletes entries that fail the check. The method returns the count of removed entries, enabling users to understand the scope of cleanup. This operation is more targeted than `Clear()`, allowing proactive cache maintenance during upgrades without losing all cached work. It supports the `cache clear --old-versions` CLI command and `daemon rebuild --clear-old-cache` flag.
+The `ClearOldVersions()` method removes cache entries that are not the current version while preserving valid entries. It iterates through all cache files, checks each entry's version against `IsCurrentVersion()`, and deletes entries that fail the check. The method returns the count of removed entries, enabling users to understand the scope of cleanup. This operation is more targeted than `Clear()`, allowing proactive cache maintenance during upgrades without losing all cached work. It supports the `cache clear --stale` CLI command and `daemon rebuild --clear-old-cache` flag.
 
 ### Content Hashing
 

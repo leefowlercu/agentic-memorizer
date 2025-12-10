@@ -168,7 +168,7 @@ docker restart memorizer-falkordb
 ./memorizer cache status
 
 # Clear stale cache entries
-./memorizer cache clear --old-versions
+./memorizer cache clear --stale
 
 # Clear all cache entries
 ./memorizer cache clear --all
@@ -464,7 +464,7 @@ Example: `sha256:abc12345def67890-v1-1-1.json`
 
 **CLI Commands:**
 - `cache status` - Show version distribution and entry counts
-- `cache clear --old-versions` - Remove stale entries
+- `cache clear --stale` - Remove stale entries
 - `cache clear --all` - Remove all entries
 - `daemon rebuild --clear-old-cache` - Clear stale entries before rebuild
 
@@ -743,7 +743,7 @@ status := format.NewStatus(format.StatusRunning, "Clearing 42 cache entries")
 
 // Warning message
 status := format.NewStatus(format.StatusWarning, "Cache is outdated")
-status.AddDetail("Run cache clear --old-versions")
+status.AddDetail("Run cache clear --stale")
 ```
 
 **Section Builder Examples:**

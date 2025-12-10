@@ -431,7 +431,7 @@ Developers increment version constants in `internal/cache/version.go` when makin
 - Bump MetadataVersion when changing metadata extraction handlers or adding FileMetadata fields
 - Bump SemanticVersion when updating prompts, adding entity/reference fields, or changing analysis routing
 
-The `cache status` and `cache clear --old-versions` commands help manage versioned cache entries.
+The `cache status` and `cache clear --stale` commands help manage versioned cache entries.
 
 ### Type System
 

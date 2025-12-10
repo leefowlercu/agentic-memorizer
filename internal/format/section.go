@@ -24,15 +24,15 @@ type SectionItem struct {
 	Type       SectionItemType
 	Key        string
 	Value      string
-	Text       string   // For SectionItemText type
+	Text       string // For SectionItemText type
 	Subsection *Section
 }
 
 // Section represents hierarchical key-value pairs with headers
 type Section struct {
 	Title       string
-	Level       int           // 0 = main section, 1 = subsection, etc.
-	WithDivider bool          // Whether to show a divider line under title
+	Level       int  // 0 = main section, 1 = subsection, etc.
+	WithDivider bool // Whether to show a divider line under title
 	Items       []SectionItem
 }
 

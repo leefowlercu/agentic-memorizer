@@ -109,11 +109,11 @@ type xmlSectionItem struct {
 }
 
 type xmlTable struct {
-	XMLName    xml.Name   `xml:"table"`
-	Headers    []string   `xml:"headers>header"`
-	Rows       []xmlRow   `xml:"rows>row"`
-	Alignments []string   `xml:"alignments>alignment,omitempty"`
-	Compact    bool       `xml:"compact,attr,omitempty"`
+	XMLName    xml.Name `xml:"table"`
+	Headers    []string `xml:"headers>header"`
+	Rows       []xmlRow `xml:"rows>row"`
+	Alignments []string `xml:"alignments>alignment,omitempty"`
+	Compact    bool     `xml:"compact,attr,omitempty"`
 }
 
 type xmlRow struct {

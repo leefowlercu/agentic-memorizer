@@ -89,11 +89,11 @@ func (f *YAMLFormatter) SupportsColors() bool {
 // YAML structure types (reuse JSON types with yaml tags)
 
 type yamlSection struct {
-	Type   string                 `yaml:"type"`
-	Title  string                 `yaml:"title"`
-	Level  int                    `yaml:"level,omitempty"`
-	Fields map[string]string      `yaml:"fields,omitempty"`
-	Items  []yamlSectionItem      `yaml:"items,omitempty"`
+	Type   string            `yaml:"type"`
+	Title  string            `yaml:"title"`
+	Level  int               `yaml:"level,omitempty"`
+	Fields map[string]string `yaml:"fields,omitempty"`
+	Items  []yamlSectionItem `yaml:"items,omitempty"`
 }
 
 type yamlSectionItem struct {

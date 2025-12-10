@@ -8,9 +8,9 @@ import (
 
 func TestBuilderType_String(t *testing.T) {
 	tests := []struct {
-		name     string
+		name        string
 		builderType BuilderType
-		want     string
+		want        string
 	}{
 		{"section", BuilderTypeSection, "section"},
 		{"table", BuilderTypeTable, "table"},

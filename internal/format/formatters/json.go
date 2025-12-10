@@ -90,11 +90,11 @@ func (f *JSONFormatter) SupportsColors() bool {
 // JSON structure types
 
 type jsonSection struct {
-	Type   string                 `json:"type"`
-	Title  string                 `json:"title"`
-	Level  int                    `json:"level,omitempty"`
-	Fields map[string]string      `json:"fields,omitempty"`
-	Items  []jsonSectionItem      `json:"items,omitempty"`
+	Type   string            `json:"type"`
+	Title  string            `json:"title"`
+	Level  int               `json:"level,omitempty"`
+	Fields map[string]string `json:"fields,omitempty"`
+	Items  []jsonSectionItem `json:"items,omitempty"`
 }
 
 type jsonSectionItem struct {
@@ -105,11 +105,11 @@ type jsonSectionItem struct {
 }
 
 type jsonTable struct {
-	Type       string              `json:"type"`
-	Headers    []string            `json:"headers"`
-	Rows       [][]string          `json:"rows"`
-	Alignments []string            `json:"alignments,omitempty"`
-	Compact    bool                `json:"compact,omitempty"`
+	Type       string     `json:"type"`
+	Headers    []string   `json:"headers"`
+	Rows       [][]string `json:"rows"`
+	Alignments []string   `json:"alignments,omitempty"`
+	Compact    bool       `json:"compact,omitempty"`
 }
 
 type jsonList struct {
@@ -125,12 +125,12 @@ type jsonListItem struct {
 }
 
 type jsonProgress struct {
-	Type       string  `json:"type"`
+	Type         string  `json:"type"`
 	ProgressType string  `json:"progress_type"`
-	Current    int     `json:"current"`
-	Total      int     `json:"total"`
-	Percentage float64 `json:"percentage"`
-	Message    string  `json:"message,omitempty"`
+	Current      int     `json:"current"`
+	Total        int     `json:"total"`
+	Percentage   float64 `json:"percentage"`
+	Message      string  `json:"message,omitempty"`
 }
 
 type jsonStatus struct {

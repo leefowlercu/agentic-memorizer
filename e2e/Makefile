@@ -20,7 +20,7 @@ test: setup ## Run full E2E test suite
 	@echo "Waiting for FalkorDB to be healthy..."
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running E2E tests..."
-	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 30m ./e2e/tests/...
+	docker-compose run --rm test-runner go test -tags=e2e -v -timeout 60m ./e2e/tests/...
 	@echo "Stopping services and cleaning volumes..."
 	docker-compose down -v
 

@@ -47,7 +47,7 @@ test-integration: ## Run integration tests only
 	@echo "Running integration tests..."
 	@go test -tags=integration -v ./...
 
-test-all: test test-integration ## Run all tests (unit + integration)
+test-all: test test-integration ## Run all non-e2e tests (unit + integration)
 	@echo ""
 	@echo "✅ All tests passed"
 

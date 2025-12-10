@@ -3,7 +3,6 @@
 package tests
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,21 +41,13 @@ func TestWalker_InitialScan(t *testing.T) {
 		}
 	}
 
-	// Start daemon (will trigger initial walk)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	// Start daemon (will trigger initial walk) - let cleanup handle stopping
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)
@@ -107,21 +98,13 @@ func TestWalker_SkipDotDirectories(t *testing.T) {
 		}
 	}
 
-	// Start daemon
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	// Start daemon - let cleanup handle stopping
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)
@@ -224,21 +207,13 @@ mcp:
 		}
 	}
 
-	// Start daemon
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	// Start daemon - let cleanup handle stopping
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)
@@ -305,21 +280,13 @@ func TestWalker_DeepNestedDirectories(t *testing.T) {
 		}
 	}
 
-	// Start daemon
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	// Start daemon - let cleanup handle stopping
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)
@@ -373,21 +340,13 @@ func TestWalker_SymbolicLinks(t *testing.T) {
 		t.Skipf("Failed to create symlink (may not be supported): %v", err)
 	}
 
-	// Start daemon
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	// Start daemon - let cleanup handle stopping
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)
@@ -440,23 +399,15 @@ func TestWalker_LargeFileCount(t *testing.T) {
 		}
 	}
 
-	// Start daemon
+	// Start daemon - let cleanup handle stopping
 	startTime := time.Now()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)

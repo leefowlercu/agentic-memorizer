@@ -256,21 +256,13 @@ func TestSSE_Reconnection(t *testing.T) {
 		t.Fatalf("Failed to enable HTTP server: %v", err)
 	}
 
-	// Start daemon
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	// Start daemon without context cancellation - let cleanup handle stopping
+	cmd := exec.Command(h.BinaryPath, "daemon", "start")
 	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start daemon: %v", err)
 	}
-
-	defer func() {
-		cancel()
-		cmd.Wait()
-	}()
 
 	if err := h.WaitForHealthy(30 * time.Second); err != nil {
 		t.Fatalf("Daemon failed to become healthy: %v", err)
@@ -294,7 +286,7 @@ func TestSSE_Reconnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconnection failed: %v", err)
 	}
-	defer resp2.Body.Close()
+	resp2.Body.Close() // Close explicitly before cleanup to avoid blocking daemon shutdown
 
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("Reconnection returned status %d", resp2.StatusCode)

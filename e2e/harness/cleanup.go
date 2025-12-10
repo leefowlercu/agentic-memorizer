@@ -14,6 +14,7 @@ type Cleanup struct {
 	t        testing.TB
 	harness  *E2EHarness
 	cleanups []func() error
+	done     bool
 }
 
 // NewCleanup creates a new cleanup manager
@@ -126,6 +127,12 @@ func (c *Cleanup) KillDaemonProcess() error {
 
 // CleanupAll performs all cleanup operations
 func (c *Cleanup) CleanupAll() {
+	// Make cleanup idempotent - only run once
+	if c.done {
+		return
+	}
+	c.done = true
+
 	// Stop daemon gracefully
 	if err := c.StopDaemon(); err != nil {
 		c.t.Logf("Failed to stop daemon gracefully: %v", err)
@@ -136,10 +143,10 @@ func (c *Cleanup) CleanupAll() {
 		}
 	}
 
-	// Wait for daemon to stop
-	if err := c.WaitForDaemonStop(5 * time.Second); err != nil {
-		c.t.Logf("Daemon did not stop in time: %v", err)
-	}
+	// Wait for daemon to stop gracefully
+	// Daemon shutdown involves: HTTP server (5s), watcher stop, worker drain, graph close, PID cleanup
+	// In Docker test environment, this can take longer than expected - force kill handles timeout
+	_ = c.WaitForDaemonStop(20 * time.Second)
 
 	// Clear graph data
 	if err := c.ClearGraph(); err != nil {

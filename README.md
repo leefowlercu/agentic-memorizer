@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.25.1-blue.svg)](https://golang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leefowlercu/agentic-memorizer)](https://goreportcard.com/report/github.com/leefowlercu/agentic-memorizer)
-[![GitHub Release](https://img.shields.io/github/v/release/leefowlercu/agentic-memorizer)](https://github.com/leefowlercu/agentic-memorizer/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/leefowlercu/agentic-memorizer?include_prereleases)](https://github.com/leefowlercu/agentic-memorizer/releases)
 [![CI](https://github.com/leefowlercu/agentic-memorizer/workflows/CI/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/ci.yml)
 [![E2E Tests](https://github.com/leefowlercu/agentic-memorizer/workflows/E2E%20Tests/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/e2e-tests.yml)
 

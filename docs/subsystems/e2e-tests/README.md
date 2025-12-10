@@ -96,7 +96,7 @@ The harness framework (`e2e/harness/`) provides the foundation for all E2E tests
 
 - **Cleanup Infrastructure** (`cleanup.go`): Comprehensive resource management with LIFO cleanup function execution, graceful daemon shutdown with timeout fallback, graph clearing with context deadlines, and selective file removal preserving cache directories.
 
-- **Assertions Helper** (`assertions.go`): 28 assertion functions covering command execution (exit codes, success/failure), string matching (contains, empty checks), data structures (map keys, list lengths), error validation, equality comparisons, and test utilities (retry loops, log dumping).
+- **Assertions Helper** (`assertions.go`): Assertion functions covering command execution (exit codes, success/failure), string matching (contains, empty checks), data structures (map keys, list lengths), error validation, equality comparisons, and test utilities (retry loops, log dumping).
 
 ### Test Fixtures
 
@@ -110,7 +110,7 @@ Fixtures are immutable reference data that tests can copy or reference without m
 
 ### Test Suites
 
-Test suites (`e2e/tests/`) comprise 18 test files with 171 test functions covering 9,259 lines of test code:
+Test suites (`e2e/tests/`) comprise 18 test files with 171 test functions:
 
 | Test Suite | Lines | Coverage |
 |------------|-------|----------|

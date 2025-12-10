@@ -7,6 +7,145 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2025-12-10
+
+### Added
+- Feat(cache): add three-tier versioning system for cache staleness detection
+- Feat(cache): rename --old-versions to --stale and add context-aware notes
+- Feat(cli): add tui wizard for initialization and consolidate docker helpers
+- Feat(cli): update commands for graph-native architecture
+- Feat(config): add skipextensions and database configuration fields
+- Feat(config): update config schema generator and show-schema command
+- Feat(config): update configuration subsystem, add config subcommands
+- Feat(daemon): integrate skipextensions filtering and database config
+- Feat(embeddings): add openai embeddings provider with caching
+- Feat(format): add GraphContent builder type for Phase 5
+- Feat(format): add GraphContent support to JSON and YAML formatters
+- Feat(format): add GraphContent support to Markdown formatter
+- Feat(format): add GraphContent support to XML formatter
+- Feat(format): add GraphContent support to text formatter
+- Feat(format): add core builder types and utilities
+- Feat(format): add text line support and improve text formatter
+- Feat(format): implement all formatters (text, json, yaml, markdown, xml)
+- Feat(format): migrate MCP server to use format package
+- Feat(format): migrate cache status to use format package
+- Feat(format): migrate claude hook adapter to use format package
+- Feat(format): migrate config show-schema to use format package
+- Feat(format): migrate config validate to use format package
+- Feat(format): migrate daemon status to use format package
+- Feat(format): migrate generic adapter to use format package
+- Feat(format): migrate graph status to use format package
+- Feat(format): migrate integrations detect to use format package
+- Feat(format): migrate integrations health to use format package
+- Feat(format): migrate integrations list to use format package
+- Feat(format): migrate read command to use format package
+- Feat(format): migrate version command to use format package
+- Feat(graph): add configuration section to status command
+- Feat(graph): add falkordb knowledge graph subsystem
+- Feat(graph): add getfilebyfilename method for flexible file lookup
+- Feat(integrations): add gemini cli sessionstart hook integration
+- Feat(integrations): update output formatters for graph-native types
+- Feat(mcp): use daemon api for graph-powered queries
+- Feat(search): update semantic search for graph-native types
+- Feat(semantic): add entity and reference extraction to analyzer
+- Feat(tui): add automatic startup configuration to initialize wizard
+- Feat(version): add divider to version command output
+- Feat(walker): add skipextensions parameter for file filtering
+- Feat(watcher): add skipextensions parameter for file filtering
+- Feat: add codex cli mcp integration adapter
+- Feat: add gemini cli mcp integration
+- Feat: reduce configuration surface area, add minimal configuration key set
+
+### Fixed
+- Fix!: update hardcoded paths in TUI initialize steps
+- Fix(cmd): replace precomputed index terminology with knowledge graph in command descriptions
+- Fix(config): add format flag to validate command for full config output
+- Fix(config): add missing viper default for claude.timeout
+- Fix(config): add missing viper defaults for embeddings provider, model, and dimensions
+- Fix(config): remove outdated index file references
+- Fix(e2e): improve daemon cleanup timeout handling
+- Fix(e2e): remove obsolete version attribute from docker-compose.yml
+- Fix(e2e): update Dockerfile and harness for new binary name
+- Fix(e2e): update cache clear tests to use --stale flag
+- Fix(graph): configure falkordb to use bind mount for data persistence
+- Fix(graph): disable maintenance notifications for falkordb compatibility
+- Fix(graph): suppress initialization logs in status command
+- Fix(init): suppress daemon start instructions after service manager setup
+- Fix(integrations): update xml output processor for empty index handling
+- Fix(tests): add formatters import to config tests for init registration
+- Fix(tests): add formatters import to integration and MCP tests
+- Fix(tui): add intelligent language for integration configuration steps
+- Fix(tui): correct wizard confirmation tracking and daemon startup behavior
+- Fix(tui): remove vertical centering from initialization wizard
+- Fix: various fixes
+
+### Changed
+- Refactor(api): remove legacy /notifications/stream sse endpoint
+- Refactor(cache): migrate clear command to use format package
+- Refactor(cli)!: update all commands for new binary name
+- Refactor(config): implement reflection-based schema generation with auto-derived tier classifications
+- Refactor(config): migrate reload command to use format package
+- Refactor(core)!: rename binary to memorizer and app dir to .memorizer
+- Refactor(daemon)!: update service manager for new binary name
+- Refactor(daemon): migrate stop/restart commands to use format package
+- Refactor(daemon): rename rebuild flag from --clear-old-cache to --clear-stale for consistency
+- Refactor(daemon): restructure with worker/api packages and graph integration
+- Refactor(daemon): simplify status command and use switch statements in helpers
+- Refactor(format): remove deprecated output package
+- Refactor(integrations)!: update adapters with old binary detection (v2.0.0)
+- Refactor(integrations): remove generic integrations (continue, cline, aider, cursor, custom)
+- Refactor(integrations): remove redundant validate command
+- Refactor: use idiomatic go patterns for validation and conditionals
+
+### Documentation
+- Docs!: add migration guide for v0.12 to v0.13 rename
+- Docs!: update CLAUDE.md for new binary name
+- Docs!: update README.md for new binary name
+- Docs!: update subsystem docs and config files for new binary name
+- Docs(comments): improve comment accuracy and add missing rationale
+- Docs(config): update config manager documentation to reflect reflection-based schema generation
+- Docs(e2e): add end-to-end testing subsystem documentation
+- Docs(format): add comprehensive CLI output formatting guidelines to CLAUDE.md
+- Docs(format): add format subsytem documentation
+- Docs(readme): update version, badges, and feature documentation
+- Docs: add codex cli integration documentation
+- Docs: add falkordb persistence and e2e testing documentation
+- Docs: clarify format subsystem integration adapter formatter usage and add last updated date
+- Docs: comprehensive readme accuracy review and corrections
+- Docs: remove assertion count and line count from e2e tests documentation
+- Docs: remove references to --hardcoded-only flag from config show-schema
+- Docs: rename index-manager to index-management and update subsystem documentation
+- Docs: update cache clear flag from --old-versions to --stale
+- Docs: update claude.md to add instructions for integration adapter version bumping during adapter updates
+- Docs: update documentation for graph-native architecture
+- Docs: update environment variables section in readme
+- Docs: update falkordb-graph subsystem documentation to reflect current implementation
+- Docs: update integration registry subsystem documentation with codex cli adapter addition
+- Docs: update integration registry subsytem documentation with gemini cli adapter addition
+
+### Build
+- Build(makefile): add e2e test and ci targets
+- Build: clean dist directory in make clean target
+- Chore(gitignore): update gitignore
+- Chore: update .gitignore with new binary name
+
+### Tests
+- Style(config): complete database config and align formatting
+- Style(graph): align struct field formatting across graph subsystem
+- Style: apply gofmt formatting
+- Style: change root command long text description
+- Style: gofmt updates/fixes
+- Test!: fix test expectations for new binary name
+- Test!: update test files for new binary name (partial)
+- Test(e2e): add automatic volume cleanup to all test targets
+- Test(e2e): add comprehensive end-to-end test suite
+- Test(e2e): update graceful degradation test to expect daemon failure without falkordb
+- Test(integration): add missing timeout to reload test config
+- Test(integration): fix daemon reload test config structure and api imports
+- Test(integration): fix mcp server test signatures and response parsing
+- Test(integrations): update output and registry tests for new patterns
+- Test: fix various test failures, update make targets
+
 ## [0.12.1] - 2025-11-25
 
 ### Fixed
@@ -639,6 +778,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
 [unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...HEAD
+[0.13.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.10.0...v0.11.0

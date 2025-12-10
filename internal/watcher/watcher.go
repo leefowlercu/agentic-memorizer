@@ -199,10 +199,26 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		return
 	}
 
-	// Batch the event (last write wins for the same path)
-	w.batchedEvents[event.Name] = Event{
-		Type: eventType,
-		Path: event.Name,
+	// Batch the event with priority:
+	// - DELETE overwrites everything (file is gone)
+	// - CREATE is preserved over MODIFY (file was just created)
+	// - MODIFY can overwrite MODIFY
+	existing, exists := w.batchedEvents[event.Name]
+	shouldUpdate := !exists ||
+		eventType == EventDelete ||
+		(eventType == EventModify && existing.Type == EventModify)
+
+	if shouldUpdate {
+		w.batchedEvents[event.Name] = Event{
+			Type: eventType,
+			Path: event.Name,
+		}
+	} else {
+		// Keep existing event (CREATE takes priority over MODIFY)
+		w.logger.Debug("preserving higher priority event",
+			"path", event.Name,
+			"existing", existing.Type,
+			"new", eventType)
 	}
 }
 

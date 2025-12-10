@@ -20,17 +20,17 @@ fi
 # Build test runner image
 echo "Building test runner Docker image..."
 cd e2e
-docker-compose build test-runner
+docker compose build test-runner
 
 # Start FalkorDB
 echo "Starting FalkorDB..."
-docker-compose up -d falkordb
+docker compose up -d falkordb
 
 # Wait for FalkorDB to be ready
 echo "Waiting for FalkorDB to be healthy..."
-timeout 30 sh -c 'until docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG; do sleep 1; done' || {
+timeout 30 sh -c 'until docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG; do sleep 1; done' || {
     echo "Error: FalkorDB failed to start"
-    docker-compose logs falkordb
+    docker compose logs falkordb
     exit 1
 }
 

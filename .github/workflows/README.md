@@ -61,42 +61,8 @@ This directory contains CI/CD workflows for the Agentic Memorizer project.
 - 10-minute timeout for quick tests
 
 **Duration:**
-- Full suite: ~20-30 minutes
+- Full suite: ~30-40 minutes
 - Quick tests: ~5-10 minutes
-
----
-
-### 3. Release (`release.yml`)
-
-**Triggers:** Version tags (`v*`), manual dispatch
-
-**Jobs:**
-- **Release** - Automated release process
-  - GoReleaser execution
-  - Multi-platform binary builds
-  - GitHub release creation
-  - Artifact upload
-
-**Prerequisites:**
-- Version tag must exist (e.g., `v0.12.0`)
-- `GITHUB_TOKEN` must have `contents: write` permission
-- `.goreleaser.yaml` configuration file
-
-**Duration:** ~5-10 minutes
-
-**Manual Release Process:**
-```bash
-# Prepare release locally (creates tag and draft release)
-make release-patch  # or release-minor, release-major
-
-# Review draft release on GitHub
-# https://github.com/leefowlercu/agentic-memorizer/releases
-
-# Push to trigger automated build
-git push && git push --tags
-
-# Publish draft release on GitHub
-```
 
 ---
 
@@ -110,12 +76,7 @@ git push && git push --tags
 
 ┌─────────────┐
 │ e2e-tests   │  ← Runs on every push/PR
-│ (20-30 min) │     Comprehensive validation
-└─────────────┘
-
-┌─────────────┐
-│ release.yml │  ← Runs on version tags
-│ (5-10 min)  │     Automated releases
+│ (30-40 min) │     Comprehensive validation
 └─────────────┘
 ```
 
@@ -176,13 +137,6 @@ If Docker cache is corrupted:
 - Verify Docker Compose is running
 - Check test logs in artifacts
 
-### Release workflow fails
-
-Common issues:
-- **Tag not pushed:** `git push --tags`
-- **Goreleaser config error:** Validate with `make goreleaser-check`
-- **Permission denied:** Check `GITHUB_TOKEN` permissions
-
 ---
 
 ## Adding New Workflows
@@ -195,7 +149,7 @@ When adding new workflows:
 
 2. **Set appropriate timeouts**
    - Fast workflows: 5-10 minutes
-   - E2E tests: 20-30 minutes
+   - E2E tests: 30-40 minutes
    - Never exceed 60 minutes
 
 3. **Add caching when possible**
@@ -229,5 +183,4 @@ Add to main README.md:
 ## References
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [GoReleaser Documentation](https://goreleaser.com/)
 - [Docker Buildx Cache](https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md)

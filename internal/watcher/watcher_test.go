@@ -411,3 +411,46 @@ func TestWatcher_DebounceUpdate(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	})
 }
+
+func TestWatcher_EventPriority(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "watcher-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	w, err := New(tmpDir, []string{}, []string{}, nil, 500, logger)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Create file with WriteFile which can trigger both CREATE and WRITE events
+	testFile := filepath.Join(tmpDir, "priority-test.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Wait for debounce (500ms debounce interval)
+	time.Sleep(700 * time.Millisecond)
+
+	// Should receive CREATE event, not MODIFY, even if both events occurred
+	select {
+	case event := <-w.Events():
+		if event.Type != EventCreate {
+			t.Errorf("expected Create event (priority over Modify), got %v", event.Type)
+		}
+		if event.Path != testFile {
+			t.Errorf("expected path %s, got %s", testFile, event.Path)
+		}
+	case <-time.After(1 * time.Second):
+		t.Error("timeout waiting for create event")
+	}
+}

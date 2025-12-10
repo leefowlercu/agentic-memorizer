@@ -274,7 +274,7 @@ func TestGraph(t *testing.T) {
 5. Add Makefile target in `e2e/Makefile`:
    ```makefile
    test-newsuite: setup
-       docker-compose run --rm test-runner go test -tags=e2e -v ./e2e/tests/newsuite_test.go
+       docker compose run --rm test-runner go test -tags=e2e -v ./e2e/tests/newsuite_test.go
    ```
 
 ### Adding Test Fixtures
@@ -328,13 +328,13 @@ make setup
 
 ```bash
 # Check FalkorDB status
-docker-compose ps falkordb
+docker compose ps falkordb
 
 # View logs
-docker-compose logs falkordb
+docker compose logs falkordb
 
 # Restart FalkorDB
-docker-compose restart falkordb
+docker compose restart falkordb
 ```
 
 ### Binary not found
@@ -349,7 +349,7 @@ make build
 
 Increase timeout in test command:
 ```bash
-docker-compose run --rm test-runner go test -tags=e2e -v -timeout 60m ./e2e/tests/...
+docker compose run --rm test-runner go test -tags=e2e -v -timeout 60m ./e2e/tests/...
 ```
 
 ## Test Coverage

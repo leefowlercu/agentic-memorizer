@@ -36,10 +36,10 @@ done
 cd "$(dirname "$0")/.."
 
 # Ensure environment is set up
-if ! docker-compose ps falkordb | grep -q "Up"; then
+if ! docker compose ps falkordb | grep -q "Up"; then
     echo "Starting FalkorDB..."
-    docker-compose up -d falkordb
-    timeout 30 sh -c 'until docker-compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG; do sleep 1; done'
+    docker compose up -d falkordb
+    timeout 30 sh -c 'until docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG; do sleep 1; done'
 fi
 
 # Determine test path
@@ -60,7 +60,7 @@ echo "Timeout: $TIMEOUT"
 echo ""
 
 # Run tests
-docker-compose run --rm test-runner \
+docker compose run --rm test-runner \
     go test -tags=e2e $VERBOSE -timeout "$TIMEOUT" "$TEST_PATH"
 
 EXIT_CODE=$?

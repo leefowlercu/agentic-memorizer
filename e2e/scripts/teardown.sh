@@ -12,9 +12,9 @@ cd "$(dirname "$0")/.."
 echo "Stopping Docker services and removing volumes..."
 if [ "$1" = "--keep-volumes" ]; then
     echo "Note: Keeping volumes (use without --keep-volumes to remove)"
-    docker-compose down
+    docker compose down
 else
-    docker-compose down -v
+    docker compose down -v
 fi
 
 # Clean test artifacts

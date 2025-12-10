@@ -1889,9 +1889,61 @@ Files matching skip patterns are completely ignored during indexing and won't ap
 
 ### Environment Variables
 
+#### Configuration Override Pattern
+
+All configuration settings can be overridden using environment variables with the `MEMORIZER_` prefix. Configuration keys use dot notation (e.g., `claude.model`), which maps to environment variables by replacing dots with underscores and adding the prefix.
+
+**Examples:**
+
+```bash
+# Override memory_root
+export MEMORIZER_MEMORY_ROOT=/custom/memory/path
+
+# Override claude.model
+export MEMORIZER_CLAUDE_MODEL=claude-opus-4-5-20251101
+
+# Override daemon.workers
+export MEMORIZER_DAEMON_WORKERS=5
+
+# Override daemon.http_port
+export MEMORIZER_DAEMON_HTTP_PORT=8080
+```
+
+**Priority:** Environment variables take precedence over `config.yaml` settings.
+
+#### Credential Environment Variables
+
+API keys and passwords have dedicated environment variables that are checked before falling back to config file values:
+
+**ANTHROPIC_API_KEY**
+
+Claude API key for semantic analysis. If not set, falls back to `claude.api_key` in config.
+
+```bash
+export ANTHROPIC_API_KEY="your-claude-api-key"
+```
+
+**OPENAI_API_KEY**
+
+OpenAI API key for vector embeddings (optional feature). If not set, falls back to `embeddings.api_key` in config.
+
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+```
+
+**FALKORDB_PASSWORD**
+
+FalkorDB password for graph database authentication (optional). If not set, falls back to `graph.password` in config.
+
+```bash
+export FALKORDB_PASSWORD="your-falkordb-password"
+```
+
+**Best Practice:** Use these credential-specific environment variables instead of storing API keys in the config file.
+
 #### MEMORIZER_APP_DIR
 
-By default, configuration and data files are stored in `~/.memorizer/`. You can customize this location by setting the `MEMORIZER_APP_DIR` environment variable:
+Customizes the application directory location. By default, configuration and data files are stored in `~/.memorizer/`.
 
 ```bash
 # Use a custom app directory
@@ -1902,7 +1954,7 @@ memorizer initialize
 MEMORIZER_APP_DIR=/tmp/test-instance memorizer daemon start
 ```
 
-Files stored in the app directory:
+**Files stored in the app directory:**
 - `config.yaml` - Configuration file
 - `daemon.pid` - Daemon process ID
 - `daemon.log` - Daemon logs (if configured)
@@ -1915,7 +1967,7 @@ Files stored in the app directory:
 - **Containers**: Use custom paths in Docker or other containerized environments
 - **CI/CD**: Isolate build/test environments
 
-**Note**: The memory directory and cache directory locations are still controlled by `config.yaml` settings, not `MEMORIZER_APP_DIR`. Only the application's own files (config, PID, logs, FalkorDB data) use the app directory.
+**Note**: The memory directory and cache directory locations are controlled by `config.yaml` settings (or their corresponding `MEMORIZER_MEMORY_ROOT` and `MEMORIZER_ANALYSIS_CACHE_DIR` environment variables), not `MEMORIZER_APP_DIR`. Only the application's own files (config, PID, logs, FalkorDB data) use the app directory.
 
 ### Output Formats
 

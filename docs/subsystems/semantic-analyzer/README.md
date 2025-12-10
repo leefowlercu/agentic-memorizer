@@ -1,5 +1,7 @@
 # Semantic Analyzer Subsystem Documentation
 
+**Last Updated:** 2025-12-09
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -464,7 +466,7 @@ The `Semantic` field is nil in three cases:
 
 **Confidence Scoring**:
 Confidence scores indicate analysis reliability:
-- **0.5**: Explicitly set for fallback analysis synthesized from metadata only (binary files, extraction failures) at `analyzeBinary()` line 455
+- **0.5**: Explicitly set for fallback analysis synthesized from metadata only (binary files, extraction failures) at `analyzeBinary()` line 501
 - **0.0**: Default value for Claude API responses (Go's zero value for float64)
 
 **Important Note**: The current implementation does NOT request confidence scores from Claude in its prompts. None of the analysis prompts (lines 99-104, 166-171, 289-294, 410-415, 470-475) ask Claude to provide a confidence field. As a result, successful Claude analyses return with Confidence=0.0 (the zero value) unless Claude spontaneously includes a confidence field in the JSON response.

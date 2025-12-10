@@ -1,5 +1,7 @@
 # MCP Subsystem Documentation
 
+**Last Updated:** 2025-12-09
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -22,7 +24,7 @@
 4. [Configuration](#configuration)
 5. [Integration Points](#integration-points)
    - [Index System Integration](#index-system-integration)
-   - [Output Processor Integration](#output-processor-integration)
+   - [Format Package Integration](#format-package-integration)
    - [Daemon Integration](#daemon-integration)
    - [External Client Integration](#external-client-integration)
 6. [Glossary](#glossary)
@@ -464,48 +466,69 @@ export MEMORIZER_MCP_LOG_LEVEL=debug
 
 ### Index System Integration
 
-The MCP server integrates with the index subsystem through read-only access patterns:
+The MCP server integrates with the index subsystem through daemon API access:
 
-**Index Loading**
-- Server loads precomputed index at startup via `index.Manager.LoadComputed()`
-- Uses standard index path from configuration
-- Fails gracefully if index missing with actionable error message
+**Index Loading** (`cmd/mcp/subcommands/start.go:78-98`)
+- Server fetches initial index from daemon HTTP API (`/api/v1/index`) at startup
+- Falls back to empty index if daemon unavailable, then waits for SSE updates
+- No direct file system access or index.Manager usage
 - No write operations or locking required
 
 **Index Schema Compatibility**
-- Uses existing `types.Index` and `types.IndexEntry` structures
+- Uses `types.GraphIndex` and `types.FileEntry` structures (graph-native format)
+- Shares type definitions with daemon and integration subsystems
 - No MCP-specific modifications to index format
 - Compatible with all existing index generation logic
 - Shares schema versioning with rest of system
 
 **Error Handling**
-- Missing index returns error directing user to start daemon
-- Malformed index fails startup with validation error
-- Empty index works correctly (returns zero results)
+- Daemon unreachable: Logs warning, starts with empty index
+- Malformed index response: Logs error, starts with empty index
+- Empty index: Works correctly, returns zero results from tools
+- SSE updates populate index when daemon becomes available
 
-The integration maintains complete separation between index generation (daemon) and index consumption (MCP server).
+The integration maintains complete separation between index generation (daemon) and index consumption (MCP server), with all data flowing through the daemon HTTP API.
 
-### Output Processor Integration
+### Format Package Integration
 
-The MCP server reuses existing output processors for resource formatting:
+The MCP server uses the unified format package for resource formatting, consistent with all other subsystems:
 
-**Format Delegation**
-- XML format → `output.NewXMLProcessor().Format(index)`
-- Markdown format → `output.NewMarkdownProcessor().Format(index)`
-- JSON format → `output.NewJSONProcessor().Format(index)`
+**Format Package Architecture**
+The server delegates resource formatting to the format package (`internal/format/`) which provides a builder-formatter pattern:
+- **GraphContent Builder** - Wraps GraphIndex for rendering (`format.NewGraphContent(index)`)
+- **Formatter Registry** - Provides formatter instances (`format.GetFormatter(name)`)
+- **Multiple Formatters** - XML, Markdown, JSON, YAML, Text implementations
+
+**Resource Formatting Implementation** (`server.go:402-430`)
+```go
+// XML resource formatting
+formatter, err := format.GetFormatter("xml")
+graphContent := format.NewGraphContent(s.index)
+content, err := formatter.Format(graphContent)
+
+// Markdown resource formatting
+formatter, err := format.GetFormatter("markdown")
+graphContent := format.NewGraphContent(s.index)
+content, err := formatter.Format(graphContent)
+
+// JSON resource formatting
+formatter, err := format.GetFormatter("json")
+graphContent := format.NewGraphContent(s.index)
+content, err := formatter.Format(graphContent)
+```
 
 **Benefits**
-- Zero code duplication between hooks and MCP
-- Consistent formatting across all integration methods
-- Automatic inheritance of format improvements
-- Schema versioning handled by processors
+- Zero code duplication across integration methods (hooks, MCP, read command)
+- Consistent formatting through unified format package
+- Automatic inheritance of format improvements and bug fixes
+- Shared GraphContent builder pattern across all subsystems
 
-**Resource URIs**
-- `memorizer://index` → XML (Claude Code format)
-- `memorizer://index/markdown` → Markdown (human-readable)
-- `memorizer://index/json` → JSON (structured data)
+**Resource URIs and Routing** (`server.go:309-322`)
+- `memorizer://index` → XML formatter (application/xml MIME type)
+- `memorizer://index/markdown` → Markdown formatter (text/markdown MIME type)
+- `memorizer://index/json` → JSON formatter (application/json MIME type)
 
-Clients can request their preferred format through URI routing, with MIME types provided for content negotiation.
+Clients request their preferred format through URI routing in `handleResourcesRead()`, which uses a switch-case to map URIs to formatter calls. MIME types are provided for proper content negotiation.
 
 ### Daemon Integration
 

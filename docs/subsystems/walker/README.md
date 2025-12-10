@@ -1,5 +1,7 @@
 # Walker Subsystem Documentation
 
+**Last Updated:** 2025-12-09
+
 ## Table of Contents
 
 1. [Overview](#overview)

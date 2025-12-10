@@ -1,5 +1,7 @@
 # Integration Registry Subsystem Documentation
 
+**Last Updated:** 2025-12-09
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -16,7 +18,7 @@
       - [Claude Code MCP Adapter](#claude-code-mcp-adapter)
       - [Gemini CLI MCP Adapter](#gemini-cli-mcp-adapter)
       - [Codex CLI MCP Adapter](#codex-cli-mcp-adapter)
-   - [Output Processors](#output-processors)
+   - [Output Formatting](#output-formatting)
 4. [Integration Points](#integration-points)
    - [CLI Commands](#cli-commands)
    - [Config Manager](#config-manager)
@@ -27,9 +29,9 @@
 
 The Integration Registry subsystem provides a framework-agnostic integration system that connects agentic-memorizer with various AI agent platforms including Claude Code, Gemini CLI, and Codex CLI. It enables automatic setup of memory index integration, allowing agent frameworks to access the precomputed memory index during their sessions through framework-specific output formatting and command generation.
 
-The subsystem follows a plugin-based architecture with three main layers: a thread-safe Registry that manages adapter registration and lookup, Adapter implementations that provide framework-specific integration logic, and Output Processors that handle rendering the index in different formats (XML, Markdown, JSON). This layered design separates concerns cleanly, enabling independent evolution of output formatting, integration wrapping, and registry management.
+The subsystem follows a plugin-based architecture with three main layers: a thread-safe Registry that manages adapter registration and lookup, Adapter implementations that provide framework-specific integration logic, and the unified Format package that handles rendering the index in different formats (XML, Markdown, JSON). This layered design separates concerns cleanly, enabling independent evolution of output formatting, integration wrapping, and registry management.
 
-The Integration Registry provides specialized adapters (Claude Code, Gemini CLI, Codex CLI) that offer automatic detection, setup, and framework-specific output wrapping. This approach provides sophisticated automation for all supported platforms.
+The Integration Registry provides specialized adapters (Claude Code, Gemini CLI, Codex CLI) that offer automatic detection, setup, and framework-specific output wrapping. Integration adapters collaborate with the unified format package (internal/format/) to produce base formats (XML, Markdown, JSON) and then apply integration-specific wrapping when needed.
 
 ## Design Principles
 
@@ -69,11 +71,11 @@ The registry provides comprehensive discovery capabilities including listing all
 
 The Integration Registry maintains clear boundaries between output formatting, integration wrapping, and registry management, enabling independent evolution of each concern.
 
-**Output Processors Independence:**
-Output processors (XML, Markdown, JSON) are completely independent from integration adapters. They implement a separate `OutputProcessor` interface and have no knowledge of frameworks or integration wrapping. This separation enables output format evolution without affecting integration logic and vice versa.
+**Format Package Independence:**
+The format package (internal/format/) provides a unified formatting system through the Buildable interface and Formatter implementations. Formatters (XML, Markdown, JSON, YAML, Text) are completely independent from integration adapters and have no knowledge of frameworks or integration wrapping. This separation enables output format evolution without affecting integration logic and vice versa.
 
 **Base Format vs. Integration Wrapping:**
-The architecture distinguishes between base output formats (rendered by processors) and integration-specific wrapping (applied by adapters). For example, Claude Code uses XML base format but wraps it in a SessionStart JSON envelope with system message and additional context. This separation enables reusing output processors across multiple integrations.
+The architecture distinguishes between base output formats (rendered by formatters via GraphContent builders) and integration-specific wrapping (applied by adapters). For example, Claude Code uses XML base format but wraps it in a SessionStart JSON envelope with system message and additional context. This separation enables reusing formatters across multiple integrations and output contexts.
 
 **Detection Logic Separation:**
 Framework detection logic (checking for config files/directories) is isolated in adapter implementations. The registry provides detection operations but delegates to adapters. This separation allows each adapter to implement detection appropriate for its framework without coupling detection logic to registry management.
@@ -123,7 +125,7 @@ The Integration interface (`internal/integrations/interface.go`) defines the con
 - `GetCommand()` - Generates the shell command that frameworks should invoke to access the index (e.g., `memorizer read --format xml --integration claude-code-hook`)
 
 **Output Formatting:**
-- `FormatOutput()` - Transforms base index format into framework-specific output, applying any necessary wrapping or envelope structures (optional for MCP-style integrations that provide tools/resources instead of formatted output)
+- `FormatOutput()` - Produces framework-specific output by obtaining base format from format package and applying integration-specific wrapping or envelope structures (optional for MCP-style integrations that provide tools/resources instead of formatted output)
 
 ### Registry Component
 
@@ -307,60 +309,88 @@ The Codex CLI MCP adapter is the only integration option for Codex CLI users. It
 
 All config file operations use atomic writes with backup pattern for safety.
 
-### Output Processors
+### Output Formatting
 
-Output Processors (`internal/integrations/output/`) are independent formatters that render the memory index into different base formats before integration-specific wrapping is applied.
+Output formatting is handled by the unified format package (`internal/format/`) which provides a consistent interface for rendering various output types including the memory index.
 
-**Processor Interface:**
-All processors implement the `GraphOutputProcessor` interface with `FormatGraph()` and `GetFormat()` methods. The `FormatGraph()` method accepts a GraphIndex and returns formatted output as a string. Processors can be configured with Options (e.g., ShowRecentDays filter) at creation time.
+**Format Package Architecture:**
+The format package uses a builder-formatter pattern where content structures (builders) implement the Buildable interface and formatters render them into specific output formats. This architecture unifies output formatting across all CLI commands and integration outputs.
 
-#### XML Processor
+**Key Components:**
+- **Buildable Interface** - Defines `Type()` and `Validate()` methods that all output structures implement
+- **Formatter Interface** - Defines `Format(Buildable)` method that renders buildables to strings
+- **Formatter Registry** - Global registry accessible via `format.GetFormatter(name)` with registered formatters
+- **Builder Types** - Status, Section, Table, List, Progress, Error, and GraphContent
 
-Produces structured XML output with comprehensive metadata and category organization suitable for programmatic parsing.
+#### GraphContent Builder
 
-**Structure:**
-- Root `<memory_index>` element containing `<metadata>` and `<categories>` sections
-- Metadata includes file count, category count, oldest/newest file timestamps
-- Categories group files by semantic classification with individual file entries
-- Optional `<recent_activity>` section when filtering by recent days
+The GraphContent builder (`internal/format/graph.go`) wraps a GraphIndex for formatting through the format package. It implements the Buildable interface to integrate with the unified formatting system.
 
-**File Entries:**
-Each file includes path, relative path, modification time, type, category, size, hash, and semantic analysis (summary, tags, topics, document type). Type-specific metadata like dimensions, word count, or page count appears when available.
+**Purpose:**
+GraphContent serves as the bridge between the graph-native index structure and the format package, enabling formatters to render graph indexes consistently with other output types.
 
-**XML Safety:**
-All text content undergoes XML entity escaping to prevent malformed output from special characters in file paths or summaries.
+**Usage Pattern:**
+```go
+// Wrap GraphIndex in GraphContent
+graphContent := format.NewGraphContent(index)
 
-#### Markdown Processor
+// Get formatter and render
+formatter, _ := format.GetFormatter("xml")
+output, _ := formatter.Format(graphContent)
+```
 
-Generates human-readable output with emoji indicators, visual formatting, and natural language descriptions designed for direct human consumption.
+#### Available Formatters
 
-**Organization:**
-- Title section with overall statistics
-- Category sections with emoji headers and file counts
-- Individual file cards with inline metadata
+The format package provides five formatters that can render GraphContent:
+
+**XML Formatter** (`internal/format/formatters/xml.go`):
+- Produces structured XML with `<memory_index>` root element
+- Contains `<metadata>` and `<categories>` sections
+- Categories group files by semantic classification
+- File entries include path, size, hash, category, semantic analysis
+- All text content undergoes XML entity escaping for safety
+- Suitable for programmatic parsing and SessionStart hooks
+
+**Markdown Formatter** (`internal/format/formatters/markdown.go`):
+- Generates human-readable output with emoji indicators
+- Category sections with visual headers and file counts
+- Individual file cards with inline metadata badges
 - Usage guide section with query examples
+- Designed for direct human consumption in terminal or rendered form
 
-**Visual Elements:**
-- Category emojis (documents, images, code, etc.)
-- File type indicators
-- Inline metadata badges (pages/slides/words/dimensions)
-- Readable/extraction status indicators
-
-**Formatting:**
-Uses Markdown heading levels, bold text, inline code, and emoji to create visually organized output that's pleasant to read in terminal or rendered form.
-
-#### JSON Processor
-
-Provides direct JSON serialization of the Index structure with pretty-printing for both programmatic access and human inspection.
-
-**Output:**
-- Complete Index structure with metadata, entries, and statistics
-- Pretty-printed with 2-space indentation for readability
-- Optional recent_entries field when filtering by recent days
+**JSON Formatter** (`internal/format/formatters/json.go`):
+- Direct JSON serialization of GraphIndex structure
+- Pretty-printed with 2-space indentation
 - Preserves all data fields without transformation
+- Ideal for programmatic integration and automated processing
 
-**Use Cases:**
-Ideal for programmatic integration, automated processing, or when consumers need full access to structured index data without parsing XML or Markdown.
+**YAML Formatter** (`internal/format/formatters/yaml.go`):
+- YAML serialization of GraphIndex structure
+- Human-readable configuration-style output
+- Useful for configuration contexts or YAML-native tools
+
+**Text Formatter** (`internal/format/formatters/text.go`):
+- Plain text output with ASCII symbols (no Unicode)
+- Fallback format for environments without rich formatting support
+- Renders all builder types including GraphContent
+
+#### Integration with Adapters
+
+Integration adapters use the format package to produce base formats before applying integration-specific wrapping:
+
+**Hook Adapters (e.g., Claude Code Hook):**
+1. Receive `FormatOutput(index, format)` call from read command
+2. Map OutputFormat enum to formatter name (xml, markdown, json)
+3. Get formatter via `format.GetFormatter(name)`
+4. Create GraphContent wrapper: `format.NewGraphContent(index)`
+5. Render base format: `formatter.Format(graphContent)`
+6. Apply integration wrapping (SessionStart JSON envelope)
+7. Return wrapped output
+
+**MCP Adapters (e.g., Claude Code MCP):**
+- Do not use `FormatOutput()` - return error if called
+- Provide output through MCP tools that query daemon API
+- Daemon API uses format package for response formatting
 
 ## Integration Points
 
@@ -454,11 +484,15 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Adapter**: Concrete implementation of the Integration interface for a particular framework, encapsulating framework-specific setup logic and configuration requirements.
 
-**Output Format**: Base rendering format (XML, Markdown, JSON) produced by output processors before any integration-specific wrapping is applied.
+**Output Format**: Base rendering format (XML, Markdown, JSON, YAML, Text) produced by formatters from the format package before any integration-specific wrapping is applied.
 
-**Integration Wrapping**: Framework-specific envelope or transformation applied to base format to conform to framework expectations (e.g., SessionStart JSON for Claude Code).
+**Integration Wrapping**: Framework-specific envelope or transformation applied to base format to conform to framework expectations (e.g., SessionStart JSON envelope for Claude Code hooks).
 
-**Output Processor**: Independent formatter implementing the GraphOutputProcessor interface that renders GraphIndex data into a specific base format without knowledge of integrations.
+**Formatter**: Implementation of the Formatter interface in the format package that renders Buildable structures into specific output formats (xml, markdown, json, yaml, text).
+
+**GraphContent**: Builder type in the format package that wraps a GraphIndex for rendering through formatters, implementing the Buildable interface.
+
+**Buildable Interface**: Core interface in the format package defining `Type()` and `Validate()` methods that all output structures implement.
 
 **SessionStart Hook**: Claude Code's mechanism for running commands at session initialization, triggered by matchers like "startup", "resume", "clear", or "compact".
 

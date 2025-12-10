@@ -34,12 +34,14 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
   - [Claude Code Integration (Automatic)](#claude-code-integration-automatic)
   - [Claude Code MCP Integration (Automatic)](#claude-code-mcp-integration-automatic)
   - [OpenAI Codex CLI Integration (Automatic)](#openai-codex-cli-integration-automatic)
+  - [Gemini CLI Integration (Automatic)](#gemini-cli-integration-automatic)
 - [Managing Integrations](#managing-integrations)
 - [Usage](#usage)
   - [Background Daemon (Required)](#background-daemon-required)
   - [Running as a Service](#running-as-a-service)
   - [Upgrading](#upgrading)
   - [Adding Files to Memory](#adding-files-to-memory-1)
+  - [Using the MCP Server](#using-the-mcp-server)
   - [Manual Testing](#manual-testing)
   - [CLI Usage](#cli-usage)
   - [Controlling Semantic Analysis](#controlling-semantic-analysis)
@@ -141,7 +143,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 - Automatic framework detection and configuration
 - One-command setup: `memorizer integrations setup gemini-cli-mcp`
 - MCP server configuration in `~/.gemini/settings.json`
-- Provides three on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`
+- Provides five on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`, `get_related_files`, `search_entities`
 - Full lifecycle management (setup, update, remove, validate)
 - Works with both user and project-level Gemini CLI configurations
 
@@ -149,7 +151,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 - Automatic framework detection and configuration
 - One-command setup: `memorizer integrations setup codex-cli-mcp`
 - MCP server configuration in `~/.codex/config.toml` (TOML format)
-- Provides three on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`
+- Provides five on-demand tools: `search_files`, `get_file_metadata`, `list_recent_files`, `get_related_files`, `search_entities`
 - Full lifecycle management (setup, update, remove, validate)
 - Verification via `/mcp` command in Codex TUI
 
@@ -188,8 +190,8 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 
 **Knowledge Graph** (`internal/graph/`):
 - FalkorDB (Redis-compatible graph database)
-- Node types: File, Tag, Topic, Entity, Category
-- Relationship types: HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY
+- Node types: File, Tag, Topic, Entity, Category, Directory
+- Relationship types: HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY, REFERENCES, SIMILAR_TO, IN_DIRECTORY, PARENT_OF
 - Vector embeddings for semantic similarity (optional, requires OpenAI API)
 
 **Semantic Search** (`internal/search/`):
@@ -302,14 +304,16 @@ docker stop memorizer-falkordb && docker rm memorizer-falkordb
 memorizer graph start
 ```
 
-### Graceful Degradation
+### FalkorDB Availability
 
-If FalkorDB is unavailable, the daemon will:
-1. Log a warning about the connection failure
-2. Continue running with reduced functionality
-3. Queue file changes for processing when FalkorDB reconnects
+**IMPORTANT:** The daemon requires FalkorDB to be running at startup and cannot operate without it.
 
-The MCP server and read command will still work with cached data when the graph is unavailable.
+If FalkorDB is unavailable:
+- Daemon initialization will fail with "failed to initialize graph"
+- You must start FalkorDB before starting the daemon
+- Use `memorizer graph start` to launch the FalkorDB container
+
+If an index rebuild fails but existing graph data is present, the daemon will continue running with the existing data (degraded mode). However, this does not apply to FalkorDB connection failures.
 
 ## Quick Start
 
@@ -341,7 +345,7 @@ memorizer graph start
 For Claude Code users, automatic setup configures everything for you:
 
 ```bash
-memorizer initialize --setup-integrations
+memorizer initialize --integrations claude-code-hook,claude-code-mcp
 ```
 
 This will:
@@ -410,16 +414,16 @@ Then run the initialize command to set up configuration:
 memorizer initialize
 
 # Or with flags for automated setup
-memorizer initialize --setup-integrations
+memorizer initialize --integrations claude-code-hook,claude-code-mcp
 ```
 
 This creates:
 - Config file at `~/.memorizer/config.yaml`
 - Memory directory at `~/.memorizer/memory/`
 - Cache directory at `~/.memorizer/.cache/` (for semantic analysis cache)
-- Index file at `~/.memorizer/index.json` (created by daemon on first run)
+- Graph database (populated by daemon on first run in FalkorDB)
 
-The initialize command can optionally configure Claude Code SessionStart hooks automatically with `--setup-integrations`.
+The initialize command can optionally configure AI agent integrations automatically with `--integrations <integration-name>`.
 
 After initialization, start the daemon:
 ```bash
@@ -490,10 +494,10 @@ This command automatically:
 5. Configures the command: `memorizer read --format xml --integration claude-code-hook`
 6. Creates backup at `~/.claude/settings.json.backup`
 
-You can also use the `--setup-integrations` flag during initialization:
+You can also use the `--integrations` flag during initialization:
 
 ```bash
-memorizer initialize --setup-integrations
+memorizer initialize --integrations
 memorizer daemon start
 ```
 
@@ -527,7 +531,7 @@ If you prefer manual configuration, add to `~/.claude/settings.json`:
 Verify your setup:
 
 ```bash
-memorizer integrations validate
+memorizer integrations health
 ```
 
 #### Removal
@@ -556,57 +560,21 @@ This command automatically:
 5. Sets the binary command path
 6. Creates backup at `~/.claude.json.backup`
 
-#### MCP Tools Provided
+#### MCP Tools and Prompts
 
-The MCP server exposes five tools to Claude Code:
+The MCP server exposes five tools and three prompt templates for interacting with your memory index. For detailed information on each tool, prompt, and how to use them, see the [Using the MCP Server](#using-the-mcp-server) section.
 
-- **`search_files`** - Semantic search across indexed files
-  - Substring-based filename matching
-  - Tag and topic search
-  - Summary text search
-  - Relevance-ranked results
-  - Category filtering
+**Available MCP Tools:**
+- `search_files` - Semantic search across indexed files
+- `get_file_metadata` - Complete metadata for a specific file
+- `list_recent_files` - Recently modified files
+- `get_related_files` - Files connected through shared tags/topics/entities (requires FalkorDB)
+- `search_entities` - Files mentioning specific entities (requires FalkorDB)
 
-- **`get_file_metadata`** - Retrieve complete metadata for a specific file
-  - File metadata (size, type, category)
-  - Semantic analysis (summary, tags, topics)
-  - Document-specific fields (word count, page count, dimensions)
-
-- **`list_recent_files`** - List recently modified files
-  - Configurable lookback period (days)
-  - Sorted by modification date
-  - Includes full metadata
-
-- **`get_related_files`** - Find files connected through shared concepts
-  - Discovers files with shared tags, topics, or entities
-  - Ranks by connection strength
-  - Enables knowledge graph traversal
-
-- **`search_entities`** - Search for files mentioning specific entities
-  - Find files referencing people, organizations, concepts
-  - Supports entity type filtering
-  - Returns files with entity mention details
-
-#### MCP Prompts (Claude Code)
-
-The Claude Code MCP server provides pre-configured prompt templates that help you interact with your memory index efficiently:
-
-- **`analyze-file`** - Deep analysis of a specific file
-  - Generates detailed analysis using semantic metadata
-  - Arguments: `file_path` (required), `focus` (optional)
-  - Example: Focus on security, performance, or architecture aspects
-
-- **`search-context`** - Build effective search queries
-  - Helps construct semantic search queries
-  - Arguments: `topic` (required), `category` (optional)
-  - Returns ranked search strategies and related terms
-
-- **`explain-summary`** - Understand AI-generated summaries
-  - Detailed explanation of file semantic analysis
-  - Arguments: `file_path` (required)
-  - Explains summary, tags, topics, and confidence scores
-
-These prompts appear in Claude Code's prompt selector and can be invoked with arguments to generate context-aware messages based on your memory index.
+**Available MCP Prompts:**
+- `analyze-file` - Generate detailed file analysis
+- `search-context` - Build effective search queries
+- `explain-summary` - Understand semantic analysis results
 
 #### MCP Configuration
 
@@ -654,7 +622,7 @@ Many users enable both for maximum flexibility.
 Verify your MCP setup:
 
 ```bash
-memorizer integrations validate
+memorizer integrations health
 memorizer integrations health
 ```
 
@@ -701,7 +669,7 @@ MEMORIZER_MEMORY_ROOT = "/path/to/memory"
 
 **MCP Tools:**
 
-The MCP server exposes three tools to Codex CLI:
+The MCP server exposes five tools to Codex CLI:
 
 - **`search_files`**: Semantic search across indexed files
   - Query by filename, tags, topics, or summary content
@@ -718,6 +686,16 @@ The MCP server exposes three tools to Codex CLI:
   - Sorted by modification date
   - Optional result limit
 
+- **`get_related_files`**: Find files connected through shared concepts
+  - Discovers files with shared tags, topics, or entities
+  - Ranks by connection strength
+  - Enables knowledge graph traversal
+
+- **`search_entities`**: Search for files mentioning specific entities
+  - Find files referencing people, organizations, concepts
+  - Supports entity type filtering
+  - Returns files with entity mention details
+
 **Verification:**
 
 Run Codex CLI and use the `/mcp` command to verify the integration:
@@ -733,7 +711,7 @@ You should see `memorizer` listed as an active MCP server.
 Alternatively, validate via CLI:
 
 ```bash
-memorizer integrations validate
+memorizer integrations health
 ```
 
 **Removal:**
@@ -742,6 +720,88 @@ Remove the MCP integration:
 
 ```bash
 memorizer integrations remove codex-cli-mcp
+```
+
+### Gemini CLI Integration (Automatic)
+
+Gemini CLI supports integration via the Model Context Protocol (MCP), providing semantic search and metadata retrieval tools.
+
+#### Setup
+
+One-command automatic setup:
+
+```bash
+memorizer integrations setup gemini-cli-mcp
+```
+
+**What it does:**
+
+1. Detects your Gemini CLI installation (`~/.gemini/` directory)
+2. Creates/updates `~/.gemini/settings.json` with MCP server configuration
+3. Configures the binary path and memory root environment variable
+4. Enables the MCP server by default
+
+**Configuration:**
+
+The setup command adds an MCP server entry to your Gemini CLI configuration:
+
+```json
+{
+  "mcpServers": {
+    "memorizer": {
+      "command": "/path/to/memorizer",
+      "args": ["mcp", "start"],
+      "env": {
+        "MEMORIZER_MEMORY_ROOT": "/path/to/memory"
+      }
+    }
+  }
+}
+```
+
+**MCP Tools:**
+
+The MCP server exposes five tools to Gemini CLI:
+
+- **`search_files`**: Semantic search across indexed files
+  - Query by filename, tags, topics, or summary content
+  - Returns ranked results with relevance scores
+  - Optional category filtering
+
+- **`get_file_metadata`**: Retrieve complete metadata for specific files
+  - Full semantic analysis (summary, tags, topics, document type)
+  - File metadata (size, type, category, modification date)
+  - Confidence scores and analysis results
+
+- **`list_recent_files`**: List recently modified files
+  - Configurable time window (1-365 days)
+  - Sorted by modification date
+  - Optional result limit
+
+- **`get_related_files`**: Find files connected through shared concepts
+  - Discovers files with shared tags, topics, or entities
+  - Ranks by connection strength
+  - Enables knowledge graph traversal
+
+- **`search_entities`**: Search for files mentioning specific entities
+  - Find files referencing people, organizations, concepts
+  - Supports entity type filtering
+  - Returns files with entity mention details
+
+**Verification:**
+
+Validate via CLI:
+
+```bash
+memorizer integrations health
+```
+
+**Removal:**
+
+Remove the MCP integration:
+
+```bash
+memorizer integrations remove gemini-cli-mcp
 ```
 
 ## Managing Integrations
@@ -843,7 +903,7 @@ Removes the integration configuration from the framework's settings file. For Cl
 Check that all configured integrations are properly set up:
 
 ```bash
-memorizer integrations validate
+memorizer integrations health
 ```
 
 **Example Output:**
@@ -901,7 +961,7 @@ memorizer daemon systemctl  # Linux
 memorizer daemon launchctl  # macOS
 ```
 
-**Note**: If you used `initialize --setup-integrations`, the integration is already configured. Otherwise, configure your AI agent framework to call `memorizer read` (see Integration Setup section above).
+**Note**: If you used `initialize --integrations`, the integration is already configured. Otherwise, configure your AI agent framework to call `memorizer read` (see Integration Setup section above).
 
 #### Daemon Commands
 
@@ -921,7 +981,7 @@ memorizer daemon restart
 # Force immediate rebuild
 memorizer daemon rebuild                    # Rebuild index
 memorizer daemon rebuild --force            # Clear graph first, then rebuild
-memorizer daemon rebuild --clear-old-cache  # Clear stale cache entries before rebuild
+memorizer daemon rebuild --clear-stale      # Clear stale cache entries before rebuild
 
 # View daemon logs
 memorizer daemon logs              # Last 50 lines
@@ -938,11 +998,11 @@ The daemon:
 1. **Watches** your memory directory for file changes using fsnotify
 2. **Processes** files in parallel using a worker pool (3 workers by default)
 3. **Rate limits** API calls to respect Claude API limits (20/min default)
-4. **Maintains** a precomputed `index.json` file with all metadata and semantic analysis
+4. **Maintains** a precomputed index in FalkorDB with all metadata and semantic analysis
 5. **Updates** the index automatically when files are added/modified/deleted
 6. **Supports** hot-reload of most configuration settings via `config reload` command
 
-When you run `memorizer read`, it simply loads the precomputed index from disk instead of analyzing all files.
+When you run `memorizer read`, it simply loads the precomputed index from FalkorDB instead of analyzing all files.
 
 #### Daemon Configuration
 
@@ -1335,10 +1395,16 @@ Response includes uptime, files processed, API calls, errors, and build status.
    - Increase rebuild interval: `daemon.full_rebuild_interval_minutes: 120`
    - Add files to skip list: `analysis.skip_files` in config
 
-5. **Index corruption after crash**
-   - Daemon automatically loads last good index on startup
-   - Force rebuild: `./memorizer daemon stop && ./memorizer daemon start`
-   - If still corrupted: `rm ~/.memorizer/index.json` and restart
+5. **Graph corruption after crash**
+   - FalkorDB persists data to `~/.memorizer/falkordb/`
+   - Force rebuild: `./memorizer daemon rebuild --force`
+   - If still corrupted: Clear graph data and rebuild:
+     ```bash
+     memorizer daemon stop
+     rm -rf ~/.memorizer/falkordb/*
+     docker restart memorizer-falkordb
+     memorizer daemon start
+     ```
 
 6. **Service won't start (macOS/Linux)**
    - **macOS**: Check Console.app for launchd errors
@@ -1368,6 +1434,197 @@ Simply add files to `~/.memorizer/memory/` (or the directory you've configured a
 ```
 
 On your next Claude Code session, these files will be automatically analyzed and indexed.
+
+### Using the MCP Server
+
+The MCP (Model Context Protocol) server provides AI agents with tools, prompts, and resources to interact with your memory index. This section covers how to use the MCP server regardless of which AI agent framework you're using (Claude Code, Gemini CLI, Codex CLI, etc.).
+
+The MCP server provides three types of capabilities: **Tools** for performing operations, **Prompts** for generating contextual messages, and **Resources** for accessing the memory index with real-time updates.
+
+#### MCP Tools
+
+The MCP server exposes five tools that AI agents can invoke to interact with your memory index:
+
+**1. search_files**
+
+Search for files using semantic search across filenames, summaries, tags, and topics.
+
+**Parameters:**
+- `query` (required): Search query text
+- `categories` (optional): Array of categories to filter by (e.g., `["documents", "code"]`)
+- `max_results` (optional): Maximum results to return (default: 10, max: 100)
+
+**Example prompts that trigger this tool:**
+- "Search my memory for files about authentication"
+- "Find documents related to API design"
+- "Show me code files that mention database migrations"
+- "What files do I have about FalkorDB?"
+
+**2. get_file_metadata**
+
+Retrieve complete metadata and semantic analysis for a specific file.
+
+**Parameters:**
+- `path` (required): Absolute path to the file
+
+**Example prompts that trigger this tool:**
+- "Show me details about ~/.memorizer/memory/docs/api-guide.md"
+- "What's in my architecture diagram file?"
+- "Get metadata for /Users/me/.memorizer/memory/notes.md"
+
+**3. list_recent_files**
+
+List recently modified files within a specified time period.
+
+**Parameters:**
+- `days` (optional): Number of days to look back (default: 7, max: 365)
+- `limit` (optional): Maximum number of files (default: 20, max: 100)
+
+**Example prompts that trigger this tool:**
+- "What files did I add this week?"
+- "Show me files modified in the last 3 days"
+- "List my recent documents"
+
+**4. get_related_files**
+
+Find files connected through shared tags, topics, or entities in the knowledge graph.
+
+**Parameters:**
+- `path` (required): Path to the source file
+- `limit` (optional): Maximum related files to return (default: 10, max: 50)
+
+**Requirements:** FalkorDB must be running
+
+**Example prompts that trigger this tool:**
+- "What files are related to my API documentation?"
+- "Find files similar to ~/.memorizer/memory/architecture.md"
+- "Show me documents connected to this design proposal"
+
+**5. search_entities**
+
+Search for files that mention specific entities (technologies, people, concepts, organizations).
+
+**Parameters:**
+- `entity` (required): Entity name to search for
+- `entity_type` (optional): Filter by type (`technology`, `person`, `concept`, `organization`)
+- `max_results` (optional): Maximum results (default: 10, max: 100)
+
+**Requirements:** FalkorDB must be running
+
+**Example prompts that trigger this tool:**
+- "Which files mention Terraform?"
+- "Find documents about authentication"
+- "Show me files that reference Docker"
+- "What mentions Go programming language?"
+
+#### MCP Prompts
+
+The MCP server provides three pre-configured prompt templates that generate contextual messages for analysis. These are currently available in Claude Code and may be supported by other MCP clients in the future.
+
+**1. analyze-file**
+
+Generates a detailed analysis request using the file's semantic metadata.
+
+**Arguments:**
+- `file_path` (required): Path to the file to analyze
+- `focus` (optional): Specific aspect to focus on (e.g., "security", "performance", "architecture")
+
+**What it does:**
+Creates a prompt that asks the AI to analyze the file's purpose, main concepts, relationships to other files, and notable patterns based on its semantic summary, tags, and topics.
+
+**Usage:**
+If your MCP client supports prompts, select "analyze-file" from the prompt selector, provide the file path, and optionally specify a focus area like "security implications" or "architectural patterns".
+
+**2. search-context**
+
+Helps construct effective search queries by identifying related terms and strategies.
+
+**Arguments:**
+- `topic` (required): Topic or concept to search for
+- `category` (optional): File category to focus on (e.g., "documents", "code")
+
+**What it does:**
+Generates suggestions for key terms, related tags, file types to focus on, and alternative search terms based on the specified topic.
+
+**Usage:**
+Use this prompt when you know what you're looking for conceptually but need help formulating an effective search query. Provide a topic like "API authentication" and get back ranked search strategies.
+
+**3. explain-summary**
+
+Generates a detailed explanation of how a file's semantic analysis was derived.
+
+**Arguments:**
+- `file_path` (required): Path to the file whose summary to explain
+
+**What it does:**
+Creates a prompt asking the AI to explain what the summary reveals about the file, how tags and topics were determined, the significance of the document type classification, and how to interpret the information.
+
+**Usage:**
+Use this prompt when you want to understand why a file was analyzed and tagged in a particular way. Useful for validating or understanding the semantic analysis results.
+
+#### MCP Resources
+
+The MCP server exposes the memory index as three resources in different formats:
+
+**Available Resources:**
+
+1. **memorizer://index**
+   - Format: XML
+   - MIME Type: `application/xml`
+   - Description: Complete semantic index with hierarchical structure optimized for AI consumption
+
+2. **memorizer://index/markdown**
+   - Format: Markdown
+   - MIME Type: `text/markdown`
+   - Description: Human-readable format with rich formatting and emojis
+
+3. **memorizer://index/json**
+   - Format: JSON
+   - MIME Type: `application/json`
+   - Description: Structured data format for programmatic access
+
+**Reading Resources:**
+
+MCP clients can read these resources directly to access the full memory index. This is useful when you want complete context about all indexed files rather than querying specific files or searching.
+
+**Resource Subscriptions:**
+
+The MCP server supports resource subscriptions for real-time updates:
+
+**How it works:**
+
+1. **Subscribe:** MCP client subscribes to one or more resource URIs (e.g., `memorizer://index`)
+2. **Daemon Updates:** When files are added, modified, or deleted, the daemon rebuilds the index
+3. **SSE Notification:** Daemon sends Server-Sent Event (SSE) to connected MCP servers
+4. **Resource Updated:** MCP server sends `notifications/resources/updated` to subscribed clients
+5. **Client Refresh:** AI agent automatically knows the index has changed and can re-fetch
+
+**Benefits:**
+- AI agents stay synchronized with your latest files without manual refresh
+- Real-time awareness of newly added documents, images, or code
+- Automatic context updates during long-running sessions
+
+**Configuration:**
+
+The MCP server connects to the daemon's SSE endpoint automatically when `daemon.http_port` is configured:
+
+```yaml
+daemon:
+  http_port: 8080  # Enable HTTP API and SSE notifications
+```
+
+**Subscription Workflow Example:**
+
+1. AI agent starts and connects to MCP server
+2. Agent subscribes to `memorizer://index/markdown` resource
+3. You add a new document: `~/.memorizer/memory/new-design.md`
+4. Daemon detects the file, analyzes it, rebuilds index
+5. Daemon sends SSE event: `{"type": "index_updated", ...}`
+6. MCP server receives event and checks subscriptions
+7. MCP server sends notification to agent: `{"method": "notifications/resources/updated", "params": {"uri": "memorizer://index/markdown"}}`
+8. Agent re-fetches the resource and now knows about `new-design.md`
+
+This creates a seamless experience where your AI agent automatically becomes aware of new files as you add them to memory.
 
 ### Manual Testing
 
@@ -1417,7 +1674,7 @@ memorizer integrations list
 memorizer integrations detect
 memorizer integrations setup <integration-name>
 memorizer integrations remove <integration-name>
-memorizer integrations validate
+memorizer integrations health
 memorizer integrations health
 
 # MCP server
@@ -1426,6 +1683,7 @@ memorizer mcp start
 # Manage configuration
 memorizer config validate
 memorizer config reload
+memorizer config show-schema
 
 # Get help
 memorizer --help
@@ -1447,7 +1705,7 @@ memorizer config --help
 --memory-root <dir>                 # Custom memory directory
 --cache-dir <dir>                   # Custom cache directory
 --force                             # Overwrite existing config
---setup-integrations                # Configure agent framework integrations
+--integrations                # Configure agent framework integrations
 --skip-integrations                 # Skip integration setup prompt
 --http-port <port>                  # HTTP API port (0=disable, -1=interactive prompt)
 ```
@@ -1459,7 +1717,7 @@ memorizer config --help
 memorizer initialize
 
 # Initialize with HTTP API enabled on port 7600 (scripted, no prompt)
-memorizer initialize --http-port 7600 --setup-integrations
+memorizer initialize --http-port 7600 --integrations
 
 # Read index (XML format)
 memorizer read
@@ -1501,7 +1759,7 @@ memorizer integrations remove claude-code-hook
 memorizer integrations remove claude-code-mcp
 
 # Validate integration configurations
-memorizer integrations validate
+memorizer integrations health
 ```
 
 ### Controlling Semantic Analysis
@@ -1520,9 +1778,9 @@ When disabled, the daemon will only extract file metadata without semantic analy
 ### Directly Readable by Claude Code
 - Markdown (`.md`)
 - Text files (`.txt`)
-- Configuration files (`.json`, `.yaml`, `.yml`, `.toml`, `.xml`)
+- Configuration files (`.json`, `.yaml`, `.yml`, `.toml`)
 - Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`)
-- Code files (`.go`, `.py`, `.js`, `.ts`, `.java`, `.c`, `.cpp`, `.rs`, `.rb`, `.php`, `.html`, `.css`, `.sh`, `.bash`)
+- Code files (`.go`, `.py`, `.js`, `.ts`, `.java`, `.c`, `.cpp`, `.rs`, `.rb`, `.php`)
 - Transcripts (`.vtt`, `.srt`)
 
 ### Requires Extraction
@@ -1646,9 +1904,10 @@ MEMORIZER_APP_DIR=/tmp/test-instance memorizer daemon start
 
 Files stored in the app directory:
 - `config.yaml` - Configuration file
-- `index.json` - Precomputed index
 - `daemon.pid` - Daemon process ID
 - `daemon.log` - Daemon logs (if configured)
+- `mcp.log` - MCP server logs (if configured)
+- `falkordb/` - FalkorDB data persistence directory
 
 **Use cases:**
 - **Testing**: Run isolated test instances without affecting your main instance
@@ -1656,7 +1915,7 @@ Files stored in the app directory:
 - **Containers**: Use custom paths in Docker or other containerized environments
 - **CI/CD**: Isolate build/test environments
 
-**Note**: The memory directory and cache directory locations are still controlled by `config.yaml` settings, not `MEMORIZER_APP_DIR`. Only the application's own files (config, index, PID, logs) use the app directory.
+**Note**: The memory directory and cache directory locations are still controlled by `config.yaml` settings, not `MEMORIZER_APP_DIR`. Only the application's own files (config, PID, logs, FalkorDB data) use the app directory.
 
 ### Output Formats
 
@@ -1856,6 +2115,7 @@ agentic-memorizer/
 ├── main.go                   # Main entry point
 ├── LICENSE                   # MIT License
 ├── .goreleaser.yaml          # GoReleaser configuration for multi-platform releases
+├── docker-compose.yml        # FalkorDB Docker configuration
 ├── cmd/
 │   ├── root.go               # Root command
 │   ├── initialize/           # Initialization command
@@ -1893,14 +2153,14 @@ agentic-memorizer/
 │   │       ├── detect.go
 │   │       ├── setup.go
 │   │       ├── remove.go
-│   │       ├── validate.go
-│   │       ├── health.go
+│   │       ├── health.go     # Health check and validation
 │   │       └── helpers.go
 │   ├── config/               # Configuration commands
 │   │   ├── config.go         # Parent config command
-│   │   └── subcommands/      # Config subcommands (2 total)
+│   │   └── subcommands/      # Config subcommands (3 total)
 │   │       ├── validate.go
-│   │       └── reload.go
+│   │       ├── reload.go
+│   │       └── show_schema.go
 │   ├── read/                 # Read precomputed index
 │   │   └── read.go
 │   └── version/              # Version command
@@ -1914,6 +2174,7 @@ agentic-memorizer/
 │   │   ├── client.go         # FalkorDB connection management
 │   │   ├── manager.go        # Graph operations (CRUD, search)
 │   │   ├── queries.go        # Cypher query patterns
+│   │   ├── schema.go         # Node/edge types and constraints
 │   │   └── export.go         # Graph to index export
 │   ├── embeddings/           # Vector embeddings (optional)
 │   ├── watcher/              # File system watching (fsnotify)
@@ -1922,25 +2183,41 @@ agentic-memorizer/
 │   ├── semantic/             # Claude API integration for semantic analysis
 │   ├── cache/                # Content-addressable analysis caching
 │   ├── search/               # Semantic search engine (graph-powered)
+│   ├── format/               # Output formatting system
+│   │   ├── formatters/       # Individual formatters (text, JSON, XML, YAML, markdown)
+│   │   └── testdata/         # Test data for formatters
 │   ├── mcp/                  # MCP server implementation
 │   │   ├── protocol/         # JSON-RPC 2.0 protocol messages
 │   │   └── transport/        # Stdio transport layer
 │   ├── integrations/         # Integration framework and adapters
-│   │   ├── output/           # Output formatting (XML/Markdown/JSON)
 │   │   └── adapters/         # Framework-specific adapters
 │   │       ├── claude/       # Hook and MCP adapters for Claude Code
 │   │       ├── gemini/       # MCP adapter for Gemini CLI
 │   │       └── codex/        # MCP adapter for Codex CLI
+│   ├── docker/               # Docker container management utilities
+│   ├── servicemanager/       # Service manager integration (systemd, launchd)
+│   ├── tui/                  # Terminal UI components
+│   │   ├── initialize/       # Initialization wizard
+│   │   └── styles/           # TUI styling
 │   └── version/              # Version information and embedding
 │       ├── VERSION           # Semantic version file (embedded)
-│       ├── version.go        # Version getters with buildinfo fallback
-│       └── version_test.go
+│       └── version.go        # Version getters with buildinfo fallback
 ├── scripts/                  # Release automation scripts
 │   ├── bump-version.sh       # Semantic version bumping
 │   └── prepare-release.sh    # Release preparation and automation
 ├── pkg/types/                # Shared types and data structures
-├── docs/subsystems/          # Comprehensive subsystem documentation
-└── testdata/                 # Test files
+├── docs/                     # Documentation
+│   ├── subsystems/           # Comprehensive subsystem documentation
+│   ├── migration/            # Migration guides
+│   └── wip/                  # Work in progress documentation
+├── e2e/                      # End-to-end testing framework
+│   ├── harness/              # Test harness and utilities
+│   ├── tests/                # Test suites
+│   ├── fixtures/             # Test fixtures and data
+│   ├── scripts/              # Test automation scripts
+│   ├── docker-compose.yml    # Test environment setup
+│   └── Dockerfile.test       # Test container image
+└── testdata/                 # Unit test files
 ```
 
 ### Building and Testing
@@ -2104,7 +2381,7 @@ This shows:
 memorizer cache clear --stale
 
 # Or include with rebuild
-memorizer daemon rebuild --clear-old-cache
+memorizer daemon rebuild --clear-stale
 ```
 
 **Force re-analysis of all files:**

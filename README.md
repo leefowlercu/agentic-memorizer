@@ -9,7 +9,7 @@
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code (hooks + MCP), Gemini CLI (hooks + MCP), and OpenAI Codex CLI (MCP).
 
-**Current Version**: v0.12.1 ([CHANGELOG.md](CHANGELOG.md))
+**Current Version**: v0.13.0 ([CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 

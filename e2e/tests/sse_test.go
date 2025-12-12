@@ -294,3 +294,105 @@ func TestSSE_Reconnection(t *testing.T) {
 
 	t.Log("SSE reconnection successful")
 }
+
+// TestSSE_LongLivedConnection tests that SSE connections stay alive beyond 60 seconds
+// This validates the fix for the SSE timeout issue where global WriteTimeout was
+// closing streaming connections after 60 seconds
+func TestSSE_LongLivedConnection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-lived connection test in short mode")
+	}
+
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	if err := h.EnableHTTPServer(8080); err != nil {
+		t.Fatalf("Failed to enable HTTP server: %v", err)
+	}
+
+	// Start daemon
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, h.BinaryPath, "daemon", "start")
+	cmd.Env = append(cmd.Env, "MEMORIZER_APP_DIR="+h.AppDir)
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Failed to start daemon: %v", err)
+	}
+
+	defer func() {
+		cancel()
+		cmd.Wait()
+	}()
+
+	if err := h.WaitForHealthy(30 * time.Second); err != nil {
+		t.Fatalf("Daemon failed to become healthy: %v", err)
+	}
+
+	// Connect SSE client
+	sseURL := "http://localhost:8080/sse"
+
+	clientCtx, clientCancel := context.WithTimeout(ctx, 75*time.Second)
+	defer clientCancel()
+
+	req, err := http.NewRequestWithContext(clientCtx, "GET", sseURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+
+	client := &http.Client{Timeout: 0}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Monitor connection for 70 seconds
+	keepaliveCount := 0
+	eventCount := 0
+	connectionClosed := false
+	errChan := make(chan error, 1)
+
+	go func() {
+		scanner := bufio.NewScanner(resp.Body)
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 10*1024*1024)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, ": keepalive") {
+				keepaliveCount++
+				t.Logf("Keepalive #%d received", keepaliveCount)
+			} else if strings.HasPrefix(line, "data:") {
+				eventCount++
+				t.Logf("Event #%d received", eventCount)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			connectionClosed = true
+			errChan <- fmt.Errorf("connection closed; %w", err)
+		}
+	}()
+
+	// Wait 70 seconds (beyond old timeout)
+	select {
+	case err := <-errChan:
+		t.Fatalf("Connection closed unexpectedly after %v: %v", time.Now(), err)
+	case <-time.After(70 * time.Second):
+		if connectionClosed {
+			t.Fatal("Connection closed before timeout")
+		}
+		t.Logf("SUCCESS: Connection stayed alive 70+ seconds (keepalives: %d, events: %d)",
+			keepaliveCount, eventCount)
+
+		if keepaliveCount < 2 {
+			t.Errorf("Expected at least 2 keepalives, got %d", keepaliveCount)
+		}
+	}
+}

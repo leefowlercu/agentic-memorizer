@@ -78,6 +78,15 @@ func (s *HTTPServer) SetRebuildHandler(handler RebuildHandler) {
 	s.rebuildHandler = handler
 }
 
+// withTimeout wraps a handler with http.TimeoutHandler to enforce request timeouts.
+// This is used for API endpoints to prevent hung requests while allowing streaming
+// endpoints (SSE) to maintain long-lived connections.
+func withTimeout(handler http.HandlerFunc, timeout time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.TimeoutHandler(handler, timeout, "Request timeout").ServeHTTP(w, r)
+	}
+}
+
 // Start starts the HTTP server on the specified port
 // If a server is already running, it will be stopped first (supports hot-reload)
 func (s *HTTPServer) Start(port int) error {
@@ -104,26 +113,28 @@ func (s *HTTPServer) Start(port int) error {
 	// Create router with all endpoints
 	mux := http.NewServeMux()
 
-	// Health check
+	// Health and SSE endpoints - no timeout
+	// Health check should always respond quickly for monitoring
+	// SSE is a long-lived streaming connection with 30s keepalive
 	mux.HandleFunc("/health", s.handleHealth)
-
-	// SSE stream
 	mux.HandleFunc("/sse", s.hub.HandleSSE)
 
-	// API v1 endpoints
-	mux.HandleFunc("/api/v1/index", s.handleGetIndex)
-	mux.HandleFunc("/api/v1/search", s.handleSearch)
-	mux.HandleFunc("/api/v1/rebuild", s.handleRebuild)
-	mux.HandleFunc("/api/v1/files/recent", s.handleRecentFiles)
-	mux.HandleFunc("/api/v1/files/related", s.handleRelatedFiles)
-	mux.HandleFunc("/api/v1/files/", s.handleGetFile) // Catch-all for /api/v1/files/{path}
-	mux.HandleFunc("/api/v1/entities/search", s.handleEntitySearch)
+	// API v1 endpoints - 60 second timeout
+	// Prevents hung requests while allowing reasonable processing time
+	apiTimeout := 60 * time.Second
+	mux.HandleFunc("/api/v1/index", withTimeout(s.handleGetIndex, apiTimeout))
+	mux.HandleFunc("/api/v1/search", withTimeout(s.handleSearch, apiTimeout))
+	mux.HandleFunc("/api/v1/rebuild", withTimeout(s.handleRebuild, apiTimeout))
+	mux.HandleFunc("/api/v1/files/recent", withTimeout(s.handleRecentFiles, apiTimeout))
+	mux.HandleFunc("/api/v1/files/related", withTimeout(s.handleRelatedFiles, apiTimeout))
+	mux.HandleFunc("/api/v1/files/", withTimeout(s.handleGetFile, apiTimeout)) // Catch-all for /api/v1/files/{path}
+	mux.HandleFunc("/api/v1/entities/search", withTimeout(s.handleEntitySearch, apiTimeout))
 
+	// Create server without global timeouts
+	// Timeouts are handled per-endpoint via http.TimeoutHandler middleware
 	s.server = &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      mux,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
 	}
 
 	s.logger.Info("starting HTTP server", "port", port)

@@ -23,10 +23,10 @@ const (
 
 // LoggerConfig holds configuration for logger creation
 type LoggerConfig struct {
-	LogFile  string        // Path to log file (empty = stdout/stderr)
-	LogLevel string        // "debug", "info", "warn", "error"
-	Handler  HandlerType   // JSON or Text
-	Outputs  []io.Writer   // Additional writers (for multi-writer)
+	LogFile  string      // Path to log file (empty = stdout/stderr)
+	LogLevel string      // "debug", "info", "warn", "error"
+	Handler  HandlerType // JSON or Text
+	Outputs  []io.Writer // Additional writers (for multi-writer)
 }
 
 // LoggerOption is a functional option for configuring logger creation

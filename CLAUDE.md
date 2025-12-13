@@ -346,6 +346,41 @@ cd e2e && make test-cli       # Specific test suite
 - Use `any` instead of `interface{}`
 - Code must pass all tests before completion
 
+### Logging Standards
+
+All log messages must be entirely lowercase with no exceptions. This follows Go error string conventions and ensures consistency across the codebase.
+
+**Rules:**
+- Log messages MUST be entirely lowercase (no exceptions)
+- Follow Go error string conventions: lowercase messages, structured data in fields
+- Use structured logging with key-value pairs via `log/slog`
+- Put proper nouns, acronyms, and important data in structured fields, not in the message string
+- Avoid string formatting in log messages; use structured fields instead
+
+**Examples:**
+```go
+// CORRECT - lowercase messages with structured fields
+logger.Info("starting daemon", "version", v)
+logger.Error("failed to connect", "host", host, "error", err)
+logger.Info("connection established", "database", "FalkorDB")
+logger.Info("server started", "protocol", "HTTP", "port", 8080)
+logger.Info("sse client connected", "total_clients", count)
+
+// INCORRECT - uppercase messages
+logger.Info("Starting daemon")
+logger.Error("Failed to connect")
+logger.Info("FalkorDB connection established")  // Put "FalkorDB" in field
+logger.Info("HTTP server started")              // Put "HTTP" in field
+logger.Info("SSE client connected")             // Put "SSE" in field
+```
+
+**Rationale:**
+- Simpler rule (no judgment calls needed about what counts as a proper noun)
+- Easier to enforce programmatically with linters
+- Messages are context; structured fields carry important data
+- Maximum consistency across entire codebase
+- Aligns perfectly with Go error string conventions
+
 ### Git Workflow
 
 - Commit messages: conventional commit format, lowercase, single line

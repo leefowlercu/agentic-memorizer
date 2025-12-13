@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -65,7 +66,7 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 		Files: []types.FileEntry{},
 	}
 	srv := NewServer(idx, logger, "")
-	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
+	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger, logging.NewProcessID())
 
 	// Start client
 	srv.sseClient.Start()
@@ -141,7 +142,7 @@ func TestSSEClient_ReceiveNotification(t *testing.T) {
 	// Create SSE client (index reload will be processed from SSE event)
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
 	srv := NewServer(initialIndex, logger, "")
-	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
+	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger, logging.NewProcessID())
 
 	// Start client
 	srv.sseClient.Start()
@@ -210,7 +211,7 @@ func TestSSEClient_AutoReconnect(t *testing.T) {
 		Files: []types.FileEntry{},
 	}
 	srv := NewServer(idx, logger, "")
-	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
+	srv.sseClient = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger, logging.NewProcessID())
 
 	// Start client
 	srv.sseClient.Start()
@@ -290,7 +291,7 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 			Files: []types.FileEntry{},
 		}
 		srv := NewServer(idx, logger, "")
-		clients[i] = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger)
+		clients[i] = NewSSEClient(fmt.Sprintf("http://localhost:%d/sse", port), srv, logger, logging.NewProcessID())
 		clients[i].Start()
 	}
 

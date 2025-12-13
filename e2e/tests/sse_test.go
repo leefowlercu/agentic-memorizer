@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/e2e/harness"
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 )
 
 // TestSSE_SingleClient tests SSE connection with a single client
@@ -51,7 +52,17 @@ func TestSSE_SingleClient(t *testing.T) {
 
 	// Connect SSE client
 	sseURL := fmt.Sprintf("http://localhost:8080/sse")
-	resp, err := http.Get(sseURL)
+	req, err := http.NewRequest("GET", sseURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+
+	// Add required client headers
+	req.Header.Set(logging.HeaderClientID, "test-client-1")
+	req.Header.Set(logging.HeaderClientType, "e2e-test")
+	req.Header.Set(logging.HeaderClientVersion, "1.0.0")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to connect to SSE: %v", err)
 	}
@@ -132,7 +143,18 @@ func TestSSE_MultipleClients(t *testing.T) {
 
 	for i := 0; i < numClients; i++ {
 		go func(clientNum int) {
-			resp, err := http.Get(sseURL)
+			req, err := http.NewRequest("GET", sseURL, nil)
+			if err != nil {
+				t.Logf("Client %d failed to create request: %v", clientNum, err)
+				return
+			}
+
+			// Add required client headers
+			req.Header.Set(logging.HeaderClientID, fmt.Sprintf("test-client-%d", clientNum))
+			req.Header.Set(logging.HeaderClientType, "e2e-test")
+			req.Header.Set(logging.HeaderClientVersion, "1.0.0")
+
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Logf("Client %d failed to connect: %v", clientNum, err)
 				return
@@ -197,6 +219,11 @@ func TestSSE_Events(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
+
+	// Add required client headers
+	req.Header.Set(logging.HeaderClientID, "test-client-events")
+	req.Header.Set(logging.HeaderClientType, "e2e-test")
+	req.Header.Set(logging.HeaderClientVersion, "1.0.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -271,7 +298,15 @@ func TestSSE_Reconnection(t *testing.T) {
 	sseURL := fmt.Sprintf("http://localhost:8080/sse")
 
 	// First connection
-	resp1, err := http.Get(sseURL)
+	req1, err := http.NewRequest("GET", sseURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to create first request: %v", err)
+	}
+	req1.Header.Set(logging.HeaderClientID, "test-client-reconnect-1")
+	req1.Header.Set(logging.HeaderClientType, "e2e-test")
+	req1.Header.Set(logging.HeaderClientVersion, "1.0.0")
+
+	resp1, err := http.DefaultClient.Do(req1)
 	if err != nil {
 		t.Fatalf("First connection failed: %v", err)
 	}
@@ -282,7 +317,15 @@ func TestSSE_Reconnection(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Reconnect
-	resp2, err := http.Get(sseURL)
+	req2, err := http.NewRequest("GET", sseURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to create reconnect request: %v", err)
+	}
+	req2.Header.Set(logging.HeaderClientID, "test-client-reconnect-2")
+	req2.Header.Set(logging.HeaderClientType, "e2e-test")
+	req2.Header.Set(logging.HeaderClientVersion, "1.0.0")
+
+	resp2, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("Reconnection failed: %v", err)
 	}
@@ -344,6 +387,11 @@ func TestSSE_LongLivedConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
+
+	// Add required client headers
+	req.Header.Set(logging.HeaderClientID, "test-client-longlived")
+	req.Header.Set(logging.HeaderClientType, "e2e-test")
+	req.Header.Set(logging.HeaderClientVersion, "1.0.0")
 
 	client := &http.Client{Timeout: 0}
 	resp, err := client.Do(req)

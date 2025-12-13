@@ -12,7 +12,25 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 )
+
+// connectSSE creates an SSE connection with required client headers
+func connectSSE(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add required client headers
+	req.Header.Set(logging.HeaderClientID, logging.NewClientID())
+	req.Header.Set(logging.HeaderClientType, "test")
+	req.Header.Set(logging.HeaderClientVersion, "1.0.0")
+
+	client := &http.Client{}
+	return client.Do(req)
+}
 
 // TestSSEHub_MultipleClients tests that the SSE hub can accept multiple client connections
 func TestSSEHub_MultipleClients(t *testing.T) {
@@ -48,7 +66,7 @@ func TestSSEHub_MultipleClients(t *testing.T) {
 
 	for i := 0; i < numClients; i++ {
 		go func() {
-			resp, err := http.Get(baseURL + "/sse")
+			resp, err := connectSSE(baseURL + "/sse")
 			if err != nil {
 				return
 			}
@@ -116,7 +134,7 @@ func TestSSEHub_Broadcast(t *testing.T) {
 
 	for i := 0; i < numClients; i++ {
 		go func() {
-			resp, err := http.Get(baseURL + "/sse")
+			resp, err := connectSSE(baseURL + "/sse")
 			if err != nil {
 				return
 			}
@@ -203,7 +221,7 @@ func TestSSEHub_Keepalive(t *testing.T) {
 	keepaliveReceived := make(chan bool, 1)
 
 	go func() {
-		resp, err := http.Get(baseURL + "/sse")
+		resp, err := connectSSE(baseURL + "/sse")
 		if err != nil {
 			return
 		}
@@ -252,7 +270,7 @@ func TestSSEHub_GracefulShutdown(t *testing.T) {
 
 	// Connect a client
 	go func() {
-		resp, err := http.Get(baseURL + "/sse")
+		resp, err := connectSSE(baseURL + "/sse")
 		if err != nil {
 			return
 		}
@@ -411,6 +429,11 @@ func TestSSEHub_NoTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
+
+	// Add required client headers
+	req.Header.Set(logging.HeaderClientID, logging.NewClientID())
+	req.Header.Set(logging.HeaderClientType, "test")
+	req.Header.Set(logging.HeaderClientVersion, "1.0.0")
 
 	client := &http.Client{Timeout: 0} // No client-side timeout
 	resp, err := client.Do(req)

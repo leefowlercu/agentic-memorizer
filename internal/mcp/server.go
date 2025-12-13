@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/transport"
 	"github.com/leefowlercu/agentic-memorizer/internal/search"
@@ -27,6 +28,7 @@ type Server struct {
 	initialized  bool
 	capabilities protocol.ServerCapabilities
 	logger       *slog.Logger
+	processID    string // UUIDv7 process identifier
 
 	// Daemon API client (all data comes from daemon)
 	daemonURL  string
@@ -55,10 +57,15 @@ type PromptHandler func(ctx context.Context, params json.RawMessage) (any, error
 // daemonURL is the base URL of the daemon HTTP API (e.g., "http://localhost:8080").
 // All data is fetched from the daemon - no direct FalkorDB connection.
 func NewServer(index *types.GraphIndex, logger *slog.Logger, daemonURL string) *Server {
+	// Generate process_id and enrich logger with process context
+	processID := logging.NewProcessID()
+	enrichedLogger := logging.WithMCPProcess(logger, processID)
+
 	s := &Server{
 		transport:        transport.NewStdioTransport(),
 		index:            index,
-		logger:           logger,
+		logger:           enrichedLogger,
+		processID:        processID,
 		daemonURL:        strings.TrimSuffix(daemonURL, "/"),
 		httpClient:       &http.Client{Timeout: 30 * time.Second},
 		subscriptions:    NewSubscriptionManager(),
@@ -81,9 +88,11 @@ func NewServer(index *types.GraphIndex, logger *slog.Logger, daemonURL string) *
 	// Only initialized if daemon URL configured (MCP can work standalone).
 	if daemonURL != "" {
 		sseURL := s.daemonURL + "/sse"
-		s.sseClient = NewSSEClient(sseURL, s, logger)
+		// Pass process_id to SSEClient for header correlation
+		sseLogger := logging.WithSSEClient(enrichedLogger)
+		s.sseClient = NewSSEClient(sseURL, s, sseLogger, processID)
 		s.sseClient.Start()
-		logger.Info("SSE client started", "daemon_url", daemonURL, "sse_url", sseURL)
+		enrichedLogger.Info("SSE client started", "daemon_url", daemonURL, "sse_url", sseURL)
 	}
 
 	return s
@@ -91,13 +100,13 @@ func NewServer(index *types.GraphIndex, logger *slog.Logger, daemonURL string) *
 
 // Run starts the MCP server loop
 func (s *Server) Run(ctx context.Context) error {
-	s.logger.Info("MCP server starting")
+	s.logger.Info("mcp server starting")
 
 	// Stop SSE client on shutdown
 	defer func() {
 		if s.sseClient != nil {
 			s.sseClient.Stop()
-			s.logger.Info("SSE client stopped")
+			s.logger.Info("sse client stopped")
 		}
 	}()
 
@@ -110,13 +119,13 @@ func (s *Server) Run(ctx context.Context) error {
 			data, err := s.transport.Read()
 			if err != nil {
 				if err == io.EOF {
-					s.logger.Info("Client disconnected")
+					s.logger.Info("client disconnected")
 					return nil
 				}
 				return fmt.Errorf("read error: %w", err)
 			}
 
-			s.logger.Debug("Received message", "raw_data", string(data))
+			s.logger.Debug("received message", "raw_data", string(data))
 
 			// Handle message
 			if err := s.handleMessage(ctx, data); err != nil {
@@ -138,7 +147,7 @@ func (s *Server) handleMessage(ctx context.Context, data []byte) error {
 	}
 
 	if err := json.Unmarshal(data, &msg); err != nil {
-		s.logger.Error("Failed to parse message", "error", err, "raw_data", string(data))
+		s.logger.Error("failed to parse message", "error", err, "raw_data", string(data))
 		// Only send error response if message has an ID (is a request, not a notification)
 		if msg.ID != nil {
 			return s.sendError(msg.ID, protocol.ParseError, "Parse error", nil)
@@ -152,7 +161,7 @@ func (s *Server) handleMessage(ctx context.Context, data []byte) error {
 		if msg.ID != nil {
 			return s.sendError(msg.ID, protocol.InvalidRequest, "Invalid JSON-RPC version", nil)
 		}
-		s.logger.Warn("Invalid JSON-RPC version in notification", "version", msg.JSONRPC)
+		s.logger.Warn("invalid json-rpc version in notification", "version", msg.JSONRPC)
 		return nil // Silently ignore notifications with invalid version
 	}
 
@@ -183,7 +192,7 @@ func (s *Server) handleMessage(ctx context.Context, data []byte) error {
 		if msg.ID != nil {
 			return s.sendError(msg.ID, protocol.MethodNotFound, fmt.Sprintf("Method not found: %s", msg.Method), nil)
 		}
-		s.logger.Warn("Unrecognized notification method", "method", msg.Method)
+		s.logger.Warn("unrecognized notification method", "method", msg.Method)
 		return nil // Silently ignore unrecognized notifications
 	}
 }
@@ -195,7 +204,7 @@ func (s *Server) handleInitialize(ctx context.Context, id any, params json.RawMe
 		return s.sendError(id, protocol.InvalidParams, "Invalid initialize params", nil)
 	}
 
-	s.logger.Info("Received initialize request",
+	s.logger.Info("received initialize request",
 		"client", req.ClientInfo.Name,
 		"version", req.ClientInfo.Version,
 		"protocol", req.ProtocolVersion,
@@ -242,12 +251,19 @@ func (s *Server) handleInitialize(ctx context.Context, id any, params json.RawMe
 
 	s.capabilities = resp.Capabilities
 
+	// Generate session_id and enrich logger with session context
+	sessionID := logging.NewSessionID()
+	s.logger = logging.WithSessionID(s.logger, sessionID)
+	s.logger = logging.WithClientInfo(s.logger, req.ClientInfo.Name, req.ClientInfo.Version)
+
+	s.logger.Info("session initialized", "session_id", sessionID)
+
 	return s.sendResponse(id, resp)
 }
 
 // handleInitialized processes the initialized notification
 func (s *Server) handleInitialized(ctx context.Context, params json.RawMessage) error {
-	s.logger.Info("Received initialized notification")
+	s.logger.Info("received initialized notification")
 	s.initialized = true
 	// No response needed for notifications
 	return nil
@@ -284,7 +300,7 @@ func (s *Server) handleResourcesList(ctx context.Context, id any, params json.Ra
 		Resources: resources,
 	}
 
-	s.logger.Info("Returning resources list", "count", len(resources))
+	s.logger.Info("returning resources list", "count", len(resources))
 	return s.sendResponse(id, resp)
 }
 
@@ -299,7 +315,7 @@ func (s *Server) handleResourcesRead(ctx context.Context, id any, params json.Ra
 		return s.sendError(id, protocol.InvalidParams, "Invalid resource read params", nil)
 	}
 
-	s.logger.Info("Reading resource", "uri", req.URI)
+	s.logger.Info("reading resource", "uri", req.URI)
 
 	// Parse URI and route to appropriate handler
 	var content string
@@ -354,7 +370,7 @@ func (s *Server) handleResourcesSubscribe(ctx context.Context, id any, params js
 		return s.sendError(id, protocol.InvalidParams, "Invalid subscribe params", nil)
 	}
 
-	s.logger.Info("Subscribing to resource", "uri", req.URI)
+	s.logger.Info("subscribing to resource", "uri", req.URI)
 
 	// Validate URI - only allow memorizer:// URIs
 	validURIs := map[string]bool{
@@ -389,7 +405,7 @@ func (s *Server) handleResourcesUnsubscribe(ctx context.Context, id any, params 
 		return s.sendError(id, protocol.InvalidParams, "Invalid unsubscribe params", nil)
 	}
 
-	s.logger.Info("Unsubscribing from resource", "uri", req.URI)
+	s.logger.Info("unsubscribing from resource", "uri", req.URI)
 
 	// Remove subscription (no error if not subscribed)
 	s.subscriptions.Unsubscribe(req.URI)
@@ -983,7 +999,7 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 		Tools: tools,
 	}
 
-	s.logger.Info("Returning tools list", "count", len(tools))
+	s.logger.Info("returning tools list", "count", len(tools))
 	return s.sendResponse(id, resp)
 }
 
@@ -1001,7 +1017,7 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, params json.RawMes
 		return s.sendError(id, protocol.InvalidParams, "Invalid tool call params", nil)
 	}
 
-	s.logger.Info("Calling tool", "name", req.Name)
+	s.logger.Info("calling tool", "name", req.Name)
 
 	// Look up handler
 	handler, exists := s.toolHandlers[req.Name]
@@ -1051,7 +1067,7 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, params json.RawMes
 }
 
 func (s *Server) handlePromptsList(ctx context.Context, id any, params json.RawMessage) error {
-	s.logger.Debug("Processing prompts/list request")
+	s.logger.Debug("processing prompts/list request")
 
 	// Get all prompts from registry
 	prompts := s.promptRegistry.ListPrompts()
@@ -1069,7 +1085,7 @@ func (s *Server) handlePromptsGet(ctx context.Context, id any, params json.RawMe
 		return s.sendError(id, protocol.InvalidParams, "Invalid prompts/get params", nil)
 	}
 
-	s.logger.Debug("Processing prompts/get request", "name", req.Name)
+	s.logger.Debug("processing prompts/get request", "name", req.Name)
 
 	// Generate messages for the requested prompt
 	messages, err := s.promptRegistry.GeneratePromptMessages(req.Name, req.Arguments, s)
@@ -1109,7 +1125,7 @@ func (s *Server) sendResponse(id any, result any) error {
 		return err
 	}
 
-	s.logger.Debug("Sending response", "raw_data", string(data))
+	s.logger.Debug("sending response", "raw_data", string(data))
 	return s.transport.Write(data)
 }
 
@@ -1137,7 +1153,7 @@ func (s *Server) sendError(id any, code int, message string, data any) error {
 		return err
 	}
 
-	s.logger.Debug("Sending error", "raw_data", string(responseData))
+	s.logger.Debug("sending error", "raw_data", string(responseData))
 	return s.transport.Write(responseData)
 }
 
@@ -1153,12 +1169,12 @@ func (s *Server) ReloadIndex(newIndex *types.GraphIndex) {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 	s.index = newIndex
-	s.logger.Info("Index reloaded", "files", len(newIndex.Files))
+	s.logger.Info("index reloaded", "files", len(newIndex.Files))
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
-	s.logger.Info("MCP server shutting down")
+	s.logger.Info("mcp server shutting down")
 	return s.transport.Close()
 }
 

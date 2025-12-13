@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
+	"github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -25,6 +27,7 @@ type SSEClient struct {
 	sseURL           string
 	server           *Server
 	logger           *slog.Logger
+	processID        string // UUIDv7 process identifier for header correlation
 	reconnectBackoff time.Duration
 	ctx              context.Context
 	cancel           context.CancelFunc
@@ -32,12 +35,13 @@ type SSEClient struct {
 
 // NewSSEClient creates a new SSE client
 // sseURL is the full URL to the SSE endpoint (e.g., "http://localhost:8080/sse")
-func NewSSEClient(sseURL string, server *Server, logger *slog.Logger) *SSEClient {
+func NewSSEClient(sseURL string, server *Server, logger *slog.Logger, processID string) *SSEClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SSEClient{
 		sseURL:           sseURL,
 		server:           server,
 		logger:           logger,
+		processID:        processID,
 		reconnectBackoff: 5 * time.Second,
 		ctx:              ctx,
 		cancel:           cancel,
@@ -67,7 +71,7 @@ func (c *SSEClient) connectLoop() {
 			case <-c.ctx.Done():
 				return
 			case <-time.After(c.reconnectBackoff):
-				c.logger.Info("Reconnecting to SSE stream")
+				c.logger.Info("reconnecting to sse stream")
 			}
 		}
 	}
@@ -75,16 +79,19 @@ func (c *SSEClient) connectLoop() {
 
 // connect establishes SSE connection and processes events
 func (c *SSEClient) connect() {
-	c.logger.Info("Connecting to daemon SSE stream", "url", c.sseURL)
+	c.logger.Info("connecting to daemon sse stream", "url", c.sseURL)
 
 	req, err := http.NewRequestWithContext(c.ctx, "GET", c.sseURL, nil)
 	if err != nil {
-		c.logger.Error("Failed to create request", "error", err)
+		c.logger.Error("failed to create request", "error", err)
 		return
 	}
 
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set(logging.HeaderClientID, c.processID)
+	req.Header.Set(logging.HeaderClientType, "mcp")
+	req.Header.Set(logging.HeaderClientVersion, version.Version)
 
 	client := &http.Client{
 		Timeout: 0, // No timeout for streaming connection
@@ -92,17 +99,17 @@ func (c *SSEClient) connect() {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		c.logger.Warn("Failed to connect to SSE stream", "error", err)
+		c.logger.Warn("failed to connect to sse stream", "error", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		c.logger.Warn("SSE stream returned non-200 status", "status", resp.StatusCode)
+		c.logger.Warn("sse stream returned non-200 status", "status", resp.StatusCode)
 		return
 	}
 
-	c.logger.Info("Connected to SSE stream")
+	c.logger.Info("connected to sse stream")
 
 	scanner := bufio.NewScanner(resp.Body)
 	// Increase buffer size for large index payloads
@@ -128,40 +135,40 @@ func (c *SSEClient) connect() {
 	}
 
 	if err := scanner.Err(); err != nil {
-		c.logger.Warn("SSE stream read error", "error", err)
+		c.logger.Warn("sse stream read error", "error", err)
 	}
 
-	c.logger.Info("SSE stream connection closed")
+	c.logger.Info("sse stream connection closed")
 }
 
 // handleEvent processes received SSE events
 func (c *SSEClient) handleEvent(data string) {
-	c.logger.Debug("Received SSE event", "data_length", len(data))
+	c.logger.Debug("received sse event", "data_length", len(data))
 
 	var event SSEEvent
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
-		c.logger.Error("Failed to parse SSE event", "error", err)
+		c.logger.Error("failed to parse sse event", "error", err)
 		return
 	}
 
-	c.logger.Info("Processing SSE event", "type", event.Type)
+	c.logger.Info("processing sse event", "type", event.Type)
 
 	switch event.Type {
 	case "index_snapshot", "index_updated":
 		c.handleIndexEvent(event)
 	default:
-		c.logger.Debug("Ignoring event type", "type", event.Type)
+		c.logger.Debug("ignoring event type", "type", event.Type)
 	}
 }
 
 // handleIndexEvent processes index_snapshot and index_updated events
 func (c *SSEClient) handleIndexEvent(event SSEEvent) {
 	if event.Data == nil {
-		c.logger.Warn("Received index event without data", "type", event.Type)
+		c.logger.Warn("received index event without data", "type", event.Type)
 		return
 	}
 
-	c.logger.Info("Reloaded index from SSE event",
+	c.logger.Info("reloaded index from sse event",
 		"type", event.Type,
 		"files", len(event.Data.Files),
 	)
@@ -176,11 +183,11 @@ func (c *SSEClient) sendMCPNotifications() {
 	subscribed := c.server.subscriptions.GetSubscriptions()
 
 	if len(subscribed) == 0 {
-		c.logger.Debug("No active subscriptions")
+		c.logger.Debug("no active subscriptions")
 		return
 	}
 
-	c.logger.Info("Sending MCP notifications", "count", len(subscribed))
+	c.logger.Info("sending mcp notifications", "count", len(subscribed))
 
 	for _, uri := range subscribed {
 		notification := protocol.JSONRPCNotification{
@@ -197,15 +204,15 @@ func (c *SSEClient) sendMCPNotifications() {
 
 		data, err := json.Marshal(notification)
 		if err != nil {
-			c.logger.Error("Failed to marshal notification", "error", err)
+			c.logger.Error("failed to marshal notification", "error", err)
 			continue
 		}
 
 		if err := c.server.transport.Write(data); err != nil {
-			c.logger.Error("Failed to write MCP notification", "error", err)
+			c.logger.Error("failed to write mcp notification", "error", err)
 			continue
 		}
 
-		c.logger.Debug("Sent MCP notification", "uri", uri)
+		c.logger.Debug("sent mcp notification", "uri", uri)
 	}
 }

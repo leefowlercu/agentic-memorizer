@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/spf13/cobra"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var StartCmd = &cobra.Command{
@@ -63,8 +63,19 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config; %w", err)
 	}
 
+	// Determine log level (flag overrides config)
+	logLevel := cfg.MCP.LogLevel
+	if cmd.Flags().Changed("log-level") {
+		logLevel, _ = cmd.Flags().GetString("log-level")
+	}
+
 	// Setup logger with dual output (stderr + file)
-	logger, logWriter, err := setupLogger(cmd, cfg)
+	logger, logWriter, err := logging.NewLogger(
+		logging.WithLogFile(cfg.MCP.LogFile),
+		logging.WithLogLevel(logLevel),
+		logging.WithHandler(logging.HandlerText),
+		logging.WithAdditionalOutputs(os.Stderr),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to setup logger; %w", err)
 	}
@@ -78,13 +89,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Try to fetch initial index from daemon if available
 	var initialIndex *types.GraphIndex
 	if daemonURL != "" {
-		logger.Info("Fetching initial index from daemon", "url", daemonURL)
+		logger.Info("fetching initial index from daemon", "url", daemonURL)
 		idx, err := fetchIndexFromDaemon(daemonURL, logger)
 		if err != nil {
-			logger.Warn("Failed to fetch initial index from daemon; will wait for SSE updates", "error", err)
+			logger.Warn("failed to fetch initial index from daemon; will wait for sse updates", "error", err)
 		} else {
 			initialIndex = idx
-			logger.Info("Loaded initial index from daemon", "files", len(idx.Files))
+			logger.Info("loaded initial index from daemon", "files", len(idx.Files))
 		}
 	}
 
@@ -94,15 +105,15 @@ func runStart(cmd *cobra.Command, args []string) error {
 			Files: []types.FileEntry{},
 			Stats: types.IndexStats{},
 		}
-		logger.Info("Starting with empty index; will populate from SSE stream")
+		logger.Info("starting with empty index; will populate from sse stream")
 	}
 
 	// Create MCP server
 	server := mcp.NewServer(initialIndex, logger, daemonURL)
 	if daemonURL != "" {
-		logger.Info("Daemon API enabled", "daemon_url", daemonURL)
+		logger.Info("daemon api enabled", "daemon_url", daemonURL)
 	} else {
-		logger.Warn("No daemon URL configured; running in index-only mode without graph features")
+		logger.Warn("no daemon url configured; running in index-only mode without graph features")
 	}
 
 	// Setup signal handling for graceful shutdown
@@ -114,12 +125,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		sig := <-sigChan
-		logger.Info("Received shutdown signal", "signal", sig)
+		logger.Info("received shutdown signal", "signal", sig)
 		cancel()
 	}()
 
 	// Run server
-	logger.Info("Starting MCP server",
+	logger.Info("starting mcp server",
 		"protocol", "stdio",
 		"memory_root", cfg.MemoryRoot,
 	)
@@ -130,10 +141,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Graceful shutdown
 	if err := server.Shutdown(); err != nil {
-		logger.Error("Shutdown error", "error", err)
+		logger.Error("shutdown error", "error", err)
 	}
 
-	logger.Info("MCP server stopped")
+	logger.Info("mcp server stopped")
 	return nil
 }
 
@@ -162,61 +173,4 @@ func fetchIndexFromDaemon(daemonURL string, logger *slog.Logger) (*types.GraphIn
 	}
 
 	return &idx, nil
-}
-
-// setupLogger creates a logger that writes to both stderr and file
-func setupLogger(cmd *cobra.Command, cfg *config.Config) (*slog.Logger, *lumberjack.Logger, error) {
-	// Determine log level (flag overrides config)
-	logLevel := cfg.MCP.LogLevel
-	if cmd.Flags().Changed("log-level") {
-		logLevel, _ = cmd.Flags().GetString("log-level")
-	}
-
-	var level slog.Level
-	switch logLevel {
-	case "debug":
-		level = slog.LevelDebug
-	case "info":
-		level = slog.LevelInfo
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
-	}
-
-	// Create log file with lumberjack rotation
-	if cfg.MCP.LogFile != "" {
-		logDir := cfg.MCP.LogFile[:len(cfg.MCP.LogFile)-len("/mcp.log")]
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, nil, fmt.Errorf("failed to create log directory; %w", err)
-		}
-
-		logWriter := &lumberjack.Logger{
-			Filename:   cfg.MCP.LogFile,
-			MaxSize:    10, // megabytes
-			MaxBackups: 3,
-			MaxAge:     28, // days
-			Compress:   true,
-		}
-
-		// Use multi-writer to write to both stderr and file
-		// Stderr: text format for client logs
-		// File: JSON format for structured debugging
-		multiWriter := io.MultiWriter(os.Stderr, logWriter)
-
-		handler := slog.NewTextHandler(multiWriter, &slog.HandlerOptions{
-			Level: level,
-		})
-
-		return slog.New(handler), logWriter, nil
-	}
-
-	// Fallback to stderr only if no log file configured
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: level,
-	})
-
-	return slog.New(handler), nil, nil
 }

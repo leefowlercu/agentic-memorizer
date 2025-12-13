@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/worker"
 	"github.com/leefowlercu/agentic-memorizer/internal/embeddings"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
 	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
@@ -176,7 +176,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		return nil, fmt.Errorf("failed to initialize graph; %w", err)
 	}
 
-	logger.Info("FalkorDB graph manager initialized",
+	logger.Info("falkordb graph manager initialized",
 		"host", cfg.Graph.Host,
 		"port", cfg.Graph.Port,
 		"database", cfg.Graph.Database,
@@ -290,7 +290,7 @@ func (d *Daemon) Start() error {
 		if err := d.httpServer.Start(cfg.Daemon.HTTPPort); err != nil {
 			logger.Warn("failed to start HTTP server", "error", err)
 		} else {
-			logger.Info("HTTP server started", "port", cfg.Daemon.HTTPPort)
+			logger.Info("http server started", "port", cfg.Daemon.HTTPPort)
 		}
 	}
 
@@ -851,9 +851,9 @@ func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.C
 			logger.Warn("failed to restart HTTP server", "error", err)
 		} else {
 			if newCfg.Daemon.HTTPPort == 0 {
-				logger.Info("HTTP server disabled")
+				logger.Info("http server disabled")
 			} else {
-				logger.Info("HTTP server restarted", "port", newCfg.Daemon.HTTPPort)
+				logger.Info("http server restarted", "port", newCfg.Daemon.HTTPPort)
 			}
 		}
 	}
@@ -894,21 +894,13 @@ func (d *Daemon) updateSemanticAnalyzer(cfg *config.Config) error {
 
 // updateLogLevel creates a new logger with the specified log level
 func (d *Daemon) updateLogLevel(cfg *config.Config) error {
-	var logLevel slog.Level
-	switch strings.ToLower(cfg.Daemon.LogLevel) {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "info":
-		logLevel = slog.LevelInfo
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	default:
-		return fmt.Errorf("invalid log level; %s", cfg.Daemon.LogLevel)
+	logLevel, err := logging.ParseLogLevel(cfg.Daemon.LogLevel)
+	if err != nil {
+		return err
 	}
 
-	handler := slog.NewJSONHandler(d.logWriter, &slog.HandlerOptions{
+	// Reuse existing logWriter for hot-reload (now with Text handler)
+	handler := slog.NewTextHandler(d.logWriter, &slog.HandlerOptions{
 		Level: logLevel,
 	})
 

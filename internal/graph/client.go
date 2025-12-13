@@ -121,7 +121,7 @@ func (c *Client) Close() error {
 	}
 
 	c.closed = true
-	c.logger.Info("FalkorDB connection closed")
+	c.logger.Info("falkordb connection closed")
 	return nil
 }
 

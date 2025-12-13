@@ -99,14 +99,14 @@ func (s *HTTPServer) Start(port int) error {
 		defer cancel()
 
 		if err := s.server.Shutdown(ctx); err != nil {
-			s.logger.Warn("HTTP server shutdown failed during restart", "error", err)
+			s.logger.Warn("http server shutdown failed during restart", "error", err)
 		}
 		s.server = nil
 	}
 
 	// Don't start if disabled (port 0)
 	if port == 0 {
-		s.logger.Info("HTTP server disabled")
+		s.logger.Info("http server disabled")
 		return nil
 	}
 
@@ -141,7 +141,7 @@ func (s *HTTPServer) Start(port int) error {
 
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("HTTP server failed", "error", err)
+			s.logger.Error("http server failed", "error", err)
 		}
 	}()
 

@@ -2,14 +2,12 @@ package subcommands
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/spf13/cobra"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var StartCmd = &cobra.Command{
@@ -40,8 +38,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config; %w", err)
 	}
 
-	// Setup logger
-	logger, logWriter, err := setupLogger(cfg)
+	// Setup logger with centralized factory (using Text handler for human-readable logs)
+	logger, logWriter, err := logging.NewLogger(
+		logging.WithLogFile(cfg.Daemon.LogFile),
+		logging.WithLogLevel(cfg.Daemon.LogLevel),
+		logging.WithHandler(logging.HandlerText),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to setup logger; %w", err)
 	}
@@ -74,51 +76,4 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// setupLogger creates a logger based on configuration
-func setupLogger(cfg *config.Config) (*slog.Logger, *lumberjack.Logger, error) {
-	var level slog.Level
-	switch cfg.Daemon.LogLevel {
-	case "debug":
-		level = slog.LevelDebug
-	case "info":
-		level = slog.LevelInfo
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
-	}
-
-	// Create log file if specified
-	var handler slog.Handler
-	var logWriter *lumberjack.Logger
-	if cfg.Daemon.LogFile != "" {
-		// Extract log directory by removing default suffix (assumes log file ends with "/daemon.log")
-		logDir := cfg.Daemon.LogFile[:len(cfg.Daemon.LogFile)-len("/daemon.log")]
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, nil, fmt.Errorf("failed to create log directory; %w", err)
-		}
-
-		// Use lumberjack for log rotation
-		logWriter = &lumberjack.Logger{
-			Filename:   cfg.Daemon.LogFile,
-			MaxSize:    10, // megabytes
-			MaxBackups: 3,
-			MaxAge:     28, // days
-			Compress:   true,
-		}
-
-		handler = slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
-			Level: level,
-		})
-	} else {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: level,
-		})
-	}
-
-	return slog.New(handler), logWriter, nil
 }

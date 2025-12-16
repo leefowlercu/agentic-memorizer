@@ -132,6 +132,9 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 			cfg.Claude.EnableVision,
 			cfg.Analysis.MaxFileSize,
 		)
+		logger.Info("semantic analysis enabled", "model", cfg.Claude.Model)
+	} else {
+		logger.Info("semantic analysis disabled", "reason", "no API key configured")
 	}
 
 	pidFile, err := config.GetPIDPath()
@@ -498,7 +501,17 @@ func (d *Daemon) rebuildIndex() error {
 		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	logger.Info("processing files with worker pool", "files", len(jobs), "workers", cfg.Daemon.Workers)
+	if analyzer == nil {
+		logger.Info("processing files with worker pool (metadata only - no API key)",
+			"files", len(jobs),
+			"workers", cfg.Daemon.Workers,
+		)
+	} else {
+		logger.Info("processing files with worker pool",
+			"files", len(jobs),
+			"workers", cfg.Daemon.Workers,
+		)
+	}
 
 	// Submit all jobs
 	pool.SubmitBatch(jobs)
@@ -819,7 +832,11 @@ func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.C
 		if err := d.updateSemanticAnalyzer(newCfg); err != nil {
 			logger.Warn("failed to update semantic analyzer", "error", err)
 		} else {
-			logger.Info("semantic analyzer updated")
+			if newCfg.Analysis.Enabled {
+				logger.Info("semantic analyzer updated", "model", newCfg.Claude.Model)
+			} else {
+				logger.Info("semantic analyzer disabled", "reason", "no API key configured")
+			}
 		}
 	}
 

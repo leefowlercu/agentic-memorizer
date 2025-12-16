@@ -39,8 +39,8 @@ func (s *APIKeyStep) Init(cfg *config.Config) tea.Cmd {
 	var options []components.RadioOption
 	if s.envKeyFound {
 		options = []components.RadioOption{
-			{Label: "Use env. variable value", Description: config.ClaudeAPIKeyEnv + " detected"},
-			{Label: "Enter API key directly", Description: "Will be stored in config file"},
+			{Label: "Use " + config.ClaudeAPIKeyEnv + " value", Description: "Environment variable detected"},
+			{Label: "Enter API key directly", Description: "Use entered value"},
 			{Label: "Skip for now", Description: "Configure later"},
 		}
 	} else {

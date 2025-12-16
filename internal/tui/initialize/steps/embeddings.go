@@ -55,18 +55,10 @@ func (s *EmbeddingsStep) Init(cfg *config.Config) tea.Cmd {
 	s.enableRadio = components.NewRadioGroup(enableOptions)
 	s.enableRadio.Focus()
 
-	// Key configuration options
-	var keyOptions []components.RadioOption
-	if s.envKeyFound {
-		keyOptions = []components.RadioOption{
-			{Label: "Use environment variable", Description: config.EmbeddingsAPIKeyEnv + " will be saved to config"},
-			{Label: "Enter API key directly", Description: "Will be stored in config file"},
-		}
-	} else {
-		keyOptions = []components.RadioOption{
-			{Label: "Use environment variable", Description: "Set " + config.EmbeddingsAPIKeyEnv},
-			{Label: "Enter API key directly", Description: "Will be stored in config file"},
-		}
+	// Key configuration options (only shown when env var not found)
+	// When env var IS found, we just show a success message instead
+	keyOptions := []components.RadioOption{
+		{Label: "Enter API key directly", Description: "Will be stored in config file"},
 	}
 	s.keyRadio = components.NewRadioGroup(keyOptions)
 
@@ -81,7 +73,7 @@ func (s *EmbeddingsStep) Init(cfg *config.Config) tea.Cmd {
 
 	// Pre-populate API key if already configured
 	if cfg.Embeddings.APIKey != "" {
-		s.keyRadio.SetSelected(1)
+		s.keyRadio.SetSelected(0) // "Enter directly" is always option 0 now
 		s.keyInput.SetValue(cfg.Embeddings.APIKey)
 	}
 
@@ -134,20 +126,15 @@ func (s *EmbeddingsStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 		}
 
 	case 1:
-		if s.showKeySetup {
-			oldSelected := s.keyRadio.Selected()
-			s.keyRadio.Update(msg)
-			newSelected := s.keyRadio.Selected()
-
-			if oldSelected != 1 && newSelected == 1 {
-				s.focusIndex = 2
-				s.keyRadio.Blur()
-				return s.keyInput.Focus(), StepContinue
-			}
+		if s.showKeySetup && !s.envKeyFound {
+			// When env var not found, keyRadio only has one option, so auto-focus input
+			s.focusIndex = 2
+			s.keyRadio.Blur()
+			return s.keyInput.Focus(), StepContinue
 		}
 
 	case 2:
-		if s.showKeySetup && s.keyRadio.Selected() == 1 {
+		if s.showKeySetup && !s.envKeyFound {
 			cmd := s.keyInput.Update(msg)
 			return cmd, StepContinue
 		}
@@ -169,12 +156,7 @@ func (s *EmbeddingsStep) View() string {
 		b.WriteString("\n\n")
 		b.WriteString(styles.Label.Render("API Key Configuration:"))
 		b.WriteString("\n")
-		b.WriteString(s.keyRadio.View())
-
-		if s.keyRadio.Selected() == 1 {
-			b.WriteString("\n\n")
-			b.WriteString(s.keyInput.View())
-		}
+		b.WriteString(s.keyInput.View())
 	} else if s.showKeySetup && s.envKeyFound {
 		b.WriteString("\n\n")
 		b.WriteString(styles.SuccessText.Render("Using " + config.EmbeddingsAPIKeyEnv + " from environment"))
@@ -186,7 +168,7 @@ func (s *EmbeddingsStep) View() string {
 	}
 
 	b.WriteString("\n\n")
-	if s.showKeySetup && s.keyRadio.Selected() == 1 {
+	if s.showKeySetup && !s.envKeyFound {
 		b.WriteString(styles.HelpText.Render(NavigationHelpWithInput()))
 	} else {
 		b.WriteString(styles.HelpText.Render(NavigationHelp()))
@@ -205,15 +187,12 @@ func (s *EmbeddingsStep) Validate() error {
 func (s *EmbeddingsStep) Apply(cfg *config.Config) error {
 	if s.enableRadio.Selected() == 0 {
 		cfg.Embeddings.Enabled = true
-		if s.keyRadio.Selected() == 1 {
-			cfg.Embeddings.APIKey = s.keyInput.Value()
+		if s.envKeyFound {
+			// Env var detected - write it to config for service manager compatibility
+			cfg.Embeddings.APIKey = os.Getenv(config.EmbeddingsAPIKeyEnv)
 		} else {
-			// If env var is detected, write it to config for service manager compatibility
-			if s.envKeyFound {
-				cfg.Embeddings.APIKey = os.Getenv(config.EmbeddingsAPIKeyEnv)
-			} else {
-				cfg.Embeddings.APIKey = ""
-			}
+			// No env var - use direct entry from input field
+			cfg.Embeddings.APIKey = s.keyInput.Value()
 		}
 	} else {
 		cfg.Embeddings.Enabled = false
@@ -229,14 +208,19 @@ func (s *EmbeddingsStep) nextFocus() tea.Cmd {
 		return nil
 	}
 
-	maxFocus := 1
-	if s.keyRadio.Selected() == 1 {
-		maxFocus = 2
+	// When env var not found, focus cycles: enable radio (0) -> input (2)
+	// When env var found, only enable radio (0) is focusable
+	if s.envKeyFound {
+		return nil // No cycling needed
 	}
 
 	s.focusIndex++
-	if s.focusIndex > maxFocus {
+	if s.focusIndex > 2 {
 		s.focusIndex = 0
+	}
+	// Skip keyRadio (1) since it's not shown
+	if s.focusIndex == 1 {
+		s.focusIndex = 2
 	}
 
 	return s.updateFocus()
@@ -247,13 +231,17 @@ func (s *EmbeddingsStep) prevFocus() tea.Cmd {
 		return nil
 	}
 
+	if s.envKeyFound {
+		return nil // No cycling needed
+	}
+
 	s.focusIndex--
 	if s.focusIndex < 0 {
-		maxFocus := 1
-		if s.keyRadio.Selected() == 1 {
-			maxFocus = 2
-		}
-		s.focusIndex = maxFocus
+		s.focusIndex = 2
+	}
+	// Skip keyRadio (1) since it's not shown
+	if s.focusIndex == 1 {
+		s.focusIndex = 0
 	}
 
 	return s.updateFocus()

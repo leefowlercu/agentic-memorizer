@@ -39,13 +39,13 @@ func (s *APIKeyStep) Init(cfg *config.Config) tea.Cmd {
 	var options []components.RadioOption
 	if s.envKeyFound {
 		options = []components.RadioOption{
-			{Label: "Use environment variable", Description: config.ClaudeAPIKeyEnv + " detected (will be saved to config)"},
+			{Label: "Use env. variable value", Description: config.ClaudeAPIKeyEnv + " detected"},
 			{Label: "Enter API key directly", Description: "Will be stored in config file"},
 			{Label: "Skip for now", Description: "Configure later"},
 		}
 	} else {
+		// When env var not found, only offer direct entry or skip
 		options = []components.RadioOption{
-			{Label: "Use environment variable", Description: "Set " + config.ClaudeAPIKeyEnv + " environment variable"},
 			{Label: "Enter API key directly", Description: "Will be stored in config file"},
 			{Label: "Skip for now", Description: "Configure later"},
 		}
@@ -61,10 +61,14 @@ func (s *APIKeyStep) Init(cfg *config.Config) tea.Cmd {
 
 	// Pre-select based on existing config
 	if cfg.Claude.APIKey != "" {
-		s.radio.SetSelected(1)
+		if s.envKeyFound {
+			s.radio.SetSelected(1) // "Enter directly" is option 1 when env var found
+		} else {
+			s.radio.SetSelected(0) // "Enter directly" is option 0 when env var not found
+		}
 		s.keyInput.SetValue(cfg.Claude.APIKey)
 	} else if s.envKeyFound {
-		s.radio.SetSelected(0)
+		s.radio.SetSelected(0) // "Use env. variable value"
 	}
 
 	return nil
@@ -88,7 +92,10 @@ func (s *APIKeyStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 
 		case "tab":
 			// Toggle focus between radio and input when input is visible
-			if s.radio.Selected() == 1 {
+			// When env var found: "Enter directly" is option 1
+			// When env var not found: "Enter directly" is option 0
+			enterDirectlySelected := (s.envKeyFound && s.radio.Selected() == 1) || (!s.envKeyFound && s.radio.Selected() == 0)
+			if enterDirectlySelected {
 				s.focusIndex = (s.focusIndex + 1) % 2
 				if s.focusIndex == 0 {
 					s.radio.Focus()
@@ -101,7 +108,8 @@ func (s *APIKeyStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 			return nil, StepContinue
 
 		case "shift+tab":
-			if s.radio.Selected() == 1 && s.focusIndex == 1 {
+			enterDirectlySelected := (s.envKeyFound && s.radio.Selected() == 1) || (!s.envKeyFound && s.radio.Selected() == 0)
+			if enterDirectlySelected && s.focusIndex == 1 {
 				s.focusIndex = 0
 				s.radio.Focus()
 				s.keyInput.Blur()
@@ -111,7 +119,8 @@ func (s *APIKeyStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	}
 
 	// Delegate to focused component
-	if s.focusIndex == 1 && s.radio.Selected() == 1 {
+	enterDirectlySelected := (s.envKeyFound && s.radio.Selected() == 1) || (!s.envKeyFound && s.radio.Selected() == 0)
+	if s.focusIndex == 1 && enterDirectlySelected {
 		cmd := s.keyInput.Update(msg)
 		return cmd, StepContinue
 	}
@@ -122,11 +131,14 @@ func (s *APIKeyStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	newSelected := s.radio.Selected()
 
 	// Auto-focus input when "Enter directly" is selected
-	if oldSelected != 1 && newSelected == 1 {
+	oldEnterDirectly := (s.envKeyFound && oldSelected == 1) || (!s.envKeyFound && oldSelected == 0)
+	newEnterDirectly := (s.envKeyFound && newSelected == 1) || (!s.envKeyFound && newSelected == 0)
+
+	if !oldEnterDirectly && newEnterDirectly {
 		s.focusIndex = 1
 		s.radio.Blur()
 		return s.keyInput.Focus(), StepContinue
-	} else if oldSelected == 1 && newSelected != 1 {
+	} else if oldEnterDirectly && !newEnterDirectly {
 		s.focusIndex = 0
 		s.radio.Focus()
 		s.keyInput.Blur()
@@ -145,7 +157,8 @@ func (s *APIKeyStep) View() string {
 	b.WriteString(s.radio.View())
 
 	// Show input field when "Enter directly" is selected
-	if s.radio.Selected() == 1 {
+	enterDirectlySelected := (s.envKeyFound && s.radio.Selected() == 1) || (!s.envKeyFound && s.radio.Selected() == 0)
+	if enterDirectlySelected {
 		b.WriteString("\n\n")
 		b.WriteString(s.keyInput.View())
 	}
@@ -156,7 +169,7 @@ func (s *APIKeyStep) View() string {
 	}
 
 	b.WriteString("\n\n")
-	if s.radio.Selected() == 1 {
+	if enterDirectlySelected {
 		b.WriteString(styles.HelpText.Render(NavigationHelpWithInput()))
 	} else {
 		b.WriteString(styles.HelpText.Render(NavigationHelp()))
@@ -174,18 +187,24 @@ func (s *APIKeyStep) Validate() error {
 
 // Apply applies the step values to config
 func (s *APIKeyStep) Apply(cfg *config.Config) error {
-	switch s.radio.Selected() {
-	case 0: // Use environment variable
-		// If env var is detected, write it to config for service manager compatibility
-		if s.envKeyFound {
+	if s.envKeyFound {
+		// When env var found, options are: [Use env, Enter directly, Skip]
+		switch s.radio.Selected() {
+		case 0: // Use environment variable
 			cfg.Claude.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
-		} else {
+		case 1: // Enter directly
+			cfg.Claude.APIKey = s.keyInput.Value()
+		case 2: // Skip
 			cfg.Claude.APIKey = ""
 		}
-	case 1: // Enter directly
-		cfg.Claude.APIKey = s.keyInput.Value()
-	case 2: // Skip
-		cfg.Claude.APIKey = ""
+	} else {
+		// When env var not found, options are: [Enter directly, Skip]
+		switch s.radio.Selected() {
+		case 0: // Enter directly
+			cfg.Claude.APIKey = s.keyInput.Value()
+		case 1: // Skip
+			cfg.Claude.APIKey = ""
+		}
 	}
 	return nil
 }

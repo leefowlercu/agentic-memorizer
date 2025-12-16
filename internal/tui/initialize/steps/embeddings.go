@@ -56,9 +56,17 @@ func (s *EmbeddingsStep) Init(cfg *config.Config) tea.Cmd {
 	s.enableRadio.Focus()
 
 	// Key configuration options
-	keyOptions := []components.RadioOption{
-		{Label: "Use environment variable", Description: "Set " + config.EmbeddingsAPIKeyEnv},
-		{Label: "Enter API key directly", Description: "Will be stored in config file"},
+	var keyOptions []components.RadioOption
+	if s.envKeyFound {
+		keyOptions = []components.RadioOption{
+			{Label: "Use environment variable", Description: config.EmbeddingsAPIKeyEnv + " will be saved to config"},
+			{Label: "Enter API key directly", Description: "Will be stored in config file"},
+		}
+	} else {
+		keyOptions = []components.RadioOption{
+			{Label: "Use environment variable", Description: "Set " + config.EmbeddingsAPIKeyEnv},
+			{Label: "Enter API key directly", Description: "Will be stored in config file"},
+		}
 	}
 	s.keyRadio = components.NewRadioGroup(keyOptions)
 
@@ -200,7 +208,12 @@ func (s *EmbeddingsStep) Apply(cfg *config.Config) error {
 		if s.keyRadio.Selected() == 1 {
 			cfg.Embeddings.APIKey = s.keyInput.Value()
 		} else {
-			cfg.Embeddings.APIKey = ""
+			// If env var is detected, write it to config for service manager compatibility
+			if s.envKeyFound {
+				cfg.Embeddings.APIKey = os.Getenv(config.EmbeddingsAPIKeyEnv)
+			} else {
+				cfg.Embeddings.APIKey = ""
+			}
 		}
 	} else {
 		cfg.Embeddings.Enabled = false

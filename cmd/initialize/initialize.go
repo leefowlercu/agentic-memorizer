@@ -272,8 +272,13 @@ func runUnattended(cmd *cobra.Command) error {
 	useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
 	if anthropicKey != "" {
 		cfg.Claude.APIKey = anthropicKey
-	} else if useEnvAnthropic || os.Getenv(config.ClaudeAPIKeyEnv) != "" {
-		cfg.Claude.APIKey = "" // Will use env var
+	} else if useEnvAnthropic {
+		// Detect and write env var to config for service manager compatibility
+		envKey := os.Getenv(config.ClaudeAPIKeyEnv)
+		cfg.Claude.APIKey = envKey
+	} else if os.Getenv(config.ClaudeAPIKeyEnv) != "" {
+		// Env var exists but not explicitly requested - still capture it
+		cfg.Claude.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
 	}
 
 	// HTTP port
@@ -319,8 +324,13 @@ func runUnattended(cmd *cobra.Command) error {
 		cfg.Embeddings.Enabled = true
 		if openaiKey != "" {
 			cfg.Embeddings.APIKey = openaiKey
-		} else if useEnvOpenai || os.Getenv(config.EmbeddingsAPIKeyEnv) != "" {
-			cfg.Embeddings.APIKey = "" // Will use env var
+		} else if useEnvOpenai {
+			// Detect and write env var to config for service manager compatibility
+			envKey := os.Getenv(config.EmbeddingsAPIKeyEnv)
+			cfg.Embeddings.APIKey = envKey
+		} else if os.Getenv(config.EmbeddingsAPIKeyEnv) != "" {
+			// Env var exists but not explicitly requested - still capture it
+			cfg.Embeddings.APIKey = os.Getenv(config.EmbeddingsAPIKeyEnv)
 		}
 	}
 

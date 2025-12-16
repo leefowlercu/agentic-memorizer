@@ -39,13 +39,13 @@ func (s *APIKeyStep) Init(cfg *config.Config) tea.Cmd {
 	var options []components.RadioOption
 	if s.envKeyFound {
 		options = []components.RadioOption{
-			{Label: "Use environment variable", Description: config.ClaudeAPIKeyEnv + " detected"},
+			{Label: "Use environment variable", Description: config.ClaudeAPIKeyEnv + " detected (will be saved to config)"},
 			{Label: "Enter API key directly", Description: "Will be stored in config file"},
 			{Label: "Skip for now", Description: "Configure later"},
 		}
 	} else {
 		options = []components.RadioOption{
-			{Label: "Use environment variable", Description: "Set " + config.ClaudeAPIKeyEnv + " before starting daemon"},
+			{Label: "Use environment variable", Description: "Set " + config.ClaudeAPIKeyEnv + " environment variable"},
 			{Label: "Enter API key directly", Description: "Will be stored in config file"},
 			{Label: "Skip for now", Description: "Configure later"},
 		}
@@ -176,7 +176,12 @@ func (s *APIKeyStep) Validate() error {
 func (s *APIKeyStep) Apply(cfg *config.Config) error {
 	switch s.radio.Selected() {
 	case 0: // Use environment variable
-		cfg.Claude.APIKey = ""
+		// If env var is detected, write it to config for service manager compatibility
+		if s.envKeyFound {
+			cfg.Claude.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+		} else {
+			cfg.Claude.APIKey = ""
+		}
 	case 1: // Enter directly
 		cfg.Claude.APIKey = s.keyInput.Value()
 	case 2: // Skip

@@ -212,7 +212,7 @@ func (s *Server) handleInitialize(ctx context.Context, id any, params json.RawMe
 
 	// Validate MCP protocol version - update supportedVersions when new versions released.
 	// See MCP spec for version compatibility requirements.
-	supportedVersions := []string{"2024-11-05", "2025-06-18"}
+	supportedVersions := []string{"2024-11-05", "2025-06-18", "2025-11-25"}
 	supported := false
 	for _, v := range supportedVersions {
 		if req.ProtocolVersion == v {
@@ -888,7 +888,8 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 			Name:        "search_files",
 			Description: "Search for files in the memory index using semantic search. Returns ranked results based on relevance to the query.",
 			InputSchema: protocol.InputSchema{
-				Type: "object",
+				Schema: "https://json-schema.org/draft/2020-12/schema",
+				Type:   "object",
 				Properties: map[string]protocol.Property{
 					"query": {
 						Type:        "string",
@@ -914,7 +915,8 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 			Name:        "get_file_metadata",
 			Description: "Get complete metadata and semantic analysis for a specific file by path. Returns all available information including summaries, tags, topics, entities, related files, and file-specific metadata in a unified FileEntry format.",
 			InputSchema: protocol.InputSchema{
-				Type: "object",
+				Schema: "https://json-schema.org/draft/2020-12/schema",
+				Type:   "object",
 				Properties: map[string]protocol.Property{
 					"path": {
 						Type:        "string",
@@ -928,7 +930,8 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 			Name:        "list_recent_files",
 			Description: "List recently modified files within a specified time period. Returns files sorted by modification date (newest first).",
 			InputSchema: protocol.InputSchema{
-				Type: "object",
+				Schema: "https://json-schema.org/draft/2020-12/schema",
+				Type:   "object",
 				Properties: map[string]protocol.Property{
 					"days": {
 						Type:        "integer",
@@ -951,7 +954,8 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 			Name:        "get_related_files",
 			Description: "Find files related to a given file through shared tags, topics, or entities in the knowledge graph. Requires FalkorDB to be running.",
 			InputSchema: protocol.InputSchema{
-				Type: "object",
+				Schema: "https://json-schema.org/draft/2020-12/schema",
+				Type:   "object",
 				Properties: map[string]protocol.Property{
 					"path": {
 						Type:        "string",
@@ -972,7 +976,8 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 			Name:        "search_entities",
 			Description: "Search for files that mention a specific entity (technology, person, concept, organization). Requires FalkorDB to be running.",
 			InputSchema: protocol.InputSchema{
-				Type: "object",
+				Schema: "https://json-schema.org/draft/2020-12/schema",
+				Type:   "object",
 				Properties: map[string]protocol.Property{
 					"entity": {
 						Type:        "string",

@@ -11,6 +11,7 @@ type Tool struct {
 
 // InputSchema defines the JSON Schema for tool parameters
 type InputSchema struct {
+	Schema     string              `json:"$schema,omitempty"`
 	Type       string              `json:"type"`
 	Properties map[string]Property `json:"properties"`
 	Required   []string            `json:"required,omitempty"`

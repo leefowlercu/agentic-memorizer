@@ -82,6 +82,24 @@ func TestServer_Initialize(t *testing.T) {
 			checkInitialized: false, // Not initialized until "initialized" notification
 		},
 		{
+			name: "successful initialization with 2025-11-25",
+			request: protocol.JSONRPCRequest{
+				JSONRPC: "2.0",
+				ID:      1,
+				Method:  "initialize",
+				Params: mustMarshal(protocol.InitializeRequest{
+					ProtocolVersion: "2025-11-25",
+					Capabilities:    protocol.ClientCapabilities{},
+					ClientInfo: protocol.ClientInfo{
+						Name:    "test-client",
+						Version: "1.0.0",
+					},
+				}),
+			},
+			wantError:        false,
+			checkInitialized: false, // Not initialized until "initialized" notification
+		},
+		{
 			name: "unsupported protocol version",
 			request: protocol.JSONRPCRequest{
 				JSONRPC: "2.0",

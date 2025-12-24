@@ -82,9 +82,6 @@ var DefaultConfig = Config{
 		DaemonHost: "localhost",
 		DaemonPort: 0, // Disabled by default; set during initialize from daemon.http_port
 	},
-	Integrations: IntegrationsConfig{
-		Enabled: []string{}, // Empty by default - populated during init/setup/remove commands
-	},
 	Graph: GraphConfig{
 		Host:                "localhost",
 		Port:                6379,

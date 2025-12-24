@@ -20,7 +20,6 @@ func TestGetConfigSchema(t *testing.T) {
 		"mcp",
 		"graph",
 		"embeddings",
-		"integrations",
 	}
 
 	for _, expected := range expectedItems {

@@ -3,7 +3,6 @@ package subcommands
 import (
 	"fmt"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
 )
@@ -58,25 +57,6 @@ func runRemove(cmd *cobra.Command, args []string) error {
 
 	if err := integration.Remove(); err != nil {
 		return fmt.Errorf("failed to remove %s; %w", integrationName, err)
-	}
-
-	// Update config to remove this integration from enabled list
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config; %w", err)
-	}
-
-	// Remove integration from enabled list
-	newEnabled := []string{}
-	for _, name := range cfg.Integrations.Enabled {
-		if name != integrationName {
-			newEnabled = append(newEnabled, name)
-		}
-	}
-	cfg.Integrations.Enabled = newEnabled
-	configPath := config.GetConfigPath()
-	if err := config.WriteConfig(configPath, cfg); err != nil {
-		return fmt.Errorf("failed to update config after removing integration; %w", err)
 	}
 
 	fmt.Printf("✓ %s integration removed successfully\n", integration.GetName())

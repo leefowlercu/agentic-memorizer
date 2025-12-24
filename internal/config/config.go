@@ -66,7 +66,6 @@ func InitConfig() error {
 	viper.SetDefault("mcp.daemon_port", DefaultConfig.MCP.DaemonPort)
 	viper.SetDefault("graph.similarity_threshold", DefaultConfig.Graph.SimilarityThreshold)
 	viper.SetDefault("graph.max_similar_files", DefaultConfig.Graph.MaxSimilarFiles)
-	viper.SetDefault("integrations.enabled", DefaultConfig.Integrations.Enabled)
 	viper.SetDefault("embeddings.enabled", DefaultConfig.Embeddings.Enabled)
 	viper.SetDefault("embeddings.provider", DefaultConfig.Embeddings.Provider)
 	viper.SetDefault("embeddings.model", DefaultConfig.Embeddings.Model)
@@ -227,11 +226,6 @@ func (c *Config) ToMinimalConfig() *MinimalConfig {
 	// Only include embeddings API key if set
 	if c.Embeddings.APIKey != "" {
 		minimal.Embeddings.APIKey = c.Embeddings.APIKey
-	}
-
-	// Only include integrations if any are enabled
-	if len(c.Integrations.Enabled) > 0 {
-		minimal.Integrations.Enabled = c.Integrations.Enabled
 	}
 
 	return minimal

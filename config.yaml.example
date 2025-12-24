@@ -101,6 +101,6 @@ embeddings:
   api_key: ""
 
 # Integration Configuration
-# Managed automatically by 'integrations setup/remove' commands
-integrations:
-  enabled: []
+# Integration state is automatically detected from framework configuration files
+# (e.g., ~/.claude/settings.json, ~/.config/gemini.json)
+# Use 'memorizer integrations list' to see configured integrations

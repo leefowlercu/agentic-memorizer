@@ -13,9 +13,10 @@ import (
 
 // ConfirmStep shows a summary and asks for confirmation
 type ConfirmStep struct {
-	radio  *components.RadioGroup
-	config *config.Config
-	err    error
+	radio                *components.RadioGroup
+	config               *config.Config
+	selectedIntegrations []string
+	err                  error
 }
 
 // NewConfirmStep creates a new confirmation step
@@ -30,7 +31,13 @@ func (s *ConfirmStep) Title() string {
 
 // Init initializes the step
 func (s *ConfirmStep) Init(cfg *config.Config) tea.Cmd {
+	return s.InitWithIntegrations(cfg, nil)
+}
+
+// InitWithIntegrations initializes with explicit integration list
+func (s *ConfirmStep) InitWithIntegrations(cfg *config.Config, selectedIntegrations []string) tea.Cmd {
 	s.config = cfg
+	s.selectedIntegrations = selectedIntegrations
 	s.err = nil
 
 	// Generate intelligent description based on NEW integrations being set up
@@ -38,9 +45,9 @@ func (s *ConfirmStep) Init(cfg *config.Config) tea.Cmd {
 
 	// Check if any integrations are newly selected (not already configured)
 	hasNewIntegrations := false
-	if len(cfg.Integrations.Enabled) > 0 {
+	if len(selectedIntegrations) > 0 {
 		registry := integrations.GlobalRegistry()
-		for _, name := range cfg.Integrations.Enabled {
+		for _, name := range selectedIntegrations {
 			integration, err := registry.Get(name)
 			if err != nil {
 				continue
@@ -166,8 +173,8 @@ func (s *ConfirmStep) renderSummary() string {
 	}
 
 	// Integrations
-	if len(s.config.Integrations.Enabled) > 0 {
-		b.WriteString(s.summaryLine("Integrations", strings.Join(s.config.Integrations.Enabled, ", ")))
+	if len(s.selectedIntegrations) > 0 {
+		b.WriteString(s.summaryLine("Integrations", strings.Join(s.selectedIntegrations, ", ")))
 	} else {
 		b.WriteString(s.summaryLine("Integrations", "None selected"))
 	}

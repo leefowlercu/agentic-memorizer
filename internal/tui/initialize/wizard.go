@@ -13,11 +13,12 @@ import (
 
 // WizardResult contains the outcome of the wizard
 type WizardResult struct {
-	Config      *config.Config
-	Confirmed   bool
-	Cancelled   bool
-	Err         error
-	StartupStep *steps.StartupStep // Startup configuration choices
+	Config               *config.Config
+	Confirmed            bool
+	Cancelled            bool
+	Err                  error
+	StartupStep          *steps.StartupStep // Startup configuration choices
+	SelectedIntegrations []string           // Selected integrations from wizard
 }
 
 // WizardModel is the main Bubbletea model for the initialization wizard
@@ -157,7 +158,15 @@ func (m WizardModel) nextStep() (tea.Model, tea.Cmd) {
 	m.progress.SetStep(m.currentStep)
 
 	// Initialize the new step
-	return m, m.steps[m.currentStep].Init(m.config)
+	cmd := m.steps[m.currentStep].Init(m.config)
+
+	// If this is the confirm step, pass selected integrations
+	if confirmStep, ok := m.steps[m.currentStep].(*steps.ConfirmStep); ok {
+		selectedIntegrations := GetSelectedIntegrations(m.steps)
+		cmd = confirmStep.InitWithIntegrations(m.config, selectedIntegrations)
+	}
+
+	return m, cmd
 }
 
 // prevStep goes back to the previous step
@@ -199,11 +208,12 @@ func RunWizard(initialConfig *config.Config) (*WizardResult, error) {
 	}
 
 	return &WizardResult{
-		Config:      m.config,
-		Confirmed:   m.confirmed,
-		Cancelled:   m.quitting && !m.confirmed,
-		Err:         m.err,
-		StartupStep: startupStep,
+		Config:               m.config,
+		Confirmed:            m.confirmed,
+		Cancelled:            m.quitting && !m.confirmed,
+		Err:                  m.err,
+		StartupStep:          startupStep,
+		SelectedIntegrations: GetSelectedIntegrations(m.steps),
 	}, nil
 }
 

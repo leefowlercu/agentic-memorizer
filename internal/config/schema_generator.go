@@ -342,7 +342,6 @@ var fieldDescriptions = map[string]string{
 	"embeddings.provider":                  "Embedding provider (only 'openai' currently supported)",
 	"embeddings.model":                     "Embedding model (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002)",
 	"embeddings.dimensions":                "Vector dimensions (must match model: 1536 for small/ada-002, 3072 for large)",
-	"integrations.enabled":                 "List of enabled integrations (managed by setup/remove commands)",
 }
 
 // Hot-reload settings (cannot be derived from reflection)
@@ -378,5 +377,4 @@ var hotReloadSettings = map[string]bool{
 	"embeddings.provider":                  true,
 	"embeddings.model":                     true,
 	"embeddings.dimensions":                true,
-	"integrations.enabled":                 false,
 }

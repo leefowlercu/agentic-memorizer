@@ -186,18 +186,8 @@ func (s *IntegrationsStep) Validate() error {
 
 // Apply applies the step values to config
 func (s *IntegrationsStep) Apply(cfg *config.Config) error {
-	if s.checkbox == nil {
-		cfg.Integrations.Enabled = []string{}
-		return nil
-	}
-
-	checked := s.checkbox.CheckedValues()
-	enabled := make([]string, len(checked))
-	for i, v := range checked {
-		enabled[i] = v.(string)
-	}
-	cfg.Integrations.Enabled = enabled
-
+	// Integration selections are passed to setupIntegrations() via wizard.GetSelectedIntegrations()
+	// No need to populate config field
 	return nil
 }
 

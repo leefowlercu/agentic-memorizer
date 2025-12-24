@@ -222,8 +222,11 @@ func runInteractive(cmd *cobra.Command) error {
 		return nil
 	}
 
+	// Get selected integrations from wizard
+	selectedIntegrations := result.SelectedIntegrations
+
 	// Finalize configuration (skip next steps - will print after startup handling)
-	if err := finalizeInit(configPath, result.Config, true); err != nil {
+	if err := finalizeInit(configPath, result.Config, selectedIntegrations, true); err != nil {
 		return err
 	}
 
@@ -334,12 +337,11 @@ func runUnattended(cmd *cobra.Command) error {
 		}
 	}
 
-	// Integrations
+	// Integrations (for setup, not config tracking)
 	integrationNames, _ := cmd.Flags().GetStringSlice("integrations")
-	cfg.Integrations.Enabled = integrationNames
 
 	// Finalize configuration (print next steps for unattended mode)
-	return finalizeInit(configPath, &cfg, false)
+	return finalizeInit(configPath, &cfg, integrationNames, false)
 }
 
 func handleStartupChoices(result *tuiinit.WizardResult) error {
@@ -432,7 +434,7 @@ func handleStartupChoices(result *tuiinit.WizardResult) error {
 	return nil
 }
 
-func finalizeInit(configPath string, cfg *config.Config, skipNextSteps bool) error {
+func finalizeInit(configPath string, cfg *config.Config, integrationNames []string, skipNextSteps bool) error {
 	// Create directories
 	if err := os.MkdirAll(cfg.MemoryRoot, 0755); err != nil {
 		return fmt.Errorf("failed to create memory directory; %w", err)
@@ -470,21 +472,10 @@ func finalizeInit(configPath string, cfg *config.Config, skipNextSteps bool) err
 	}
 
 	// Setup integrations
-	if len(cfg.Integrations.Enabled) > 0 {
-		enabledIntegrations, err := setupIntegrations(cfg.Integrations.Enabled)
+	if len(integrationNames) > 0 {
+		_, err := setupIntegrations(integrationNames)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: %v\n\n", err)
-		}
-
-		// Update config with successfully enabled integrations
-		if len(enabledIntegrations) > 0 {
-			cfg.Integrations.Enabled = enabledIntegrations
-			if err := config.WriteMinimalConfig(configPath, cfg); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to update config with enabled integrations; %v\n", err)
-			}
-			if err := config.InitConfig(); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to reload config; %v\n", err)
-			}
 		}
 	}
 

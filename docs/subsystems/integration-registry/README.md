@@ -459,10 +459,10 @@ Lists all registered integrations with their names, descriptions, versions, and 
 Scans the system for installed frameworks and reports which ones are detected. Useful for discovering what integrations are possible on the current system.
 
 **`integrations setup <name>`:**
-Configures the specified integration. Performs automatic setup including config file modification and validation. Updates `integrations.enabled` list in config.yaml to track configured integrations.
+Configures the specified integration. Performs automatic setup including framework config file modification and validation. Integration state is tracked in framework-specific files only.
 
 **`integrations remove <name>`:**
-Removes the specified integration configuration, cleaning up hooks and settings modifications. Restores frameworks to their pre-integration state. Removes integration from `integrations.enabled` list in config.yaml.
+Removes the specified integration configuration, cleaning up hooks and settings modifications. Restores frameworks to their pre-integration state.
 
 **`integrations validate`:**
 Checks configuration health for all enabled integrations, reporting any issues with binary paths, settings files, or configuration validity.
@@ -504,11 +504,11 @@ The `IntegrationsConfig` type (`internal/integrations/types.go`) contains a simp
 This lightweight configuration tracks which integrations have been set up without storing detailed framework-specific settings. Detailed settings like SessionStart matchers or MCP environment variables are stored in framework-specific configuration files (`~/.claude/settings.json`, `~/.claude.json`, etc.) rather than in agentic-memorizer's config.yaml.
 
 **Configuration Lifecycle:**
-1. Config Manager loads enabled integrations list during initialization
-2. `integrations setup` command adds integration names to the Enabled list
-3. `integrations remove` command removes integration names from the Enabled list
-4. Adapters read their detailed configuration from framework-specific files
-5. Changes persist to config.yaml's `integrations.enabled` array
+1. `integrations setup` command modifies framework-specific configuration files
+2. Configuration is framework-specific - hooks stored in ~/.claude.json, tools in settings.json
+3. `integrations remove` command removes configuration from framework files
+4. Adapters read their configuration from framework-specific files
+5. Integration state is detected on-demand using `IsEnabled()` method
 
 ### Index Manager
 

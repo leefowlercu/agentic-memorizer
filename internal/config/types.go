@@ -3,14 +3,13 @@ package config
 import "fmt"
 
 type Config struct {
-	MemoryRoot   string             `mapstructure:"memory_root" yaml:"memory_root"`
-	Claude       ClaudeConfig       `mapstructure:"claude" yaml:"claude"`
-	Analysis     AnalysisConfig     `mapstructure:"analysis" yaml:"analysis"`
-	Daemon       DaemonConfig       `mapstructure:"daemon" yaml:"daemon"`
-	MCP          MCPConfig          `mapstructure:"mcp" yaml:"mcp"`
-	Integrations IntegrationsConfig `mapstructure:"integrations" yaml:"integrations"`
-	Graph        GraphConfig        `mapstructure:"graph" yaml:"graph"`
-	Embeddings   EmbeddingsConfig   `mapstructure:"embeddings" yaml:"embeddings"`
+	MemoryRoot string           `mapstructure:"memory_root" yaml:"memory_root"`
+	Claude     ClaudeConfig     `mapstructure:"claude" yaml:"claude"`
+	Analysis   AnalysisConfig   `mapstructure:"analysis" yaml:"analysis"`
+	Daemon     DaemonConfig     `mapstructure:"daemon" yaml:"daemon"`
+	MCP        MCPConfig        `mapstructure:"mcp" yaml:"mcp"`
+	Graph      GraphConfig      `mapstructure:"graph" yaml:"graph"`
+	Embeddings EmbeddingsConfig `mapstructure:"embeddings" yaml:"embeddings"`
 }
 
 type ClaudeConfig struct {
@@ -53,14 +52,6 @@ func (m *MCPConfig) GetDaemonURL() string {
 		return fmt.Sprintf("http://%s:%d", m.DaemonHost, m.DaemonPort)
 	}
 	return ""
-}
-
-// IntegrationsConfig represents the complete integrations configuration section.
-// The Enabled list tracks which integrations have been configured via setup commands.
-// Integration-specific configuration (hooks, tools, etc.) is stored in framework-specific
-// files (e.g., ~/.claude.json, ~/.claude/settings.json) rather than in this config file.
-type IntegrationsConfig struct {
-	Enabled []string `mapstructure:"enabled" yaml:"enabled"`
 }
 
 // GraphConfig contains FalkorDB knowledge graph configuration.

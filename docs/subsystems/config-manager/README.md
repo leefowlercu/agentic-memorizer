@@ -50,7 +50,6 @@ These settings appear in the default configuration file and are commonly adjuste
 - `graph.host`, `graph.port` - FalkorDB connection
 - `graph.password` - FalkorDB authentication password
 - `embeddings.api_key` - OpenAI API key for embeddings (conditional)
-- `integrations.enabled` - List of enabled integrations
 
 **Tier 2: Advanced (documented, not shown by default)**
 These settings can be added to `config.yaml` to override sensible defaults:

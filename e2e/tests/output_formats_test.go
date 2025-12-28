@@ -26,7 +26,7 @@ func TestOutputFormats_XML(t *testing.T) {
 	}
 
 	// Read with XML format (default)
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "xml")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "xml")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -70,7 +70,7 @@ func TestOutputFormats_Markdown(t *testing.T) {
 	}
 
 	// Read with Markdown format
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "markdown")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "markdown")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -102,7 +102,7 @@ func TestOutputFormats_JSON(t *testing.T) {
 	}
 
 	// Read with JSON format
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "json")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "json")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -143,11 +143,11 @@ func TestOutputFormats_VerboseMode(t *testing.T) {
 	}
 
 	// Read without verbose
-	stdoutNormal, _, exitCode := h.RunCommand("read", "--format", "json")
+	stdoutNormal, _, exitCode := h.RunCommand("read", "files", "--format", "json")
 	harness.AssertExitCode(t, 0, exitCode, stdoutNormal, "")
 
 	// Read with verbose
-	stdoutVerbose, _, exitCode := h.RunCommand("read", "--format", "json", "-v")
+	stdoutVerbose, _, exitCode := h.RunCommand("read", "files", "--format", "json", "-v")
 	harness.AssertExitCode(t, 0, exitCode, stdoutVerbose, "")
 
 	// Verbose output should be different (likely larger with related files)
@@ -182,7 +182,7 @@ func TestOutputFormats_IntegrationWrapping(t *testing.T) {
 	}
 
 	// Test Claude Code hook integration wrapping
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "json", "--integration", "claude-code-hook")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "json", "--integration", "claude-code-hook")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -221,7 +221,7 @@ func TestOutputFormats_InvalidFormat(t *testing.T) {
 	defer cleanup.CleanupAll()
 
 	// Try invalid format
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "invalid")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "invalid")
 
 	// Should fail with non-zero exit code
 	if exitCode == 0 {
@@ -250,7 +250,7 @@ func TestOutputFormats_EmptyIndex(t *testing.T) {
 	// so we just verify the command runs successfully rather than checking emptiness
 
 	// Read index (may not be empty if user has files in ~/.memorizer/memory)
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "json")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "json")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -283,7 +283,7 @@ func TestOutputFormats_XMLStructureValidation(t *testing.T) {
 	}
 
 	// Read XML output
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "xml")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "xml")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -333,7 +333,7 @@ func TestOutputFormats_JSONSchemaValidation(t *testing.T) {
 	}
 
 	// Read JSON output
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "json")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "json")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
@@ -396,7 +396,7 @@ func TestOutputFormats_MarkdownReadability(t *testing.T) {
 	}
 
 	// Read Markdown output
-	stdout, stderr, exitCode := h.RunCommand("read", "--format", "markdown")
+	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "markdown")
 
 	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 

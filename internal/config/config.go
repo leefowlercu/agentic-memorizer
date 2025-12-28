@@ -202,7 +202,8 @@ type MinimalGraphConfig struct {
 }
 
 type MinimalEmbeddingsConfig struct {
-	APIKey string `yaml:"api_key,omitempty"`
+	APIKey   string `yaml:"api_key,omitempty"`
+	Provider string `yaml:"provider,omitempty"`
 }
 
 type MinimalIntegrationsConfig struct {
@@ -239,7 +240,8 @@ func (c *Config) ToMinimalConfig() *MinimalConfig {
 		minimal.MCP.DaemonPort = c.MCP.DaemonPort
 	}
 
-	// Only include embeddings API key if set
+	// Include embeddings provider (always) and API key (if set)
+	minimal.Embeddings.Provider = c.Embeddings.Provider
 	if c.Embeddings.APIKey != "" {
 		minimal.Embeddings.APIKey = c.Embeddings.APIKey
 	}

@@ -198,7 +198,7 @@ func TestGetConfigSchema_EmbeddingsSectionHasNewFields(t *testing.T) {
 
 	// Check for new fields
 	expectedFields := map[string]string{
-		"provider":   "advanced",
+		"provider":   "minimal",
 		"model":      "advanced",
 		"dimensions": "advanced",
 	}

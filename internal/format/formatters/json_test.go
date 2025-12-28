@@ -3,8 +3,10 @@ package formatters
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
+	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -273,4 +275,83 @@ func TestJSONFormatter_ValidJSON(t *testing.T) {
 		// All should have a "type" field
 		assert.NotEmpty(t, result["type"])
 	}
+}
+
+func TestJSONFormatter_FormatFacts(t *testing.T) {
+	formatter := NewJSONFormatter()
+
+	now := time.Now()
+	index := &types.FactsIndex{
+		Generated: now,
+		Facts: []types.Fact{
+			{
+				ID:        "fact-1",
+				Content:   "This is a test fact",
+				CreatedAt: now,
+				Source:    "cli",
+			},
+			{
+				ID:        "fact-2",
+				Content:   "Another test fact",
+				CreatedAt: now.Add(-time.Hour),
+				UpdatedAt: now,
+				Source:    "cli",
+			},
+		},
+		Stats: types.FactStats{
+			TotalFacts: 2,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	// Verify it's valid JSON
+	var result types.FactsIndex
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err)
+
+	// Verify content
+	assert.Len(t, result.Facts, 2)
+	assert.Equal(t, "fact-1", result.Facts[0].ID)
+	assert.Equal(t, "This is a test fact", result.Facts[0].Content)
+	assert.Equal(t, "cli", result.Facts[0].Source)
+	assert.Equal(t, 2, result.Stats.TotalFacts)
+	assert.Equal(t, 50, result.Stats.MaxFacts)
+}
+
+func TestJSONFormatter_FormatFactsEmpty(t *testing.T) {
+	formatter := NewJSONFormatter()
+
+	index := &types.FactsIndex{
+		Generated: time.Now(),
+		Facts:     []types.Fact{},
+		Stats: types.FactStats{
+			TotalFacts: 0,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	var result types.FactsIndex
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err)
+
+	assert.Len(t, result.Facts, 0)
+	assert.Equal(t, 0, result.Stats.TotalFacts)
+}
+
+func TestJSONFormatter_FormatFactsValidationError(t *testing.T) {
+	formatter := NewJSONFormatter()
+
+	fc := format.NewFactsContent(nil)
+	_, err := formatter.Format(fc)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
 }

@@ -34,6 +34,7 @@ type Manager struct {
 	nodes           *Nodes
 	edges           *Edges
 	queries         *Queries
+	facts           *Facts
 	disambiguation  *Disambiguation
 	recommendations *Recommendations
 	clusters        *ClusterDetection
@@ -75,12 +76,13 @@ func (m *Manager) Initialize(ctx context.Context) error {
 
 	// Initialize sub-components in dependency order:
 	// 1. Schema first (creates constraints and indexes)
-	// 2. Nodes/Edges (core CRUD operations, depend on schema)
+	// 2. Nodes/Edges/Facts (core CRUD operations, depend on schema)
 	// 3. Queries (read-only operations, depend on nodes/edges)
 	// 4. Analytics (disambiguation, recommendations, clusters, gaps, temporal)
 	m.schema = NewSchema(m.client, m.config.Schema, m.logger)
 	m.nodes = NewNodes(m.client, m.logger)
 	m.edges = NewEdges(m.client, m.logger)
+	m.facts = NewFacts(m.client, m.logger)
 	m.queries = NewQueries(m.client, m.logger)
 	m.disambiguation = NewDisambiguation(m.client, m.logger)
 	m.recommendations = NewRecommendations(m.client, m.logger)
@@ -707,6 +709,11 @@ func (m *Manager) Edges() *Edges {
 // Queries returns the Queries handler for direct query operations
 func (m *Manager) Queries() *Queries {
 	return m.queries
+}
+
+// Facts returns the Facts handler for direct fact operations
+func (m *Manager) Facts() *Facts {
+	return m.facts
 }
 
 // Client returns the underlying FalkorDB client

@@ -43,19 +43,19 @@ func TestGeminiCLIHookAdapter_GetCommand(t *testing.T) {
 			name:       "XML format",
 			binaryPath: "/usr/local/bin/memorizer",
 			format:     integrations.FormatXML,
-			want:       "/usr/local/bin/memorizer read --format xml --integration gemini-cli-hook",
+			want:       "/usr/local/bin/memorizer read files --format xml --integration gemini-cli-hook",
 		},
 		{
 			name:       "Markdown format",
 			binaryPath: "/usr/local/bin/memorizer",
 			format:     integrations.FormatMarkdown,
-			want:       "/usr/local/bin/memorizer read --format markdown --integration gemini-cli-hook",
+			want:       "/usr/local/bin/memorizer read files --format markdown --integration gemini-cli-hook",
 		},
 		{
 			name:       "JSON format",
 			binaryPath: "/usr/local/bin/memorizer",
 			format:     integrations.FormatJSON,
-			want:       "/usr/local/bin/memorizer read --format json --integration gemini-cli-hook",
+			want:       "/usr/local/bin/memorizer read files --format json --integration gemini-cli-hook",
 		},
 	}
 

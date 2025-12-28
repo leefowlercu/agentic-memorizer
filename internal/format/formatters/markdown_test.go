@@ -3,8 +3,10 @@ package formatters
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
+	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -285,5 +287,80 @@ func TestMarkdownFormatter_ValidationError(t *testing.T) {
 
 	_, err := formatter.Format(section)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
+}
+
+func TestMarkdownFormatter_FormatFacts(t *testing.T) {
+	formatter := NewMarkdownFormatter()
+
+	now := time.Now()
+	index := &types.FactsIndex{
+		Generated: now,
+		Facts: []types.Fact{
+			{
+				ID:        "fact-1",
+				Content:   "This is a test fact",
+				CreatedAt: now,
+				Source:    "cli",
+			},
+			{
+				ID:        "fact-2",
+				Content:   "Another test fact",
+				CreatedAt: now.Add(-time.Hour),
+				UpdatedAt: now,
+				Source:    "cli",
+			},
+		},
+		Stats: types.FactStats{
+			TotalFacts: 2,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	// Verify Markdown structure
+	assert.Contains(t, output, "# Facts")
+	assert.Contains(t, output, "**Generated**:")
+	assert.Contains(t, output, "**Total Facts**: 2 / 50")
+	assert.Contains(t, output, "### fact-1")
+	assert.Contains(t, output, "This is a test fact")
+	assert.Contains(t, output, "*Source*: cli")
+	assert.Contains(t, output, "### fact-2")
+	assert.Contains(t, output, "*Updated*:")
+}
+
+func TestMarkdownFormatter_FormatFactsEmpty(t *testing.T) {
+	formatter := NewMarkdownFormatter()
+
+	index := &types.FactsIndex{
+		Generated: time.Now(),
+		Facts:     []types.Fact{},
+		Stats: types.FactStats{
+			TotalFacts: 0,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "# Facts")
+	assert.Contains(t, output, "**Total Facts**: 0 / 50")
+	assert.Contains(t, output, "*No facts stored.*")
+	// Should not have the separator when empty
+	assert.NotContains(t, output, "---")
+}
+
+func TestMarkdownFormatter_FormatFactsValidationError(t *testing.T) {
+	formatter := NewMarkdownFormatter()
+
+	fc := format.NewFactsContent(nil)
+	_, err := formatter.Format(fc)
+
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation failed")
 }

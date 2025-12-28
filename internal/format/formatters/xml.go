@@ -43,6 +43,9 @@ func (f *XMLFormatter) Format(b format.Buildable) (string, error) {
 	case *format.GraphContent:
 		// GraphContent uses direct string generation for backward compatibility
 		return f.formatGraph(v)
+	case *format.FactsContent:
+		// FactsContent uses direct string generation
+		return f.formatFacts(v)
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -560,6 +563,41 @@ func (f *XMLFormatter) marshal(data any) (string, error) {
 	}
 
 	return xml.Header + string(bytes), nil
+}
+
+// formatFacts renders FactsIndex as XML
+func (f *XMLFormatter) formatFacts(fc *format.FactsContent) (string, error) {
+	index := fc.Index
+	var sb strings.Builder
+
+	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	sb.WriteString("<facts_index>\n")
+
+	// Metadata section
+	sb.WriteString("  <metadata>\n")
+	sb.WriteString(fmt.Sprintf("    <generated>%s</generated>\n", index.Generated.Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("    <total_facts>%d</total_facts>\n", index.Stats.TotalFacts))
+	sb.WriteString(fmt.Sprintf("    <max_facts>%d</max_facts>\n", index.Stats.MaxFacts))
+	sb.WriteString("  </metadata>\n\n")
+
+	// Facts section
+	sb.WriteString("  <facts>\n")
+	for _, fact := range index.Facts {
+		sb.WriteString("    <fact>\n")
+		sb.WriteString(fmt.Sprintf("      <id>%s</id>\n", xmlEscape(fact.ID)))
+		sb.WriteString(fmt.Sprintf("      <content>%s</content>\n", xmlEscape(fact.Content)))
+		sb.WriteString(fmt.Sprintf("      <created_at>%s</created_at>\n", fact.CreatedAt.Format(time.RFC3339)))
+		if !fact.UpdatedAt.IsZero() {
+			sb.WriteString(fmt.Sprintf("      <updated_at>%s</updated_at>\n", fact.UpdatedAt.Format(time.RFC3339)))
+		}
+		sb.WriteString(fmt.Sprintf("      <source>%s</source>\n", xmlEscape(fact.Source)))
+		sb.WriteString("    </fact>\n")
+	}
+	sb.WriteString("  </facts>\n")
+
+	sb.WriteString("</facts_index>\n")
+
+	return sb.String(), nil
 }
 
 func init() {

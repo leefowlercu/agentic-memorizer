@@ -53,6 +53,7 @@ var NodeLabels = []string{
 	"Category",  // File categories (documents, code, images, etc.)
 	"Entity",    // Named entities (technologies, people, concepts)
 	"Directory", // Directory hierarchy
+	"Fact",      // User-defined facts for agent context
 }
 
 // RelationshipTypes defines the relationship types in our schema
@@ -115,6 +116,7 @@ func (s *Schema) createIndexes(ctx context.Context) error {
 		{"Category", "name"},
 		{"Entity", "normalized"},
 		{"Directory", "path"},
+		{"Fact", "id"},
 	}
 
 	for _, idx := range rangeIndexes {

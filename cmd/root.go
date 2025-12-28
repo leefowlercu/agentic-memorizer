@@ -7,11 +7,13 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/cache"
 	"github.com/leefowlercu/agentic-memorizer/cmd/config"
 	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
+	"github.com/leefowlercu/agentic-memorizer/cmd/forget"
 	"github.com/leefowlercu/agentic-memorizer/cmd/graph"
 	"github.com/leefowlercu/agentic-memorizer/cmd/initialize"
 	"github.com/leefowlercu/agentic-memorizer/cmd/integrations"
 	"github.com/leefowlercu/agentic-memorizer/cmd/mcp"
 	"github.com/leefowlercu/agentic-memorizer/cmd/read"
+	"github.com/leefowlercu/agentic-memorizer/cmd/remember"
 	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	configint "github.com/leefowlercu/agentic-memorizer/internal/config"
 	versionint "github.com/leefowlercu/agentic-memorizer/internal/version"
@@ -36,6 +38,8 @@ func init() {
 	memorizerCmd.AddCommand(graph.GraphCmd)
 	memorizerCmd.AddCommand(cache.CacheCmd)
 	memorizerCmd.AddCommand(read.ReadCmd)
+	memorizerCmd.AddCommand(remember.RememberCmd)
+	memorizerCmd.AddCommand(forget.ForgetCmd)
 	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
 	memorizerCmd.AddCommand(config.ConfigCmd)
 	memorizerCmd.AddCommand(mcp.McpCmd)

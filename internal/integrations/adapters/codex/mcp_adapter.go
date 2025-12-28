@@ -173,6 +173,12 @@ func (a *CodexCLIMCPAdapter) FormatOutput(index *types.GraphIndex, format integr
 	return "", fmt.Errorf("MCP integrations do not use FormatOutput; output is provided through MCP resources and tools")
 }
 
+// FormatFactsOutput is not used by MCP integrations
+// MCP servers provide output through resources and tools, not direct formatting
+func (a *CodexCLIMCPAdapter) FormatFactsOutput(facts *types.FactsIndex, format integrations.OutputFormat) (string, error) {
+	return "", fmt.Errorf("MCP integrations do not use FormatFactsOutput; output is provided through MCP resources and tools")
+}
+
 // Validate checks the health of the integration
 func (a *CodexCLIMCPAdapter) Validate() error {
 	// Check if config file exists

@@ -7,7 +7,7 @@
 [![CI](https://github.com/leefowlercu/agentic-memorizer/workflows/CI/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/ci.yml)
 [![E2E Tests](https://github.com/leefowlercu/agentic-memorizer/workflows/E2E%20Tests/badge.svg)](https://github.com/leefowlercu/agentic-memorizer/actions/workflows/e2e-tests.yml)
 
-A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis. Features native automatic integration for Claude Code (hooks + MCP), Gemini CLI (hooks + MCP), and OpenAI Codex CLI (MCP).
+A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis, plus user-defined facts that inject persistent context into every conversation. Features native automatic integration for Claude Code (hooks + MCP), Gemini CLI (hooks + MCP), and OpenAI Codex CLI (MCP).
 
 **Current Version**: v0.13.0 ([CHANGELOG.md](CHANGELOG.md))
 
@@ -16,6 +16,7 @@ A framework-agnostic AI agent memory system that provides automatic awareness an
 - [Overview](#overview)
   - [How It Works](#how-it-works)
   - [Key Capabilities](#key-capabilities)
+  - [Facts Management](#facts-management)
 - [Why Use This?](#why-use-this)
 - [Supported AI Agent Frameworks](#supported-ai-agent-frameworks)
   - [Automatic Integration](#automatic-integration)
@@ -71,9 +72,10 @@ Works seamlessly with Claude Code, Gemini CLI, and Codex CLI with automatic setu
 
 A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using configurable AI providers (Claude, OpenAI, or Gemini)—semantically analyzed to understand its content, purpose, and key topics. 
 
-When you launch your AI agent, the precomputed index is loaded into its context:
-- **Claude Code & Gemini CLI**: SessionStart hooks automatically load the index
-- **Other frameworks**: Configure your agent to run the read command on startup
+When you launch your AI agent, context is automatically injected via hooks:
+- **File Index**: SessionStart hooks load the precomputed file index at session start
+- **User Facts**: UserPromptSubmit (Claude) / BeforeAgent (Gemini) hooks inject user-defined facts before each prompt
+- **Other frameworks**: Configure your agent to run `memorizer read files` and `memorizer read facts` on startup
 
 Your AI agent can then:
 - **Discover** what files exist without you listing them
@@ -105,12 +107,53 @@ Your AI agent can then:
 - **Extraction supported**: Word documents (DOCX), PowerPoint (PPTX), PDFs
 - Automatic metadata extraction for all file types
 
+**Facts Management:**
+- Store persistent facts that inject into every AI conversation
+- User-defined context (preferences, project info, reminders)
+- Facts delivered via per-prompt hooks (UserPromptSubmit/BeforeAgent)
+- Simple CRUD operations: remember, read, forget
+- Up to 50 facts, 10-500 characters each
+
 **Integration:**
 - Framework-agnostic with native support for multiple AI agent frameworks
 - Automatic setup for Claude Code, Gemini CLI, and Codex CLI
+- Dual-hook architecture: files at session start, facts before each prompt
 - Configurable output formats (XML, Markdown, JSON)
 - Integration management commands for detection, setup, validation, and health checks
 - Optional health monitoring and logging
+
+### Facts Management
+
+Facts are user-defined pieces of context that persist across AI sessions and inject automatically into every conversation. Unlike files (which provide document awareness), facts provide personalized context about you, your projects, and your preferences.
+
+**Example facts:**
+- "I prefer TypeScript over JavaScript for new projects"
+- "The current sprint focuses on authentication improvements"
+- "Always use conventional commit format for commit messages"
+- "I work on a MacBook Pro M2 running macOS Sonoma"
+
+**How facts are delivered:**
+
+Facts are injected before each prompt via framework-specific hooks:
+- **Claude Code**: UserPromptSubmit hook
+- **Gemini CLI**: BeforeAgent hook
+
+This ensures your AI agent always has your context, even in long sessions where the SessionStart context may be summarized.
+
+**Managing facts:**
+
+```bash
+# Add a fact
+memorizer remember fact "I prefer dark mode in all applications"
+
+# View all facts
+memorizer read facts
+
+# Remove a fact by ID
+memorizer forget fact <fact-id>
+```
+
+Facts are stored in FalkorDB and support multiple output formats (XML, Markdown, JSON).
 
 ## Why Use This?
 
@@ -192,9 +235,14 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 
 **Knowledge Graph** (`internal/graph/`):
 - FalkorDB (Redis-compatible graph database)
-- Node types: File, Tag, Topic, Entity, Category, Directory
+- Node types: File, Tag, Topic, Entity, Category, Directory, Fact
 - Relationship types: HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY, REFERENCES, SIMILAR_TO, IN_DIRECTORY, PARENT_OF
 - Vector embeddings for semantic similarity (optional, requires OpenAI API)
+
+**Facts Storage** (`internal/graph/facts.go`):
+- CRUD operations for user-defined facts
+- Up to 50 facts, 10-500 characters each
+- Facts injected via UserPromptSubmit (Claude) / BeforeAgent (Gemini) hooks
 
 **Semantic Search** (`internal/search/`):
 - Graph-powered Cypher queries
@@ -551,8 +599,12 @@ This command automatically:
 1. Detects your Claude Code installation (`~/.claude/` directory)
 2. Creates or updates `~/.claude/settings.json`
 3. Preserves existing settings (won't overwrite other configurations)
-4. Adds SessionStart hooks for all matchers (startup, resume, clear, compact)
-5. Configures the command: `memorizer read --format xml --integration claude-code-hook`
+4. Adds **two hook types**:
+   - **SessionStart hooks** (startup, resume, clear, compact) - load file index at session start
+   - **UserPromptSubmit hook** - inject user facts before each prompt
+5. Configures the commands:
+   - `memorizer read files --format xml --integration claude-code-hook`
+   - `memorizer read facts --format xml --integration claude-code-hook`
 6. Creates backup at `~/.claude/settings.json.backup`
 
 You can also use the `--integrations` flag during initialization:
@@ -575,17 +627,27 @@ If you prefer manual configuration, add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/memorizer read --format xml --integration claude-code-hook"
+            "command": "/path/to/memorizer read files --format xml --integration claude-code-hook"
           }
         ]
       }
       // Repeat for "resume", "clear", and "compact" matchers
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/memorizer read facts --format xml --integration claude-code-hook"
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
-**Note**: Include all four SessionStart matchers to ensure the memory index loads throughout your session lifecycle.
+**Note**: SessionStart hooks require matchers (startup, resume, clear, compact). UserPromptSubmit hooks do NOT use matchers - they fire on every prompt submission.
 
 #### Validation
 
@@ -664,12 +726,14 @@ tail -f ~/.memorizer/mcp.log
 
 The server communicates via stdin/stdout using JSON-RPC 2.0 protocol.
 
-#### MCP vs SessionStart Hooks
+#### MCP vs Hook Integration
 
 You can use one or both Claude Code integration methods:
 
-- **SessionStart Hooks** (`claude-code-hook`): Injects full memory index at session start
-  - Best for: Always-available context, complete file awareness
+- **Hook Integration** (`claude-code-hook`): Automatic context injection via hooks
+  - SessionStart hooks inject file index at session start
+  - UserPromptSubmit hook injects user facts before each prompt
+  - Best for: Always-available context, complete file and facts awareness
   - Trade-off: Larger initial context, all files loaded upfront
 
 - **MCP Server** (`claude-code-mcp`): Provides on-demand tools for semantic search
@@ -709,8 +773,12 @@ This command automatically:
 1. Detects your Gemini CLI installation (`~/.gemini/` directory)
 2. Creates or updates `~/.gemini/settings.json`
 3. Preserves existing settings (won't overwrite other configurations)
-4. Adds SessionStart hooks for all matchers (startup, resume, clear)
-5. Configures the command: `memorizer read --format xml --integration gemini-cli-hook`
+4. Adds **two hook types**:
+   - **SessionStart hooks** (startup, resume, clear) - load file index at session start
+   - **BeforeAgent hook** - inject user facts before each agent invocation
+5. Configures the commands:
+   - `memorizer read files --format xml --integration gemini-cli-hook`
+   - `memorizer read facts --format xml --integration gemini-cli-hook`
 6. Creates backup at `~/.gemini/settings.json.backup`
 
 You can also use the `--integrations` flag during initialization:
@@ -734,23 +802,36 @@ If you prefer manual configuration, add to `~/.gemini/settings.json`:
           {
             "name": "memorizer-hook",
             "type": "command",
-            "command": "/path/to/memorizer read --format xml --integration gemini-cli-hook",
+            "command": "/path/to/memorizer read files --format xml --integration gemini-cli-hook",
             "description": "Load agentic memory index"
           }
         ]
       }
       // Repeat for "resume" and "clear" matchers
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "name": "memorizer-facts-hook",
+            "type": "command",
+            "command": "/path/to/memorizer read facts --format xml --integration gemini-cli-hook",
+            "description": "Load user-defined facts"
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
-**Note**: Gemini CLI supports three SessionStart matchers: `startup`, `resume`, and `clear`.
+**Note**: SessionStart hooks require matchers (`startup`, `resume`, `clear`). BeforeAgent hooks do NOT use matchers - they fire before every agent invocation.
 
 #### Hook Output Format
 
-The Gemini CLI hook integration uses a simpler JSON envelope compared to Claude Code:
+The Gemini CLI hook integration uses JSON envelopes with hook-specific event names:
 
+**SessionStart (file index):**
 ```json
 {
   "hookSpecificOutput": {
@@ -760,8 +841,18 @@ The Gemini CLI hook integration uses a simpler JSON envelope compared to Claude 
 }
 ```
 
-- **hookEventName**: Always "SessionStart"
-- **additionalContext**: Contains the full index (XML, Markdown, or JSON) that Gemini CLI adds to the context window
+**BeforeAgent (facts):**
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "BeforeAgent",
+    "additionalContext": "<facts_index>...</facts_index>"
+  }
+}
+```
+
+- **hookEventName**: Indicates hook type ("SessionStart" for files, "BeforeAgent" for facts)
+- **additionalContext**: Contains the formatted content (XML, Markdown, or JSON) that Gemini CLI adds to context
 
 #### Validation
 
@@ -1783,14 +1874,17 @@ This creates a seamless experience where your AI agent automatically becomes awa
 
 ### Manual Testing
 
-View the precomputed index:
+View the precomputed index and facts:
 
 ```bash
 # Start daemon if not already running
 memorizer daemon start
 
-# In another terminal, read the index
-memorizer read
+# In another terminal, read the file index
+memorizer read files
+
+# Read user facts
+memorizer read facts
 ```
 
 This outputs the index (XML by default) that AI agents receive. The daemon must be running (or have completed at least one indexing cycle) for the index file to exist.
@@ -1821,15 +1915,19 @@ memorizer cache status          # Show cache statistics and version info
 memorizer cache clear --stale   # Clear stale cache entries
 memorizer cache clear --all     # Clear all cache entries
 
-# Read precomputed index (for SessionStart hooks)
-memorizer read [flags]
+# Read precomputed index and facts
+memorizer read files [flags]    # Read file index (SessionStart hooks)
+memorizer read facts [flags]    # Read user facts (UserPromptSubmit/BeforeAgent hooks)
+
+# Manage user-defined facts
+memorizer remember fact "fact content"   # Add a new fact
+memorizer forget fact <fact-id>          # Remove a fact by ID
 
 # Manage agent framework integrations
 memorizer integrations list
 memorizer integrations detect
 memorizer integrations setup <integration-name>
 memorizer integrations remove <integration-name>
-memorizer integrations health
 memorizer integrations health
 
 # MCP server
@@ -1845,6 +1943,8 @@ memorizer --help
 memorizer initialize --help
 memorizer daemon --help
 memorizer read --help
+memorizer remember --help
+memorizer forget --help
 memorizer integrations --help
 memorizer config --help
 ```
@@ -1852,9 +1952,12 @@ memorizer config --help
 **Common Flags:**
 
 ```bash
-# Read command flags
+# Read files/facts command flags
 --format <xml|markdown|json>        # Output format
 --integration <name>                # Format for specific integration (claude-code-hook, etc)
+
+# Remember fact command flags
+--id <uuid>                         # Update existing fact by ID
 
 # Init command flags
 --memory-root <dir>                 # Custom memory directory
@@ -1874,17 +1977,36 @@ memorizer initialize
 # Initialize with HTTP API enabled on port 7600 (scripted, no prompt)
 memorizer initialize --http-port 7600 --integrations
 
-# Read index (XML format)
-memorizer read
+# Read file index (XML format - default)
+memorizer read files
 
-# Read index (Markdown format)
-memorizer read --format markdown
+# Read file index (Markdown format)
+memorizer read files --format markdown
 
-# Read index (JSON format)
-memorizer read --format json
+# Read file index (JSON format)
+memorizer read files --format json
 
-# Read with Claude Code hook integration (SessionStart)
-memorizer read --format xml --integration claude-code-hook
+# Read file index with Claude Code hook integration (SessionStart)
+memorizer read files --format xml --integration claude-code-hook
+
+# Read user facts (for UserPromptSubmit/BeforeAgent hooks)
+memorizer read facts
+
+# Read facts with integration-specific formatting
+memorizer read facts --format xml --integration claude-code-hook
+memorizer read facts --format xml --integration gemini-cli-hook
+
+# Add a new fact
+memorizer remember fact "I prefer TypeScript over JavaScript"
+
+# View all facts
+memorizer read facts
+
+# Update an existing fact
+memorizer remember fact "I prefer Go over TypeScript" --id <fact-id>
+
+# Remove a fact
+memorizer forget fact <fact-id>
 
 # Note: MCP integration uses tools, not read command
 
@@ -1903,13 +2025,13 @@ memorizer integrations list
 # Detect installed agent frameworks
 memorizer integrations detect
 
-# Setup Claude Code SessionStart hooks
+# Setup Claude Code hooks (SessionStart + UserPromptSubmit)
 memorizer integrations setup claude-code-hook
 
 # Setup Claude Code MCP server
 memorizer integrations setup claude-code-mcp
 
-# Setup Gemini CLI SessionStart hooks
+# Setup Gemini CLI hooks (SessionStart + BeforeAgent)
 memorizer integrations setup gemini-cli-hook
 
 # Setup Gemini CLI MCP server
@@ -2148,16 +2270,19 @@ MEMORIZER_APP_DIR=/tmp/test-instance memorizer daemon start
 
 ### Output Formats
 
-The memorizer supports three output formats:
+The memorizer supports three output formats for both files and facts:
 
 #### XML (Default)
 
 Highly structured XML following Anthropic's recommendations for Claude [prompt engineering](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags):
 
 ```bash
-memorizer read
+memorizer read files
 # or explicitly:
-memorizer read --format xml
+memorizer read files --format xml
+
+# Facts also use XML by default
+memorizer read facts
 ```
 
 #### Markdown
@@ -2165,7 +2290,8 @@ memorizer read --format xml
 Human-readable markdown, formatted for direct viewing:
 
 ```bash
-memorizer read --format markdown
+memorizer read files --format markdown
+memorizer read facts --format markdown
 ```
 
 #### JSON Format
@@ -2173,36 +2299,40 @@ memorizer read --format markdown
 Pretty-printed JSON representation of the index:
 
 ```bash
-memorizer read --format json
+memorizer read files --format json
+memorizer read facts --format json
 ```
 
 #### Integration-Specific Output
 
-Use the `--integration` flag to format output for specific agent frameworks. This wraps the index in the appropriate structure for that framework:
+Use the `--integration` flag to format output for specific agent frameworks. This wraps the content in the appropriate hook structure:
 
 ```bash
-# Claude Code hook integration (SessionStart injection)
-memorizer read --format xml --integration claude-code-hook
+# Claude Code integration
+memorizer read files --format xml --integration claude-code-hook  # SessionStart hook
+memorizer read facts --format xml --integration claude-code-hook  # UserPromptSubmit hook
 
-# Gemini CLI hook integration (SessionStart injection)
-memorizer read --format xml --integration gemini-cli-hook
+# Gemini CLI integration
+memorizer read files --format xml --integration gemini-cli-hook  # SessionStart hook
+memorizer read facts --format xml --integration gemini-cli-hook  # BeforeAgent hook
 
 # Can also use markdown or json formats
-memorizer read --format markdown --integration claude-code-hook
-memorizer read --format markdown --integration gemini-cli-hook
+memorizer read files --format markdown --integration claude-code-hook
+memorizer read facts --format json --integration gemini-cli-hook
 
 # Note: MCP integration doesn't use read - uses tools instead
 ```
 
 **Claude Code Integration Output Structure:**
 
-The Claude Code integration wraps the formatted index in a SessionStart hook JSON envelope:
+The Claude Code integration uses different hook structures for files and facts:
 
+**SessionStart (file index):**
 ```json
 {
   "continue": true,
   "suppressOutput": true,
-  "systemMessage": "Memory index updated: 15 files (5 documents, 3 images, 2 presentations, 5 code files), 2.3 MB total — 12 cached, 3 analyzed",
+  "systemMessage": "Memory index updated: 15 files (5 documents, 3 images, 2 presentations, 5 code files), 2.3 MB total",
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
     "additionalContext": "<memory_index>...</memory_index>"
@@ -2210,16 +2340,29 @@ The Claude Code integration wraps the formatted index in a SessionStart hook JSO
 }
 ```
 
-- **continue**: Always `true` - allows session to proceed
-- **suppressOutput**: Always `true` - keeps verbose index out of transcript
-- **systemMessage**: Concise summary visible to user in UI
-- **hookSpecificOutput**: Contains the full index (XML, Markdown, or JSON) in `additionalContext`, which Claude Code adds to the context window
+**UserPromptSubmit (facts):**
+```json
+{
+  "continue": true,
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "<facts_index>...</facts_index>"
+  }
+}
+```
+
+- **continue**: Always `true` - allows session/prompt to proceed
+- **suppressOutput**: `true` for SessionStart to keep verbose index out of transcript
+- **systemMessage**: Concise summary visible to user in UI (SessionStart only)
+- **hookSpecificOutput**: Contains the formatted content in `additionalContext`
 
 **More Info**
 
 [Claude Hook JSON Common Fields](https://docs.claude.com/en/docs/claude-code/hooks#common-json-fields)
 
 [Claude SessionStart Hook Fields](https://docs.claude.com/en/docs/claude-code/hooks#sessionstart-decision-control)
+
+[Claude UserPromptSubmit Hook Fields](https://docs.claude.com/en/docs/claude-code/hooks#userpromptsubmit-decision-control)
 
 ## Example Outputs
 
@@ -2394,8 +2537,19 @@ agentic-memorizer/
 │   │       ├── validate.go
 │   │       ├── reload.go
 │   │       └── show_schema.go
-│   ├── read/                 # Read precomputed index
-│   │   └── read.go
+│   ├── read/                 # Read file index and facts
+│   │   ├── read.go           # Parent read command
+│   │   └── subcommands/      # Read subcommands (2 total)
+│   │       ├── files.go      # Read file index
+│   │       └── facts.go      # Read user facts
+│   ├── remember/             # Remember (create) commands
+│   │   ├── remember.go       # Parent remember command
+│   │   └── subcommands/
+│   │       └── fact.go       # Remember a fact
+│   ├── forget/               # Forget (delete) commands
+│   │   ├── forget.go         # Parent forget command
+│   │   └── subcommands/
+│   │       └── fact.go       # Forget a fact
 │   └── version/              # Version command
 │       └── version.go
 ├── internal/
@@ -2408,7 +2562,8 @@ agentic-memorizer/
 │   │   ├── manager.go        # Graph operations (CRUD, search)
 │   │   ├── queries.go        # Cypher query patterns
 │   │   ├── schema.go         # Node/edge types and constraints
-│   │   └── export.go         # Graph to index export
+│   │   ├── export.go         # Graph to index export
+│   │   └── facts.go          # Facts CRUD operations
 │   ├── embeddings/           # Vector embeddings (optional)
 │   ├── watcher/              # File system watching (fsnotify)
 │   ├── walker/               # File system traversal with filtering
@@ -2504,14 +2659,16 @@ go test -tags=e2e -v ./e2e/tests/ -run TestGraph      # FalkorDB operations
 ```
 
 **E2E Test Coverage:**
-- **CLI Tests** - All 30 commands with argument parsing and output validation
+- **CLI Tests** - All commands with argument parsing and output validation
 - **Daemon Tests** - Start, stop, status, restart, rebuild operations
 - **Filesystem Tests** - File watching, processing pipelines, cache behavior
-- **HTTP API Tests** - All 9 REST endpoints with request/response validation
+- **HTTP API Tests** - All REST endpoints with request/response validation
 - **SSE Tests** - Real-time event delivery and connection management
 - **Configuration Tests** - Loading, validation, hot-reload, error handling
 - **Graph Tests** - FalkorDB CRUD, schema, queries, and graceful degradation
+- **Facts Tests** - Remember, read, forget commands with validation
 - **Integration Tests** - All framework adapters (Claude Code, Gemini, Codex, etc.)
+- **Integration Facts Tests** - Dual-hook setup (SessionStart + UserPromptSubmit/BeforeAgent)
 - **Output Format Tests** - XML, JSON, Markdown processors with schema validation
 - **Walker Tests** - Directory/file/extension skip patterns
 

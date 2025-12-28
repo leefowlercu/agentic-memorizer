@@ -45,6 +45,9 @@ func (m *mockIntegration) GetCommand(binaryPath string, format OutputFormat) str
 func (m *mockIntegration) FormatOutput(*types.GraphIndex, OutputFormat) (string, error) {
 	return "", nil
 }
+func (m *mockIntegration) FormatFactsOutput(*types.FactsIndex, OutputFormat) (string, error) {
+	return "", nil
+}
 func (m *mockIntegration) Validate() error                          { return nil }
 func (m *mockIntegration) Reload(newConfig IntegrationConfig) error { return nil }
 

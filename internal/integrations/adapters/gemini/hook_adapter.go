@@ -15,13 +15,19 @@ const (
 	HookIntegrationName = "gemini-cli-hook"
 
 	// HookIntegrationVersion is the adapter version
-	HookIntegrationVersion = "1.0.0"
+	HookIntegrationVersion = "2.0.0"
 
 	// HookName is the name field for the hook
 	HookName = "memorizer-hook"
 
 	// HookDescription is the description field for the hook
 	HookDescription = "Load agentic memory index"
+
+	// FactsHookName is the name field for the facts hook
+	FactsHookName = "memorizer-facts-hook"
+
+	// FactsHookDescription is the description field for the facts hook
+	FactsHookDescription = "Load user-defined facts"
 )
 
 // Default matchers for SessionStart hooks
@@ -50,7 +56,7 @@ func (a *GeminiCLIHookAdapter) GetName() string {
 
 // GetDescription returns a human-readable description
 func (a *GeminiCLIHookAdapter) GetDescription() string {
-	return "Gemini CLI SessionStart hook integration"
+	return "Gemini CLI hooks integration (SessionStart for files, BeforeAgent for facts)"
 }
 
 // GetVersion returns the adapter version
@@ -74,6 +80,7 @@ func (a *GeminiCLIHookAdapter) Detect() (bool, error) {
 }
 
 // IsEnabled checks if the integration is currently configured
+// Returns true only if BOTH SessionStart AND BeforeAgent hooks are installed
 func (a *GeminiCLIHookAdapter) IsEnabled() (bool, error) {
 	// Check if settings file exists
 	if _, err := os.Stat(a.settingsPath); os.IsNotExist(err) {
@@ -86,54 +93,112 @@ func (a *GeminiCLIHookAdapter) IsEnabled() (bool, error) {
 		return false, fmt.Errorf("failed to read settings; %w", err)
 	}
 
-	// Check if SessionStart hooks exist with memorizer command
-	sessionStartEvents, ok := settings.Hooks[SessionStartEvent]
-	if !ok || len(sessionStartEvents) == 0 {
-		return false, nil
+	// Check both hook types
+	hasSessionStart := a.hasMemorizerHook(settings, SessionStartEvent)
+	hasBeforeAgent := a.hasMemorizerHook(settings, BeforeAgentEvent)
+
+	// Both hooks must be present for integration to be considered enabled
+	return hasSessionStart && hasBeforeAgent, nil
+}
+
+// hasMemorizerHook checks if a specific event type has a memorizer hook installed
+func (a *GeminiCLIHookAdapter) hasMemorizerHook(settings *GeminiSettings, eventType string) bool {
+	events, ok := settings.Hooks[eventType]
+	if !ok || len(events) == 0 {
+		return false
 	}
 
-	// Look for memorizer hook (not old agentic-memorizer)
-	for _, event := range sessionStartEvents {
+	for _, event := range events {
 		for _, hook := range event.Hooks {
+			// Reject old binary name
 			if strings.Contains(hook.Command, "agentic-memorizer") {
-				// Found old binary name - report as not enabled
-				return false, nil
+				return false
 			}
 			if strings.Contains(hook.Command, "memorizer") {
-				return true, nil
+				return true
 			}
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 // Setup configures the Gemini CLI integration
+// Installs both SessionStart (for files) and BeforeAgent (for facts) hooks
+// Uses transactional semantics: if BeforeAgent fails, SessionStart is rolled back
 func (a *GeminiCLIHookAdapter) Setup(binaryPath string) error {
 	settings, fullSettings, err := readHookSettings(a.settingsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read settings; %w", err)
 	}
 
-	command := a.GetCommand(binaryPath, a.outputFormat)
+	// Save original state for rollback
+	originalSessionStart := cloneGeminiHookEvents(settings.Hooks[SessionStartEvent])
+	originalBeforeAgent := cloneGeminiHookEvents(settings.Hooks[BeforeAgentEvent])
 
-	// Setup hooks for all matchers
+	// Step 1: Install SessionStart hooks (for files)
+	filesCommand := a.getFilesCommand(binaryPath, a.outputFormat)
 	sessionStartEvents := settings.Hooks[SessionStartEvent]
 	if sessionStartEvents == nil {
 		sessionStartEvents = []GeminiHookEvent{}
 	}
 
 	for _, matcher := range a.matchers {
-		sessionStartEvents = addOrUpdateGeminiHook(sessionStartEvents, matcher, command)
+		sessionStartEvents = addOrUpdateGeminiHook(sessionStartEvents, matcher, filesCommand, HookName, HookDescription)
 	}
-
 	settings.Hooks[SessionStartEvent] = sessionStartEvents
 
 	if err := writeHookSettings(a.settingsPath, settings, fullSettings); err != nil {
-		return fmt.Errorf("failed to write settings; %w", err)
+		return fmt.Errorf("failed to write SessionStart hooks; %w", err)
+	}
+
+	// Step 2: Install BeforeAgent hook (for facts)
+	// Note: BeforeAgent doesn't use matchers - it fires before every agent invocation
+	factsCommand := a.getFactsCommand(binaryPath, a.outputFormat)
+	beforeAgentEvents := settings.Hooks[BeforeAgentEvent]
+	if beforeAgentEvents == nil {
+		beforeAgentEvents = []GeminiHookEvent{}
+	}
+
+	// Add or update single hook without matcher
+	beforeAgentEvents = addOrUpdateGeminiHookNoMatcher(beforeAgentEvents, factsCommand, FactsHookName, FactsHookDescription)
+	settings.Hooks[BeforeAgentEvent] = beforeAgentEvents
+
+	if err := writeHookSettings(a.settingsPath, settings, fullSettings); err != nil {
+		// Rollback SessionStart hooks
+		settings.Hooks[SessionStartEvent] = originalSessionStart
+		settings.Hooks[BeforeAgentEvent] = originalBeforeAgent
+		_ = writeHookSettings(a.settingsPath, settings, fullSettings)
+		return fmt.Errorf("failed to write BeforeAgent hooks (rolled back SessionStart); %w", err)
 	}
 
 	return nil
+}
+
+// cloneGeminiHookEvents creates a deep copy of hook events for rollback
+func cloneGeminiHookEvents(events []GeminiHookEvent) []GeminiHookEvent {
+	if events == nil {
+		return nil
+	}
+	cloned := make([]GeminiHookEvent, len(events))
+	for i, event := range events {
+		cloned[i] = GeminiHookEvent{
+			Matcher: event.Matcher,
+			Hooks:   make([]GeminiHook, len(event.Hooks)),
+		}
+		copy(cloned[i].Hooks, event.Hooks)
+	}
+	return cloned
+}
+
+// getFilesCommand returns the command for SessionStart hook (file index)
+func (a *GeminiCLIHookAdapter) getFilesCommand(binaryPath string, format integrations.OutputFormat) string {
+	return fmt.Sprintf("%s read files --format %s --integration %s", binaryPath, format, HookIntegrationName)
+}
+
+// getFactsCommand returns the command for BeforeAgent hook (facts)
+func (a *GeminiCLIHookAdapter) getFactsCommand(binaryPath string, format integrations.OutputFormat) string {
+	return fmt.Sprintf("%s read facts --format %s --integration %s", binaryPath, format, HookIntegrationName)
 }
 
 // Update updates the integration configuration
@@ -143,21 +208,48 @@ func (a *GeminiCLIHookAdapter) Update(binaryPath string) error {
 }
 
 // Remove removes the integration configuration
+// Removes both SessionStart and BeforeAgent hooks
+// Continues removing remaining hooks even if one fails, returning aggregated error
 func (a *GeminiCLIHookAdapter) Remove() error {
 	settings, fullSettings, err := readHookSettings(a.settingsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read settings; %w", err)
 	}
 
+	var errors []string
+
 	// Remove memorizer hooks from SessionStart
-	sessionStartEvents, ok := settings.Hooks[SessionStartEvent]
+	if err := a.removeHooksFromEvent(settings, SessionStartEvent); err != nil {
+		errors = append(errors, fmt.Sprintf("SessionStart: %v", err))
+	}
+
+	// Remove memorizer hooks from BeforeAgent
+	if err := a.removeHooksFromEvent(settings, BeforeAgentEvent); err != nil {
+		errors = append(errors, fmt.Sprintf("BeforeAgent: %v", err))
+	}
+
+	// Write settings even if some removals failed (to persist partial removal)
+	if err := writeHookSettings(a.settingsPath, settings, fullSettings); err != nil {
+		return fmt.Errorf("failed to write settings; %w", err)
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("partial removal errors: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+// removeHooksFromEvent removes memorizer hooks from a specific event type
+func (a *GeminiCLIHookAdapter) removeHooksFromEvent(settings *GeminiSettings, eventType string) error {
+	events, ok := settings.Hooks[eventType]
 	if !ok {
 		return nil // Nothing to remove
 	}
 
 	// Filter out memorizer and old agentic-memorizer hooks
 	filtered := []GeminiHookEvent{}
-	for _, event := range sessionStartEvents {
+	for _, event := range events {
 		filteredHooks := []GeminiHook{}
 		for _, hook := range event.Hooks {
 			if !strings.Contains(hook.Command, "agentic-memorizer") && !strings.Contains(hook.Command, "memorizer") {
@@ -171,21 +263,18 @@ func (a *GeminiCLIHookAdapter) Remove() error {
 	}
 
 	if len(filtered) == 0 {
-		delete(settings.Hooks, SessionStartEvent)
+		delete(settings.Hooks, eventType)
 	} else {
-		settings.Hooks[SessionStartEvent] = filtered
-	}
-
-	if err := writeHookSettings(a.settingsPath, settings, fullSettings); err != nil {
-		return fmt.Errorf("failed to write settings; %w", err)
+		settings.Hooks[eventType] = filtered
 	}
 
 	return nil
 }
 
 // GetCommand returns the command that should be executed by the hook
+// Returns the SessionStart command for backwards compatibility
 func (a *GeminiCLIHookAdapter) GetCommand(binaryPath string, format integrations.OutputFormat) string {
-	return fmt.Sprintf("%s read --format %s --integration %s", binaryPath, format, HookIntegrationName)
+	return a.getFilesCommand(binaryPath, format)
 }
 
 // FormatOutput formats the graph index for Gemini CLI (SessionStart JSON wrapper)
@@ -193,7 +282,13 @@ func (a *GeminiCLIHookAdapter) FormatOutput(index *types.GraphIndex, format inte
 	return formatGeminiHookJSON(index, format)
 }
 
+// FormatFactsOutput formats the facts index for Gemini CLI (BeforeAgent JSON wrapper)
+func (a *GeminiCLIHookAdapter) FormatFactsOutput(facts *types.FactsIndex, format integrations.OutputFormat) (string, error) {
+	return formatBeforeAgentJSON(facts, format)
+}
+
 // Validate checks the health of the integration
+// Reports per-hook status for SessionStart and BeforeAgent
 func (a *GeminiCLIHookAdapter) Validate() error {
 	// Check if settings file exists
 	if _, err := os.Stat(a.settingsPath); os.IsNotExist(err) {
@@ -206,37 +301,48 @@ func (a *GeminiCLIHookAdapter) Validate() error {
 		return fmt.Errorf("failed to read settings; %w", err)
 	}
 
-	// Check if hooks are configured
-	sessionStartEvents, ok := settings.Hooks[SessionStartEvent]
-	if !ok || len(sessionStartEvents) == 0 {
-		return fmt.Errorf("no SessionStart hooks configured")
+	// Check for old binary name in any hook type
+	if hasOldBinaryName(settings, SessionStartEvent) || hasOldBinaryName(settings, BeforeAgentEvent) {
+		return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
+			HookIntegrationName, HookIntegrationName)
 	}
 
-	// Check for old binary name and reject
-	for _, event := range sessionStartEvents {
-		for _, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "agentic-memorizer") {
-				return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
-					HookIntegrationName, HookIntegrationName)
-			}
-		}
+	// Check each hook type
+	hasSessionStart := a.hasMemorizerHook(settings, SessionStartEvent)
+	hasBeforeAgent := a.hasMemorizerHook(settings, BeforeAgentEvent)
+
+	// Report detailed status
+	if !hasSessionStart && !hasBeforeAgent {
+		return fmt.Errorf("no memorizer hooks configured; SessionStart: missing, BeforeAgent: missing")
 	}
 
-	// Verify memorizer hooks exist
-	foundHooks := 0
-	for _, event := range sessionStartEvents {
-		for _, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "memorizer") {
-				foundHooks++
-			}
-		}
+	if !hasSessionStart {
+		return fmt.Errorf("partially configured; SessionStart: missing, BeforeAgent: installed")
 	}
 
-	if foundHooks == 0 {
-		return fmt.Errorf("no memorizer hooks found in SessionStart events")
+	if !hasBeforeAgent {
+		return fmt.Errorf("partially configured; SessionStart: installed, BeforeAgent: missing")
 	}
 
 	return nil
+}
+
+// hasOldBinaryName checks if any hooks in the event type use the old binary name
+func hasOldBinaryName(settings *GeminiSettings, eventType string) bool {
+	events, ok := settings.Hooks[eventType]
+	if !ok {
+		return false
+	}
+
+	for _, event := range events {
+		for _, hook := range event.Hooks {
+			if strings.Contains(hook.Command, "agentic-memorizer") {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // Reload applies configuration changes
@@ -279,7 +385,7 @@ func getDefaultHookSettingsPath() string {
 }
 
 // addOrUpdateGeminiHook adds or updates a hook for a specific matcher
-func addOrUpdateGeminiHook(events []GeminiHookEvent, matcher, command string) []GeminiHookEvent {
+func addOrUpdateGeminiHook(events []GeminiHookEvent, matcher, command, name, description string) []GeminiHookEvent {
 	// Find existing matcher index
 	matcherIdx := -1
 	for i, event := range events {
@@ -290,17 +396,17 @@ func addOrUpdateGeminiHook(events []GeminiHookEvent, matcher, command string) []
 	}
 
 	newHook := GeminiHook{
-		Name:        HookName,
+		Name:        name,
 		Type:        "command",
 		Command:     command,
-		Description: HookDescription,
+		Description: description,
 	}
 
 	if matcherIdx >= 0 {
-		// Update existing matcher
+		// Update existing matcher - look for hook with same name or memorizer command
 		hookExists := false
 		for i, hook := range events[matcherIdx].Hooks {
-			if strings.Contains(hook.Command, "agentic-memorizer") {
+			if hook.Name == name || strings.Contains(hook.Command, "memorizer") {
 				events[matcherIdx].Hooks[i] = newHook
 				hookExists = true
 				break
@@ -316,6 +422,36 @@ func addOrUpdateGeminiHook(events []GeminiHookEvent, matcher, command string) []
 			Hooks:   []GeminiHook{newHook},
 		})
 	}
+
+	return events
+}
+
+// addOrUpdateGeminiHookNoMatcher adds or updates a hook without a matcher
+// Used for events like BeforeAgent that don't use matchers
+func addOrUpdateGeminiHookNoMatcher(events []GeminiHookEvent, command, name, description string) []GeminiHookEvent {
+	newHook := GeminiHook{
+		Name:        name,
+		Type:        "command",
+		Command:     command,
+		Description: description,
+	}
+
+	// Look for existing event with memorizer hook (no matcher or empty matcher)
+	for i, event := range events {
+		// Look for memorizer hook in this event
+		for j, hook := range event.Hooks {
+			if hook.Name == name || strings.Contains(hook.Command, "memorizer") {
+				events[i].Hooks[j] = newHook
+				return events
+			}
+		}
+	}
+
+	// No existing memorizer hook found - add new event without matcher
+	events = append(events, GeminiHookEvent{
+		// Matcher is empty - omitempty will exclude it from JSON
+		Hooks: []GeminiHook{newHook},
+	})
 
 	return events
 }

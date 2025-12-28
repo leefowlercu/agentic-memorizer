@@ -24,6 +24,9 @@ const (
 
 	// BuilderTypeGraph represents graph index data
 	BuilderTypeGraph BuilderType = "graph"
+
+	// BuilderTypeFacts represents facts index data
+	BuilderTypeFacts BuilderType = "facts"
 )
 
 // String returns the string representation of the builder type

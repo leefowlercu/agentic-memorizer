@@ -15,10 +15,13 @@ const (
 	IntegrationName = "claude-code-hook"
 
 	// IntegrationVersion is the adapter version
-	IntegrationVersion = "2.0.0"
+	IntegrationVersion = "3.0.0"
 
-	// SessionStartEvent is the hook event name for Claude Code
+	// SessionStartEvent is the hook event name for file index injection
 	SessionStartEvent = "SessionStart"
+
+	// UserPromptSubmitEvent is the hook event name for facts injection
+	UserPromptSubmitEvent = "UserPromptSubmit"
 )
 
 // Default matchers for SessionStart hooks
@@ -47,7 +50,7 @@ func (a *ClaudeCodeAdapter) GetName() string {
 
 // GetDescription returns a human-readable description
 func (a *ClaudeCodeAdapter) GetDescription() string {
-	return "Claude Code SessionStart hook integration"
+	return "Claude Code hooks integration (SessionStart for files, UserPromptSubmit for facts)"
 }
 
 // GetVersion returns the adapter version
@@ -71,66 +74,125 @@ func (a *ClaudeCodeAdapter) Detect() (bool, error) {
 }
 
 // IsEnabled checks if the integration is currently configured
+// Returns true only if BOTH SessionStart AND UserPromptSubmit hooks are installed
 func (a *ClaudeCodeAdapter) IsEnabled() (bool, error) {
 	// Check if settings file exists
 	if _, err := os.Stat(a.settingsPath); os.IsNotExist(err) {
 		return false, nil
 	}
 
-	// Read settings and check for agentic-memorizer hooks
+	// Read settings and check for memorizer hooks
 	settings, _, err := readSettings(a.settingsPath)
 	if err != nil {
 		return false, fmt.Errorf("failed to read settings: %w", err)
 	}
 
-	// Check if SessionStart hooks exist with agentic-memorizer command
-	sessionStartEvents, ok := settings.Hooks[SessionStartEvent]
-	if !ok || len(sessionStartEvents) == 0 {
-		return false, nil
+	// Check both hook types
+	hasSessionStart := a.hasMemorizerHook(settings, SessionStartEvent)
+	hasUserPromptSubmit := a.hasMemorizerHook(settings, UserPromptSubmitEvent)
+
+	// Both hooks must be present for integration to be considered enabled
+	return hasSessionStart && hasUserPromptSubmit, nil
+}
+
+// hasMemorizerHook checks if a specific event type has a memorizer hook installed
+func (a *ClaudeCodeAdapter) hasMemorizerHook(settings *Settings, eventType string) bool {
+	events, ok := settings.Hooks[eventType]
+	if !ok || len(events) == 0 {
+		return false
 	}
 
-	// Look for memorizer hook (not old agentic-memorizer)
-	for _, event := range sessionStartEvents {
+	for _, event := range events {
 		for _, hook := range event.Hooks {
+			// Reject old binary name
 			if strings.Contains(hook.Command, "agentic-memorizer") {
-				// Found old binary name - report as not enabled
-				return false, nil
+				return false
 			}
 			if strings.Contains(hook.Command, "memorizer") {
-				return true, nil
+				return true
 			}
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 // Setup configures the Claude Code integration
+// Installs both SessionStart (for files) and UserPromptSubmit (for facts) hooks
+// Uses transactional semantics: if UserPromptSubmit fails, SessionStart is rolled back
 func (a *ClaudeCodeAdapter) Setup(binaryPath string) error {
 	settings, fullSettings, err := readSettings(a.settingsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read settings: %w", err)
 	}
 
-	command := a.GetCommand(binaryPath, a.outputFormat)
+	// Save original state for rollback
+	originalSessionStart := cloneHookEvents(settings.Hooks[SessionStartEvent])
+	originalUserPromptSubmit := cloneHookEvents(settings.Hooks[UserPromptSubmitEvent])
 
-	// Setup hooks for all matchers
+	// Step 1: Install SessionStart hooks (for files)
+	filesCommand := a.getFilesCommand(binaryPath, a.outputFormat)
 	sessionStartEvents := settings.Hooks[SessionStartEvent]
 	if sessionStartEvents == nil {
 		sessionStartEvents = []HookEvent{}
 	}
 
 	for _, matcher := range a.matchers {
-		sessionStartEvents = addOrUpdateHook(sessionStartEvents, matcher, command)
+		sessionStartEvents = addOrUpdateHook(sessionStartEvents, matcher, filesCommand)
 	}
-
 	settings.Hooks[SessionStartEvent] = sessionStartEvents
 
 	if err := writeSettings(a.settingsPath, settings, fullSettings); err != nil {
-		return fmt.Errorf("failed to write settings: %w", err)
+		return fmt.Errorf("failed to write SessionStart hooks: %w", err)
+	}
+
+	// Step 2: Install UserPromptSubmit hook (for facts)
+	// Note: UserPromptSubmit doesn't use matchers - it fires on every prompt
+	factsCommand := a.getFactsCommand(binaryPath, a.outputFormat)
+	userPromptSubmitEvents := settings.Hooks[UserPromptSubmitEvent]
+	if userPromptSubmitEvents == nil {
+		userPromptSubmitEvents = []HookEvent{}
+	}
+
+	// Add or update single hook without matcher
+	userPromptSubmitEvents = addOrUpdateHookNoMatcher(userPromptSubmitEvents, factsCommand)
+	settings.Hooks[UserPromptSubmitEvent] = userPromptSubmitEvents
+
+	if err := writeSettings(a.settingsPath, settings, fullSettings); err != nil {
+		// Rollback SessionStart hooks
+		settings.Hooks[SessionStartEvent] = originalSessionStart
+		settings.Hooks[UserPromptSubmitEvent] = originalUserPromptSubmit
+		_ = writeSettings(a.settingsPath, settings, fullSettings)
+		return fmt.Errorf("failed to write UserPromptSubmit hooks (rolled back SessionStart): %w", err)
 	}
 
 	return nil
+}
+
+// cloneHookEvents creates a deep copy of hook events for rollback
+func cloneHookEvents(events []HookEvent) []HookEvent {
+	if events == nil {
+		return nil
+	}
+	cloned := make([]HookEvent, len(events))
+	for i, event := range events {
+		cloned[i] = HookEvent{
+			Matcher: event.Matcher,
+			Hooks:   make([]Hook, len(event.Hooks)),
+		}
+		copy(cloned[i].Hooks, event.Hooks)
+	}
+	return cloned
+}
+
+// getFilesCommand returns the command for SessionStart hook (file index)
+func (a *ClaudeCodeAdapter) getFilesCommand(binaryPath string, format integrations.OutputFormat) string {
+	return fmt.Sprintf("%s read files --format %s --integration %s", binaryPath, format, IntegrationName)
+}
+
+// getFactsCommand returns the command for UserPromptSubmit hook (facts)
+func (a *ClaudeCodeAdapter) getFactsCommand(binaryPath string, format integrations.OutputFormat) string {
+	return fmt.Sprintf("%s read facts --format %s --integration %s", binaryPath, format, IntegrationName)
 }
 
 // Update updates the integration configuration
@@ -140,21 +202,48 @@ func (a *ClaudeCodeAdapter) Update(binaryPath string) error {
 }
 
 // Remove removes the integration configuration
+// Removes both SessionStart and UserPromptSubmit hooks
+// Continues removing remaining hooks even if one fails, returning aggregated error
 func (a *ClaudeCodeAdapter) Remove() error {
 	settings, fullSettings, err := readSettings(a.settingsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read settings: %w", err)
 	}
 
-	// Remove agentic-memorizer hooks from SessionStart
-	sessionStartEvents, ok := settings.Hooks[SessionStartEvent]
+	var errors []string
+
+	// Remove memorizer hooks from SessionStart
+	if err := a.removeHooksFromEvent(settings, SessionStartEvent); err != nil {
+		errors = append(errors, fmt.Sprintf("SessionStart: %v", err))
+	}
+
+	// Remove memorizer hooks from UserPromptSubmit
+	if err := a.removeHooksFromEvent(settings, UserPromptSubmitEvent); err != nil {
+		errors = append(errors, fmt.Sprintf("UserPromptSubmit: %v", err))
+	}
+
+	// Write settings even if some removals failed (to persist partial removal)
+	if err := writeSettings(a.settingsPath, settings, fullSettings); err != nil {
+		return fmt.Errorf("failed to write settings: %w", err)
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("partial removal errors: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+// removeHooksFromEvent removes memorizer hooks from a specific event type
+func (a *ClaudeCodeAdapter) removeHooksFromEvent(settings *Settings, eventType string) error {
+	events, ok := settings.Hooks[eventType]
 	if !ok {
 		return nil // Nothing to remove
 	}
 
 	// Filter out memorizer and old agentic-memorizer hooks
 	filtered := []HookEvent{}
-	for _, event := range sessionStartEvents {
+	for _, event := range events {
 		filteredHooks := []Hook{}
 		for _, hook := range event.Hooks {
 			if !strings.Contains(hook.Command, "agentic-memorizer") && !strings.Contains(hook.Command, "memorizer") {
@@ -168,21 +257,18 @@ func (a *ClaudeCodeAdapter) Remove() error {
 	}
 
 	if len(filtered) == 0 {
-		delete(settings.Hooks, SessionStartEvent)
+		delete(settings.Hooks, eventType)
 	} else {
-		settings.Hooks[SessionStartEvent] = filtered
-	}
-
-	if err := writeSettings(a.settingsPath, settings, fullSettings); err != nil {
-		return fmt.Errorf("failed to write settings: %w", err)
+		settings.Hooks[eventType] = filtered
 	}
 
 	return nil
 }
 
 // GetCommand returns the command that should be executed by the hook
+// Returns the SessionStart command for backwards compatibility
 func (a *ClaudeCodeAdapter) GetCommand(binaryPath string, format integrations.OutputFormat) string {
-	return fmt.Sprintf("%s read --format %s --integration %s", binaryPath, format, IntegrationName)
+	return a.getFilesCommand(binaryPath, format)
 }
 
 // FormatOutput formats the graph index for Claude Code (SessionStart JSON wrapper)
@@ -190,7 +276,13 @@ func (a *ClaudeCodeAdapter) FormatOutput(index *types.GraphIndex, format integra
 	return formatSessionStartJSON(index, format)
 }
 
+// FormatFactsOutput formats the facts index for Claude Code (UserPromptSubmit JSON wrapper)
+func (a *ClaudeCodeAdapter) FormatFactsOutput(facts *types.FactsIndex, format integrations.OutputFormat) (string, error) {
+	return formatUserPromptSubmitJSON(facts, format)
+}
+
 // Validate checks the health of the integration
+// Reports per-hook status for SessionStart and UserPromptSubmit
 func (a *ClaudeCodeAdapter) Validate() error {
 	// Check if settings file exists
 	if _, err := os.Stat(a.settingsPath); os.IsNotExist(err) {
@@ -203,37 +295,48 @@ func (a *ClaudeCodeAdapter) Validate() error {
 		return fmt.Errorf("failed to read settings: %w", err)
 	}
 
-	// Check if hooks are configured
-	sessionStartEvents, ok := settings.Hooks[SessionStartEvent]
-	if !ok || len(sessionStartEvents) == 0 {
-		return fmt.Errorf("no SessionStart hooks configured")
+	// Check for old binary name in any hook type
+	if hasOldBinaryName(settings, SessionStartEvent) || hasOldBinaryName(settings, UserPromptSubmitEvent) {
+		return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
+			IntegrationName, IntegrationName)
 	}
 
-	// Check for old binary name and reject
-	for _, event := range sessionStartEvents {
-		for _, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "agentic-memorizer") {
-				return fmt.Errorf("integration uses old binary name 'agentic-memorizer'; run 'memorizer integrations remove %s && memorizer integrations setup %s'",
-					IntegrationName, IntegrationName)
-			}
-		}
+	// Check each hook type
+	hasSessionStart := a.hasMemorizerHook(settings, SessionStartEvent)
+	hasUserPromptSubmit := a.hasMemorizerHook(settings, UserPromptSubmitEvent)
+
+	// Report detailed status
+	if !hasSessionStart && !hasUserPromptSubmit {
+		return fmt.Errorf("no memorizer hooks configured; SessionStart: missing, UserPromptSubmit: missing")
 	}
 
-	// Verify memorizer hooks exist
-	foundHooks := 0
-	for _, event := range sessionStartEvents {
-		for _, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "memorizer") {
-				foundHooks++
-			}
-		}
+	if !hasSessionStart {
+		return fmt.Errorf("partially configured; SessionStart: missing, UserPromptSubmit: installed")
 	}
 
-	if foundHooks == 0 {
-		return fmt.Errorf("no memorizer hooks found in SessionStart events")
+	if !hasUserPromptSubmit {
+		return fmt.Errorf("partially configured; SessionStart: installed, UserPromptSubmit: missing")
 	}
 
 	return nil
+}
+
+// hasOldBinaryName checks if any hooks in the event type use the old binary name
+func hasOldBinaryName(settings *Settings, eventType string) bool {
+	events, ok := settings.Hooks[eventType]
+	if !ok {
+		return false
+	}
+
+	for _, event := range events {
+		for _, hook := range event.Hooks {
+			if strings.Contains(hook.Command, "agentic-memorizer") {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // Reload applies configuration changes
@@ -311,6 +414,34 @@ func addOrUpdateHook(events []HookEvent, matcher, command string) []HookEvent {
 			Hooks:   []Hook{newHook},
 		})
 	}
+
+	return events
+}
+
+// addOrUpdateHookNoMatcher adds or updates a hook without a matcher
+// Used for events like UserPromptSubmit that don't use matchers
+func addOrUpdateHookNoMatcher(events []HookEvent, command string) []HookEvent {
+	newHook := Hook{
+		Type:    "command",
+		Command: command,
+	}
+
+	// Look for existing event with memorizer hook (no matcher or empty matcher)
+	for i, event := range events {
+		// Look for memorizer hook in this event
+		for j, hook := range event.Hooks {
+			if strings.Contains(hook.Command, "memorizer") {
+				events[i].Hooks[j] = newHook
+				return events
+			}
+		}
+	}
+
+	// No existing memorizer hook found - add new event without matcher
+	events = append(events, HookEvent{
+		// Matcher is empty - omitempty will exclude it from JSON
+		Hooks: []Hook{newHook},
+	})
 
 	return events
 }

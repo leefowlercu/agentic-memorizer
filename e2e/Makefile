@@ -1,4 +1,4 @@
-.PHONY: help setup build test test-quick test-verbose test-cli test-daemon test-mcp test-integrations test-config test-graph test-semantic test-e2e clean clean-volumes logs shell
+.PHONY: help setup build test test-quick test-verbose test-cli test-daemon test-mcp test-integrations test-config test-graph test-semantic test-e2e test-facts test-integrations-facts clean clean-volumes logs shell
 
 help: ## Show this help message
 	@echo "E2E Test Suite - Agentic Memorizer"
@@ -121,6 +121,26 @@ test-e2e: setup ## Run end-to-end workflow tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running E2E workflow tests..."
 	docker compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/e2e_test.go
+	@echo "Stopping services and cleaning volumes..."
+	docker compose down -v
+
+test-facts: setup ## Run facts command tests only
+	@echo "Starting FalkorDB..."
+	docker compose up -d falkordb
+	@echo "Waiting for FalkorDB..."
+	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
+	@echo "Running facts tests..."
+	docker compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/facts_test.go
+	@echo "Stopping services and cleaning volumes..."
+	docker compose down -v
+
+test-integrations-facts: setup ## Run integration facts tests only
+	@echo "Starting FalkorDB..."
+	docker compose up -d falkordb
+	@echo "Waiting for FalkorDB..."
+	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
+	@echo "Running integration facts tests..."
+	docker compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/integrations_facts_test.go
 	@echo "Stopping services and cleaning volumes..."
 	docker compose down -v
 

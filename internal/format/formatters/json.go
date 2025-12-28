@@ -40,6 +40,9 @@ func (f *JSONFormatter) Format(b format.Buildable) (string, error) {
 	case *format.GraphContent:
 		// GraphContent marshals the GraphIndex directly
 		return f.formatGraph(v)
+	case *format.FactsContent:
+		// FactsContent marshals the FactsIndex directly
+		return f.formatFacts(v)
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -257,6 +260,12 @@ func (f *JSONFormatter) errorToJSON(e *format.Error) *jsonError {
 func (f *JSONFormatter) formatGraph(gc *format.GraphContent) (string, error) {
 	// Marshal the GraphIndex directly with pretty-printing and no HTML escaping
 	return f.marshal(gc.Index)
+}
+
+// formatFacts renders FactsIndex as pretty-printed JSON
+func (f *JSONFormatter) formatFacts(fc *format.FactsContent) (string, error) {
+	// Marshal the FactsIndex directly with pretty-printing and no HTML escaping
+	return f.marshal(fc.Index)
 }
 
 // marshal converts data to JSON with proper formatting

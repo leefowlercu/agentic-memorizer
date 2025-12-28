@@ -39,6 +39,9 @@ func (f *MarkdownFormatter) Format(b format.Buildable) (string, error) {
 	case *format.GraphContent:
 		// GraphContent uses specialized markdown formatting
 		return f.formatGraph(v)
+	case *format.FactsContent:
+		// FactsContent uses specialized markdown formatting
+		return f.formatFacts(v)
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -569,6 +572,38 @@ func formatUsageGuideMarkdown() string {
 
 **Re-indexing**: Index auto-updates on session start. Manual re-index: run memorizer
 `
+}
+
+// formatFacts renders FactsIndex as Markdown
+func (f *MarkdownFormatter) formatFacts(fc *format.FactsContent) (string, error) {
+	index := fc.Index
+	var sb strings.Builder
+
+	sb.WriteString("# Facts\n\n")
+	sb.WriteString(fmt.Sprintf("**Generated**: %s\n", index.Generated.Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("**Total Facts**: %d / %d\n\n", index.Stats.TotalFacts, index.Stats.MaxFacts))
+
+	if len(index.Facts) == 0 {
+		sb.WriteString("*No facts stored.*\n")
+		return sb.String(), nil
+	}
+
+	sb.WriteString("---\n\n")
+
+	for i, fact := range index.Facts {
+		if i > 0 {
+			sb.WriteString("\n---\n\n")
+		}
+		sb.WriteString(fmt.Sprintf("### %s\n\n", fact.ID))
+		sb.WriteString(fmt.Sprintf("%s\n\n", fact.Content))
+		sb.WriteString(fmt.Sprintf("*Created*: %s", fact.CreatedAt.Format("2006-01-02 15:04:05")))
+		if !fact.UpdatedAt.IsZero() {
+			sb.WriteString(fmt.Sprintf(" | *Updated*: %s", fact.UpdatedAt.Format("2006-01-02 15:04:05")))
+		}
+		sb.WriteString(fmt.Sprintf(" | *Source*: %s\n", fact.Source))
+	}
+
+	return sb.String(), nil
 }
 
 func init() {

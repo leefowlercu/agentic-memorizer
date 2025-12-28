@@ -60,6 +60,13 @@ type Integration interface {
 	// Returns formatted string ready for the framework to consume
 	FormatOutput(index *types.GraphIndex, format OutputFormat) (string, error)
 
+	// FormatFactsOutput formats the facts index for this specific integration
+	// Applies integration-specific wrapping (e.g., UserPromptSubmit JSON for Claude Code)
+	// facts is the facts index to format
+	// format is the base output format (xml, markdown, json)
+	// Returns formatted string ready for the framework to consume
+	FormatFactsOutput(facts *types.FactsIndex, format OutputFormat) (string, error)
+
 	// Validation
 
 	// Validate checks the health of the integration configuration

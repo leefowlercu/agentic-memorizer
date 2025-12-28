@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Agentic Memorizer is a local file memorizer for Claude Code that provides automatic awareness and understanding of files through AI-powered semantic analysis. A background daemon watches a memory directory, extracts metadata, performs semantic analysis via multiple AI providers (Claude, OpenAI, Gemini), and maintains a knowledge graph in FalkorDB that integrates with Claude via SessionStart hooks and MCP tools.
+Agentic Memorizer is a local file memorizer for Claude Code that provides automatic awareness and understanding of files through AI-powered semantic analysis, plus user-defined facts that inject persistent context into every conversation. A background daemon watches a memory directory, extracts metadata, performs semantic analysis via multiple AI providers (Claude, OpenAI, Gemini), and maintains a knowledge graph in FalkorDB that integrates with Claude via hooks (SessionStart for files, UserPromptSubmit for facts) and MCP tools.
 
 ## Development Commands
 
@@ -87,7 +87,12 @@ make validate-config          # Validate configuration
 
 # Integration
 ./memorizer mcp start                         # Start MCP server
-./memorizer read                              # Read knowledge graph index
+./memorizer read files                        # Read file index
+./memorizer read facts                        # Read user facts
+
+# Facts management
+./memorizer remember fact "fact content"      # Add a new fact
+./memorizer forget fact <fact-id>             # Remove a fact by ID
 
 # Service manager integration (Linux/macOS)
 ./memorizer daemon systemctl                  # Generate systemd unit file
@@ -192,9 +197,14 @@ The graph subsystem (`internal/graph/`) provides persistent storage and relation
 
 **Graph Schema:**
 
-Nodes: File, Tag, Topic, Entity, Category
+Nodes: File, Tag, Topic, Entity, Category, Fact
 
 Edges: HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY
+
+**Facts Storage** (`internal/graph/facts.go`):
+- CRUD operations for user-defined facts
+- Up to 50 facts, 10-500 characters each
+- Facts injected via UserPromptSubmit (Claude) / BeforeAgent (Gemini) hooks
 
 **Graph Commands:**
 - `graph start/stop/status` - Manage FalkorDB Docker container
@@ -231,11 +241,14 @@ The Integration Registry (`internal/integrations/`) provides framework-agnostic 
 - **Auto-registration** - Adapters register via init() functions
 
 **Active Integrations:**
-- **Claude Code** - SessionStart hooks (`claude-code-hook`) + MCP server (`claude-code-mcp`)
-- **Gemini CLI** - SessionStart hooks (`gemini-cli-hook`) + MCP server (`gemini-cli-mcp`)
+- **Claude Code** - Dual hooks (`claude-code-hook`) + MCP server (`claude-code-mcp`)
+- **Gemini CLI** - Dual hooks (`gemini-cli-hook`) + MCP server (`gemini-cli-mcp`)
 - **Codex CLI** - MCP server only (`codex-cli-mcp`)
 
-SessionStart hooks inject full knowledge graph at session start. MCP servers provide on-demand tools (search, metadata, related files, entity search).
+**Dual-Hook Architecture:**
+- SessionStart hooks inject file index at session start
+- UserPromptSubmit (Claude) / BeforeAgent (Gemini) hooks inject user facts before each prompt
+- MCP servers provide on-demand tools (search, metadata, related files, entity search)
 
 **Configuration Formats:**
 - Claude Code & Gemini CLI: JSON configuration files
@@ -385,19 +398,22 @@ cd e2e && make test-cli       # Specific test suite
 
 **CLI Commands:**
 - Root: `cmd/root.go`
-- Commands: `cmd/{initialize,daemon,integrations,config,read,mcp,graph,cache}/`
+- Commands: `cmd/{initialize,daemon,integrations,config,read,remember,forget,mcp,graph,cache}/`
 - Daemon subcommands (8): `cmd/daemon/subcommands/` - start, stop, status, restart, logs, rebuild, systemctl, launchctl
 - Graph subcommands (3): `cmd/graph/subcommands/` - start, stop, status
 - Cache subcommands (2): `cmd/cache/subcommands/` - status, clear
-- Integration subcommands (6): `cmd/integrations/subcommands/` - detect, list, setup, remove, health, helpers
+- Read subcommands (2): `cmd/read/subcommands/` - files, facts
+- Remember subcommands (1): `cmd/remember/subcommands/` - fact
+- Forget subcommands (1): `cmd/forget/subcommands/` - fact
+- Integration subcommands (5): `cmd/integrations/subcommands/` - detect, list, setup, remove, health
 - Config subcommands (3): `cmd/config/subcommands/` - validate, reload, show-schema
 
 **Core Subsystems:**
 - Main: `internal/{daemon,metadata,semantic,cache,graph,config,integrations,watcher,walker,mcp,search,format,embeddings,servicemanager,tui,version}/`
 - Semantic Providers: `internal/semantic/providers/{claude,openai,gemini}/` - Provider implementations
-- Graph: `internal/graph/` - FalkorDB client, queries, schema, exporter
+- Graph: `internal/graph/` - FalkorDB client, queries, schema, exporter, facts
 - Daemon API: `internal/daemon/api/` - HTTP server, SSE hub, handlers
-- Types: `pkg/types/types.go` - Core type definitions (GraphIndex, FileEntry)
+- Types: `pkg/types/` - Core type definitions (GraphIndex, FileEntry, Fact, FactsIndex)
 
 **Documentation:**
 - Subsystems: `docs/subsystems/` - Technical documentation

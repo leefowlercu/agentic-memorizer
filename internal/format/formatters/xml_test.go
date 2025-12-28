@@ -4,8 +4,10 @@ import (
 	"encoding/xml"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
+	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -266,4 +268,113 @@ func TestXMLFormatter_ValidXML(t *testing.T) {
 		err = xml.Unmarshal([]byte(output), &result)
 		require.NoError(t, err, "builder type %s produced invalid XML", b.Type())
 	}
+}
+
+func TestXMLFormatter_FormatFacts(t *testing.T) {
+	formatter := NewXMLFormatter()
+
+	now := time.Now()
+	index := &types.FactsIndex{
+		Generated: now,
+		Facts: []types.Fact{
+			{
+				ID:        "fact-1",
+				Content:   "This is a test fact",
+				CreatedAt: now,
+				Source:    "cli",
+			},
+			{
+				ID:        "fact-2",
+				Content:   "Another test fact",
+				CreatedAt: now.Add(-time.Hour),
+				UpdatedAt: now,
+				Source:    "cli",
+			},
+		},
+		Stats: types.FactStats{
+			TotalFacts: 2,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	// Verify XML structure
+	assert.True(t, strings.HasPrefix(output, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"))
+	assert.Contains(t, output, "<facts_index>")
+	assert.Contains(t, output, "</facts_index>")
+	assert.Contains(t, output, "<metadata>")
+	assert.Contains(t, output, "<total_facts>2</total_facts>")
+	assert.Contains(t, output, "<max_facts>50</max_facts>")
+	assert.Contains(t, output, "<facts>")
+	assert.Contains(t, output, "<fact>")
+	assert.Contains(t, output, "<id>fact-1</id>")
+	assert.Contains(t, output, "<content>This is a test fact</content>")
+	assert.Contains(t, output, "<source>cli</source>")
+	assert.Contains(t, output, "<id>fact-2</id>")
+	assert.Contains(t, output, "<updated_at>")
+}
+
+func TestXMLFormatter_FormatFactsEmpty(t *testing.T) {
+	formatter := NewXMLFormatter()
+
+	index := &types.FactsIndex{
+		Generated: time.Now(),
+		Facts:     []types.Fact{},
+		Stats: types.FactStats{
+			TotalFacts: 0,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "<total_facts>0</total_facts>")
+	assert.Contains(t, output, "<facts>")
+	assert.Contains(t, output, "</facts>")
+	// Empty facts section should not contain <fact> elements
+	assert.NotContains(t, output, "<fact>")
+}
+
+func TestXMLFormatter_FormatFactsEscaping(t *testing.T) {
+	formatter := NewXMLFormatter()
+
+	index := &types.FactsIndex{
+		Generated: time.Now(),
+		Facts: []types.Fact{
+			{
+				ID:        "fact-1",
+				Content:   "Use <tags> and \"quotes\" & ampersands",
+				CreatedAt: time.Now(),
+				Source:    "cli",
+			},
+		},
+		Stats: types.FactStats{
+			TotalFacts: 1,
+			MaxFacts:   50,
+		},
+	}
+
+	fc := format.NewFactsContent(index)
+	output, err := formatter.Format(fc)
+	require.NoError(t, err)
+
+	// Verify special characters are escaped
+	assert.Contains(t, output, "&lt;tags&gt;")
+	assert.Contains(t, output, "&quot;quotes&quot;")
+	assert.Contains(t, output, "&amp; ampersands")
+}
+
+func TestXMLFormatter_FormatFactsValidationError(t *testing.T) {
+	formatter := NewXMLFormatter()
+
+	fc := format.NewFactsContent(nil)
+	_, err := formatter.Format(fc)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
 }

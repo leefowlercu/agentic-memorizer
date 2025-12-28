@@ -76,9 +76,9 @@ var DefaultConfig = Config{
 		Provider:        DefaultSemanticProvider,
 		Model:           DefaultClaudeModel,
 		MaxTokens:       1500,
-		Timeout:         30,                      // API request timeout in seconds
-		EnableVision:    true,                    // Enable vision API for image analysis
-		MaxFileSize:     10485760,                // 10 MB
+		Timeout:         30,       // API request timeout in seconds
+		EnableVision:    true,     // Enable vision API for image analysis
+		MaxFileSize:     10485760, // 10 MB
 		SkipExtensions:  DefaultSkipExtensions,
 		SkipFiles:       DefaultSkipFiles,
 		CacheDir:        "~/" + AppDirName + "/" + CacheDirName,

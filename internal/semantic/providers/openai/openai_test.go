@@ -97,8 +97,8 @@ func TestOpenAIProvider_SupportsVision(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	tests := []struct {
-		model   string
-		want    bool
+		model string
+		want  bool
 	}{
 		{"gpt-4o", true},
 		{"gpt-4o-mini", true},

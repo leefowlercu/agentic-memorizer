@@ -191,10 +191,10 @@ type mockProvider struct {
 func (m *mockProvider) Analyze(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	return nil, nil
 }
-func (m *mockProvider) Name() string             { return m.name }
-func (m *mockProvider) Model() string            { return m.model }
-func (m *mockProvider) SupportsVision() bool     { return false }
-func (m *mockProvider) SupportsDocuments() bool  { return false }
+func (m *mockProvider) Name() string            { return m.name }
+func (m *mockProvider) Model() string           { return m.model }
+func (m *mockProvider) SupportsVision() bool    { return false }
+func (m *mockProvider) SupportsDocuments() bool { return false }
 
 // TestDaemon_SemanticProviderSwap tests atomic provider replacement
 func TestDaemon_SemanticProviderSwap(t *testing.T) {
@@ -656,7 +656,7 @@ func TestDaemon_DetectChanges(t *testing.T) {
 	t.Run("no changes", func(t *testing.T) {
 		cfg := &config.Config{
 			Semantic: config.SemanticConfig{APIKey: "key1"},
-			Daemon: config.DaemonConfig{Workers: 3, LogLevel: "info"},
+			Daemon:   config.DaemonConfig{Workers: 3, LogLevel: "info"},
 		}
 
 		changes := d.detectChanges(cfg, cfg)

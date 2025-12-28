@@ -40,15 +40,15 @@ type ModelInfo struct {
 
 // SemanticProviderStep handles semantic provider selection and configuration
 type SemanticProviderStep struct {
-	phase          providerPhase
-	providers      []ProviderInfo
-	providerRadio  *components.RadioGroup
-	modelRadio     *components.RadioGroup
-	keyInput       *components.TextInput
-	selectedProv   int
-	selectedModel  int
-	focusIndex     int
-	err            error
+	phase         providerPhase
+	providers     []ProviderInfo
+	providerRadio *components.RadioGroup
+	modelRadio    *components.RadioGroup
+	keyInput      *components.TextInput
+	selectedProv  int
+	selectedModel int
+	focusIndex    int
+	err           error
 }
 
 // NewSemanticProviderStep creates a new semantic provider configuration step

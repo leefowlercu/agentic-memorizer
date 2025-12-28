@@ -1,12 +1,11 @@
 package claude
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/shared"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -63,7 +62,7 @@ func formatSessionStartJSON(index *types.FileIndex, outputFormat integrations.Ou
 	}
 
 	// Marshal to JSON with indentation and no HTML escaping
-	jsonBytes, err := marshalIndentNoEscape(wrapper, "", "  ")
+	jsonBytes, err := shared.MarshalIndentNoEscape(wrapper, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal SessionStart JSON; %w", err)
 	}
@@ -71,25 +70,9 @@ func formatSessionStartJSON(index *types.FileIndex, outputFormat integrations.Ou
 	return string(jsonBytes), nil
 }
 
-// marshalIndentNoEscape marshals JSON with indentation but without HTML escaping.
-// This prevents <, >, and & from being escaped to \u003c, \u003e, and \u0026.
-// Unlike json.MarshalIndent which hard-codes escapeHTML: true, this function uses
-// an Encoder with SetEscapeHTML(false) to produce cleaner output for CLI contexts.
-func marshalIndentNoEscape(v any, prefix, indent string) ([]byte, error) {
-	buffer := &bytes.Buffer{}
-	encoder := json.NewEncoder(buffer)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent(prefix, indent)
-	if err := encoder.Encode(v); err != nil {
-		return nil, err
-	}
-	// Encoder.Encode adds a trailing newline, trim it to match MarshalIndent behavior
-	return bytes.TrimRight(buffer.Bytes(), "\n"), nil
-}
-
 // generateSystemMessage creates a concise system message for the SessionStart hook
 func generateSystemMessage(index *types.FileIndex) string {
-	categories := groupByCategory(index.Files)
+	categories := shared.GroupByCategory(index.Files)
 	categoryCount := len(categories)
 
 	msg := fmt.Sprintf("Memory index updated: %d files", index.Stats.TotalFiles)
@@ -103,52 +86,15 @@ func generateSystemMessage(index *types.FileIndex) string {
 			}
 		}
 		if len(categoryParts) > 0 {
-			msg += fmt.Sprintf(" (%s)", join(categoryParts, ", "))
+			msg += fmt.Sprintf(" (%s)", shared.Join(categoryParts, ", "))
 		}
 	}
 
-	msg += fmt.Sprintf(", %s total", formatSize(index.Stats.TotalSize))
+	msg += fmt.Sprintf(", %s total", shared.FormatSize(index.Stats.TotalSize))
 
 	if index.Stats.CachedFiles > 0 || index.Stats.AnalyzedFiles > 0 {
 		msg += fmt.Sprintf(" — %d cached, %d analyzed", index.Stats.CachedFiles, index.Stats.AnalyzedFiles)
 	}
 
 	return msg
-}
-
-// groupByCategory groups file entries by their category
-func groupByCategory(files []types.FileEntry) map[string][]types.FileEntry {
-	categories := make(map[string][]types.FileEntry)
-	for _, file := range files {
-		categories[file.Category] = append(categories[file.Category], file)
-	}
-	return categories
-}
-
-// formatSize formats bytes into human-readable size
-func formatSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
-// join concatenates strings with a separator
-func join(parts []string, sep string) string {
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += sep
-		}
-		result += part
-	}
-	return result
 }

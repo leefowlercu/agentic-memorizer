@@ -7,6 +7,7 @@ import (
 
 	_ "github.com/leefowlercu/agentic-memorizer/internal/format/formatters" // Register formatters
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/shared"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -132,9 +133,9 @@ func TestMarshalIndentNoEscape(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := marshalIndentNoEscape(tt.input, "", "  ")
+			result, err := shared.MarshalIndentNoEscape(tt.input, "", "  ")
 			if err != nil {
-				t.Fatalf("marshalIndentNoEscape() error = %v", err)
+				t.Fatalf("shared.MarshalIndentNoEscape() error = %v", err)
 			}
 
 			resultStr := string(result)
@@ -167,9 +168,9 @@ func TestMarshalIndentNoEscape_Formatting(t *testing.T) {
 		},
 	}
 
-	result, err := marshalIndentNoEscape(input, "", "  ")
+	result, err := shared.MarshalIndentNoEscape(input, "", "  ")
 	if err != nil {
-		t.Fatalf("marshalIndentNoEscape() error = %v", err)
+		t.Fatalf("shared.MarshalIndentNoEscape() error = %v", err)
 	}
 
 	resultStr := string(result)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/shared"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -54,7 +55,7 @@ func formatBeforeAgentJSON(facts *types.FactsIndex, outputFormat integrations.Ou
 	}
 
 	// Marshal to JSON with indentation and no HTML escaping
-	jsonBytes, err := marshalIndentNoEscape(wrapper, "", "  ")
+	jsonBytes, err := shared.MarshalIndentNoEscape(wrapper, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal BeforeAgent JSON; %w", err)
 	}

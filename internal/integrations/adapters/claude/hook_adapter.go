@@ -27,16 +27,16 @@ const (
 // Default matchers for SessionStart hooks
 var defaultMatchers = []string{"startup", "resume", "clear", "compact"}
 
-// ClaudeCodeAdapter implements the Integration interface for Claude Code
-type ClaudeCodeAdapter struct {
+// ClaudeCodeHookAdapter implements the Integration interface for Claude Code
+type ClaudeCodeHookAdapter struct {
 	settingsPath string
 	matchers     []string
 	outputFormat integrations.OutputFormat
 }
 
-// NewClaudeCodeAdapter creates a new Claude Code integration adapter
-func NewClaudeCodeAdapter() *ClaudeCodeAdapter {
-	return &ClaudeCodeAdapter{
+// NewClaudeCodeHookAdapter creates a new Claude Code hook integration adapter
+func NewClaudeCodeHookAdapter() *ClaudeCodeHookAdapter {
+	return &ClaudeCodeHookAdapter{
 		settingsPath: getDefaultSettingsPath(),
 		matchers:     defaultMatchers,
 		outputFormat: integrations.FormatXML, // Default to XML
@@ -44,22 +44,22 @@ func NewClaudeCodeAdapter() *ClaudeCodeAdapter {
 }
 
 // GetName returns the integration name
-func (a *ClaudeCodeAdapter) GetName() string {
+func (a *ClaudeCodeHookAdapter) GetName() string {
 	return IntegrationName
 }
 
 // GetDescription returns a human-readable description
-func (a *ClaudeCodeAdapter) GetDescription() string {
+func (a *ClaudeCodeHookAdapter) GetDescription() string {
 	return "Claude Code hooks integration (SessionStart for files, UserPromptSubmit for facts)"
 }
 
 // GetVersion returns the adapter version
-func (a *ClaudeCodeAdapter) GetVersion() string {
+func (a *ClaudeCodeHookAdapter) GetVersion() string {
 	return IntegrationVersion
 }
 
 // Detect checks if Claude Code is installed on the system
-func (a *ClaudeCodeAdapter) Detect() (bool, error) {
+func (a *ClaudeCodeHookAdapter) Detect() (bool, error) {
 	// Check if ~/.claude directory exists
 	claudeDir := filepath.Dir(a.settingsPath)
 	info, err := os.Stat(claudeDir)
@@ -75,7 +75,7 @@ func (a *ClaudeCodeAdapter) Detect() (bool, error) {
 
 // IsEnabled checks if the integration is currently configured
 // Returns true only if BOTH SessionStart AND UserPromptSubmit hooks are installed
-func (a *ClaudeCodeAdapter) IsEnabled() (bool, error) {
+func (a *ClaudeCodeHookAdapter) IsEnabled() (bool, error) {
 	// Check if settings file exists
 	if _, err := os.Stat(a.settingsPath); os.IsNotExist(err) {
 		return false, nil
@@ -96,7 +96,7 @@ func (a *ClaudeCodeAdapter) IsEnabled() (bool, error) {
 }
 
 // hasMemorizerHook checks if a specific event type has a memorizer hook installed
-func (a *ClaudeCodeAdapter) hasMemorizerHook(settings *Settings, eventType string) bool {
+func (a *ClaudeCodeHookAdapter) hasMemorizerHook(settings *Settings, eventType string) bool {
 	events, ok := settings.Hooks[eventType]
 	if !ok || len(events) == 0 {
 		return false
@@ -120,7 +120,7 @@ func (a *ClaudeCodeAdapter) hasMemorizerHook(settings *Settings, eventType strin
 // Setup configures the Claude Code integration
 // Installs both SessionStart (for files) and UserPromptSubmit (for facts) hooks
 // Uses transactional semantics: if UserPromptSubmit fails, SessionStart is rolled back
-func (a *ClaudeCodeAdapter) Setup(binaryPath string) error {
+func (a *ClaudeCodeHookAdapter) Setup(binaryPath string) error {
 	settings, fullSettings, err := readSettings(a.settingsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read settings: %w", err)
@@ -186,17 +186,17 @@ func cloneHookEvents(events []HookEvent) []HookEvent {
 }
 
 // getFilesCommand returns the command for SessionStart hook (file index)
-func (a *ClaudeCodeAdapter) getFilesCommand(binaryPath string, format integrations.OutputFormat) string {
+func (a *ClaudeCodeHookAdapter) getFilesCommand(binaryPath string, format integrations.OutputFormat) string {
 	return fmt.Sprintf("%s read files --format %s --integration %s", binaryPath, format, IntegrationName)
 }
 
 // getFactsCommand returns the command for UserPromptSubmit hook (facts)
-func (a *ClaudeCodeAdapter) getFactsCommand(binaryPath string, format integrations.OutputFormat) string {
+func (a *ClaudeCodeHookAdapter) getFactsCommand(binaryPath string, format integrations.OutputFormat) string {
 	return fmt.Sprintf("%s read facts --format %s --integration %s", binaryPath, format, IntegrationName)
 }
 
 // Update updates the integration configuration
-func (a *ClaudeCodeAdapter) Update(binaryPath string) error {
+func (a *ClaudeCodeHookAdapter) Update(binaryPath string) error {
 	// For Claude Code, update is the same as setup
 	return a.Setup(binaryPath)
 }
@@ -204,7 +204,7 @@ func (a *ClaudeCodeAdapter) Update(binaryPath string) error {
 // Remove removes the integration configuration
 // Removes both SessionStart and UserPromptSubmit hooks
 // Continues removing remaining hooks even if one fails, returning aggregated error
-func (a *ClaudeCodeAdapter) Remove() error {
+func (a *ClaudeCodeHookAdapter) Remove() error {
 	settings, fullSettings, err := readSettings(a.settingsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read settings: %w", err)
@@ -235,7 +235,7 @@ func (a *ClaudeCodeAdapter) Remove() error {
 }
 
 // removeHooksFromEvent removes memorizer hooks from a specific event type
-func (a *ClaudeCodeAdapter) removeHooksFromEvent(settings *Settings, eventType string) error {
+func (a *ClaudeCodeHookAdapter) removeHooksFromEvent(settings *Settings, eventType string) error {
 	events, ok := settings.Hooks[eventType]
 	if !ok {
 		return nil // Nothing to remove
@@ -267,23 +267,23 @@ func (a *ClaudeCodeAdapter) removeHooksFromEvent(settings *Settings, eventType s
 
 // GetCommand returns the command that should be executed by the hook
 // Returns the SessionStart command for backwards compatibility
-func (a *ClaudeCodeAdapter) GetCommand(binaryPath string, format integrations.OutputFormat) string {
+func (a *ClaudeCodeHookAdapter) GetCommand(binaryPath string, format integrations.OutputFormat) string {
 	return a.getFilesCommand(binaryPath, format)
 }
 
 // FormatOutput formats the file index for Claude Code (SessionStart JSON wrapper)
-func (a *ClaudeCodeAdapter) FormatOutput(index *types.FileIndex, format integrations.OutputFormat) (string, error) {
+func (a *ClaudeCodeHookAdapter) FormatOutput(index *types.FileIndex, format integrations.OutputFormat) (string, error) {
 	return formatSessionStartJSON(index, format)
 }
 
 // FormatFactsOutput formats the facts index for Claude Code (UserPromptSubmit JSON wrapper)
-func (a *ClaudeCodeAdapter) FormatFactsOutput(facts *types.FactsIndex, format integrations.OutputFormat) (string, error) {
+func (a *ClaudeCodeHookAdapter) FormatFactsOutput(facts *types.FactsIndex, format integrations.OutputFormat) (string, error) {
 	return formatUserPromptSubmitJSON(facts, format)
 }
 
 // Validate checks the health of the integration
 // Reports per-hook status for SessionStart and UserPromptSubmit
-func (a *ClaudeCodeAdapter) Validate() error {
+func (a *ClaudeCodeHookAdapter) Validate() error {
 	// Check if settings file exists
 	if _, err := os.Stat(a.settingsPath); os.IsNotExist(err) {
 		return fmt.Errorf("settings file not found at %s", a.settingsPath)
@@ -340,7 +340,7 @@ func hasOldBinaryName(settings *Settings, eventType string) bool {
 }
 
 // Reload applies configuration changes
-func (a *ClaudeCodeAdapter) Reload(newConfig integrations.IntegrationConfig) error {
+func (a *ClaudeCodeHookAdapter) Reload(newConfig integrations.IntegrationConfig) error {
 	// Update output format if changed
 	if newConfig.OutputFormat != "" {
 		format, err := integrations.ParseOutputFormat(newConfig.OutputFormat)

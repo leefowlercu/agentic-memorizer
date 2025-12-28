@@ -69,7 +69,7 @@ Works seamlessly with Claude Code, Gemini CLI, and Codex CLI with automatic setu
 
 ### How It Works
 
-A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using configurable AI providers (Claude, OpenAI, or Gemini)—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
+A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using configurable AI providers (Claude, OpenAI, or Gemini)—semantically analyzed to understand its content, purpose, and key topics. 
 
 When you launch your AI agent, the precomputed index is loaded into its context:
 - **Claude Code & Gemini CLI**: SessionStart hooks automatically load the index

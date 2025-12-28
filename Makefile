@@ -43,7 +43,7 @@ test: ## Run unit tests only
 	@echo "Running unit tests..."
 	@go test -v ./...
 
-test-integration: ## Run integration tests only
+test-integration: build ## Run integration tests only
 	@echo "Running integration tests..."
 	@go test -tags=integration -v ./...
 

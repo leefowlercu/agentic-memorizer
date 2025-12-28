@@ -76,7 +76,7 @@ The Integration Registry maintains clear boundaries between output formatting, i
 The format package (internal/format/) provides a unified formatting system through the Buildable interface and Formatter implementations. Formatters (XML, Markdown, JSON, YAML, Text) are completely independent from integration adapters and have no knowledge of frameworks or integration wrapping. This separation enables output format evolution without affecting integration logic and vice versa.
 
 **Base Format vs. Integration Wrapping:**
-The architecture distinguishes between base output formats (rendered by formatters via GraphContent builders) and integration-specific wrapping (applied by adapters). For example, Claude Code uses XML base format but wraps it in a SessionStart JSON envelope with system message and additional context. This separation enables reusing formatters across multiple integrations and output contexts.
+The architecture distinguishes between base output formats (rendered by formatters via FilesContent builders) and integration-specific wrapping (applied by adapters). For example, Claude Code uses XML base format but wraps it in a SessionStart JSON envelope with system message and additional context. This separation enables reusing formatters across multiple integrations and output contexts.
 
 **Detection Logic Separation:**
 Framework detection logic (checking for config files/directories) is isolated in adapter implementations. The registry provides detection operations but delegates to adapters. This separation allows each adapter to implement detection appropriate for its framework without coupling detection logic to registry management.
@@ -370,19 +370,19 @@ The format package uses a builder-formatter pattern where content structures (bu
 - **Buildable Interface** - Defines `Type()` and `Validate()` methods that all output structures implement
 - **Formatter Interface** - Defines `Format(Buildable)` method that renders buildables to strings
 - **Formatter Registry** - Global registry accessible via `format.GetFormatter(name)` with registered formatters
-- **Builder Types** - Status, Section, Table, List, Progress, Error, and GraphContent
+- **Builder Types** - Status, Section, Table, List, Progress, Error, and FilesContent
 
-#### GraphContent Builder
+#### FilesContent Builder
 
-The GraphContent builder (`internal/format/graph.go`) wraps a GraphIndex for formatting through the format package. It implements the Buildable interface to integrate with the unified formatting system.
+The FilesContent builder (`internal/format/graph.go`) wraps a FileIndex for formatting through the format package. It implements the Buildable interface to integrate with the unified formatting system.
 
 **Purpose:**
-GraphContent serves as the bridge between the graph-native index structure and the format package, enabling formatters to render graph indexes consistently with other output types.
+FilesContent serves as the bridge between the graph-native index structure and the format package, enabling formatters to render graph indexes consistently with other output types.
 
 **Usage Pattern:**
 ```go
-// Wrap GraphIndex in GraphContent
-graphContent := format.NewGraphContent(index)
+// Wrap FileIndex in FilesContent
+graphContent := format.NewFilesContent(index)
 
 // Get formatter and render
 formatter, _ := format.GetFormatter("xml")
@@ -391,7 +391,7 @@ output, _ := formatter.Format(graphContent)
 
 #### Available Formatters
 
-The format package provides five formatters that can render GraphContent:
+The format package provides five formatters that can render FilesContent:
 
 **XML Formatter** (`internal/format/formatters/xml.go`):
 - Produces structured XML with `<memory_index>` root element
@@ -409,20 +409,20 @@ The format package provides five formatters that can render GraphContent:
 - Designed for direct human consumption in terminal or rendered form
 
 **JSON Formatter** (`internal/format/formatters/json.go`):
-- Direct JSON serialization of GraphIndex structure
+- Direct JSON serialization of FileIndex structure
 - Pretty-printed with 2-space indentation
 - Preserves all data fields without transformation
 - Ideal for programmatic integration and automated processing
 
 **YAML Formatter** (`internal/format/formatters/yaml.go`):
-- YAML serialization of GraphIndex structure
+- YAML serialization of FileIndex structure
 - Human-readable configuration-style output
 - Useful for configuration contexts or YAML-native tools
 
 **Text Formatter** (`internal/format/formatters/text.go`):
 - Plain text output with ASCII symbols (no Unicode)
 - Fallback format for environments without rich formatting support
-- Renders all builder types including GraphContent
+- Renders all builder types including FilesContent
 
 #### Integration with Adapters
 
@@ -432,7 +432,7 @@ Integration adapters use the format package to produce base formats before apply
 1. Receive `FormatOutput(index, format)` call from read command
 2. Map OutputFormat enum to formatter name (xml, markdown, json)
 3. Get formatter via `format.GetFormatter(name)`
-4. Create GraphContent wrapper: `format.NewGraphContent(index)`
+4. Create FilesContent wrapper: `format.NewFilesContent(index)`
 5. Render base format: `formatter.Format(graphContent)`
 6. Apply integration wrapping (SessionStart JSON envelope)
 7. Return wrapped output
@@ -540,7 +540,7 @@ Both subsystems use the shared `Index` type from `pkg/types/types.go`, providing
 
 **Formatter**: Implementation of the Formatter interface in the format package that renders Buildable structures into specific output formats (xml, markdown, json, yaml, text).
 
-**GraphContent**: Builder type in the format package that wraps a GraphIndex for rendering through formatters, implementing the Buildable interface.
+**FilesContent**: Builder type in the format package that wraps a FileIndex for rendering through formatters, implementing the Buildable interface.
 
 **Buildable Interface**: Core interface in the format package defining `Type()` and `Validate()` methods that all output structures implement.
 

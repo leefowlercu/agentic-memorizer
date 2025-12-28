@@ -40,9 +40,9 @@ func (f *XMLFormatter) Format(b format.Buildable) (string, error) {
 		data = f.statusToXML(v)
 	case *format.Error:
 		data = f.errorToXML(v)
-	case *format.GraphContent:
-		// GraphContent uses direct string generation for backward compatibility
-		return f.formatGraph(v)
+	case *format.FilesContent:
+		// FilesContent uses direct string generation for backward compatibility
+		return f.formatFiles(v)
 	case *format.FactsContent:
 		// FactsContent uses direct string generation
 		return f.formatFacts(v)
@@ -271,9 +271,9 @@ func (f *XMLFormatter) errorToXML(e *format.Error) *xmlError {
 	}
 }
 
-// formatGraph renders GraphIndex as XML (backward compatibility with legacy output)
-func (f *XMLFormatter) formatGraph(gc *format.GraphContent) (string, error) {
-	index := gc.Index
+// formatFiles renders FileIndex as XML (backward compatibility with legacy output)
+func (f *XMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
+	index := fc.Index
 	var sb strings.Builder
 
 	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")

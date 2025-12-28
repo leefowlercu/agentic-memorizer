@@ -22,8 +22,8 @@ const (
 	// BuilderTypeError represents structured error messages
 	BuilderTypeError BuilderType = "error"
 
-	// BuilderTypeGraph represents graph index data
-	BuilderTypeGraph BuilderType = "graph"
+	// BuilderTypeFiles represents files index data
+	BuilderTypeFiles BuilderType = "files"
 
 	// BuilderTypeFacts represents facts index data
 	BuilderTypeFacts BuilderType = "facts"

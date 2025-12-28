@@ -238,7 +238,7 @@ func (s *HTTPServer) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	index, err := s.exporter.ToGraphIndex(ctx, s.memoryRoot)
+	index, err := s.exporter.ToFileIndex(ctx, s.memoryRoot)
 	if err != nil {
 		s.logger.Error("failed to export index", "error", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to export index", err.Error())
@@ -534,9 +534,9 @@ func (s *HTTPServer) writeError(w http.ResponseWriter, status int, message strin
 }
 
 // GetIndex exports the current index (for SSE hub to include in events)
-func (s *HTTPServer) GetIndex(ctx context.Context) (*types.GraphIndex, error) {
+func (s *HTTPServer) GetIndex(ctx context.Context) (*types.FileIndex, error) {
 	if s.exporter == nil {
 		return nil, fmt.Errorf("graph exporter not available")
 	}
-	return s.exporter.ToGraphIndex(ctx, s.memoryRoot)
+	return s.exporter.ToFileIndex(ctx, s.memoryRoot)
 }

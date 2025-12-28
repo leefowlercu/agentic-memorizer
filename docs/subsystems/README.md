@@ -86,13 +86,13 @@ Graph-native storage architecture with on-demand export capabilities for Session
 - Real-time graph updates via Graph Manager
 - On-demand index export from live graph data
 - Thread-safe graph operations with connection pooling
-- GraphIndex generation for SessionStart hooks and read command
+- FileIndex generation for SessionStart hooks and read command
 - No file-based persistence (fully graph-native)
 
 **Primary Components:**
 - `internal/graph/manager.go` - Graph CRUD operations and queries
-- `internal/graph/export.go` - GraphIndex export from graph
-- `pkg/types/types.go` - GraphIndex and FileEntry structures
+- `internal/graph/export.go` - FileIndex export from graph
+- `pkg/types/types.go` - FileIndex and FileEntry structures
 
 **See:** [index-management/README.md](./index-management/README.md)
 
@@ -302,7 +302,7 @@ Exposes the knowledge graph through the Model Context Protocol (MCP) as a standa
 
 **Key Features:**
 - JSON-RPC 2.0 protocol implementation
-- Static context delivery via GraphIndex export in multiple formats (XML, Markdown, JSON)
+- Static context delivery via FileIndex export in multiple formats (XML, Markdown, JSON)
 - Dynamic graph-powered semantic search across knowledge base
 - Metadata retrieval and time-based filtering via daemon HTTP API
 - Graph query tools (search, related files, entity search, recent files)
@@ -389,7 +389,7 @@ Centralized CLI output formatting with multi-format support and structured build
 - `internal/format/list.go` - List builder with nesting
 - `internal/format/progress.go` - Progress indicator builder
 - `internal/format/error.go` - Structured error message builder
-- `internal/format/graph.go` - GraphContent builder for integration output
+- `internal/format/graph.go` - FilesContent builder for integration output
 - `internal/format/utils.go` - Shared formatting utilities
 - `internal/format/formatters/` - Format-specific renderers (text, JSON, YAML, XML, markdown)
 
@@ -584,10 +584,10 @@ If you're looking for specific subsystem information:
   - Completely rewrote Index Management section to reflect graph-native architecture:
     - Changed title from "Index Manager" to "Index Management" throughout
     - Updated description: "Graph-native storage with on-demand export" (not "precomputed index file with atomic writes")
-    - Replaced key features to reflect FalkorDB storage, GraphIndex export, no file persistence
+    - Replaced key features to reflect FalkorDB storage, FileIndex export, no file persistence
     - Updated primary components: `internal/graph/manager.go` and `export.go` (not `internal/index/`)
   - Updated MCP Server description: "Exposes knowledge graph" (not "precomputed index")
-  - Enhanced MCP Server key features to clarify GraphIndex export and daemon HTTP API integration
+  - Enhanced MCP Server key features to clarify FileIndex export and daemon HTTP API integration
   - Updated Subsystem Interactions diagram: "Graph Manager (FalkorDB ops)" replacing "Index Manager (atomic I/O)"
   - Added missing daemon subcommands: systemctl, launchctl
   - Fixed broken link: index-manager → index-management

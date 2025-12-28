@@ -15,7 +15,7 @@ import (
 
 func TestServer_Run_ContextCancellation(t *testing.T) {
 	// Create minimal index for server
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -54,7 +54,7 @@ func TestServer_Run_ContextCancellation(t *testing.T) {
 }
 
 func TestServer_Run_ClientDisconnect(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -84,7 +84,7 @@ func TestServer_Run_ClientDisconnect(t *testing.T) {
 }
 
 func TestServer_Shutdown(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -109,7 +109,7 @@ func TestServer_Shutdown(t *testing.T) {
 }
 
 func TestServer_HandleMessage_NotificationWithInvalidVersion(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -150,7 +150,7 @@ func TestServer_HandleMessage_NotificationWithInvalidVersion(t *testing.T) {
 }
 
 func TestServer_HandleMessage_UnknownNotification(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -189,7 +189,7 @@ func TestServer_HandleMessage_UnknownNotification(t *testing.T) {
 }
 
 func TestServer_HandleMessage_MalformedNotification(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -219,7 +219,7 @@ func TestServer_HandleMessage_MalformedNotification(t *testing.T) {
 }
 
 func TestServer_HandlePromptsList(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},
@@ -300,7 +300,7 @@ func TestServer_HandlePromptsList(t *testing.T) {
 }
 
 func TestServer_HandlePromptsGet(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Stats: types.IndexStats{
 			TotalFiles: 0,
 		},

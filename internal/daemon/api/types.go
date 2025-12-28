@@ -46,7 +46,7 @@ type EntitySearchResponse struct {
 
 // IndexResponse is the response for GET /api/v1/index
 type IndexResponse struct {
-	Index *types.GraphIndex `json:"index"`
+	Index *types.FileIndex `json:"index"`
 }
 
 // APIError represents an error response
@@ -74,7 +74,7 @@ type RebuildHandler interface {
 
 // SSEEvent represents an SSE event with typed data
 type SSEEvent struct {
-	Type      string            `json:"type"`
-	Timestamp string            `json:"timestamp"`
-	Data      *types.GraphIndex `json:"data,omitempty"`
+	Type      string           `json:"type"`
+	Timestamp string           `json:"timestamp"`
+	Data      *types.FileIndex `json:"data,omitempty"`
 }

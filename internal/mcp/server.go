@@ -23,7 +23,7 @@ import (
 
 type Server struct {
 	transport    transport.Transport
-	index        *types.GraphIndex
+	index        *types.FileIndex
 	indexMu      sync.RWMutex // Protects index access and reloading
 	initialized  bool
 	capabilities protocol.ServerCapabilities
@@ -56,7 +56,7 @@ type PromptHandler func(ctx context.Context, params json.RawMessage) (any, error
 // NewServer creates a new MCP server.
 // daemonURL is the base URL of the daemon HTTP API (e.g., "http://localhost:8080").
 // All data is fetched from the daemon - no direct FalkorDB connection.
-func NewServer(index *types.GraphIndex, logger *slog.Logger, daemonURL string) *Server {
+func NewServer(index *types.FileIndex, logger *slog.Logger, daemonURL string) *Server {
 	// Generate process_id and enrich logger with process context
 	processID := logging.NewProcessID()
 	enrichedLogger := logging.WithMCPProcess(logger, processID)
@@ -421,8 +421,8 @@ func (s *Server) formatIndexXML() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get formatter; %w", err)
 	}
-	graphContent := format.NewGraphContent(s.index)
-	return formatter.Format(graphContent)
+	filesContent := format.NewFilesContent(s.index)
+	return formatter.Format(filesContent)
 }
 
 // formatIndexMarkdown formats the index as Markdown
@@ -431,8 +431,8 @@ func (s *Server) formatIndexMarkdown() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get formatter; %w", err)
 	}
-	graphContent := format.NewGraphContent(s.index)
-	return formatter.Format(graphContent)
+	filesContent := format.NewFilesContent(s.index)
+	return formatter.Format(filesContent)
 }
 
 // formatIndexJSON formats the index as JSON
@@ -441,8 +441,8 @@ func (s *Server) formatIndexJSON() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get formatter; %w", err)
 	}
-	graphContent := format.NewGraphContent(s.index)
-	return formatter.Format(graphContent)
+	filesContent := format.NewFilesContent(s.index)
+	return formatter.Format(filesContent)
 }
 
 // handleSearchFiles performs semantic search across indexed files
@@ -1163,14 +1163,14 @@ func (s *Server) sendError(id any, code int, message string, data any) error {
 }
 
 // GetIndex returns the current index (thread-safe)
-func (s *Server) GetIndex() *types.GraphIndex {
+func (s *Server) GetIndex() *types.FileIndex {
 	s.indexMu.RLock()
 	defer s.indexMu.RUnlock()
 	return s.index
 }
 
 // ReloadIndex atomically updates the server's index (thread-safe)
-func (s *Server) ReloadIndex(newIndex *types.GraphIndex) {
+func (s *Server) ReloadIndex(newIndex *types.FileIndex) {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 	s.index = newIndex

@@ -304,7 +304,7 @@ func TestClaudeCodeMCPAdapter_FormatOutput(t *testing.T) {
 	adapter := NewClaudeCodeMCPAdapter()
 
 	// FormatOutput should return an error for MCP integrations
-	_, err := adapter.FormatOutput(&types.GraphIndex{}, integrations.FormatXML)
+	_, err := adapter.FormatOutput(&types.FileIndex{}, integrations.FormatXML)
 	if err == nil {
 		t.Error("Expected error from FormatOutput, got nil")
 	}

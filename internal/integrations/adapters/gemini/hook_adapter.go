@@ -277,8 +277,8 @@ func (a *GeminiCLIHookAdapter) GetCommand(binaryPath string, format integrations
 	return a.getFilesCommand(binaryPath, format)
 }
 
-// FormatOutput formats the graph index for Gemini CLI (SessionStart JSON wrapper)
-func (a *GeminiCLIHookAdapter) FormatOutput(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
+// FormatOutput formats the file index for Gemini CLI (SessionStart JSON wrapper)
+func (a *GeminiCLIHookAdapter) FormatOutput(index *types.FileIndex, format integrations.OutputFormat) (string, error) {
 	return formatGeminiHookJSON(index, format)
 }
 

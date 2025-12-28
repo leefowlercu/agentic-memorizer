@@ -132,23 +132,23 @@ func runReadFiles(cmd *cobra.Command, args []string) error {
 
 	exporter := graph.NewExporter(graphManager, logger)
 
-	// Export graph-native format
+	// Export file index format
 	// Verbose mode includes related files per entry and graph insights
-	graphIdx, err := exporter.ToGraphIndex(ctx, cfg.MemoryRoot, verbose)
+	fileIdx, err := exporter.ToFileIndex(ctx, cfg.MemoryRoot, verbose)
 	if err != nil {
-		return fmt.Errorf("failed to export graph; %w", err)
+		return fmt.Errorf("failed to export file index; %w", err)
 	}
 
 	// If integration specified, wrap output in integration-specific envelope
 	if integrationName != "" {
-		return outputFilesForIntegration(graphIdx, integrationName, formatStr)
+		return outputFilesForIntegration(fileIdx, integrationName, formatStr)
 	}
 
-	return outputGraph(graphIdx, formatStr)
+	return outputFiles(fileIdx, formatStr)
 }
 
 func handleEmptyFilesIndex(cmd *cobra.Command, cfg *config.Config) error {
-	emptyIndex := &types.GraphIndex{
+	emptyIndex := &types.FileIndex{
 		MemoryRoot: cfg.MemoryRoot,
 		Files:      []types.FileEntry{},
 		Stats:      types.IndexStats{},
@@ -179,11 +179,11 @@ For now, showing empty index.
 `
 
 	fmt.Print(warningMessage)
-	return outputGraph(emptyIndex, formatStr)
+	return outputFiles(emptyIndex, formatStr)
 }
 
 // outputFilesForIntegration wraps output in integration-specific envelope
-func outputFilesForIntegration(idx *types.GraphIndex, integrationName, formatStr string) error {
+func outputFilesForIntegration(idx *types.FileIndex, integrationName, formatStr string) error {
 	registry := integrations.GlobalRegistry()
 	integration, err := registry.Get(integrationName)
 	if err != nil {
@@ -204,19 +204,19 @@ func outputFilesForIntegration(idx *types.GraphIndex, integrationName, formatStr
 	return nil
 }
 
-// outputGraph outputs the GraphIndex format using the format package
-func outputGraph(idx *types.GraphIndex, formatStr string) error {
+// outputFiles outputs the FileIndex format using the format package
+func outputFiles(idx *types.FileIndex, formatStr string) error {
 	// Get the appropriate formatter
 	formatter, err := format.GetFormatter(formatStr)
 	if err != nil {
 		return fmt.Errorf("failed to get formatter; %w", err)
 	}
 
-	// Wrap the GraphIndex in GraphContent
-	graphContent := format.NewGraphContent(idx)
+	// Wrap the FileIndex in FilesContent
+	filesContent := format.NewFilesContent(idx)
 
 	// Format and output
-	content, err := formatter.Format(graphContent)
+	content, err := formatter.Format(filesContent)
 	if err != nil {
 		return fmt.Errorf("failed to format output; %w", err)
 	}

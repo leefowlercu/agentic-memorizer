@@ -6,7 +6,7 @@
 //     Used by metadata extraction, semantic analysis, worker pool.
 //     NOT exposed in public output formats.
 //
-//   - Graph-Native Types (GraphIndex, FileEntry):
+//   - File Index Types (FileIndex, FileEntry):
 //     Public output format consumed by integrations and MCP clients.
 //     Flattened structure optimized for knowledge graph representation.
 //
@@ -19,7 +19,7 @@ import "time"
 // Internal Processing Types
 // These types are used internally by the processing pipeline (metadata extraction,
 // semantic analysis, worker pool, graph storage). They are NOT part of the public
-// output format. External consumers should use GraphIndex and FileEntry.
+// output format. External consumers should use FileIndex and FileEntry.
 // ============================================================================
 
 // FileInfo represents basic file metadata (internal use)
@@ -138,14 +138,14 @@ type CachedAnalysis struct {
 }
 
 // ============================================================================
-// Graph-Native Types (Phase 3)
-// These types represent the new graph-native index structure with flattened
-// file entries and knowledge graph relationships.
+// File Index Types
+// These types represent the file index structure with flattened file entries
+// and knowledge graph relationships.
 // ============================================================================
 
-// GraphIndex represents the graph-native memory index
-// This is the new format that replaces the nested Index structure
-type GraphIndex struct {
+// FileIndex represents the file memory index
+// This is the primary format for file index output
+type FileIndex struct {
 	// Metadata
 	Generated  time.Time  `json:"generated"`
 	MemoryRoot string     `json:"memory_root"`

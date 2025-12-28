@@ -18,7 +18,7 @@ func TestBuilderType_String(t *testing.T) {
 		{"progress", BuilderTypeProgress, "progress"},
 		{"status", BuilderTypeStatus, "status"},
 		{"error", BuilderTypeError, "error"},
-		{"graph", BuilderTypeGraph, "graph"},
+		{"files", BuilderTypeFiles, "files"},
 	}
 
 	for _, tt := range tests {

@@ -12,7 +12,7 @@ import (
 
 func TestFormatSessionStartJSON_NoHTMLEscaping(t *testing.T) {
 	// Create a simple graph index with XML-like content in fields
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		MemoryRoot: "/test/path",
 		Stats: types.IndexStats{
 			TotalFiles:    1,

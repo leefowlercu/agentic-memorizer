@@ -420,7 +420,7 @@ func TestCodexCLIMCPAdapter_GetCommand(t *testing.T) {
 
 func TestCodexCLIMCPAdapter_FormatOutput_ReturnsError(t *testing.T) {
 	adapter := NewCodexCLIMCPAdapter()
-	index := &types.GraphIndex{}
+	index := &types.FileIndex{}
 
 	_, err := adapter.FormatOutput(index, integrations.FormatXML)
 	if err == nil {

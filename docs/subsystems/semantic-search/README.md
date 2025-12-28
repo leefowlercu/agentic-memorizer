@@ -124,7 +124,7 @@ When graph-based search fails, the subsystem automatically falls back to in-memo
 - **Weighted Scoring**: Different fields contribute different score weights (filename highest at 3.0)
 - **Proportional Scoring**: Partial matches receive fractional credit based on token match ratio
 - **Stateless Operation**: No caching, deterministic results for same query
-- **Read-Only**: Accesses GraphIndex.Files slice without locking
+- **Read-Only**: Accesses FileIndex.Files slice without locking
 - **Case-Insensitive**: All comparisons lowercased for user convenience
 
 **When Fallback Occurs:**
@@ -298,7 +298,7 @@ The Searcher component (`internal/search/semantic.go`) provides token-based sear
 **Searcher Structure:**
 ```go
 type Searcher struct {
-    index *types.GraphIndex
+    index *types.FileIndex
 }
 ```
 
@@ -353,7 +353,7 @@ type SearchResult struct {
   7. document_type (0.5)
 
 **Data Structure:**
-- Uses `types.GraphIndex` with flattened `types.FileEntry`
+- Uses `types.FileIndex` with flattened `types.FileEntry`
 - Semantic fields (Summary, Tags, Topics, DocumentType) are top-level properties, not nested
 - Empty string checks for Summary and DocumentType
 - Empty slice iteration for Tags and Topics (contributes 0 score if empty)
@@ -542,7 +542,7 @@ For detailed implementation information, see:
 
 **Integration:**
 - MCP tools: `internal/mcp/server.go` (handleSearchFiles, handleGetRelatedFiles, handleSearchEntities)
-- Type definitions: `pkg/types/types.go` (GraphIndex, FileEntry, SearchResult)
+- Type definitions: `pkg/types/types.go` (FileIndex, FileEntry, SearchResult)
 
 **Related Subsystems:**
 - Graph subsystem: `docs/subsystems/falkordb-graph/README.md`

@@ -37,9 +37,9 @@ func (f *JSONFormatter) Format(b format.Buildable) (string, error) {
 		data = f.statusToJSON(v)
 	case *format.Error:
 		data = f.errorToJSON(v)
-	case *format.GraphContent:
-		// GraphContent marshals the GraphIndex directly
-		return f.formatGraph(v)
+	case *format.FilesContent:
+		// FilesContent marshals the FileIndex directly
+		return f.formatFiles(v)
 	case *format.FactsContent:
 		// FactsContent marshals the FactsIndex directly
 		return f.formatFacts(v)
@@ -256,10 +256,10 @@ func (f *JSONFormatter) errorToJSON(e *format.Error) *jsonError {
 	}
 }
 
-// formatGraph renders GraphIndex as pretty-printed JSON (backward compatibility)
-func (f *JSONFormatter) formatGraph(gc *format.GraphContent) (string, error) {
-	// Marshal the GraphIndex directly with pretty-printing and no HTML escaping
-	return f.marshal(gc.Index)
+// formatFiles renders FileIndex as pretty-printed JSON (backward compatibility)
+func (f *JSONFormatter) formatFiles(fc *format.FilesContent) (string, error) {
+	// Marshal the FileIndex directly with pretty-printing and no HTML escaping
+	return f.marshal(fc.Index)
 }
 
 // formatFacts renders FactsIndex as pretty-printed JSON

@@ -27,12 +27,12 @@ func NewExporter(manager *Manager, logger *slog.Logger) *Exporter {
 	}
 }
 
-// ToGraphIndex exports the graph to a types.GraphIndex (new flattened format)
-// This is the new graph-native format with FileEntry instead of nested IndexEntry
+// ToFileIndex exports the graph to a types.FileIndex (flattened format)
+// This is the primary format with FileEntry instead of nested IndexEntry
 // When verbose is true, includes related files per entry and graph insights
-func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string, verbose ...bool) (*types.GraphIndex, error) {
+func (e *Exporter) ToFileIndex(ctx context.Context, memoryRoot string, verbose ...bool) (*types.FileIndex, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
-	e.logger.Debug("exporting graph to graph-native format", "verbose", isVerbose)
+	e.logger.Debug("exporting graph to file index format", "verbose", isVerbose)
 
 	if !e.manager.IsConnected() {
 		return nil, fmt.Errorf("graph manager not connected")
@@ -91,8 +91,8 @@ func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string, verbose 
 	// Get knowledge summary (top tags, topics, entities)
 	knowledge := e.getKnowledgeSummary(ctx, 10) // Top 10 of each
 
-	// Build the graph index
-	index := &types.GraphIndex{
+	// Build the file index
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: memoryRoot,
 		Files:      files,
@@ -129,7 +129,7 @@ func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string, verbose 
 		}
 	}
 
-	e.logger.Debug("exported graph to graph-native format",
+	e.logger.Debug("exported graph to file index format",
 		"files", len(files),
 		"total_size", totalSize,
 		"has_knowledge", knowledge != nil,

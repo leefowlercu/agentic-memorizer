@@ -475,7 +475,7 @@ The MCP server integrates with the index subsystem through daemon API access:
 - No write operations or locking required
 
 **Index Schema Compatibility**
-- Uses `types.GraphIndex` and `types.FileEntry` structures (graph-native format)
+- Uses `types.FileIndex` and `types.FileEntry` structures (graph-native format)
 - Shares type definitions with daemon and integration subsystems
 - No MCP-specific modifications to index format
 - Compatible with all existing index generation logic
@@ -495,7 +495,7 @@ The MCP server uses the unified format package for resource formatting, consiste
 
 **Format Package Architecture**
 The server delegates resource formatting to the format package (`internal/format/`) which provides a builder-formatter pattern:
-- **GraphContent Builder** - Wraps GraphIndex for rendering (`format.NewGraphContent(index)`)
+- **FilesContent Builder** - Wraps FileIndex for rendering (`format.NewFilesContent(index)`)
 - **Formatter Registry** - Provides formatter instances (`format.GetFormatter(name)`)
 - **Multiple Formatters** - XML, Markdown, JSON, YAML, Text implementations
 
@@ -503,17 +503,17 @@ The server delegates resource formatting to the format package (`internal/format
 ```go
 // XML resource formatting
 formatter, err := format.GetFormatter("xml")
-graphContent := format.NewGraphContent(s.index)
+graphContent := format.NewFilesContent(s.index)
 content, err := formatter.Format(graphContent)
 
 // Markdown resource formatting
 formatter, err := format.GetFormatter("markdown")
-graphContent := format.NewGraphContent(s.index)
+graphContent := format.NewFilesContent(s.index)
 content, err := formatter.Format(graphContent)
 
 // JSON resource formatting
 formatter, err := format.GetFormatter("json")
-graphContent := format.NewGraphContent(s.index)
+graphContent := format.NewFilesContent(s.index)
 content, err := formatter.Format(graphContent)
 ```
 
@@ -521,7 +521,7 @@ content, err := formatter.Format(graphContent)
 - Zero code duplication across integration methods (hooks, MCP, read command)
 - Consistent formatting through unified format package
 - Automatic inheritance of format improvements and bug fixes
-- Shared GraphContent builder pattern across all subsystems
+- Shared FilesContent builder pattern across all subsystems
 
 **Resource URIs and Routing** (`server.go:309-322`)
 - `memorizer://index` → XML formatter (application/xml MIME type)

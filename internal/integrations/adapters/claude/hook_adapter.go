@@ -271,8 +271,8 @@ func (a *ClaudeCodeAdapter) GetCommand(binaryPath string, format integrations.Ou
 	return a.getFilesCommand(binaryPath, format)
 }
 
-// FormatOutput formats the graph index for Claude Code (SessionStart JSON wrapper)
-func (a *ClaudeCodeAdapter) FormatOutput(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
+// FormatOutput formats the file index for Claude Code (SessionStart JSON wrapper)
+func (a *ClaudeCodeAdapter) FormatOutput(index *types.FileIndex, format integrations.OutputFormat) (string, error) {
 	return formatSessionStartJSON(index, format)
 }
 

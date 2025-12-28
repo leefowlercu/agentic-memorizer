@@ -36,9 +36,9 @@ func (f *MarkdownFormatter) Format(b format.Buildable) (string, error) {
 		return f.formatStatus(v), nil
 	case *format.Error:
 		return f.formatError(v), nil
-	case *format.GraphContent:
-		// GraphContent uses specialized markdown formatting
-		return f.formatGraph(v)
+	case *format.FilesContent:
+		// FilesContent uses specialized markdown formatting
+		return f.formatFiles(v)
 	case *format.FactsContent:
 		// FactsContent uses specialized markdown formatting
 		return f.formatFacts(v)
@@ -300,9 +300,9 @@ func (f *MarkdownFormatter) formatError(e *format.Error) string {
 	return strings.TrimSuffix(sb.String(), "\n")
 }
 
-// formatGraph renders GraphIndex as Markdown (backward compatibility with legacy output)
-func (f *MarkdownFormatter) formatGraph(gc *format.GraphContent) (string, error) {
-	index := gc.Index
+// formatFiles renders FileIndex as Markdown (backward compatibility with legacy output)
+func (f *MarkdownFormatter) formatFiles(fc *format.FilesContent) (string, error) {
+	index := fc.Index
 	var sb strings.Builder
 
 	sb.WriteString("# Claude Code Agentic Memory Index\n")

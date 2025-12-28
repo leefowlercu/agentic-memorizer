@@ -223,7 +223,7 @@ func TestGeminiCLIHookAdapter_Detect(t *testing.T) {
 func TestGeminiCLIHookAdapter_FormatOutput(t *testing.T) {
 	adapter := NewGeminiCLIHookAdapter()
 
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		MemoryRoot: "/test/path",
 		Stats: types.IndexStats{
 			TotalFiles:    1,

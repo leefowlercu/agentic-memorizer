@@ -87,7 +87,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	daemonURL := cfg.MCP.GetDaemonURL()
 
 	// Try to fetch initial index from daemon if available
-	var initialIndex *types.GraphIndex
+	var initialIndex *types.FileIndex
 	if daemonURL != "" {
 		logger.Info("fetching initial index from daemon", "url", daemonURL)
 		idx, err := fetchIndexFromDaemon(daemonURL, logger)
@@ -101,7 +101,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Create empty index if we couldn't fetch from daemon
 	if initialIndex == nil {
-		initialIndex = &types.GraphIndex{
+		initialIndex = &types.FileIndex{
 			Files: []types.FileEntry{},
 			Stats: types.IndexStats{},
 		}
@@ -149,7 +149,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 }
 
 // fetchIndexFromDaemon fetches the current index from the daemon API
-func fetchIndexFromDaemon(daemonURL string, logger *slog.Logger) (*types.GraphIndex, error) {
+func fetchIndexFromDaemon(daemonURL string, logger *slog.Logger) (*types.FileIndex, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	resp, err := client.Get(daemonURL + "/api/v1/index")
@@ -167,7 +167,7 @@ func fetchIndexFromDaemon(daemonURL string, logger *slog.Logger) (*types.GraphIn
 		return nil, fmt.Errorf("failed to read response; %w", err)
 	}
 
-	var idx types.GraphIndex
+	var idx types.FileIndex
 	if err := json.Unmarshal(body, &idx); err != nil {
 		return nil, fmt.Errorf("failed to parse index; %w", err)
 	}

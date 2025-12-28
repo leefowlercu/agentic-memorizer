@@ -44,12 +44,12 @@ func TestNewExporter(t *testing.T) {
 	}
 }
 
-func TestExporter_ToGraphIndex_NotConnected(t *testing.T) {
+func TestExporter_ToFileIndex_NotConnected(t *testing.T) {
 	manager := NewManager(DefaultManagerConfig(), nil)
 	exporter := NewExporter(manager, nil)
 	ctx := context.Background()
 
-	_, err := exporter.ToGraphIndex(ctx, "/test/memory")
+	_, err := exporter.ToFileIndex(ctx, "/test/memory")
 	if err == nil {
 		t.Error("expected error when exporting from unconnected manager")
 	}

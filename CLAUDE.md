@@ -193,7 +193,7 @@ The graph subsystem (`internal/graph/`) provides persistent storage and relation
 - **Manager** (`manager.go`) - Connection pooling, health checks, graceful degradation
 - **Queries** (`queries.go`) - Cypher query execution for CRUD operations
 - **Schema** (`schema.go`) - Node/edge type definitions and constraint management
-- **Exporter** (`exporter.go`) - Converts graph storage to GraphIndex output format
+- **Exporter** (`exporter.go`) - Converts graph storage to FileIndex output format
 
 **Graph Schema:**
 
@@ -413,7 +413,7 @@ cd e2e && make test-cli       # Specific test suite
 - Semantic Providers: `internal/semantic/providers/{claude,openai,gemini}/` - Provider implementations
 - Graph: `internal/graph/` - FalkorDB client, queries, schema, exporter, facts
 - Daemon API: `internal/daemon/api/` - HTTP server, SSE hub, handlers
-- Types: `pkg/types/` - Core type definitions (GraphIndex, FileEntry, Fact, FactsIndex)
+- Types: `pkg/types/` - Core type definitions (FileIndex, FileEntry, Fact, FactsIndex)
 
 **Documentation:**
 - Subsystems: `docs/subsystems/` - Technical documentation
@@ -538,7 +538,7 @@ All CLI commands use `internal/format` package for consistent, structured output
 - **List** - Ordered/unordered lists with nesting
 - **Progress** - Progress bars and percentages
 - **Error** - Detailed error messages with suggestions
-- **GraphContent** - Knowledge graph output
+- **FilesContent** - File index output
 
 **Usage Pattern:**
 ```go

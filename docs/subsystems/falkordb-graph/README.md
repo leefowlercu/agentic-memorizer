@@ -254,16 +254,16 @@ type Exporter struct {
 }
 
 // Primary export methods
-func (e *Exporter) ToGraphIndex(ctx context.Context, memoryRoot string, verbose ...bool) (*types.GraphIndex, error)
+func (e *Exporter) ToFileIndex(ctx context.Context, memoryRoot string, verbose ...bool) (*types.FileIndex, error)
 func (e *Exporter) ToSummary(ctx context.Context, memoryRoot string, recentDays int, topN int) (*ExportSummary, error)
 func (e *Exporter) GetFileEntry(ctx context.Context, path string, relatedLimit int) (*types.FileEntry, error)
 ```
 
-**ToGraphIndex Export Process:**
+**ToFileIndex Export Process:**
 1. Query all File nodes from graph
 2. For each file, retrieve connections (tags, topics, entities)
 3. Build FileEntry from file properties and connections
-4. Assemble GraphIndex with metadata and knowledge summary
+4. Assemble FileIndex with metadata and knowledge summary
 5. In verbose mode: include related files per entry and graph insights (recommendations, clusters, gaps)
 
 **ToSummary Export:**
@@ -291,7 +291,7 @@ The HTTP API exposes graph queries over HTTP for MCP and other clients.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health status with graph metrics |
-| `/api/v1/index` | GET | Export full GraphIndex from graph |
+| `/api/v1/index` | GET | Export full FileIndex from graph |
 | `/api/v1/search` | POST | Semantic search across tags, topics, summary |
 | `/api/v1/files/{path}` | GET | File metadata with graph connections |
 | `/api/v1/files/recent` | GET | Recently modified files within time window |

@@ -17,7 +17,7 @@ import (
 // TestIntegration_FullResourcesFlow tests the complete initialization and resources flow
 func TestIntegration_FullResourcesFlow(t *testing.T) {
 	// Create a test index with sample data
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -227,7 +227,7 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 			// Verify content contains expected data
 			if format.name == "JSON" {
 				// Parse JSON to verify structure
-				var parsedIndex types.GraphIndex
+				var parsedIndex types.FileIndex
 				if err := json.Unmarshal([]byte(content.Text), &parsedIndex); err != nil {
 					t.Errorf("Invalid JSON content: %v", err)
 				}
@@ -244,7 +244,7 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 	now := time.Now()
 
 	// Create a test index with sample data for tools
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  now,
 		MemoryRoot: "/test/memory",
 		Files: []types.FileEntry{

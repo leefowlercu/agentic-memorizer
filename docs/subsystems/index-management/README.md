@@ -12,7 +12,7 @@
 3. [Key Components](#key-components)
    - [Graph Manager](#graph-manager)
    - [Graph Exporter](#graph-exporter)
-   - [GraphIndex Structure](#graphindex-structure)
+   - [FileIndex Structure](#graphindex-structure)
    - [Type Definitions](#type-definitions)
 4. [Integration Points](#integration-points)
    - [Daemon Subsystem](#daemon-subsystem)
@@ -37,12 +37,12 @@ The Index Management subsystem provides several critical capabilities:
 - **Graph-Native Storage**: All file metadata, semantic analysis, and relationships are stored in FalkorDB (Redis-compatible graph database)
 - **Real-Time Updates**: Changes are persisted immediately to the graph database without intermediate file operations
 - **Rich Queries**: Supports semantic search across tags, topics, entities, and relationships via Cypher queries
-- **On-Demand Export**: Converts graph data to GraphIndex format when needed by consumers (read command, HTTP API)
+- **On-Demand Export**: Converts graph data to FileIndex format when needed by consumers (read command, HTTP API)
 - **Graph Analytics**: Provides recommendations, cluster detection, gap analysis, and temporal tracking
 
 ### Role in the System
 
-The Index Management subsystem acts as the persistence and query layer for the memory index. The Graph Manager handles all CRUD operations on the index, while the Graph Exporter converts graph data to the GraphIndex format when needed. The daemon streams file processing results directly to the graph, and consumers query the graph to retrieve index data in various formats.
+The Index Management subsystem acts as the persistence and query layer for the memory index. The Graph Manager handles all CRUD operations on the index, while the Graph Exporter converts graph data to the FileIndex format when needed. The daemon streams file processing results directly to the graph, and consumers query the graph to retrieve index data in various formats.
 
 ## Design Principles
 
@@ -70,14 +70,14 @@ This real-time approach ensures the index is always current and eliminates the n
 
 ### Exporter Pattern
 
-The GraphIndex structure (the public output format) is not stored directly. Instead, the Graph Exporter (`internal/graph/export.go`) converts graph data to GraphIndex format on-demand when consumers need it.
+The FileIndex structure (the public output format) is not stored directly. Instead, the Graph Exporter (`internal/graph/export.go`) converts graph data to FileIndex format on-demand when consumers need it.
 
 This pattern provides several benefits:
 - **Always Fresh**: Index output is always current since it's generated from the live graph
 - **Flexible Output**: Different export modes (normal vs verbose) can be generated from the same graph data
 - **Efficient Storage**: The graph stores only the core relationships; derived data (like related files) is computed on-demand
 
-The read command and HTTP API both use the Graph Exporter's `ToGraphIndex()` method to produce GraphIndex output.
+The read command and HTTP API both use the Graph Exporter's `ToFileIndex()` method to produce FileIndex output.
 
 ### Thread Safety
 
@@ -90,7 +90,7 @@ Read operations acquire read locks, allowing multiple concurrent readers. Write 
 The Index Management subsystem is cleanly separated into distinct responsibilities:
 
 - **Graph Manager** (`internal/graph/manager.go`) - CRUD operations, connection management, query orchestration
-- **Graph Exporter** (`internal/graph/export.go`) - Converting graph data to GraphIndex format
+- **Graph Exporter** (`internal/graph/export.go`) - Converting graph data to FileIndex format
 - **Nodes** (`internal/graph/nodes.go`) - Low-level node CRUD operations
 - **Edges** (`internal/graph/edges.go`) - Low-level relationship management
 - **Queries** (`internal/graph/queries.go`) - Complex read-only queries (search, related files, recent files)
@@ -157,13 +157,13 @@ The daemon uses these types to track processing outcomes and update health metri
 
 ### Graph Exporter
 
-The Exporter type (`internal/graph/export.go`) handles converting graph data to the GraphIndex output format.
+The Exporter type (`internal/graph/export.go`) handles converting graph data to the FileIndex output format.
 
 **Constructor:**
 - `NewExporter(manager *Manager, logger *slog.Logger) *Exporter` - Creates a new exporter
 
 **Export Methods:**
-- `ToGraphIndex(ctx, memoryRoot string, verbose ...bool) (*GraphIndex, error)` - Exports graph to GraphIndex format
+- `ToFileIndex(ctx, memoryRoot string, verbose ...bool) (*FileIndex, error)` - Exports graph to FileIndex format
   - Normal mode: Returns files with metadata, semantic analysis, and knowledge summary
   - Verbose mode: Includes related files per entry and graph insights (recommendations, clusters, gaps)
 - `ToSummary(ctx, memoryRoot string, recentDays, topN int) (*ExportSummary, error)` - Exports condensed summary for context windows
@@ -171,12 +171,12 @@ The Exporter type (`internal/graph/export.go`) handles converting graph data to 
 
 The exporter queries the graph via the Graph Manager's GetAll method, retrieves statistics, computes coverage metrics, and converts internal IndexEntry structures to flattened FileEntry structures for output.
 
-### GraphIndex Structure
+### FileIndex Structure
 
-The GraphIndex type (`pkg/types/types.go`) represents the public output format consumed by integrations and the read command. This is a flattened, graph-native structure optimized for consumption.
+The FileIndex type (`pkg/types/types.go`) represents the public output format consumed by integrations and the read command. This is a flattened, graph-native structure optimized for consumption.
 
 ```go
-type GraphIndex struct {
+type FileIndex struct {
     Generated  time.Time        // When index was exported
     MemoryRoot string           // Memory directory root
     Files      []FileEntry      // Flattened file list
@@ -247,7 +247,7 @@ The Index Management subsystem relies on several type definitions:
 - `IndexEntry` - Combines metadata and semantic analysis (internal format)
 
 **Graph-Native Types** (public output format):
-- `GraphIndex` - The graph-native index structure
+- `FileIndex` - The graph-native index structure
 - `FileEntry` - Flattened file representation optimized for output
 - `KnowledgeSummary` - Overview of knowledge landscape (top tags, topics, entities)
 - `IndexInsights` - Graph analytics results (recommendations, clusters, gaps)
@@ -294,13 +294,13 @@ The daemon never reads the index for display purposes—it only writes to the gr
 
 ### Read Command
 
-The read command (`cmd/read/read.go`) is a consumer of the graph data. It connects to FalkorDB, exports the graph to GraphIndex format, and outputs it in the requested format (XML, Markdown, or JSON).
+The read command (`cmd/read/read.go`) is a consumer of the graph data. It connects to FalkorDB, exports the graph to FileIndex format, and outputs it in the requested format (XML, Markdown, or JSON).
 
 **Workflow:**
 1. Initialize configuration
 2. Connect to FalkorDB via `graph.NewManager()` and `Initialize()`
 3. Create Graph Exporter via `graph.NewExporter()`
-4. Export graph via `exporter.ToGraphIndex(ctx, memoryRoot, verbose)`
+4. Export graph via `exporter.ToFileIndex(ctx, memoryRoot, verbose)`
 5. Format output via output processors (XML, Markdown, JSON)
 6. Optionally wrap in integration-specific envelope
 
@@ -311,7 +311,7 @@ The read command does not depend on the daemon running—it queries FalkorDB dir
 The HTTP API (`internal/daemon/api/server.go`) provides programmatic access to the index via REST endpoints:
 
 - `GET /health` - Daemon health with graph metrics
-- `GET /api/v1/index` - Full index export as GraphIndex (supports `?verbose=true`)
+- `GET /api/v1/index` - Full index export as FileIndex (supports `?verbose=true`)
 - `POST /api/v1/search` - Semantic search across the graph
 - `GET /api/v1/files/{path}` - Single file metadata with related files
 - `GET /api/v1/files/recent` - Recently modified files
@@ -320,7 +320,7 @@ The HTTP API (`internal/daemon/api/server.go`) provides programmatic access to t
 - `POST /api/v1/rebuild` - Trigger full rebuild
 - `GET /sse` - Server-Sent Events for real-time updates
 
-All endpoints query the Graph Manager and use the Graph Exporter when GraphIndex output is needed.
+All endpoints query the Graph Manager and use the Graph Exporter when FileIndex output is needed.
 
 ### Type System
 
@@ -328,7 +328,7 @@ The Index Management subsystem depends on the `pkg/types` package for core data 
 
 The type system defines:
 - **Internal types** (IndexEntry, FileMetadata, SemanticAnalysis) used within the processing pipeline
-- **Graph-native types** (GraphIndex, FileEntry) used for output
+- **Graph-native types** (FileIndex, FileEntry) used for output
 - **Statistics types** (IndexStats) used for metrics
 
 The separation allows the type system to evolve independently. New metadata fields or semantic properties can be added to `pkg/types` without modifying the Graph Manager, as long as the core structure remains compatible.
@@ -423,17 +423,17 @@ This design ensures the daemon always has a valid graph connection and eliminate
 
 **Entity**: A named entity extracted from file content (person, organization, technology, concept, project) stored as Entity nodes in the graph
 
-**Exporter Pattern**: Design pattern where the public output format (GraphIndex) is generated on-demand from the graph database rather than being stored directly
+**Exporter Pattern**: Design pattern where the public output format (FileIndex) is generated on-demand from the graph database rather than being stored directly
 
 **FalkorDB**: Redis-compatible graph database that stores the index as nodes and relationships
 
-**FileEntry**: The flattened file representation in the GraphIndex output format, optimized for consumption by integrations
+**FileEntry**: The flattened file representation in the FileIndex output format, optimized for consumption by integrations
 
 **Graph Manager**: The component responsible for all CRUD operations, queries, and analytics on the graph database (`internal/graph/manager.go`)
 
 **Graph-Native Storage**: Architecture where all index data is stored in a graph database with nodes and relationships, enabling rich semantic queries
 
-**GraphIndex**: The public output format for the memory index, containing files, statistics, knowledge summary, and optional insights
+**FileIndex**: The public output format for the memory index, containing files, statistics, knowledge summary, and optional insights
 
 **IndexEntry**: Internal processing type that combines FileMetadata and SemanticAnalysis, used within the processing pipeline before storage in the graph
 
@@ -453,4 +453,4 @@ This design ensures the daemon always has a valid graph connection and eliminate
 
 **UpdateResult**: Result structure indicating whether UpdateSingle added a new file or updated an existing one
 
-**Verbose Mode**: Export mode that includes related files per entry and graph insights (recommendations, clusters, gaps) in the GraphIndex output
+**Verbose Mode**: Export mode that includes related files per entry and graph insights (recommendations, clusters, gaps) in the FileIndex output

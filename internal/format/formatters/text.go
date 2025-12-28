@@ -38,8 +38,8 @@ func (f *TextFormatter) Format(b format.Buildable) (string, error) {
 		return f.formatStatus(v), nil
 	case *format.Error:
 		return f.formatError(v), nil
-	case *format.GraphContent:
-		return f.formatGraph(v), nil
+	case *format.FilesContent:
+		return f.formatFiles(v), nil
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -431,9 +431,9 @@ func (f *TextFormatter) formatError(e *format.Error) string {
 	return strings.TrimSuffix(sb.String(), "\n")
 }
 
-// formatGraph renders a GraphIndex as plain text
-func (f *TextFormatter) formatGraph(gc *format.GraphContent) string {
-	index := gc.Index
+// formatFiles renders a FileIndex as plain text
+func (f *TextFormatter) formatFiles(fc *format.FilesContent) string {
+	index := fc.Index
 	var sb strings.Builder
 
 	// Header

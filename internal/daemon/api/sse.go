@@ -15,7 +15,7 @@ import (
 
 // IndexProvider is an interface for getting the current index
 type IndexProvider interface {
-	GetIndex(ctx context.Context) (*types.GraphIndex, error)
+	GetIndex(ctx context.Context) (*types.FileIndex, error)
 }
 
 // SSEClient represents a connected SSE client
@@ -99,7 +99,7 @@ func (h *SSEHub) BroadcastIndexUpdate() {
 	}
 
 	// Get index data if provider is available
-	var index *types.GraphIndex
+	var index *types.FileIndex
 	if h.indexProvider != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -219,7 +219,7 @@ func (h *SSEHub) HandleSSE(w http.ResponseWriter, r *http.Request) {
 // sendIndexSnapshot sends the initial index snapshot to a newly connected client
 func (h *SSEHub) sendIndexSnapshot(w http.ResponseWriter, flusher http.Flusher, clientID string, logger *slog.Logger) {
 	// Get index data if provider is available
-	var index *types.GraphIndex
+	var index *types.FileIndex
 	if h.indexProvider != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

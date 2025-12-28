@@ -17,9 +17,9 @@ import (
 
 // SSEEvent represents the structure of SSE events from the daemon
 type SSEEvent struct {
-	Type      string            `json:"type"`
-	Timestamp string            `json:"timestamp"`
-	Data      *types.GraphIndex `json:"data,omitempty"`
+	Type      string           `json:"type"`
+	Timestamp string           `json:"timestamp"`
+	Data      *types.FileIndex `json:"data,omitempty"`
 }
 
 // SSEClient connects to daemon's SSE notification stream

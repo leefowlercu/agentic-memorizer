@@ -24,11 +24,11 @@ type SearchResult struct {
 
 // Searcher performs semantic search over an index
 type Searcher struct {
-	index *types.GraphIndex
+	index *types.FileIndex
 }
 
 // NewSearcher creates a new searcher for the given index
-func NewSearcher(index *types.GraphIndex) *Searcher {
+func NewSearcher(index *types.FileIndex) *Searcher {
 	return &Searcher{index: index}
 }
 

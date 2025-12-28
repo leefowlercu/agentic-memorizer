@@ -24,8 +24,8 @@ type HookSpecificOutput struct {
 	AdditionalContext string `json:"additionalContext,omitempty"`
 }
 
-// formatSessionStartJSON wraps the formatted graph index in a Claude Code SessionStart JSON envelope
-func formatSessionStartJSON(index *types.GraphIndex, outputFormat integrations.OutputFormat) (string, error) {
+// formatSessionStartJSON wraps the formatted file index in a Claude Code SessionStart JSON envelope
+func formatSessionStartJSON(index *types.FileIndex, outputFormat integrations.OutputFormat) (string, error) {
 	// Step 1: Get the appropriate formatter
 	var formatStr string
 	switch outputFormat {
@@ -44,9 +44,9 @@ func formatSessionStartJSON(index *types.GraphIndex, outputFormat integrations.O
 		return "", fmt.Errorf("failed to get formatter; %w", err)
 	}
 
-	// Step 2: Format the graph content
-	graphContent := format.NewGraphContent(index)
-	content, err := formatter.Format(graphContent)
+	// Step 2: Format the file index content
+	filesContent := format.NewFilesContent(index)
+	content, err := formatter.Format(filesContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to format index; %w", err)
 	}
@@ -88,7 +88,7 @@ func marshalIndentNoEscape(v any, prefix, indent string) ([]byte, error) {
 }
 
 // generateSystemMessage creates a concise system message for the SessionStart hook
-func generateSystemMessage(index *types.GraphIndex) string {
+func generateSystemMessage(index *types.FileIndex) string {
 	categories := groupByCategory(index.Files)
 	categoryCount := len(categories)
 

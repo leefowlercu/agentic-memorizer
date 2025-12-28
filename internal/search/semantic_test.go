@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewSearcher(t *testing.T) {
-	index := &types.GraphIndex{}
+	index := &types.FileIndex{}
 	searcher := NewSearcher(index)
 
 	if searcher == nil {
@@ -20,7 +20,7 @@ func TestNewSearcher(t *testing.T) {
 }
 
 func TestSearch_EmptyQuery(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path: "/test/file.txt",
@@ -38,7 +38,7 @@ func TestSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestSearch_FilenameMatch(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path: "/test/terraform-guide.md",
@@ -68,7 +68,7 @@ func TestSearch_FilenameMatch(t *testing.T) {
 }
 
 func TestSearch_SummaryMatch(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:    "/test/doc.md",
@@ -95,7 +95,7 @@ func TestSearch_SummaryMatch(t *testing.T) {
 }
 
 func TestSearch_TagMatch(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path: "/test/doc.md",
@@ -122,7 +122,7 @@ func TestSearch_TagMatch(t *testing.T) {
 }
 
 func TestSearch_TopicMatch(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:   "/test/doc.md",
@@ -149,7 +149,7 @@ func TestSearch_TopicMatch(t *testing.T) {
 }
 
 func TestSearch_DocumentTypeMatch(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:         "/test/doc.md",
@@ -176,7 +176,7 @@ func TestSearch_DocumentTypeMatch(t *testing.T) {
 }
 
 func TestSearch_MultipleMatches(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:    "/test/terraform-guide.md",
@@ -208,7 +208,7 @@ func TestSearch_MultipleMatches(t *testing.T) {
 }
 
 func TestSearch_Scoring(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:    "/test/terraform-config.tf",
@@ -248,7 +248,7 @@ func TestSearch_Scoring(t *testing.T) {
 }
 
 func TestSearch_CategoryFilter(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:     "/test/terraform-guide.md",
@@ -281,7 +281,7 @@ func TestSearch_CategoryFilter(t *testing.T) {
 }
 
 func TestSearch_MaxResults(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{},
 	}
 
@@ -305,7 +305,7 @@ func TestSearch_MaxResults(t *testing.T) {
 }
 
 func TestSearch_CaseInsensitive(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:    "/test/Terraform-Guide.md",
@@ -338,7 +338,7 @@ func TestSearch_CaseInsensitive(t *testing.T) {
 }
 
 func TestSearch_NoSemanticAnalysis(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:    "/test/terraform.config",

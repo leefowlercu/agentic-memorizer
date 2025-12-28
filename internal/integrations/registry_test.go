@@ -42,7 +42,7 @@ func (m *mockIntegration) Setup(binaryPath string) error                        
 func (m *mockIntegration) Update(binaryPath string) error                           { return nil }
 func (m *mockIntegration) Remove() error                                            { m.enabled = false; return nil }
 func (m *mockIntegration) GetCommand(binaryPath string, format OutputFormat) string { return "" }
-func (m *mockIntegration) FormatOutput(*types.GraphIndex, OutputFormat) (string, error) {
+func (m *mockIntegration) FormatOutput(*types.FileIndex, OutputFormat) (string, error) {
 	return "", nil
 }
 func (m *mockIntegration) FormatFactsOutput(*types.FactsIndex, OutputFormat) (string, error) {

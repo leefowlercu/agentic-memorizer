@@ -36,9 +36,9 @@ func (f *YAMLFormatter) Format(b format.Buildable) (string, error) {
 		data = f.statusToYAML(v)
 	case *format.Error:
 		data = f.errorToYAML(v)
-	case *format.GraphContent:
-		// GraphContent marshals the GraphIndex directly
-		return f.formatGraph(v)
+	case *format.FilesContent:
+		// FilesContent marshals the FileIndex directly
+		return f.formatFiles(v)
 	default:
 		return "", fmt.Errorf("unsupported builder type: %s", b.Type())
 	}
@@ -252,10 +252,10 @@ func (f *YAMLFormatter) errorToYAML(e *format.Error) *yamlError {
 	}
 }
 
-// formatGraph renders GraphIndex as YAML (backward compatibility)
-func (f *YAMLFormatter) formatGraph(gc *format.GraphContent) (string, error) {
-	// Marshal the GraphIndex directly as YAML
-	return f.marshal(gc.Index)
+// formatFiles renders FileIndex as YAML (backward compatibility)
+func (f *YAMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
+	// Marshal the FileIndex directly as YAML
+	return f.marshal(fc.Index)
 }
 
 // marshal converts data to YAML

@@ -26,8 +26,8 @@ type GeminiHookSpecificOutput struct {
 	AdditionalContext string `json:"additionalContext"`
 }
 
-// formatGeminiHookJSON wraps the formatted graph index in a Gemini CLI hook JSON envelope
-func formatGeminiHookJSON(index *types.GraphIndex, outputFormat integrations.OutputFormat) (string, error) {
+// formatGeminiHookJSON wraps the formatted file index in a Gemini CLI hook JSON envelope
+func formatGeminiHookJSON(index *types.FileIndex, outputFormat integrations.OutputFormat) (string, error) {
 	// Step 1: Get the appropriate formatter
 	var formatStr string
 	switch outputFormat {
@@ -46,9 +46,9 @@ func formatGeminiHookJSON(index *types.GraphIndex, outputFormat integrations.Out
 		return "", fmt.Errorf("failed to get formatter; %w", err)
 	}
 
-	// Step 2: Format the graph content
-	graphContent := format.NewGraphContent(index)
-	content, err := formatter.Format(graphContent)
+	// Step 2: Format the file index content
+	filesContent := format.NewFilesContent(index)
+	content, err := formatter.Format(filesContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to format index; %w", err)
 	}

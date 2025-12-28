@@ -61,7 +61,7 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 
 	// Create SSE client
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
-	idx := &types.GraphIndex{
+	idx := &types.FileIndex{
 		Stats: types.IndexStats{TotalFiles: 0},
 		Files: []types.FileEntry{},
 	}
@@ -84,7 +84,7 @@ func TestSSEClient_ConnectToStream(t *testing.T) {
 // TestSSEClient_ReceiveNotification tests that client receives and processes notifications
 func TestSSEClient_ReceiveNotification(t *testing.T) {
 	// Create initial index (graph reload will fail without FalkorDB, but we're testing notification receipt)
-	initialIndex := &types.GraphIndex{
+	initialIndex := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test/memory",
 		Files: []types.FileEntry{
@@ -206,7 +206,7 @@ func TestSSEClient_AutoReconnect(t *testing.T) {
 
 	// Create SSE client
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
-	idx := &types.GraphIndex{
+	idx := &types.FileIndex{
 		Stats: types.IndexStats{TotalFiles: 0},
 		Files: []types.FileEntry{},
 	}
@@ -286,7 +286,7 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 	clients := make([]*SSEClient, 3)
 
 	for i := 0; i < 3; i++ {
-		idx := &types.GraphIndex{
+		idx := &types.FileIndex{
 			Stats: types.IndexStats{TotalFiles: 0},
 			Files: []types.FileEntry{},
 		}

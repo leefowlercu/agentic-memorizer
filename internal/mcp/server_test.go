@@ -139,7 +139,7 @@ func TestServer_Initialize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.GraphIndex{
+			index := &types.FileIndex{
 				Generated:  time.Now(),
 				MemoryRoot: "/test",
 				Files:      []types.FileEntry{},
@@ -240,7 +240,7 @@ func TestServer_Initialize(t *testing.T) {
 }
 
 func TestServer_Initialized(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files:      []types.FileEntry{},
@@ -286,7 +286,7 @@ func TestServer_Initialized(t *testing.T) {
 }
 
 func TestServer_MethodNotFound(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files:      []types.FileEntry{},
@@ -358,7 +358,7 @@ func TestServer_ResourcesList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.GraphIndex{
+			index := &types.FileIndex{
 				Generated:  time.Now(),
 				MemoryRoot: "/test",
 				Files:      []types.FileEntry{},
@@ -489,7 +489,7 @@ func TestServer_ResourcesRead(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.GraphIndex{
+			index := &types.FileIndex{
 				Generated:  time.Now(),
 				MemoryRoot: "/test",
 				Files: []types.FileEntry{
@@ -604,7 +604,7 @@ func TestServer_ToolsList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.GraphIndex{
+			index := &types.FileIndex{
 				Generated:  time.Now(),
 				MemoryRoot: "/test",
 				Files:      []types.FileEntry{},
@@ -694,7 +694,7 @@ func TestServer_ToolsList(t *testing.T) {
 }
 
 func TestServer_ToolsCall_SearchFiles(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -783,7 +783,7 @@ func TestServer_ToolsCall_SearchFiles(t *testing.T) {
 }
 
 func TestServer_ToolsCall_GetFileMetadata(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -849,7 +849,7 @@ func TestServer_ToolsCall_GetFileMetadata(t *testing.T) {
 
 func TestServer_ToolsCall_ListRecentFiles(t *testing.T) {
 	now := time.Now()
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  now,
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -928,7 +928,7 @@ func TestServer_ToolsCall_ListRecentFiles(t *testing.T) {
 }
 
 func TestServer_ToolsCall_InvalidTool(t *testing.T) {
-	index := &types.GraphIndex{}
+	index := &types.FileIndex{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	server := NewServer(index, logger, "")
 	server.initialized = true
@@ -974,7 +974,7 @@ func TestServer_ToolsCall_InvalidTool(t *testing.T) {
 }
 
 func TestServer_ToolsCall_InvalidArguments(t *testing.T) {
-	index := &types.GraphIndex{}
+	index := &types.FileIndex{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	server := NewServer(index, logger, "")
 	server.initialized = true
@@ -1067,7 +1067,7 @@ func TestServer_ResourcesSubscribe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.GraphIndex{
+			index := &types.FileIndex{
 				Generated:  time.Now(),
 				MemoryRoot: "/test",
 				Files:      []types.FileEntry{},
@@ -1164,7 +1164,7 @@ func TestServer_ResourcesUnsubscribe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			index := &types.GraphIndex{
+			index := &types.FileIndex{
 				Generated:  time.Now(),
 				MemoryRoot: "/test",
 				Files:      []types.FileEntry{},
@@ -1232,7 +1232,7 @@ func TestServer_ResourcesUnsubscribe(t *testing.T) {
 }
 
 func TestServer_ReloadIndex(t *testing.T) {
-	originalIndex := &types.GraphIndex{
+	originalIndex := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -1257,7 +1257,7 @@ func TestServer_ReloadIndex(t *testing.T) {
 	}
 
 	// Create new index
-	newIndex := &types.GraphIndex{
+	newIndex := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -1290,7 +1290,7 @@ func TestServer_ReloadIndex(t *testing.T) {
 }
 
 func TestServer_GetIndex(t *testing.T) {
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
 		Files: []types.FileEntry{
@@ -1322,7 +1322,7 @@ func TestServer_GetIndex(t *testing.T) {
 }
 
 func TestServer_CapabilitiesIncludeSubscribe(t *testing.T) {
-	index := &types.GraphIndex{}
+	index := &types.FileIndex{}
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	server := NewServer(index, logger, "")
 

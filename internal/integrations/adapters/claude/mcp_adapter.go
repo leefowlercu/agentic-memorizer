@@ -153,7 +153,7 @@ func (a *ClaudeCodeMCPAdapter) GetCommand(binaryPath string, format integrations
 
 // FormatOutput is not used by MCP integrations
 // MCP servers provide output through resources and tools, not direct formatting
-func (a *ClaudeCodeMCPAdapter) FormatOutput(index *types.GraphIndex, format integrations.OutputFormat) (string, error) {
+func (a *ClaudeCodeMCPAdapter) FormatOutput(index *types.FileIndex, format integrations.OutputFormat) (string, error) {
 	return "", fmt.Errorf("MCP integrations do not use FormatOutput; output is provided through MCP resources and tools")
 }
 

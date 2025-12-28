@@ -231,7 +231,7 @@ func TestPromptRegistry_GeneratePromptMessages_MissingRequiredArgument(t *testin
 	registry := NewPromptRegistry()
 
 	// Create minimal server for testing
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{},
 	}
 	server := &Server{
@@ -275,7 +275,7 @@ func TestPromptRegistry_GeneratePromptMessages_FileNotFound(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create empty index
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{},
 	}
 	server := &Server{
@@ -318,7 +318,7 @@ func TestPromptRegistry_GeneratePromptMessages_SearchContext(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create minimal server (search-context doesn't need index data)
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{},
 	}
 	server := &Server{
@@ -376,7 +376,7 @@ func TestPromptRegistry_GeneratePromptMessages_WithIndexData(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create index with test file
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:         "/test/file.txt",
@@ -459,7 +459,7 @@ func TestPromptRegistry_GeneratePromptMessages_FileWithoutSemanticAnalysis(t *te
 	registry := NewPromptRegistry()
 
 	// Create index with file that has no semantic analysis (empty Summary)
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:     "/test/file.txt",
@@ -508,7 +508,7 @@ func TestPromptRegistry_GeneratePromptMessages_FileWithoutSemanticAnalysis(t *te
 func TestPromptRegistry_GeneratePromptMessages_UnknownPrompt(t *testing.T) {
 	registry := NewPromptRegistry()
 
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{},
 	}
 	server := &Server{
@@ -555,7 +555,7 @@ func TestPromptRegistry_PromptMessageFormat(t *testing.T) {
 	registry := NewPromptRegistry()
 
 	// Create index with test data
-	index := &types.GraphIndex{
+	index := &types.FileIndex{
 		Files: []types.FileEntry{
 			{
 				Path:     "/test/file.txt",

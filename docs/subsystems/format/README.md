@@ -101,7 +101,7 @@ Builders construct structured representations of output content. Each builder ty
 
 6. **Error** (`error.go`): Structured error messages with field names, values, detail lines, and suggestions. Distinguishes validation errors from runtime errors.
 
-7. **GraphContent** (`graph.go`): Special-purpose builder wrapping `GraphIndex` for integration output. Preserves backward compatibility with legacy XML/markdown formats.
+7. **FilesContent** (`files.go`): Special-purpose builder wrapping `FileIndex` for integration output. Preserves backward compatibility with legacy XML/markdown formats.
 
 **Builder Characteristics:**
 - Immutable after construction (fluent APIs return new builders)
@@ -220,7 +220,7 @@ return outputStatus(status)
 
 ### Integration Adapters
 
-Integration adapters use formatters to generate framework-specific output. The `GraphContent` builder provides a unified interface for rendering the graph index.
+Integration adapters use formatters to generate framework-specific output. The `FilesContent` builder provides a unified interface for rendering the graph index.
 
 **Integration Output Paths:**
 
@@ -230,9 +230,9 @@ Integration adapters use formatters to generate framework-specific output. The `
 
 3. **MCP Adapters** (`internal/integrations/adapters/*/mcp_adapter.go`): Do not use formatters directly. Output is provided through MCP protocol resources and tool responses rather than via FormatOutput method.
 
-**Why GraphContent Builder?**
+**Why FilesContent Builder?**
 
-The GraphContent builder wraps `types.GraphIndex` to integrate with the format system while maintaining backward compatibility with legacy XML/markdown output formats. This allows integration code to use the same formatter infrastructure as CLI commands.
+The FilesContent builder wraps `types.FileIndex` to integrate with the format system while maintaining backward compatibility with legacy XML/markdown output formats. This allows integration code to use the same formatter infrastructure as CLI commands.
 
 ### Daemon HTTP API
 
@@ -240,7 +240,7 @@ The daemon HTTP API uses formatters indirectly through the integration adapters.
 
 **API Response Pattern:**
 
-The daemon serves formatted graph content via the `/api/v1/graph` endpoint, using the same GraphContent builder and JSON formatter that the `read` command uses. This ensures CLI and API output remain synchronized.
+The daemon serves formatted graph content via the `/api/v1/graph` endpoint, using the same FilesContent builder and JSON formatter that the `read` command uses. This ensures CLI and API output remain synchronized.
 
 ## Glossary
 
@@ -268,7 +268,7 @@ The daemon serves formatted graph content via the `/api/v1/graph` endpoint, usin
 
 **Registry Pattern**: Design pattern using global registry for component registration, enabling extension without modifying core code. Used for both formatters and metadata handlers.
 
-**GraphContent**: Special builder wrapping `types.GraphIndex` for integration output, preserving backward compatibility with legacy XML/markdown formats.
+**FilesContent**: Special builder wrapping `types.FileIndex` for integration output, preserving backward compatibility with legacy XML/markdown formats.
 
 **init() Registration**: Go pattern where packages register components during initialization, making systems self-configuring without explicit wiring.
 

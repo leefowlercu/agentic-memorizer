@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Agentic Memorizer is a local file memorizer for Claude Code that provides automatic awareness and understanding of files through AI-powered semantic analysis. A background daemon watches a memory directory, extracts metadata, performs semantic analysis via Claude API, and maintains a knowledge graph in FalkorDB that integrates with Claude via SessionStart hooks and MCP tools.
+Agentic Memorizer is a local file memorizer for Claude Code that provides automatic awareness and understanding of files through AI-powered semantic analysis. A background daemon watches a memory directory, extracts metadata, performs semantic analysis via multiple AI providers (Claude, OpenAI, Gemini), and maintains a knowledge graph in FalkorDB that integrates with Claude via SessionStart hooks and MCP tools.
 
 ## Development Commands
 
@@ -116,8 +116,54 @@ The daemon runs in foreground mode, delegating process supervision to external s
 Files are processed through three distinct phases:
 
 1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 9 file type categories (documents, images, code, data, media, archives, fonts, models, other)
-2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API with content-based routing (text, vision for images, document blocks for PDFs, extraction for Office files)
+2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via provider abstraction supporting Claude, OpenAI, and Gemini with content-based routing (text, vision for images, document blocks for PDFs, extraction for Office files)
 3. **Knowledge Graph Storage** (`internal/graph/`) - FalkorDB stores files, tags, topics, entities, and relationships for semantic search
+
+### Semantic Analysis Provider Architecture
+
+The semantic analysis subsystem uses a provider abstraction pattern for multi-provider support:
+
+**Provider Interface** (`internal/semantic/provider.go`):
+```go
+type Provider interface {
+    Analyze(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error)
+    Name() string           // "claude", "openai", "gemini"
+    Model() string          // e.g., "claude-sonnet-4-5-20250929"
+    SupportsVision() bool   // Image analysis capability
+    SupportsDocuments() bool // Native PDF/document blocks
+}
+```
+
+**Provider Registry** (`internal/semantic/registry.go`):
+- Thread-safe singleton pattern (like integrations)
+- Providers register via `init()` functions
+- Factory pattern for provider instantiation
+
+**Provider Implementations** (`internal/semantic/providers/`):
+- **Claude** (`providers/claude/`) - Anthropic API with vision, PDF document blocks, PPTX/DOCX text extraction
+- **OpenAI** (`providers/openai/`) - OpenAI API with GPT-4o/5.x vision support
+- **Gemini** (`providers/gemini/`) - Google Gemini API with native multimodal support
+
+**Content Routing by Provider:**
+| Content Type | Claude | OpenAI | Gemini |
+|-------------|--------|--------|--------|
+| Text files | ✓ | ✓ | ✓ |
+| Images (vision) | ✓ | ✓ (GPT-4o/5.x) | ✓ |
+| PDFs | Document blocks | Text extraction | Native multimodal |
+| Office docs | Text extraction | Metadata only | Metadata only |
+
+**Hot-Reload Support:**
+- Provider can be changed at runtime via `config reload`
+- Atomic value replacement in daemon
+- Cache isolation by provider (separate subdirectories)
+
+**Cache Provider Isolation:**
+```
+~/.memorizer/cache/summaries/
+├── claude/   # Claude provider cache
+├── openai/   # OpenAI provider cache
+└── gemini/   # Gemini provider cache
+```
 
 ### Background Daemon Architecture
 
@@ -217,17 +263,36 @@ The Config Manager (`internal/config/`) implements layered configuration with pr
 Use `config show-schema` to discover all settings.
 
 **Key Configuration Sections:**
-- `claude` - API credentials, model, timeout (5-300s), enable_vision
-- `analysis` - Size limits, skip patterns, cache directory
-- `daemon` - Workers, debounce, rate limits, rebuild intervals, health port
-- `integrations` - Per-framework settings
+- `semantic` - Provider selection, API credentials, model, timeout, vision, rate limits
+- `daemon` - Workers, debounce, rebuild intervals, health port
 - `mcp` - Log file, log level, daemon connectivity
 - `graph` - FalkorDB host, port, database, password
 - `embeddings` - API key, provider, model, dimensions
 
-**Settings Requiring Daemon Restart:** `memory_root`, `analysis.cache_dir`, `daemon.log_file`
+**Semantic Configuration (`semantic.*`):**
+```yaml
+semantic:
+  provider: claude           # claude, openai, gemini
+  api_key: ""                # Or use env var (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY)
+  model: claude-sonnet-4-5-20250929
+  max_tokens: 4096
+  timeout: 30                # Seconds (5-300)
+  enable_vision: true
+  max_file_size: 10485760    # 10MB
+  skip_extensions: [...]
+  skip_files: [...]
+  cache_dir: ~/.memorizer/cache
+  rate_limit_per_min: 20     # Provider-specific defaults: Claude=20, OpenAI=60, Gemini=100
+```
 
-**Hot-reloadable Settings:** API credentials, `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`, `daemon.log_level`, `daemon.http_port`, `analysis.skip_extensions`, `analysis.skip_files`
+**Environment Variables for API Keys:**
+- Claude: `ANTHROPIC_API_KEY`
+- OpenAI: `OPENAI_API_KEY`
+- Gemini: `GOOGLE_API_KEY`
+
+**Settings Requiring Daemon Restart:** `memory_root`, `semantic.cache_dir`, `daemon.log_file`
+
+**Hot-reloadable Settings:** `semantic.provider`, `semantic.api_key`, `semantic.model`, `semantic.max_tokens`, `semantic.timeout`, `semantic.enable_vision`, `semantic.rate_limit_per_min`, `daemon.workers`, `daemon.debounce_ms`, `daemon.log_level`, `daemon.http_port`
 
 ## Code Organization Principles
 
@@ -236,8 +301,9 @@ Use `config show-schema` to discover all settings.
 Each major subsystem operates independently with clean boundaries:
 - `internal/daemon/` - Daemon orchestration and worker pool
 - `internal/metadata/` - Metadata extraction handlers
-- `internal/semantic/` - Semantic analysis via Claude API
-- `internal/cache/` - Content-addressable caching
+- `internal/semantic/` - Multi-provider semantic analysis (Claude, OpenAI, Gemini)
+- `internal/semantic/providers/` - Provider implementations
+- `internal/cache/` - Content-addressable caching with provider isolation
 - `internal/graph/` - FalkorDB graph storage and queries
 - `internal/config/` - Configuration management
 - `internal/integrations/` - Integration adapters
@@ -328,6 +394,7 @@ cd e2e && make test-cli       # Specific test suite
 
 **Core Subsystems:**
 - Main: `internal/{daemon,metadata,semantic,cache,graph,config,integrations,watcher,walker,mcp,search,format,embeddings,servicemanager,tui,version}/`
+- Semantic Providers: `internal/semantic/providers/{claude,openai,gemini}/` - Provider implementations
 - Graph: `internal/graph/` - FalkorDB client, queries, schema, exporter
 - Daemon API: `internal/daemon/api/` - HTTP server, SSE hub, handlers
 - Types: `pkg/types/types.go` - Core type definitions (GraphIndex, FileEntry)
@@ -389,7 +456,14 @@ logger.Info("SSE client connected")             // Put "SSE" in field
 
 ### API Rate Limiting
 
-Token bucket rate limiting (default 20 calls/minute) respects Claude API quotas. Workers call `rateLimiter.Wait(ctx)` before semantic analysis. Adjust `daemon.rate_limit_per_min` in config.
+Token bucket rate limiting respects provider API quotas. Workers call `rateLimiter.Wait(ctx)` before semantic analysis.
+
+**Provider-Specific Defaults:**
+- Claude: 20 calls/minute (conservative)
+- OpenAI: 60 calls/minute (GPT-4o tier 1: 500 RPM)
+- Gemini: 100 calls/minute (paid tier: 1000-2000 RPM)
+
+Adjust via `semantic.rate_limit_per_min` in config. Rate limit is hot-reloadable.
 
 ### Configuration Hot-Reload
 

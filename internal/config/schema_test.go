@@ -14,8 +14,7 @@ func TestGetConfigSchema(t *testing.T) {
 	// Test that all items are present (both RootFields and Sections)
 	expectedItems := []string{
 		"memory_root",
-		"claude",
-		"analysis",
+		"semantic",
 		"daemon",
 		"mcp",
 		"graph",
@@ -143,30 +142,31 @@ func TestGetConfigSchema_HardcodedSettingsHaveReasons(t *testing.T) {
 	}
 }
 
-func TestGetConfigSchema_ClaudeSectionHasNewFields(t *testing.T) {
+func TestGetConfigSchema_SemanticSectionHasNewFields(t *testing.T) {
 	schema := GetConfigSchema()
 
-	var claudeSection *SchemaSection
+	var semanticSection *SchemaSection
 	for _, item := range schema.Items {
-		if section, ok := item.(SchemaSection); ok && section.Name == "claude" {
-			claudeSection = &section
+		if section, ok := item.(SchemaSection); ok && section.Name == "semantic" {
+			semanticSection = &section
 			break
 		}
 	}
 
-	if claudeSection == nil {
-		t.Fatal("claude section not found")
+	if semanticSection == nil {
+		t.Fatal("semantic section not found")
 	}
 
 	// Check for new fields
 	expectedFields := map[string]string{
 		"timeout":       "advanced",
 		"enable_vision": "advanced",
+		"provider":      "minimal",
 	}
 
 	for fieldName, expectedTier := range expectedFields {
 		found := false
-		for _, field := range claudeSection.Fields {
+		for _, field := range semanticSection.Fields {
 			if field.Name == fieldName {
 				found = true
 				if field.Tier != expectedTier {
@@ -176,7 +176,7 @@ func TestGetConfigSchema_ClaudeSectionHasNewFields(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("expected field %q not found in claude section", fieldName)
+			t.Errorf("expected field %q not found in semantic section", fieldName)
 		}
 	}
 }

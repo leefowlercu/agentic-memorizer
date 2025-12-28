@@ -73,18 +73,6 @@ func (v *Validator) Error() string {
 
 // checkDeprecatedKeys logs warnings for deprecated configuration keys
 func checkDeprecatedKeys() {
-	// Check for deprecated analysis.parallel key
-	if viper.IsSet("analysis.parallel") {
-		parallelValue := viper.GetInt("analysis.parallel")
-		slog.Warn(
-			"deprecated configuration key detected",
-			"key", "analysis.parallel",
-			"value", parallelValue,
-			"message", "analysis.parallel is no longer used and has been removed",
-			"suggestion", "use daemon.workers (default: 3) to control parallel processing",
-		)
-	}
-
 	// Check for removed output section
 	if viper.IsSet("output.format") || viper.IsSet("output.show_recent_days") {
 		slog.Warn(
@@ -92,16 +80,6 @@ func checkDeprecatedKeys() {
 			"key", "output",
 			"message", "output section has been removed; format is now a CLI flag only",
 			"suggestion", "use --format flag with the 'read' command instead",
-		)
-	}
-
-	// Check for removed claude settings
-	if viper.IsSet("claude.api_key_env") {
-		slog.Warn(
-			"deprecated configuration key detected",
-			"key", "claude.api_key_env",
-			"message", "claude.api_key_env has been removed; ANTHROPIC_API_KEY is now the hardcoded env var",
-			"suggestion", "set ANTHROPIC_API_KEY environment variable or use claude.api_key directly",
 		)
 	}
 
@@ -125,8 +103,7 @@ func ValidateConfig(cfg *Config) error {
 
 	// Phase 1: Basic field validation
 	validateMemoryRoot(v, cfg)
-	validateClaude(v, cfg)
-	validateAnalysis(v, cfg)
+	validateSemantic(v, cfg)
 	validateDaemon(v, cfg)
 	validateMCP(v, cfg)
 	validateGraph(v, cfg)
@@ -166,40 +143,48 @@ func validateMemoryRoot(v *Validator, cfg *Config) {
 	}
 }
 
-// validateClaude validates Claude API configuration
-func validateClaude(v *Validator, cfg *Config) {
-	// API key validation - note: key may come from hardcoded env var (ANTHROPIC_API_KEY)
-	// We don't error here since analysis.enabled is derived from API key presence
+// validateSemantic validates semantic analysis configuration
+func validateSemantic(v *Validator, cfg *Config) {
+	// Provider validation
+	validProviders := []string{"claude", "openai", "gemini"}
+	if cfg.Semantic.Provider != "" && !contains(validProviders, cfg.Semantic.Provider) {
+		v.AddError("semantic.provider", "enum", fmt.Sprintf("invalid provider '%s', must be one of: %v", cfg.Semantic.Provider, validProviders), "Set provider to 'claude', 'openai', or 'gemini'", cfg.Semantic.Provider)
+	}
+
+	// API key validation - note: key may come from provider-specific env vars
+	// We don't error here since semantic.enabled is derived from API key presence
 	// and the daemon will simply skip semantic analysis if no key is set
 
-	// Validate model name (basic check - just ensure it's not empty)
-	if cfg.Claude.Model == "" {
-		v.AddError("claude.model", "required", "claude.model is required", "Set to a valid Claude model (e.g., claude-sonnet-4-5-20250929)", nil)
+	// Validate model name (basic check - just ensure it's not empty if provider is set)
+	if cfg.Semantic.Provider != "" && cfg.Semantic.Model == "" {
+		v.AddError("semantic.model", "required", "semantic.model is required when provider is set", "Set to a valid model for the chosen provider", nil)
 	}
 
 	// Validate max_tokens range
-	if cfg.Claude.MaxTokens < 1 || cfg.Claude.MaxTokens > 8192 {
-		v.AddError("claude.max_tokens", "range", fmt.Sprintf("max_tokens %d is out of valid range (1-8192)", cfg.Claude.MaxTokens), "Set max_tokens between 1 and 8192", cfg.Claude.MaxTokens)
+	if cfg.Semantic.MaxTokens < 1 || cfg.Semantic.MaxTokens > 8192 {
+		v.AddError("semantic.max_tokens", "range", fmt.Sprintf("max_tokens %d is out of valid range (1-8192)", cfg.Semantic.MaxTokens), "Set max_tokens between 1 and 8192", cfg.Semantic.MaxTokens)
 	}
 
 	// Validate timeout range (5-300 seconds)
-	if cfg.Claude.Timeout < 5 || cfg.Claude.Timeout > 300 {
-		v.AddError("claude.timeout", "range", fmt.Sprintf("timeout %d is out of valid range (5-300 seconds)", cfg.Claude.Timeout), "Set timeout between 5 and 300 seconds", cfg.Claude.Timeout)
+	if cfg.Semantic.Timeout < 5 || cfg.Semantic.Timeout > 300 {
+		v.AddError("semantic.timeout", "range", fmt.Sprintf("timeout %d is out of valid range (5-300 seconds)", cfg.Semantic.Timeout), "Set timeout between 5 and 300 seconds", cfg.Semantic.Timeout)
 	}
-}
 
-// validateAnalysis validates analysis configuration
-func validateAnalysis(v *Validator, cfg *Config) {
 	// Validate max_file_size
-	if cfg.Analysis.MaxFileSize < 0 {
-		v.AddError("analysis.max_file_size", "range", "max_file_size cannot be negative", "Set max_file_size to a positive number or 0 for unlimited", cfg.Analysis.MaxFileSize)
+	if cfg.Semantic.MaxFileSize < 0 {
+		v.AddError("semantic.max_file_size", "range", "max_file_size cannot be negative", "Set max_file_size to a positive number or 0 for unlimited", cfg.Semantic.MaxFileSize)
 	}
 
 	// Validate cache dir
-	if cfg.Analysis.CacheDir == "" {
-		v.AddError("analysis.cache_dir", "required", "cache_dir is required", "Set cache_dir to a valid directory path", nil)
-	} else if strings.Contains(cfg.Analysis.CacheDir, "..") {
-		v.AddError("analysis.cache_dir", "security", "cache_dir contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.Analysis.CacheDir)
+	if cfg.Semantic.CacheDir == "" {
+		v.AddError("semantic.cache_dir", "required", "cache_dir is required", "Set cache_dir to a valid directory path", nil)
+	} else if strings.Contains(cfg.Semantic.CacheDir, "..") {
+		v.AddError("semantic.cache_dir", "security", "cache_dir contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.Semantic.CacheDir)
+	}
+
+	// Validate rate limit
+	if cfg.Semantic.RateLimitPerMin < 1 || cfg.Semantic.RateLimitPerMin > 200 {
+		v.AddError("semantic.rate_limit_per_min", "range", fmt.Sprintf("rate_limit_per_min %d is out of valid range (1-200)", cfg.Semantic.RateLimitPerMin), "Set rate_limit_per_min between 1 and 200", cfg.Semantic.RateLimitPerMin)
 	}
 }
 
@@ -213,11 +198,6 @@ func validateDaemon(v *Validator, cfg *Config) {
 	// Validate workers
 	if cfg.Daemon.Workers < 1 || cfg.Daemon.Workers > 20 {
 		v.AddError("daemon.workers", "range", fmt.Sprintf("workers %d is out of valid range (1-20)", cfg.Daemon.Workers), "Set workers between 1 and 20", cfg.Daemon.Workers)
-	}
-
-	// Validate rate limit
-	if cfg.Daemon.RateLimitPerMin < 1 || cfg.Daemon.RateLimitPerMin > 200 {
-		v.AddError("daemon.rate_limit_per_min", "range", fmt.Sprintf("rate_limit_per_min %d is out of valid range (1-200)", cfg.Daemon.RateLimitPerMin), "Set rate_limit_per_min between 1 and 200", cfg.Daemon.RateLimitPerMin)
 	}
 
 	// Validate full rebuild interval

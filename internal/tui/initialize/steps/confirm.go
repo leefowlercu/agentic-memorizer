@@ -144,11 +144,21 @@ func (s *ConfirmStep) renderSummary() string {
 	// Memory root
 	b.WriteString(s.summaryLine("Memory Directory", s.config.MemoryRoot))
 
-	// Claude API
-	if s.config.Claude.APIKey != "" {
-		b.WriteString(s.summaryLine("Claude API Key", s.maskKey(s.config.Claude.APIKey)))
+	// Semantic Provider
+	if s.config.Semantic.Enabled && s.config.Semantic.Provider != "" {
+		providerDisplay := s.config.Semantic.Provider
+		if s.config.Semantic.Model != "" {
+			providerDisplay += " (" + s.config.Semantic.Model + ")"
+		}
+		b.WriteString(s.summaryLine("Semantic Provider", providerDisplay))
+
+		if s.config.Semantic.APIKey != "" {
+			b.WriteString(s.summaryLine("API Key", s.maskKey(s.config.Semantic.APIKey)))
+		} else {
+			b.WriteString(s.summaryLine("API Key", "Using environment variable"))
+		}
 	} else {
-		b.WriteString(s.summaryLine("Claude API Key", "Using environment variable"))
+		b.WriteString(s.summaryLine("Semantic Analysis", "Disabled"))
 	}
 
 	// HTTP API
@@ -183,7 +193,7 @@ func (s *ConfirmStep) renderSummary() string {
 }
 
 func (s *ConfirmStep) summaryLine(label, value string) string {
-	labelStr := styles.Label.Render(fmt.Sprintf("  %-18s", label+":"))
+	labelStr := styles.Label.Render(fmt.Sprintf("  %-19s", label+":"))
 	valueStr := styles.SuccessText.Render(value)
 	return labelStr + valueStr + "\n"
 }

@@ -190,7 +190,7 @@ func determineTier(fieldPath string, minimalFields map[string]bool) string {
 // and not directly user-configurable. Derived fields should not appear in schema.
 func isDerivedField(fieldPath string) bool {
 	derivedFields := map[string]bool{
-		"analysis.enabled":   true, // Derived from claude.api_key presence
+		"semantic.enabled":   true, // Derived from semantic.api_key presence
 		"embeddings.enabled": true, // Derived from embeddings.api_key presence
 	}
 	return derivedFields[fieldPath]
@@ -218,18 +218,27 @@ func getTypeString(t reflect.Type) string {
 }
 
 // getHardcodedSettings returns hardcoded configuration constants.
-// This list is already correct and doesn't need changes.
 func getHardcodedSettings() []HardcodedSetting {
 	return []HardcodedSetting{
 		{
 			Name:   "ClaudeAPIKeyEnv",
 			Value:  ClaudeAPIKeyEnv,
-			Reason: "Standard Anthropic convention",
+			Reason: "Standard Anthropic convention (used when semantic.provider=claude)",
+		},
+		{
+			Name:   "OpenAIAPIKeyEnv",
+			Value:  OpenAIAPIKeyEnv,
+			Reason: "Standard OpenAI convention (used when semantic.provider=openai)",
+		},
+		{
+			Name:   "GoogleAPIKeyEnv",
+			Value:  GoogleAPIKeyEnv,
+			Reason: "Standard Google convention (used when semantic.provider=gemini)",
 		},
 		{
 			Name:   "EmbeddingsAPIKeyEnv",
 			Value:  EmbeddingsAPIKeyEnv,
-			Reason: "Standard OpenAI convention",
+			Reason: "Standard OpenAI convention (for embeddings)",
 		},
 		{
 			Name:   "GraphPasswordEnv",
@@ -300,8 +309,7 @@ func getHotReload(fieldPath string) bool {
 // Section descriptions (cannot be derived from reflection)
 var sectionDescriptions = map[string]string{
 	"memory_root":  "Root directory for memory files",
-	"claude":       "Claude API configuration",
-	"analysis":     "File analysis settings",
+	"semantic":     "Semantic analysis provider configuration",
 	"daemon":       "Background daemon configuration",
 	"mcp":          "MCP server configuration",
 	"graph":        "FalkorDB knowledge graph configuration",
@@ -312,15 +320,17 @@ var sectionDescriptions = map[string]string{
 // Field descriptions (cannot be derived from reflection)
 var fieldDescriptions = map[string]string{
 	"memory_root":                          "Directory containing files to index (requires daemon restart)",
-	"claude.api_key":                       "Claude API key (or use ANTHROPIC_API_KEY env var)",
-	"claude.model":                         "Claude model to use for semantic analysis",
-	"claude.max_tokens":                    "Maximum tokens per API request (1-8192)",
-	"claude.timeout":                       "API request timeout in seconds (5-300)",
-	"claude.enable_vision":                 "Enable vision API for image analysis",
-	"analysis.max_file_size":               "Maximum file size in bytes for analysis (default: 10MB)",
-	"analysis.skip_extensions":             "File extensions to skip during analysis",
-	"analysis.skip_files":                  "Filenames to skip during analysis",
-	"analysis.cache_dir":                   "Directory for analysis cache (requires daemon restart)",
+	"semantic.provider":                    "Semantic analysis provider (claude, openai, gemini)",
+	"semantic.api_key":                     "Provider API key (or use provider-specific env var: ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY)",
+	"semantic.model":                       "Model to use for semantic analysis (provider-specific)",
+	"semantic.max_tokens":                  "Maximum tokens per API request (1-8192)",
+	"semantic.timeout":                     "API request timeout in seconds (5-300)",
+	"semantic.enable_vision":               "Enable vision API for image analysis",
+	"semantic.max_file_size":               "Maximum file size in bytes for analysis (default: 10MB)",
+	"semantic.skip_extensions":             "File extensions to skip during analysis",
+	"semantic.skip_files":                  "Filenames to skip during analysis",
+	"semantic.cache_dir":                   "Directory for analysis cache (requires daemon restart)",
+	"semantic.rate_limit_per_min":          "Maximum API calls per minute (provider-specific, 1-200)",
 	"daemon.http_port":                     "HTTP API port (0 to disable)",
 	"daemon.workers":                       "Number of concurrent worker threads (1-20)",
 	"daemon.rate_limit_per_min":            "Maximum Claude API calls per minute (1-200)",
@@ -347,15 +357,17 @@ var fieldDescriptions = map[string]string{
 // Hot-reload settings (cannot be derived from reflection)
 var hotReloadSettings = map[string]bool{
 	"memory_root":                          false,
-	"claude.api_key":                       true,
-	"claude.model":                         true,
-	"claude.max_tokens":                    true,
-	"claude.timeout":                       true,
-	"claude.enable_vision":                 true,
-	"analysis.max_file_size":               true,
-	"analysis.skip_extensions":             true,
-	"analysis.skip_files":                  true,
-	"analysis.cache_dir":                   false,
+	"semantic.provider":                    true,
+	"semantic.api_key":                     true,
+	"semantic.model":                       true,
+	"semantic.max_tokens":                  true,
+	"semantic.timeout":                     true,
+	"semantic.enable_vision":               true,
+	"semantic.max_file_size":               true,
+	"semantic.skip_extensions":             true,
+	"semantic.skip_files":                  true,
+	"semantic.cache_dir":                   false,
+	"semantic.rate_limit_per_min":          true,
 	"daemon.http_port":                     true,
 	"daemon.workers":                       true,
 	"daemon.rate_limit_per_min":            true,

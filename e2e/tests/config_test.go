@@ -432,9 +432,9 @@ func TestConfig_YAMLSyntaxError(t *testing.T) {
 	// Write invalid YAML
 	invalidYAML := `
 memory_root: /tmp/test
-claude:
-  api_key: sk-test
-  model: claude-3-5-sonnet
+semantic:
+  provider: claude
+  model: claude-sonnet-4-5-20250929
     invalid: indentation
 `
 
@@ -506,11 +506,17 @@ func TestConfig_HotReloadMultipleMutableSettings(t *testing.T) {
 		config["daemon"] = daemon
 	}
 
+	semantic, ok := config["semantic"].(map[string]any)
+	if !ok {
+		semantic = make(map[string]any)
+		config["semantic"] = semantic
+	}
+
 	// Change multiple settings
 	daemon["workers"] = 4
-	daemon["rate_limit_per_min"] = 30
 	daemon["debounce_ms"] = 500
 	daemon["log_level"] = "debug"
+	semantic["rate_limit_per_min"] = 30
 
 	// Write updated config
 	newConfigData, _ := yaml.Marshal(config)

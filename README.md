@@ -69,7 +69,7 @@ Works seamlessly with Claude Code, Gemini CLI, and Codex CLI with automatic setu
 
 ### How It Works
 
-A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using the Claude API—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
+A background daemon continuously watches your designated memory directory (`~/.memorizer/memory/` by default), automatically discovering and analyzing files as they're added or modified. Each file is processed to extract metadata (word counts, dimensions, page counts, etc.) and—using configurable AI providers (Claude, OpenAI, or Gemini)—semantically analyzed to understand its content, purpose, and key topics. This information is maintained in a precomputed index that loads quickly when your AI agent starts.
 
 When you launch your AI agent, the precomputed index is loaded into its context:
 - **Claude Code & Gemini CLI**: SessionStart hooks automatically load the index
@@ -92,7 +92,7 @@ Your AI agent can then:
 - AI-powered summaries of file content and purpose
 - Semantic tags and key topics for each file
 - Document type classification (e.g., "technical-guide", "architecture-diagram")
-- Vision analysis for images using Claude's multimodal capabilities
+- Vision analysis for images using multimodal capabilities (Claude, OpenAI, Gemini)
 
 **Efficiency:**
 - Background daemon handles all processing asynchronously
@@ -172,7 +172,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 **Three-Phase Processing Pipeline:**
 
 1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 9 file type categories
-2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via Claude API with entity extraction
+2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding with multi-provider support (Claude, OpenAI, Gemini) and entity extraction
 3. **Knowledge Graph Storage** (`internal/graph/`) - FalkorDB graph database for relationships and semantic search
 
 **Background Daemon** (`internal/daemon/`):
@@ -329,9 +329,20 @@ go install github.com/leefowlercu/agentic-memorizer@latest
 
 ### 2. Set API Key
 
+Set the API key for your chosen provider:
+
 ```bash
+# Claude (Anthropic)
 export ANTHROPIC_API_KEY="your-key-here"
+
+# OpenAI
+export OPENAI_API_KEY="your-key-here"
+
+# Google Gemini
+export GOOGLE_API_KEY="your-key-here"
 ```
+
+You only need to set the key for your chosen semantic analysis provider. The initialize wizard will prompt you to select a provider.
 
 ### 3. Start FalkorDB
 
@@ -437,7 +448,7 @@ For detailed installation options, configuration, and advanced usage, see the se
 
 - Go 1.25.1 or later
 - Docker (for FalkorDB knowledge graph)
-- Claude API key ([get one here](https://console.anthropic.com/))
+- AI provider API key: [Claude](https://console.anthropic.com/), [OpenAI](https://platform.openai.com/), or [Google Gemini](https://aistudio.google.com/)
 - An AI agent framework: Claude Code, Gemini CLI, or Codex CLI
 
 ### Build and Install
@@ -489,17 +500,26 @@ The build automatically injects version information from git tags and commits, p
 
 ### Configuration
 
-Set your API key via environment variable (recommended):
+Set your provider API key via environment variable (recommended):
 
 ```bash
+# Claude (default provider)
 export ANTHROPIC_API_KEY="your-key-here"
+
+# OpenAI
+export OPENAI_API_KEY="your-key-here"
+
+# Google Gemini
+export GOOGLE_API_KEY="your-key-here"
 ```
 
-Or edit `~/.memorizer/config.yaml`:
+Or edit `~/.memorizer/config.yaml` to configure provider and credentials:
 
 ```yaml
-claude:
+semantic:
+  provider: claude  # Options: claude, openai, gemini
   api_key: "your-api-key-here"
+  model: claude-sonnet-4-5-20250929  # Provider-specific model
 ```
 
 **Custom Setup:**
@@ -1132,7 +1152,7 @@ memorizer config reload
 The daemon:
 1. **Watches** your memory directory for file changes using fsnotify
 2. **Processes** files in parallel using a worker pool (3 workers by default)
-3. **Rate limits** API calls to respect Claude API limits (20/min default)
+3. **Rate limits** API calls to respect provider limits (default: Claude 20/min, OpenAI 60/min, Gemini 100/min)
 4. **Maintains** a precomputed index in FalkorDB with all metadata and semantic analysis
 5. **Updates** the index automatically when files are added/modified/deleted
 6. **Supports** hot-reload of most configuration settings via `config reload` command
@@ -1158,8 +1178,8 @@ daemon:
 **Hot-Reloading**: Most settings can be hot-reloaded using `memorizer config reload` without restarting the daemon:
 - ✓ `daemon.workers`, `daemon.rate_limit_per_min`, `daemon.debounce_ms`
 - ✓ `daemon.full_rebuild_interval_minutes`, `daemon.http_port`
-- ✓ `analysis.*` settings, `claude.*` settings
-- ✗ `memory_root`, `analysis.cache_dir`, `daemon.log_file`, `mcp.log_file` (require restart)
+- ✓ `semantic.*` settings (provider, model, vision, rate limits)
+- ✗ `memory_root`, `semantic.cache_dir`, `daemon.log_file`, `mcp.log_file` (require restart)
 
 #### Running as a Service
 
@@ -1515,7 +1535,7 @@ Response includes uptime, files processed, API calls, errors, and build status.
 2. **Daemon crashes or exits immediately**
    - Check logs: `tail -f ~/.memorizer/daemon.log`
    - Verify config file: `cat ~/.memorizer/config.yaml`
-   - Ensure Claude API key is set (in config or `ANTHROPIC_API_KEY` env var)
+   - Ensure API key is set for your configured provider (in config or provider-specific env var)
    - Check file permissions on cache directory
 
 3. **Index not updating after file changes**
@@ -1906,11 +1926,12 @@ memorizer integrations health
 
 ### Controlling Semantic Analysis
 
-Semantic analysis can be enabled or disabled in `config.yaml`:
+Semantic analysis is automatically enabled when an API key is configured for any provider. To disable semantic analysis, remove the API key configuration from `config.yaml`:
 
 ```yaml
-analysis:
-  enable: true  # Set to false to skip Claude API calls
+semantic:
+  provider: claude  # Provider still required for configuration
+  api_key: ""       # Empty or missing = semantic analysis disabled
 ```
 
 When disabled, the daemon will only extract file metadata without semantic analysis.
@@ -1940,8 +1961,9 @@ The configuration system follows "convention over configuration" principles. Mos
 
 **User-Facing Settings** (shown after `initialize`):
 - `memory_root` - Directory containing your memory files
-- `claude.api_key` - Anthropic API key (or set `ANTHROPIC_API_KEY` env var)
-- `claude.model` - Claude model to use (default: `claude-sonnet-4-5-20250929`)
+- `semantic.provider` - Semantic analysis provider (claude, openai, or gemini)
+- `semantic.api_key` - Provider API key (or use env var: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY`)
+- `semantic.model` - Model for analysis (provider-specific, e.g., `claude-sonnet-4-5-20250929`, `gpt-5.2-chat-latest`, `gemini-2.5-flash`)
 - `daemon.http_port` - HTTP API port for MCP integration (0 to disable)
 - `daemon.log_level` - Daemon log verbosity (debug/info/warn/error)
 - `mcp.log_level` - MCP server log verbosity
@@ -1954,11 +1976,13 @@ The configuration system follows "convention over configuration" principles. Mos
 These settings have optimal defaults but can be customized by adding them to your `config.yaml`:
 
 ```yaml
-# Claude API tuning
-claude:
+# Semantic analysis provider tuning
+semantic:
+  provider: claude           # Provider: claude, openai, or gemini
   max_tokens: 1500           # Response length limit per analysis (1-8192)
   timeout: 30                # API request timeout in seconds (5-300)
   enable_vision: true        # Enable vision API for image analysis
+  rate_limit_per_min: 20     # Provider-specific (Claude: 20, OpenAI: 60, Gemini: 100)
 
 # Analysis tuning
 analysis:
@@ -1971,7 +1995,7 @@ analysis:
 daemon:
   debounce_ms: 500           # Wait time before processing file changes
   workers: 3                 # Parallel processing workers
-  rate_limit_per_min: 20     # Claude API rate limit
+  rate_limit_per_min: 20     # Provider API rate limit
   full_rebuild_interval_minutes: 60
   log_file: ~/.memorizer/daemon.log
 
@@ -2000,7 +2024,7 @@ memorizer config show-schema --advanced-only
 ```
 
 **Derived Settings** (computed automatically):
-- `analysis.enabled` - Automatically enabled when Claude API key is set
+- `semantic.enabled` - Automatically enabled when provider API key is set
 - `embeddings.enabled` - Automatically enabled when OpenAI API key is set
 
 See `config.yaml.example` for a complete reference with all available options
@@ -2033,7 +2057,7 @@ Files matching skip patterns are completely ignored during indexing and won't ap
 
 #### Configuration Override Pattern
 
-All configuration settings can be overridden using environment variables with the `MEMORIZER_` prefix. Configuration keys use dot notation (e.g., `claude.model`), which maps to environment variables by replacing dots with underscores and adding the prefix.
+All configuration settings can be overridden using environment variables with the `MEMORIZER_` prefix. Configuration keys use dot notation (e.g., `semantic.model`), which maps to environment variables by replacing dots with underscores and adding the prefix.
 
 **Examples:**
 
@@ -2041,8 +2065,11 @@ All configuration settings can be overridden using environment variables with th
 # Override memory_root
 export MEMORIZER_MEMORY_ROOT=/custom/memory/path
 
-# Override claude.model
-export MEMORIZER_CLAUDE_MODEL=claude-opus-4-5-20251101
+# Override semantic.provider
+export MEMORIZER_SEMANTIC_PROVIDER=openai
+
+# Override semantic.model
+export MEMORIZER_SEMANTIC_MODEL=gpt-5.2-chat-latest
 
 # Override daemon.workers
 export MEMORIZER_DAEMON_WORKERS=5
@@ -2055,11 +2082,11 @@ export MEMORIZER_DAEMON_HTTP_PORT=8080
 
 #### Credential Environment Variables
 
-API keys and passwords have dedicated environment variables that are checked before falling back to config file values:
+API keys and passwords have dedicated environment variables that are checked before falling back to config file values. The semantic analysis provider determines which API key is required:
 
 **ANTHROPIC_API_KEY**
 
-Claude API key for semantic analysis. If not set, falls back to `claude.api_key` in config.
+Claude API key for semantic analysis when `semantic.provider: claude`. If not set, falls back to `semantic.api_key` in config.
 
 ```bash
 export ANTHROPIC_API_KEY="your-claude-api-key"
@@ -2067,10 +2094,18 @@ export ANTHROPIC_API_KEY="your-claude-api-key"
 
 **OPENAI_API_KEY**
 
-OpenAI API key for vector embeddings (optional feature). If not set, falls back to `embeddings.api_key` in config.
+OpenAI API key for semantic analysis when `semantic.provider: openai`, or for vector embeddings (optional). Falls back to `semantic.api_key` or `embeddings.api_key` in config.
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
+```
+
+**GOOGLE_API_KEY**
+
+Google API key for semantic analysis when `semantic.provider: gemini`. If not set, falls back to `semantic.api_key` in config.
+
+```bash
+export GOOGLE_API_KEY="your-google-api-key"
 ```
 
 **FALKORDB_PASSWORD**
@@ -2378,7 +2413,7 @@ agentic-memorizer/
 │   ├── watcher/              # File system watching (fsnotify)
 │   ├── walker/               # File system traversal with filtering
 │   ├── metadata/             # File metadata extraction (9 category handlers)
-│   ├── semantic/             # Claude API integration for semantic analysis
+│   ├── semantic/             # Multi-provider semantic analysis (Claude, OpenAI, Gemini)
 │   ├── cache/                # Content-addressable analysis caching
 │   ├── search/               # Semantic search engine (graph-powered)
 │   ├── format/               # Output formatting system
@@ -2500,15 +2535,15 @@ See existing handlers for examples.
 
 ### Current Limitations
 
-- **API Costs**: Semantic analysis uses Claude API calls (costs apply)
+- **API Costs**: Semantic analysis uses API calls to your configured provider (costs apply)
   - Mitigated by caching (only analyzes new/modified files)
-  - Can disable semantic analysis in config: `analysis.enabled: false` for metadata-only mode
+  - Can disable semantic analysis by removing API key for metadata-only mode
 
 - **File Size Limit**: Default 10MB max for semantic analysis
   - Configurable via `analysis.max_file_size` in config
   - Larger files are indexed with metadata only
 
-- **Internet Required**: Needs connection for Claude API calls
+- **Internet Required**: Needs connection for provider API calls
   - Cached analyses work offline
   - Metadata extraction works offline
 
@@ -2526,11 +2561,20 @@ See existing handlers for examples.
 
 ### "API key is required" error
 
-Set your API key in config or environment:
+Set the API key for your configured provider:
 
 ```bash
+# For Claude (default provider)
 export ANTHROPIC_API_KEY="your-key-here"
+
+# For OpenAI
+export OPENAI_API_KEY="your-key-here"
+
+# For Google Gemini
+export GOOGLE_API_KEY="your-key-here"
 ```
+
+Check your configured provider in `~/.memorizer/config.yaml` under `semantic.provider`.
 
 ### Index not appearing in AI agent
 
@@ -2554,7 +2598,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 When indexing many files:
 - Reduce daemon workers: `daemon.workers: 1` in config
 - Lower rate limit: `daemon.rate_limit_per_min: 10` in config
-- Disable semantic analysis temporarily: `analysis.enabled: false` in config
+- Disable semantic analysis temporarily by removing API key from config
 
 ### Cache issues
 

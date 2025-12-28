@@ -21,6 +21,9 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
 	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/claude" // Register Claude provider
+	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/gemini" // Register Gemini provider
+	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/openai" // Register OpenAI provider
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
@@ -34,8 +37,10 @@ type Daemon struct {
 	cfgMu sync.RWMutex
 	cfg   *config.Config
 
-	// Semantic analyzer (atomic replacement)
-	semanticAnalyzer atomic.Value // *semantic.Analyzer
+	// Semantic provider (atomic replacement)
+	semanticProvider atomic.Value // semantic.Provider
+	currentProvider  string       // Current provider name (e.g., "claude", "openai")
+	currentModel     string       // Current model ID
 
 	// Logger (thread-safe replacement)
 	loggerMu  sync.RWMutex
@@ -82,18 +87,23 @@ func (d *Daemon) SetConfig(cfg *config.Config) {
 	d.cfg = cfg
 }
 
-// GetSemanticAnalyzer returns the current semantic analyzer (lock-free)
-func (d *Daemon) GetSemanticAnalyzer() *semantic.Analyzer {
-	val := d.semanticAnalyzer.Load()
+// GetSemanticProvider returns the current semantic provider (lock-free)
+func (d *Daemon) GetSemanticProvider() semantic.Provider {
+	val := d.semanticProvider.Load()
 	if val == nil {
 		return nil
 	}
-	return val.(*semantic.Analyzer)
+	return val.(semantic.Provider)
 }
 
-// SetSemanticAnalyzer sets the semantic analyzer atomically (lock-free)
-func (d *Daemon) SetSemanticAnalyzer(a *semantic.Analyzer) {
-	d.semanticAnalyzer.Store(a)
+// SetSemanticProvider sets the semantic provider atomically (lock-free)
+func (d *Daemon) SetSemanticProvider(p semantic.Provider) {
+	d.semanticProvider.Store(p)
+}
+
+// GetProviderInfo returns the current provider name and model
+func (d *Daemon) GetProviderInfo() (provider, model string) {
+	return d.currentProvider, d.currentModel
 }
 
 // GetLogger returns the current logger (thread-safe)
@@ -112,27 +122,42 @@ func (d *Daemon) SetLogger(l *slog.Logger) {
 
 // New creates a new daemon instance
 func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) (*Daemon, error) {
-	cacheManager, err := cache.NewManager(cfg.Analysis.CacheDir)
+	cacheManager, err := cache.NewManager(cfg.Semantic.CacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache manager: %w", err)
 	}
 
 	metadataExtractor := metadata.NewExtractor()
 
-	var semanticAnalyzer *semantic.Analyzer
-	if cfg.Analysis.Enabled {
-		client := semantic.NewClient(
-			cfg.Claude.APIKey,
-			cfg.Claude.Model,
-			cfg.Claude.MaxTokens,
-			cfg.Claude.Timeout,
-		)
-		semanticAnalyzer = semantic.NewAnalyzer(
-			client,
-			cfg.Claude.EnableVision,
-			cfg.Analysis.MaxFileSize,
-		)
-		logger.Info("semantic analysis enabled", "model", cfg.Claude.Model)
+	var semanticProv semantic.Provider
+	var currentProvider, currentModel string
+	if cfg.Semantic.Enabled {
+		// Get provider from registry
+		registry := semantic.GlobalRegistry()
+		factory, err := registry.Get(cfg.Semantic.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get semantic provider %q; %w", cfg.Semantic.Provider, err)
+		}
+
+		// Create provider config
+		providerConfig := semantic.ProviderConfig{
+			APIKey:       cfg.Semantic.APIKey,
+			Model:        cfg.Semantic.Model,
+			MaxTokens:    cfg.Semantic.MaxTokens,
+			Timeout:      cfg.Semantic.Timeout,
+			EnableVision: cfg.Semantic.EnableVision,
+			MaxFileSize:  cfg.Semantic.MaxFileSize,
+		}
+
+		// Instantiate provider
+		semanticProv, err = factory(providerConfig, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create semantic provider %q; %w", cfg.Semantic.Provider, err)
+		}
+
+		currentProvider = semanticProv.Name()
+		currentModel = semanticProv.Model()
+		logger.Info("semantic analysis enabled", "provider", currentProvider, "model", currentModel)
 	} else {
 		logger.Info("semantic analysis disabled", "reason", "no API key configured")
 	}
@@ -144,11 +169,11 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 
 	// Create file watcher
 	skipDirs := []string{".cache", ".git"}
-	skipFiles := cfg.Analysis.SkipFiles
+	skipFiles := cfg.Semantic.SkipFiles
 	if len(skipFiles) == 0 {
 		skipFiles = []string{"memorizer"}
 	}
-	skipExtensions := cfg.Analysis.SkipExtensions
+	skipExtensions := cfg.Semantic.SkipExtensions
 
 	fileWatcher, err := watcher.New(
 		cfg.MemoryRoot,
@@ -203,6 +228,8 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 
 	d := &Daemon{
 		cfg:               cfg,
+		currentProvider:   currentProvider,
+		currentModel:      currentModel,
 		graphManager:      graphManager,
 		cacheManager:      cacheManager,
 		metadataExtractor: metadataExtractor,
@@ -218,11 +245,18 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		rebuildIntervalCh: make(chan time.Duration, 1),
 	}
 
-	// Set semantic analyzer atomically
-	d.SetSemanticAnalyzer(semanticAnalyzer)
+	// Set semantic provider atomically (only if non-nil; atomic.Value panics on nil)
+	if semanticProv != nil {
+		d.SetSemanticProvider(semanticProv)
+	}
 
 	// Set rebuild handler on HTTP server (Daemon implements api.RebuildHandler)
 	httpServer.SetRebuildHandler(d)
+
+	// Set provider info getter for health metrics (uses d.cfg for hot-reload support)
+	healthMetrics.SetProviderInfoGetter(func() (enabled bool, provider string, model string) {
+		return d.cfg.Semantic.Enabled, d.currentProvider, d.currentModel
+	})
 
 	return d, nil
 }
@@ -414,14 +448,15 @@ func (d *Daemon) rebuildIndex() error {
 
 	cfg := d.GetConfig()
 	logger := d.GetLogger()
-	analyzer := d.GetSemanticAnalyzer()
+	provider := d.GetSemanticProvider()
+	providerName, modelName := d.GetProviderInfo()
 
 	skipDirs := []string{".cache", ".git"}
-	skipFiles := cfg.Analysis.SkipFiles
+	skipFiles := cfg.Semantic.SkipFiles
 	if len(skipFiles) == 0 {
 		skipFiles = []string{"memorizer"}
 	}
-	skipExtensions := cfg.Analysis.SkipExtensions
+	skipExtensions := cfg.Semantic.SkipExtensions
 
 	// Create embedding provider and cache if embeddings are enabled
 	var embeddingProvider embeddings.Provider
@@ -457,7 +492,7 @@ func (d *Daemon) rebuildIndex() error {
 			}
 
 			// Create embedding cache
-			embCacheDir := filepath.Join(cfg.Analysis.CacheDir, "embeddings")
+			embCacheDir := filepath.Join(cfg.Semantic.CacheDir, "embeddings")
 			embeddingCache, err = embeddings.NewCache(embCacheDir, logger)
 			if err != nil {
 				logger.Warn("failed to create embedding cache", "error", err)
@@ -472,9 +507,11 @@ func (d *Daemon) rebuildIndex() error {
 	// Create worker pool
 	pool := worker.NewPool(
 		cfg.Daemon.Workers,
-		cfg.Daemon.RateLimitPerMin,
+		cfg.Semantic.RateLimitPerMin,
 		d.metadataExtractor,
-		analyzer,
+		provider,
+		providerName,
+		modelName,
 		embeddingProvider,
 		embeddingCache,
 		d.cacheManager,
@@ -501,7 +538,7 @@ func (d *Daemon) rebuildIndex() error {
 		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	if analyzer == nil {
+	if provider == nil {
 		logger.Info("processing files with worker pool (metadata only - no API key)",
 			"files", len(jobs),
 			"workers", cfg.Daemon.Workers,
@@ -510,6 +547,8 @@ func (d *Daemon) rebuildIndex() error {
 		logger.Info("processing files with worker pool",
 			"files", len(jobs),
 			"workers", cfg.Daemon.Workers,
+			"provider", providerName,
+			"model", modelName,
 		)
 	}
 
@@ -624,7 +663,8 @@ func (d *Daemon) processWatcherEvents() {
 func (d *Daemon) handleFileEvent(event watcher.Event) {
 	cfg := d.GetConfig()
 	logger := d.GetLogger()
-	analyzer := d.GetSemanticAnalyzer()
+	provider := d.GetSemanticProvider()
+	providerName, modelName := d.GetProviderInfo()
 
 	relPath, err := walker.GetRelPath(cfg.MemoryRoot, event.Path)
 	if err != nil {
@@ -675,18 +715,18 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 
 		// Analyze semantically if enabled
 		var semanticAnalysis *types.SemanticAnalysis
-		if analyzer != nil && fileHash != "" {
-			// Check cache first
-			cached, err := d.cacheManager.Get(fileHash)
+		if provider != nil && fileHash != "" {
+			// Check cache first (use provider name for cache subdirectory)
+			cached, err := d.cacheManager.Get(fileHash, providerName)
 			if err == nil && cached != nil && !d.cacheManager.IsStale(cached, fileHash) {
 				semanticAnalysis = cached.Semantic
 				wasCached = true
 				d.healthMetrics.RecordCacheHit()
 				logger.Debug("using cached analysis", "path", relPath)
 			} else {
-				// Analyze file
-				logger.Debug("analyzing file", "path", relPath)
-				analysis, err := analyzer.Analyze(fileMetadata)
+				// Analyze file using provider
+				logger.Debug("analyzing file", "path", relPath, "provider", providerName)
+				analysis, err := provider.Analyze(d.ctx, fileMetadata)
 				if err != nil {
 					logger.Warn("analysis failed", "path", event.Path, "error", err)
 					hadError = true
@@ -696,8 +736,10 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 					wasAnalyzed = true
 					d.healthMetrics.RecordAPICall()
 
-					// Cache result
+					// Cache result with provider and model info
 					cachedAnalysis := &types.CachedAnalysis{
+						Provider:   providerName,
+						Model:      modelName,
 						FilePath:   event.Path,
 						FileHash:   fileHash,
 						AnalyzedAt: time.Now(),
@@ -812,15 +854,15 @@ func (d *Daemon) ReloadConfig() error {
 // detectChanges compares old and new configs to detect changes
 func (d *Daemon) detectChanges(oldCfg, newCfg *config.Config) map[string]bool {
 	return map[string]bool{
-		"claude":           !reflect.DeepEqual(newCfg.Claude, oldCfg.Claude),
+		"semantic":         !reflect.DeepEqual(newCfg.Semantic, oldCfg.Semantic),
 		"log_level":        newCfg.Daemon.LogLevel != oldCfg.Daemon.LogLevel,
 		"debounce":         newCfg.Daemon.DebounceMs != oldCfg.Daemon.DebounceMs,
 		"rebuild_interval": newCfg.Daemon.FullRebuildIntervalMinutes != oldCfg.Daemon.FullRebuildIntervalMinutes,
 		"http_port":        newCfg.Daemon.HTTPPort != oldCfg.Daemon.HTTPPort,
 		"workers":          newCfg.Daemon.Workers != oldCfg.Daemon.Workers,
-		"rate_limit":       newCfg.Daemon.RateLimitPerMin != oldCfg.Daemon.RateLimitPerMin,
-		"skip_patterns": !reflect.DeepEqual(newCfg.Analysis.SkipFiles, oldCfg.Analysis.SkipFiles) ||
-			!reflect.DeepEqual(newCfg.Analysis.SkipExtensions, oldCfg.Analysis.SkipExtensions),
+		"rate_limit":       newCfg.Semantic.RateLimitPerMin != oldCfg.Semantic.RateLimitPerMin,
+		"skip_patterns": !reflect.DeepEqual(newCfg.Semantic.SkipFiles, oldCfg.Semantic.SkipFiles) ||
+			!reflect.DeepEqual(newCfg.Semantic.SkipExtensions, oldCfg.Semantic.SkipExtensions),
 	}
 }
 
@@ -828,14 +870,14 @@ func (d *Daemon) detectChanges(oldCfg, newCfg *config.Config) map[string]bool {
 func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.Config) {
 	logger := d.GetLogger()
 
-	if changes["claude"] {
-		if err := d.updateSemanticAnalyzer(newCfg); err != nil {
-			logger.Warn("failed to update semantic analyzer", "error", err)
+	if changes["semantic"] {
+		if err := d.updateSemanticProvider(newCfg); err != nil {
+			logger.Warn("failed to update semantic provider", "error", err)
 		} else {
-			if newCfg.Analysis.Enabled {
-				logger.Info("semantic analyzer updated", "model", newCfg.Claude.Model)
+			if newCfg.Semantic.Enabled {
+				logger.Info("semantic provider updated", "provider", d.currentProvider, "model", d.currentModel)
 			} else {
-				logger.Info("semantic analyzer disabled", "reason", "no API key configured")
+				logger.Info("semantic provider disabled", "reason", "no API key configured")
 			}
 		}
 	}
@@ -878,7 +920,7 @@ func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.C
 	if changes["workers"] || changes["rate_limit"] {
 		logger.Info("worker pool settings will apply on next rebuild",
 			"workers", newCfg.Daemon.Workers,
-			"rate_limit", newCfg.Daemon.RateLimitPerMin)
+			"rate_limit", newCfg.Semantic.RateLimitPerMin)
 	}
 
 	if changes["skip_patterns"] {
@@ -886,26 +928,43 @@ func (d *Daemon) applyComponentChanges(changes map[string]bool, newCfg *config.C
 	}
 }
 
-// updateSemanticAnalyzer creates and sets a new semantic analyzer
-func (d *Daemon) updateSemanticAnalyzer(cfg *config.Config) error {
-	if !cfg.Analysis.Enabled {
-		d.SetSemanticAnalyzer(nil)
+// updateSemanticProvider creates and sets a new semantic provider
+func (d *Daemon) updateSemanticProvider(cfg *config.Config) error {
+	if !cfg.Semantic.Enabled {
+		// Note: We don't clear the provider (atomic.Value can't store nil).
+		// Instead, mark as disabled by clearing provider info fields.
+		// Code that uses the provider checks cfg.Semantic.Enabled first.
+		d.currentProvider = ""
+		d.currentModel = ""
 		return nil
 	}
 
-	client := semantic.NewClient(
-		cfg.Claude.APIKey,
-		cfg.Claude.Model,
-		cfg.Claude.MaxTokens,
-		cfg.Claude.Timeout,
-	)
-	analyzer := semantic.NewAnalyzer(
-		client,
-		cfg.Claude.EnableVision,
-		cfg.Analysis.MaxFileSize,
-	)
+	// Get provider from registry
+	registry := semantic.GlobalRegistry()
+	factory, err := registry.Get(cfg.Semantic.Provider)
+	if err != nil {
+		return fmt.Errorf("failed to get semantic provider %q; %w", cfg.Semantic.Provider, err)
+	}
 
-	d.SetSemanticAnalyzer(analyzer)
+	// Create provider config
+	providerConfig := semantic.ProviderConfig{
+		APIKey:       cfg.Semantic.APIKey,
+		Model:        cfg.Semantic.Model,
+		MaxTokens:    cfg.Semantic.MaxTokens,
+		Timeout:      cfg.Semantic.Timeout,
+		EnableVision: cfg.Semantic.EnableVision,
+		MaxFileSize:  cfg.Semantic.MaxFileSize,
+	}
+
+	// Instantiate provider
+	provider, err := factory(providerConfig, d.GetLogger())
+	if err != nil {
+		return fmt.Errorf("failed to create semantic provider %q; %w", cfg.Semantic.Provider, err)
+	}
+
+	d.SetSemanticProvider(provider)
+	d.currentProvider = provider.Name()
+	d.currentModel = provider.Model()
 	return nil
 }
 

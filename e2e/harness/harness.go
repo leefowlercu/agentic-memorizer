@@ -226,18 +226,18 @@ func (h *E2EHarness) createConfigWithHTTPPort(httpPort int) error {
 	config := fmt.Sprintf(`# E2E Test Configuration
 memory_root: %s
 
-claude:
+semantic:
+  enabled: false
+  provider: claude
   timeout: 30
-
-analysis:
   max_file_size: 10485760
   skip_extensions: []
   skip_files: []
   cache_dir: %s
+  rate_limit_per_min: 20
 
 daemon:
   workers: 2
-  rate_limit_per_min: 20
   debounce_ms: 200
   full_rebuild_interval_minutes: 60
   http_port: %d
@@ -273,6 +273,81 @@ func (h *E2EHarness) EnableHTTPServer(port int) error {
 
 	// Update HTTP client with the new port
 	h.HTTPClient = NewHTTPClient("localhost", port)
+
+	return nil
+}
+
+// SemanticProviderConfig holds semantic provider configuration for tests
+type SemanticProviderConfig struct {
+	Enabled  bool
+	Provider string // "claude", "openai", "gemini"
+	Model    string
+	APIKey   string
+}
+
+// CreateConfigWithSemanticProvider creates a config file with specific semantic provider settings
+func (h *E2EHarness) CreateConfigWithSemanticProvider(httpPort int, semantic SemanticProviderConfig) error {
+	h.t.Helper()
+
+	graphHost := os.Getenv("FALKORDB_HOST")
+	if graphHost == "" {
+		graphHost = "localhost"
+	}
+	graphPort := os.Getenv("FALKORDB_PORT")
+	if graphPort == "" {
+		graphPort = "6379"
+	}
+
+	// Build semantic config section
+	semanticConfig := fmt.Sprintf(`semantic:
+  enabled: %t
+  provider: %s`, semantic.Enabled, semantic.Provider)
+
+	if semantic.Model != "" {
+		semanticConfig += fmt.Sprintf("\n  model: %s", semantic.Model)
+	}
+	if semantic.APIKey != "" {
+		semanticConfig += fmt.Sprintf("\n  api_key: %s", semantic.APIKey)
+	}
+	semanticConfig += fmt.Sprintf(`
+  timeout: 30
+  max_file_size: 10485760
+  skip_extensions: []
+  skip_files: []
+  cache_dir: %s`, filepath.Join(h.MemoryRoot, ".cache"))
+
+	config := fmt.Sprintf(`# E2E Test Configuration
+memory_root: %s
+
+%s
+
+daemon:
+  workers: 2
+  rate_limit_per_min: 20
+  debounce_ms: 200
+  full_rebuild_interval_minutes: 60
+  http_port: %d
+  log_file: %s
+  log_level: info
+
+graph:
+  host: %s
+  port: %s
+  database: %s
+
+mcp:
+  log_file: %s
+  log_level: info
+  daemon_host: localhost
+  daemon_port: %d
+`, h.MemoryRoot, semanticConfig, httpPort, h.LogPath, graphHost, graphPort, h.GraphName, filepath.Join(h.AppDir, "mcp.log"), httpPort)
+
+	if err := os.WriteFile(h.ConfigPath, []byte(config), 0644); err != nil {
+		return fmt.Errorf("failed to write config file; %w", err)
+	}
+
+	// Update HTTP client with the new port
+	h.HTTPClient = NewHTTPClient("localhost", httpPort)
 
 	return nil
 }

@@ -63,8 +63,14 @@ func init() {
 	// Mode selection
 	InitializeCmd.Flags().Bool("unattended", false, "Run in unattended mode without interactive prompts")
 
-	// Claude API configuration
-	InitializeCmd.Flags().String("anthropic-api-key", "", "Anthropic API key value")
+	// Semantic provider configuration
+	InitializeCmd.Flags().String("semantic-provider", "", "Semantic analysis provider (claude, openai, gemini)")
+	InitializeCmd.Flags().String("semantic-model", "", "Model for semantic analysis (provider-specific)")
+	InitializeCmd.Flags().String("semantic-api-key", "", "API key for semantic analysis")
+	InitializeCmd.Flags().Bool("skip-semantic", false, "Disable semantic analysis")
+
+	// Claude API configuration (legacy, still supported)
+	InitializeCmd.Flags().String("anthropic-api-key", "", "Anthropic API key value (legacy; use --semantic-api-key)")
 	InitializeCmd.Flags().Bool("use-env-anthropic-api-key", false, "Use ANTHROPIC_API_KEY from environment")
 
 	// HTTP API configuration
@@ -128,13 +134,55 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--http-port must be -1 (default), 0 (disabled), or 1-65535")
 	}
 
+	// Validate semantic provider if specified
+	semanticProvider, _ := cmd.Flags().GetString("semantic-provider")
+	skipSemantic, _ := cmd.Flags().GetBool("skip-semantic")
+	if semanticProvider != "" && skipSemantic {
+		return fmt.Errorf("--semantic-provider and --skip-semantic are mutually exclusive")
+	}
+	if semanticProvider != "" && semanticProvider != "claude" && semanticProvider != "openai" && semanticProvider != "gemini" {
+		return fmt.Errorf("--semantic-provider must be one of: claude, openai, gemini")
+	}
+
 	// Unattended mode validation
 	if unattended {
-		// Must have either API key or use-env flag
-		if anthropicKey == "" && !useEnvAnthropic {
-			envKey := os.Getenv(config.ClaudeAPIKeyEnv)
-			if envKey == "" {
-				return fmt.Errorf("unattended mode requires --anthropic-api-key or --use-env-anthropic-api-key (or %s environment variable)", config.ClaudeAPIKeyEnv)
+		// Semantic analysis: require API key unless skipped
+		if !skipSemantic {
+			semanticAPIKey, _ := cmd.Flags().GetString("semantic-api-key")
+			provider := semanticProvider
+			if provider == "" {
+				provider = "claude" // default
+			}
+
+			// Check for API key based on provider
+			hasKey := semanticAPIKey != ""
+			if !hasKey {
+				// Check legacy Anthropic flags for backward compatibility
+				if provider == "claude" && (anthropicKey != "" || useEnvAnthropic) {
+					hasKey = true
+				}
+				// Check environment variable for provider
+				if !hasKey {
+					switch provider {
+					case "claude":
+						hasKey = os.Getenv(config.ClaudeAPIKeyEnv) != ""
+					case "openai":
+						hasKey = os.Getenv(config.OpenAIAPIKeyEnv) != ""
+					case "gemini":
+						hasKey = os.Getenv(config.GoogleAPIKeyEnv) != ""
+					}
+				}
+			}
+
+			if !hasKey {
+				envVar := config.ClaudeAPIKeyEnv
+				switch provider {
+				case "openai":
+					envVar = config.OpenAIAPIKeyEnv
+				case "gemini":
+					envVar = config.GoogleAPIKeyEnv
+				}
+				return fmt.Errorf("unattended mode requires --semantic-api-key or %s environment variable (or use --skip-semantic)", envVar)
 			}
 		}
 
@@ -201,9 +249,9 @@ func runInteractive(cmd *cobra.Command) error {
 		cfg.MemoryRoot = config.ExpandHome(cfg.MemoryRoot)
 	}
 	if cacheDir != "" {
-		cfg.Analysis.CacheDir = config.ExpandHome(cacheDir)
+		cfg.Semantic.CacheDir = config.ExpandHome(cacheDir)
 	} else {
-		cfg.Analysis.CacheDir = config.ExpandHome(cfg.Analysis.CacheDir)
+		cfg.Semantic.CacheDir = config.ExpandHome(cfg.Semantic.CacheDir)
 	}
 
 	// Run the TUI wizard
@@ -265,23 +313,71 @@ func runUnattended(cmd *cobra.Command) error {
 
 	// Cache dir
 	if cacheDir != "" {
-		cfg.Analysis.CacheDir = config.ExpandHome(cacheDir)
+		cfg.Semantic.CacheDir = config.ExpandHome(cacheDir)
 	} else {
-		cfg.Analysis.CacheDir = config.ExpandHome(cfg.Analysis.CacheDir)
+		cfg.Semantic.CacheDir = config.ExpandHome(cfg.Semantic.CacheDir)
 	}
 
-	// Anthropic API key
-	anthropicKey, _ := cmd.Flags().GetString("anthropic-api-key")
-	useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
-	if anthropicKey != "" {
-		cfg.Claude.APIKey = anthropicKey
-	} else if useEnvAnthropic {
-		// Detect and write env var to config for service manager compatibility
-		envKey := os.Getenv(config.ClaudeAPIKeyEnv)
-		cfg.Claude.APIKey = envKey
-	} else if os.Getenv(config.ClaudeAPIKeyEnv) != "" {
-		// Env var exists but not explicitly requested - still capture it
-		cfg.Claude.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+	// Semantic provider configuration
+	skipSemantic, _ := cmd.Flags().GetBool("skip-semantic")
+	if skipSemantic {
+		cfg.Semantic.Enabled = false
+		cfg.Semantic.Provider = ""
+		cfg.Semantic.Model = ""
+		cfg.Semantic.APIKey = ""
+	} else {
+		cfg.Semantic.Enabled = true
+
+		// Provider selection
+		semanticProvider, _ := cmd.Flags().GetString("semantic-provider")
+		if semanticProvider != "" {
+			cfg.Semantic.Provider = semanticProvider
+		} else {
+			cfg.Semantic.Provider = config.DefaultSemanticProvider
+		}
+
+		// Model selection (use provider default if not specified)
+		semanticModel, _ := cmd.Flags().GetString("semantic-model")
+		if semanticModel != "" {
+			cfg.Semantic.Model = semanticModel
+		} else {
+			switch cfg.Semantic.Provider {
+			case "claude":
+				cfg.Semantic.Model = config.DefaultClaudeModel
+				cfg.Semantic.RateLimitPerMin = config.DefaultClaudeRateLimit
+			case "openai":
+				cfg.Semantic.Model = config.DefaultOpenAIModel
+				cfg.Semantic.RateLimitPerMin = config.DefaultOpenAIRateLimit
+			case "gemini":
+				cfg.Semantic.Model = config.DefaultGeminiModel
+				cfg.Semantic.RateLimitPerMin = config.DefaultGeminiRateLimit
+			}
+		}
+
+		// API key - check new flag, then legacy flags, then env vars
+		semanticAPIKey, _ := cmd.Flags().GetString("semantic-api-key")
+		anthropicKey, _ := cmd.Flags().GetString("anthropic-api-key")
+		useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
+
+		if semanticAPIKey != "" {
+			cfg.Semantic.APIKey = semanticAPIKey
+		} else if cfg.Semantic.Provider == "claude" && anthropicKey != "" {
+			// Legacy support
+			cfg.Semantic.APIKey = anthropicKey
+		} else if cfg.Semantic.Provider == "claude" && useEnvAnthropic {
+			// Legacy support
+			cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+		} else {
+			// Try to get from environment based on provider
+			switch cfg.Semantic.Provider {
+			case "claude":
+				cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+			case "openai":
+				cfg.Semantic.APIKey = os.Getenv(config.OpenAIAPIKeyEnv)
+			case "gemini":
+				cfg.Semantic.APIKey = os.Getenv(config.GoogleAPIKeyEnv)
+			}
+		}
 	}
 
 	// HTTP port
@@ -440,7 +536,7 @@ func finalizeInit(configPath string, cfg *config.Config, integrationNames []stri
 		return fmt.Errorf("failed to create memory directory; %w", err)
 	}
 
-	if err := os.MkdirAll(cfg.Analysis.CacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.Semantic.CacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory; %w", err)
 	}
 
@@ -463,7 +559,7 @@ func finalizeInit(configPath string, cfg *config.Config, integrationNames []stri
 	fmt.Printf("\nConfiguration:\n")
 	fmt.Printf("  Created configuration file: %s\n", configPath)
 	fmt.Printf("  Created memory directory: %s\n", cfg.MemoryRoot)
-	fmt.Printf("  Created cache directory: %s\n", cfg.Analysis.CacheDir)
+	fmt.Printf("  Created cache directory: %s\n", cfg.Semantic.CacheDir)
 	fmt.Printf("  FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
 	if cfg.Embeddings.Enabled {
 		fmt.Printf("  Embeddings: %s (%s)\n", cfg.Embeddings.Provider, cfg.Embeddings.Model)
@@ -531,7 +627,7 @@ type StartupInfo struct {
 }
 
 func printNextSteps(cfg *config.Config, startup *StartupInfo) {
-	apiKeyConfigured := cfg.Claude.APIKey != "" || os.Getenv(config.ClaudeAPIKeyEnv) != ""
+	apiKeyConfigured := cfg.Semantic.APIKey != "" || os.Getenv(config.ClaudeAPIKeyEnv) != ""
 	falkorDBRunning := docker.IsFalkorDBRunning(cfg.Graph.Port)
 
 	fmt.Printf("\nNext steps:\n")

@@ -75,7 +75,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	configSection := format.NewSection("Configuration").SetLevel(1).AddDivider()
 	configSection.AddKeyValuef("Debounce Period", "%d ms", cfg.Daemon.DebounceMs)
 	configSection.AddKeyValuef("Workers", "%d", cfg.Daemon.Workers)
-	configSection.AddKeyValuef("Rate Limit", "%d/min", cfg.Daemon.RateLimitPerMin)
 	configSection.AddKeyValuef("Rebuild Interval", "%d minutes", cfg.Daemon.FullRebuildIntervalMinutes)
 
 	// HTTP Port with "(disabled)" if 0

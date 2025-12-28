@@ -19,12 +19,12 @@ func TestValidateReload(t *testing.T) {
 			name: "no changes",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError: false,
@@ -33,12 +33,12 @@ func TestValidateReload(t *testing.T) {
 			name: "memory_root changed",
 			oldCfg: &Config{
 				MemoryRoot: "/old/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/new/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError:  true,
@@ -48,27 +48,27 @@ func TestValidateReload(t *testing.T) {
 			name: "cache_dir changed",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/old/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/old/cache"},
 				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/new/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/new/cache"},
 				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError:  true,
-			errorField: "analysis.cache_dir",
+			errorField: "semantic.cache_dir",
 		},
 		{
 			name: "log_file changed",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon:     DaemonConfig{LogFile: "/old/daemon.log"},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon:     DaemonConfig{LogFile: "/new/daemon.log"},
 			},
 			wantError:  true,
@@ -78,12 +78,12 @@ func TestValidateReload(t *testing.T) {
 			name: "multiple immutable fields changed",
 			oldCfg: &Config{
 				MemoryRoot: "/old/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/old/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/old/cache"},
 				Daemon:     DaemonConfig{LogFile: "/old/daemon.log"},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/new/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/new/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/new/cache"},
 				Daemon:     DaemonConfig{LogFile: "/new/daemon.log"},
 			},
 			wantError:  true,
@@ -93,7 +93,7 @@ func TestValidateReload(t *testing.T) {
 			name: "workers changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile: "/test/daemon.log",
 					Workers: 3,
@@ -101,7 +101,7 @@ func TestValidateReload(t *testing.T) {
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile: "/test/daemon.log",
 					Workers: 8,
@@ -113,18 +113,22 @@ func TestValidateReload(t *testing.T) {
 			name: "rate_limit changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
-				Daemon: DaemonConfig{
-					LogFile:         "/test/daemon.log",
+				Semantic: SemanticConfig{
+					CacheDir:        "/test/cache",
 					RateLimitPerMin: 20,
+				},
+				Daemon: DaemonConfig{
+					LogFile: "/test/daemon.log",
 				},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
-				Daemon: DaemonConfig{
-					LogFile:         "/test/daemon.log",
+				Semantic: SemanticConfig{
+					CacheDir:        "/test/cache",
 					RateLimitPerMin: 40,
+				},
+				Daemon: DaemonConfig{
+					LogFile: "/test/daemon.log",
 				},
 			},
 			wantError: false,
@@ -133,7 +137,7 @@ func TestValidateReload(t *testing.T) {
 			name: "log_level changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					LogLevel: "info",
@@ -141,7 +145,7 @@ func TestValidateReload(t *testing.T) {
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					LogLevel: "debug",
@@ -150,26 +154,26 @@ func TestValidateReload(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name: "claude api settings changed (hot-reloadable)",
+			name: "semantic api settings changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
-				Claude: ClaudeConfig{
+				Semantic: SemanticConfig{
+					CacheDir:  "/test/cache",
 					APIKey:    "old-key",
 					Model:     "claude-3-sonnet",
 					MaxTokens: 1000,
 				},
+				Daemon: DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
-				Claude: ClaudeConfig{
+				Semantic: SemanticConfig{
+					CacheDir:  "/test/cache",
 					APIKey:    "new-key",
 					Model:     "claude-3-opus",
 					MaxTokens: 2000,
 				},
+				Daemon: DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError: false,
 		},
@@ -177,7 +181,7 @@ func TestValidateReload(t *testing.T) {
 			name: "debounce interval changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:    "/test/daemon.log",
 					DebounceMs: 500,
@@ -185,7 +189,7 @@ func TestValidateReload(t *testing.T) {
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:    "/test/daemon.log",
 					DebounceMs: 1000,
@@ -197,7 +201,7 @@ func TestValidateReload(t *testing.T) {
 			name: "rebuild interval changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:                    "/test/daemon.log",
 					FullRebuildIntervalMinutes: 60,
@@ -205,7 +209,7 @@ func TestValidateReload(t *testing.T) {
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:                    "/test/daemon.log",
 					FullRebuildIntervalMinutes: 120,
@@ -217,7 +221,7 @@ func TestValidateReload(t *testing.T) {
 			name: "http port changed (hot-reloadable)",
 			oldCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					HTTPPort: 8080,
@@ -225,7 +229,7 @@ func TestValidateReload(t *testing.T) {
 			},
 			newCfg: &Config{
 				MemoryRoot: "/test/memory",
-				Analysis:   AnalysisConfig{CacheDir: "/test/cache"},
+				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					HTTPPort: 8081,
@@ -260,13 +264,13 @@ func TestValidateReload_ErrorAccumulation(t *testing.T) {
 	// Test that multiple immutable field changes are all reported
 	oldCfg := &Config{
 		MemoryRoot: "/old/memory",
-		Analysis:   AnalysisConfig{CacheDir: "/old/cache"},
+		Semantic:   SemanticConfig{CacheDir: "/old/cache"},
 		Daemon:     DaemonConfig{LogFile: "/old/daemon.log"},
 	}
 
 	newCfg := &Config{
 		MemoryRoot: "/new/memory",
-		Analysis:   AnalysisConfig{CacheDir: "/new/cache"},
+		Semantic:   SemanticConfig{CacheDir: "/new/cache"},
 		Daemon:     DaemonConfig{LogFile: "/new/daemon.log"},
 	}
 

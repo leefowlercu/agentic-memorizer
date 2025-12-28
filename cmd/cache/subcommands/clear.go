@@ -50,7 +50,7 @@ func runClear(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config; %w", err)
 	}
 
-	manager, err := cache.NewManager(cfg.Analysis.CacheDir)
+	manager, err := cache.NewManager(cfg.Semantic.CacheDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize cache manager; %w", err)
 	}

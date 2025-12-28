@@ -1,81 +1,121 @@
-package semantic
+package claude
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
-type Analyzer struct {
+const Version = "1.0.0"
+
+// ClaudeProvider implements the Provider interface for Claude API
+type ClaudeProvider struct {
 	client       *Client
+	model        string
 	enableVision bool
 	maxFileSize  int64
+	logger       *slog.Logger
 }
 
-func NewAnalyzer(client *Client, enableVision bool, maxFileSize int64) *Analyzer {
-	return &Analyzer{
-		client:       client,
-		enableVision: enableVision,
-		maxFileSize:  maxFileSize,
+// NewClaudeProvider creates a new Claude provider instance
+func NewClaudeProvider(config semantic.ProviderConfig, logger *slog.Logger) (semantic.Provider, error) {
+	if config.APIKey == "" {
+		return nil, fmt.Errorf("API key is required for Claude provider")
 	}
+
+	if config.Model == "" {
+		return nil, fmt.Errorf("model is required for Claude provider")
+	}
+
+	client := NewClient(config.APIKey, config.Model, config.MaxTokens, config.Timeout)
+
+	return &ClaudeProvider{
+		client:       client,
+		model:        config.Model,
+		enableVision: config.EnableVision,
+		maxFileSize:  config.MaxFileSize,
+		logger:       logger,
+	}, nil
 }
 
+// Name returns the provider identifier
+func (p *ClaudeProvider) Name() string {
+	return "claude"
+}
+
+// Model returns the model being used
+func (p *ClaudeProvider) Model() string {
+	return p.model
+}
+
+// SupportsVision returns whether provider supports image analysis
+func (p *ClaudeProvider) SupportsVision() bool {
+	return true // Claude supports vision API
+}
+
+// SupportsDocuments returns whether provider supports PDF/document blocks
+func (p *ClaudeProvider) SupportsDocuments() bool {
+	return true // Claude supports document content blocks for PDFs
+}
+
+// Analyze generates semantic understanding for a file
 // Content routing strategy:
 // - Images -> analyzeImage (vision API with base64 encoding)
 // - Office docs (pptx/docx) -> analyzeDocument (text extraction + analysis)
 // - PDFs -> analyzeDocument (document content blocks API)
 // - Everything else -> analyzeText (standard text analysis)
 // Files exceeding maxFileSize are rejected before routing.
-func (a *Analyzer) Analyze(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
-	if metadata.Size > a.maxFileSize {
+func (p *ClaudeProvider) Analyze(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+	if metadata.Size > p.maxFileSize {
 		return nil, fmt.Errorf("file too large for analysis: %d bytes", metadata.Size)
 	}
 
-	if metadata.Category == "images" && a.enableVision {
-		return a.analyzeImage(metadata)
+	if metadata.Category == "images" && p.enableVision {
+		return p.analyzeImage(metadata)
 	}
 
 	if metadata.Type == "pptx" || metadata.Type == "docx" {
-		return a.analyzeDocument(metadata)
+		return p.analyzeDocument(metadata)
 	}
 
-	return a.analyzeText(metadata)
+	return p.analyzeText(metadata)
 }
 
-func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+func (p *ClaudeProvider) analyzeText(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	content, err := os.ReadFile(metadata.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file; %w", err)
 	}
 
 	if !metadata.IsReadable {
-		return a.analyzeBinary(metadata)
+		return p.analyzeBinary(metadata)
 	}
 
 	contentStr := string(content)
 	if len(contentStr) > 100000 { // 100,000 byte limit for analysis
-
 		contentStr = contentStr[:100000] + "\n\n[Content truncated...]"
 	}
 
-	prompt := a.buildPrompt(metadata, contentStr)
+	prompt := p.buildPrompt(metadata, contentStr)
 
-	response, err := a.client.SendMessage(prompt)
+	response, err := p.client.SendMessage(prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze with Claude; %w", err)
 	}
 
 	var analysis types.SemanticAnalysis
 	if err := json.Unmarshal([]byte(response), &analysis); err != nil {
-		if jsonStr := extractJSON(response); jsonStr != "" { // Try extracting JSON from code block wrapper
-
+		if jsonStr := extractJSON(response); jsonStr != "" {
 			if err := json.Unmarshal([]byte(jsonStr), &analysis); err == nil {
 				return &analysis, nil
 			}
@@ -86,14 +126,13 @@ func (a *Analyzer) analyzeText(metadata *types.FileMetadata) (*types.SemanticAna
 	return &analysis, nil
 }
 
-func (a *Analyzer) analyzeImage(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+func (p *ClaudeProvider) analyzeImage(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	imageData, err := os.ReadFile(metadata.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read image; %w", err)
 	}
 
 	imageBase64 := base64.StdEncoding.EncodeToString(imageData)
-
 	mediaType := getMediaType(metadata.Type)
 
 	prompt := fmt.Sprintf(`Analyze this image and provide semantic understanding.
@@ -125,7 +164,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 		metadata.Dimensions.Height,
 	)
 
-	response, err := a.client.SendMessageWithImage(prompt, imageBase64, mediaType)
+	response, err := p.client.SendMessageWithImage(prompt, imageBase64, mediaType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze image with Claude; %w", err)
 	}
@@ -143,16 +182,16 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	return &analysis, nil
 }
 
-func (a *Analyzer) analyzeDocument(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+func (p *ClaudeProvider) analyzeDocument(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	// For PPTX files, extract text and analyze as text
 	// (Claude API only supports PDF for document content blocks)
 	if metadata.Type == "pptx" {
-		return a.analyzePptx(metadata)
+		return p.analyzePptx(metadata)
 	}
 
 	// For DOCX files, extract text and analyze as text
 	if metadata.Type == "docx" {
-		return a.analyzeDocx(metadata)
+		return p.analyzeDocx(metadata)
 	}
 
 	// For PDF files, send as document
@@ -197,7 +236,7 @@ For references, identify what the document depends on, builds upon, or relates t
 
 Be concise but informative. Respond with ONLY valid JSON.`
 
-		response, err := a.client.SendMessageWithDocument(prompt, documentBase64, "application/pdf")
+		response, err := p.client.SendMessageWithDocument(prompt, documentBase64, "application/pdf")
 		if err != nil {
 			return nil, fmt.Errorf("failed to analyze document with Claude; %w", err)
 		}
@@ -216,12 +255,11 @@ Be concise but informative. Respond with ONLY valid JSON.`
 	}
 
 	// For other document types, fall back to generic analysis
-	return a.analyzeBinary(metadata)
+	return p.analyzeBinary(metadata)
 }
 
-func (a *Analyzer) analyzePptx(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
-	// Import the metadata package to access the PptxHandler
-	// We'll extract text directly here to avoid circular dependencies
+func (p *ClaudeProvider) analyzePptx(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+	// Open PPTX as ZIP
 	zipReader, err := os.Open(metadata.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open PPTX; %w", err)
@@ -294,7 +332,7 @@ func (a *Analyzer) analyzePptx(metadata *types.FileMetadata) (*types.SemanticAna
 	extractedText := strings.TrimSpace(allText.String())
 	if extractedText == "" {
 		// No text extracted, fall back to metadata-only analysis
-		return a.analyzeBinary(metadata)
+		return p.analyzeBinary(metadata)
 	}
 
 	// Truncate if too long
@@ -334,7 +372,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 		extractedText,
 	)
 
-	response, err := a.client.SendMessage(prompt)
+	response, err := p.client.SendMessage(prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze with Claude; %w", err)
 	}
@@ -352,7 +390,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	return &analysis, nil
 }
 
-func (a *Analyzer) analyzeDocx(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+func (p *ClaudeProvider) analyzeDocx(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	// Open DOCX as ZIP
 	zipReader, err := os.Open(metadata.Path)
 	if err != nil {
@@ -425,7 +463,7 @@ func (a *Analyzer) analyzeDocx(metadata *types.FileMetadata) (*types.SemanticAna
 	extractedText := strings.TrimSpace(allText.String())
 	if extractedText == "" {
 		// No text extracted, fall back to metadata-only analysis
-		return a.analyzeBinary(metadata)
+		return p.analyzeBinary(metadata)
 	}
 
 	// Truncate if too long
@@ -465,7 +503,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 		extractedText,
 	)
 
-	response, err := a.client.SendMessage(prompt)
+	response, err := p.client.SendMessage(prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze with Claude; %w", err)
 	}
@@ -483,7 +521,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	return &analysis, nil
 }
 
-func (a *Analyzer) analyzeBinary(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+func (p *ClaudeProvider) analyzeBinary(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
 	// For binary files, create a basic analysis based on metadata
 	summary := fmt.Sprintf("%s file", strings.ToUpper(strings.TrimPrefix(metadata.Type, ".")))
 
@@ -504,7 +542,7 @@ func (a *Analyzer) analyzeBinary(metadata *types.FileMetadata) (*types.SemanticA
 	}, nil
 }
 
-func (a *Analyzer) buildPrompt(metadata *types.FileMetadata, content string) string {
+func (p *ClaudeProvider) buildPrompt(metadata *types.FileMetadata, content string) string {
 	return fmt.Sprintf(`Analyze this file and provide semantic understanding.
 
 File: %s
@@ -540,6 +578,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	)
 }
 
+// extractJSON extracts JSON from code block wrappers
 func extractJSON(text string) string {
 	if start := strings.Index(text, "```json"); start != -1 {
 		start += 7
@@ -558,6 +597,7 @@ func extractJSON(text string) string {
 	return ""
 }
 
+// getMediaType converts file type to media type
 func getMediaType(fileType string) string {
 	switch strings.ToLower(fileType) {
 	case ".png", "png":

@@ -59,7 +59,9 @@ const CacheMetadataVersion = 1
 //   - Changing confidence score calculations
 //   - Updating entity/reference extraction
 //   - Fixing bugs in semantic analysis
-const CacheSemanticVersion = 1
+//
+// Version 2: Multi-provider semantic analysis refactor (claude.* + analysis.* → semantic.*)
+const CacheSemanticVersion = 2
 
 // CacheVersion returns the combined version string in format "v{schema}.{metadata}.{semantic}"
 func CacheVersion() string {

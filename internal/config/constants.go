@@ -16,6 +16,8 @@ const (
 // The actual values (API keys, passwords) come from the environment or config file.
 const (
 	ClaudeAPIKeyEnv = "ANTHROPIC_API_KEY"
+	OpenAIAPIKeyEnv = "OPENAI_API_KEY"
+	GoogleAPIKeyEnv = "GOOGLE_API_KEY"
 )
 
 // Hardcoded Graph environment variable names
@@ -47,30 +49,44 @@ const (
 var DefaultSkipExtensions = []string{".zip", ".tar", ".gz", ".exe", ".bin", ".dmg", ".iso"}
 var DefaultSkipFiles = []string{"memorizer"}
 
+// Provider-specific defaults
+const (
+	DefaultSemanticProvider = "claude"
+	DefaultClaudeModel      = "claude-sonnet-4-5-20250929"
+	DefaultOpenAIModel      = "gpt-5.2-chat-latest"
+	DefaultGeminiModel      = "gemini-2.5-flash"
+)
+
+// Provider-specific rate limits (requests per minute)
+const (
+	DefaultClaudeRateLimit = 20  // Conservative for API quotas
+	DefaultOpenAIRateLimit = 60  // Tier 1: 500 RPM, suggest conservative
+	DefaultGeminiRateLimit = 100 // Paid tier: 2000 RPM, suggest conservative
+)
+
 // DefaultConfig provides sensible defaults for all configuration settings.
 // INTERNAL settings (not shown in initialized config but available for power users):
-// - claude.max_tokens, analysis.max_file_size, analysis.skip_extensions, analysis.skip_files
-// - daemon.debounce_ms, daemon.workers, daemon.rate_limit_per_min, daemon.full_rebuild_interval_minutes
-// - graph.similarity_threshold, graph.max_similar_files, integrations.enabled
+// - semantic.max_tokens, semantic.max_file_size, semantic.skip_extensions, semantic.skip_files
+// - daemon.debounce_ms, daemon.workers, daemon.full_rebuild_interval_minutes
+// - graph.similarity_threshold, graph.max_similar_files
 var DefaultConfig = Config{
 	MemoryRoot: "~/" + AppDirName + "/" + MemoryDirName,
-	Claude: ClaudeConfig{
-		Model:        "claude-sonnet-4-5-20250929",
-		MaxTokens:    1500,
-		Timeout:      30,   // API request timeout in seconds
-		EnableVision: true, // Enable vision API for image analysis
-	},
-	Analysis: AnalysisConfig{
-		Enabled:        true,     // Derived from API key presence in GetConfig()
-		MaxFileSize:    10485760, // 10 MB
-		SkipExtensions: DefaultSkipExtensions,
-		SkipFiles:      DefaultSkipFiles,
-		CacheDir:       "~/" + AppDirName + "/" + CacheDirName,
+	Semantic: SemanticConfig{
+		Enabled:         true, // Derived from API key presence in GetConfig()
+		Provider:        DefaultSemanticProvider,
+		Model:           DefaultClaudeModel,
+		MaxTokens:       1500,
+		Timeout:         30,                      // API request timeout in seconds
+		EnableVision:    true,                    // Enable vision API for image analysis
+		MaxFileSize:     10485760,                // 10 MB
+		SkipExtensions:  DefaultSkipExtensions,
+		SkipFiles:       DefaultSkipFiles,
+		CacheDir:        "~/" + AppDirName + "/" + CacheDirName,
+		RateLimitPerMin: DefaultClaudeRateLimit, // Default to Claude's conservative limit
 	},
 	Daemon: DaemonConfig{
 		DebounceMs:                 500,
 		Workers:                    3,
-		RateLimitPerMin:            20,
 		FullRebuildIntervalMinutes: 60,
 		HTTPPort:                   0, // Disabled by default
 		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,

@@ -17,10 +17,10 @@ func ValidateReload(oldCfg, newCfg *Config) error {
 			oldCfg.MemoryRoot, newCfg.MemoryRoot))
 	}
 
-	if oldCfg.Analysis.CacheDir != newCfg.Analysis.CacheDir {
+	if oldCfg.Semantic.CacheDir != newCfg.Semantic.CacheDir {
 		errors = append(errors, fmt.Sprintf(
-			"analysis.cache_dir cannot be changed during reload (old: %s, new: %s) - restart daemon required",
-			oldCfg.Analysis.CacheDir, newCfg.Analysis.CacheDir))
+			"semantic.cache_dir cannot be changed during reload (old: %s, new: %s) - restart daemon required",
+			oldCfg.Semantic.CacheDir, newCfg.Semantic.CacheDir))
 	}
 
 	if oldCfg.Daemon.LogFile != newCfg.Daemon.LogFile {

@@ -266,20 +266,18 @@ func TestValidateConfig_MCP(t *testing.T) {
 			name: "valid config with MCP",
 			cfg: &Config{
 				MemoryRoot: "~/.memorizer/memory",
-				Claude: ClaudeConfig{
-					Model:        "claude-sonnet-4-5-20250929",
-					MaxTokens:    1500,
-					Timeout:      30,
-					EnableVision: true,
-				},
-				Analysis: AnalysisConfig{
-					CacheDir: "~/.memorizer/.cache",
+				Semantic: SemanticConfig{
+					Model:           "claude-sonnet-4-5-20250929",
+					MaxTokens:       1500,
+					Timeout:         30,
+					EnableVision:    true,
+					CacheDir:        "~/.memorizer/.cache",
+					RateLimitPerMin: 20,
 				},
 				Daemon: DaemonConfig{
-					Workers:         3,
-					RateLimitPerMin: 20,
-					LogFile:         "~/.memorizer/daemon.log",
-					LogLevel:        "info",
+					Workers:  3,
+					LogFile:  "~/.memorizer/daemon.log",
+					LogLevel: "info",
 				},
 				MCP: MCPConfig{
 					LogFile:  "~/.memorizer/mcp.log",
@@ -298,20 +296,18 @@ func TestValidateConfig_MCP(t *testing.T) {
 			name: "invalid MCP log level",
 			cfg: &Config{
 				MemoryRoot: "~/.memorizer/memory",
-				Claude: ClaudeConfig{
-					Model:        "claude-sonnet-4-5-20250929",
-					MaxTokens:    1500,
-					Timeout:      30,
-					EnableVision: true,
-				},
-				Analysis: AnalysisConfig{
-					CacheDir: "~/.memorizer/.cache",
+				Semantic: SemanticConfig{
+					Model:           "claude-sonnet-4-5-20250929",
+					MaxTokens:       1500,
+					Timeout:         30,
+					EnableVision:    true,
+					CacheDir:        "~/.memorizer/.cache",
+					RateLimitPerMin: 20,
 				},
 				Daemon: DaemonConfig{
-					Workers:         3,
-					RateLimitPerMin: 20,
-					LogFile:         "~/.memorizer/daemon.log",
-					LogLevel:        "info",
+					Workers:  3,
+					LogFile:  "~/.memorizer/daemon.log",
+					LogLevel: "info",
 				},
 				MCP: MCPConfig{
 					LogFile:  "~/.memorizer/mcp.log",
@@ -331,20 +327,18 @@ func TestValidateConfig_MCP(t *testing.T) {
 			name: "unsafe MCP log file path",
 			cfg: &Config{
 				MemoryRoot: "~/.memorizer/memory",
-				Claude: ClaudeConfig{
-					Model:        "claude-sonnet-4-5-20250929",
-					MaxTokens:    1500,
-					Timeout:      30,
-					EnableVision: true,
-				},
-				Analysis: AnalysisConfig{
-					CacheDir: "~/.memorizer/.cache",
+				Semantic: SemanticConfig{
+					Model:           "claude-sonnet-4-5-20250929",
+					MaxTokens:       1500,
+					Timeout:         30,
+					EnableVision:    true,
+					CacheDir:        "~/.memorizer/.cache",
+					RateLimitPerMin: 20,
 				},
 				Daemon: DaemonConfig{
-					Workers:         3,
-					RateLimitPerMin: 20,
-					LogFile:         "~/.memorizer/daemon.log",
-					LogLevel:        "info",
+					Workers:  3,
+					LogFile:  "~/.memorizer/daemon.log",
+					LogLevel: "info",
 				},
 				MCP: MCPConfig{
 					LogFile:  "~/../tmp/mcp.log",
@@ -384,7 +378,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 	}
 }
 
-func TestValidateClaude_Timeout(t *testing.T) {
+func TestValidateSemantic_Timeout(t *testing.T) {
 	tests := []struct {
 		name       string
 		timeout    int
@@ -431,14 +425,16 @@ func TestValidateClaude_Timeout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &Validator{}
 			cfg := &Config{
-				Claude: ClaudeConfig{
-					Model:        "claude-sonnet-4-5-20250929",
-					MaxTokens:    1500,
-					Timeout:      tt.timeout,
-					EnableVision: true,
+				Semantic: SemanticConfig{
+					Model:           "claude-sonnet-4-5-20250929",
+					MaxTokens:       1500,
+					Timeout:         tt.timeout,
+					EnableVision:    true,
+					CacheDir:        "~/.memorizer/cache",
+					RateLimitPerMin: 20,
 				},
 			}
-			validateClaude(v, cfg)
+			validateSemantic(v, cfg)
 
 			if tt.wantErrors && !v.HasErrors() {
 				t.Errorf("expected validation errors, got none")

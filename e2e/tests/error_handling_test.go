@@ -115,18 +115,18 @@ func TestErrorHandling_GracefulDegradation(t *testing.T) {
 	configContent := `# E2E Test Configuration
 memory_root: ` + h.MemoryRoot + `
 
-claude:
+semantic:
+  enabled: false
+  provider: claude
   timeout: 30
-
-analysis:
   max_file_size: 10485760
   skip_extensions: []
   skip_files: []
   cache_dir: ` + filepath.Join(h.MemoryRoot, ".cache") + `
+  rate_limit_per_min: 20
 
 daemon:
   workers: 2
-  rate_limit_per_min: 20
   debounce_ms: 200
   full_rebuild_interval_minutes: 60
   http_port: 8080

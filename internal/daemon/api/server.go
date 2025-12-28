@@ -34,6 +34,11 @@ type HealthSnapshot struct {
 	IndexFileCount   int
 	WatcherActive    bool
 
+	// Semantic provider info
+	SemanticEnabled  bool
+	SemanticProvider string
+	SemanticModel    string
+
 	// Cache versioning stats
 	CacheVersion       string
 	CacheTotalEntries  int
@@ -202,6 +207,11 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 			"index_file_count":   snapshot.IndexFileCount,
 			"watcher_active":     snapshot.WatcherActive,
 			"sse_clients":        sseClients,
+		},
+		"semantic": map[string]any{
+			"enabled":  snapshot.SemanticEnabled,
+			"provider": snapshot.SemanticProvider,
+			"model":    snapshot.SemanticModel,
 		},
 		"cache": map[string]any{
 			"version":        snapshot.CacheVersion,

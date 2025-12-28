@@ -60,13 +60,13 @@ func (s *APIKeyStep) Init(cfg *config.Config) tea.Cmd {
 		WithWidth(60)
 
 	// Pre-select based on existing config
-	if cfg.Claude.APIKey != "" {
+	if cfg.Semantic.APIKey != "" {
 		if s.envKeyFound {
 			s.radio.SetSelected(1) // "Enter directly" is option 1 when env var found
 		} else {
 			s.radio.SetSelected(0) // "Enter directly" is option 0 when env var not found
 		}
-		s.keyInput.SetValue(cfg.Claude.APIKey)
+		s.keyInput.SetValue(cfg.Semantic.APIKey)
 	} else if s.envKeyFound {
 		s.radio.SetSelected(0) // "Use env. variable value"
 	}
@@ -191,19 +191,19 @@ func (s *APIKeyStep) Apply(cfg *config.Config) error {
 		// When env var found, options are: [Use env, Enter directly, Skip]
 		switch s.radio.Selected() {
 		case 0: // Use environment variable
-			cfg.Claude.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+			cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
 		case 1: // Enter directly
-			cfg.Claude.APIKey = s.keyInput.Value()
+			cfg.Semantic.APIKey = s.keyInput.Value()
 		case 2: // Skip
-			cfg.Claude.APIKey = ""
+			cfg.Semantic.APIKey = ""
 		}
 	} else {
 		// When env var not found, options are: [Enter directly, Skip]
 		switch s.radio.Selected() {
 		case 0: // Enter directly
-			cfg.Claude.APIKey = s.keyInput.Value()
+			cfg.Semantic.APIKey = s.keyInput.Value()
 		case 1: // Skip
-			cfg.Claude.APIKey = ""
+			cfg.Semantic.APIKey = ""
 		}
 	}
 	return nil

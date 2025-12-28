@@ -31,7 +31,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config; %w", err)
 	}
 
-	manager, err := cache.NewManager(cfg.Analysis.CacheDir)
+	manager, err := cache.NewManager(cfg.Semantic.CacheDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize cache manager; %w", err)
 	}
@@ -43,7 +43,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Build output using format package
 	section := format.NewSection("Cache Status").AddDivider()
-	section.AddKeyValue("Location", cfg.Analysis.CacheDir)
+	section.AddKeyValue("Location", cfg.Semantic.CacheDir)
 	section.AddKeyValue("Current Version", cache.CacheVersion())
 
 	// Add statistics subsection

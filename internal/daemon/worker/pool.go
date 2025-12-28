@@ -34,7 +34,9 @@ type Pool struct {
 	rateLimiter       *rate.Limiter
 	embeddingLimiter  *rate.Limiter // Separate rate limiter for embeddings API
 	metadataExtractor *metadata.Extractor
-	semanticAnalyzer  *semantic.Analyzer
+	semanticProvider  semantic.Provider
+	providerName      string // Current provider name (e.g., "claude", "openai")
+	modelName         string // Current model ID
 	embeddingProvider embeddings.Provider
 	embeddingCache    *embeddings.Cache
 	cacheManager      *cache.Manager
@@ -50,7 +52,9 @@ func NewPool(
 	workers int,
 	rateLimitPerMin int,
 	metadataExtractor *metadata.Extractor,
-	semanticAnalyzer *semantic.Analyzer,
+	semanticProvider semantic.Provider,
+	providerName string,
+	modelName string,
 	embeddingProvider embeddings.Provider,
 	embeddingCache *embeddings.Cache,
 	cacheManager *cache.Manager,
@@ -75,7 +79,9 @@ func NewPool(
 		rateLimiter:       limiter,
 		embeddingLimiter:  embeddingLimiter,
 		metadataExtractor: metadataExtractor,
-		semanticAnalyzer:  semanticAnalyzer,
+		semanticProvider:  semanticProvider,
+		providerName:      providerName,
+		modelName:         modelName,
 		embeddingProvider: embeddingProvider,
 		embeddingCache:    embeddingCache,
 		cacheManager:      cacheManager,
@@ -200,9 +206,9 @@ func (p *Pool) processJob(job Job) JobResult {
 
 	// Analyze semantically if enabled
 	var semanticAnalysis *types.SemanticAnalysis
-	if p.semanticAnalyzer != nil && fileHash != "" {
-		// Check cache first
-		cached, err := p.cacheManager.Get(fileHash)
+	if p.semanticProvider != nil && fileHash != "" {
+		// Check cache first (use provider name for cache subdirectory)
+		cached, err := p.cacheManager.Get(fileHash, p.providerName)
 		if err == nil && cached != nil && !p.cacheManager.IsStale(cached, fileHash) {
 			semanticAnalysis = cached.Semantic
 			p.logger.Debug("cache hit",
@@ -236,9 +242,9 @@ func (p *Pool) processJob(job Job) JobResult {
 				}
 			}
 
-			p.logger.Debug("analyzing file", "path", job.Path)
+			p.logger.Debug("analyzing file", "path", job.Path, "provider", p.providerName)
 
-			analysis, err := p.semanticAnalyzer.Analyze(fileMetadata)
+			analysis, err := p.semanticProvider.Analyze(p.ctx, fileMetadata)
 			if err != nil {
 				p.logger.Warn("analysis failed", "path", job.Path, "error", err)
 			} else {
@@ -248,8 +254,10 @@ func (p *Pool) processJob(job Job) JobResult {
 				p.stats.APICalls++
 				p.statsMu.Unlock()
 
-				// Cache result (version fields set by cacheManager.Set)
+				// Cache result with provider and model info (version fields set by cacheManager.Set)
 				cachedAnalysis := &types.CachedAnalysis{
+					Provider:   p.providerName,
+					Model:      p.modelName,
 					FilePath:   job.Path,
 					FileHash:   fileHash,
 					AnalyzedAt: time.Now(),

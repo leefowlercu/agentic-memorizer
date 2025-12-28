@@ -160,15 +160,18 @@ func TestWalker_ConfiguredSkipPatterns(t *testing.T) {
 
 	configContent := `memory_root: ` + h.MemoryRoot + `
 
-analysis:
+semantic:
+  enabled: false
+  provider: claude
+  timeout: 30
   max_file_size: 10485760
   skip_extensions: [".log", ".tmp"]
   skip_files: ["SKIP_ME.txt"]
   cache_dir: ` + filepath.Join(h.MemoryRoot, ".cache") + `
+  rate_limit_per_min: 20
 
 daemon:
   workers: 2
-  rate_limit_per_min: 20
   debounce_ms: 200
   full_rebuild_interval_minutes: 60
   http_port: 8080

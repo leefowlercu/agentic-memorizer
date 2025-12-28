@@ -54,7 +54,7 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 
 	// Clear stale cache entries if requested
 	if clearStale {
-		cacheManager, err := cache.NewManager(cfg.Analysis.CacheDir)
+		cacheManager, err := cache.NewManager(cfg.Semantic.CacheDir)
 		if err != nil {
 			return fmt.Errorf("failed to initialize cache manager; %w", err)
 		}

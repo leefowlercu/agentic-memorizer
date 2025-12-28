@@ -75,7 +75,7 @@ func TestRunShowSchema_TextFormat(t *testing.T) {
 	// Check for expected content
 	expectedStrings := []string{
 		"Configuration Schema",
-		"claude",
+		"semantic",
 		"daemon",
 	}
 
@@ -91,7 +91,7 @@ func TestRunShowSchema_TextFormat(t *testing.T) {
 	}
 
 	// Verify config sections have colons
-	if !strings.Contains(output, "claude:") {
+	if !strings.Contains(output, "semantic:") {
 		t.Error("Config sections should have colons")
 	}
 
@@ -146,8 +146,8 @@ func TestRunShowSchema_YAMLFormat(t *testing.T) {
 	}
 
 	// Check structure - should have direct keys for sections
-	if _, ok := result["claude"]; !ok {
-		t.Error("YAML output should have 'claude' key")
+	if _, ok := result["semantic"]; !ok {
+		t.Error("YAML output should have 'semantic' key")
 	}
 	if _, ok := result["daemon"]; !ok {
 		t.Error("YAML output should have 'daemon' key")
@@ -183,8 +183,8 @@ func TestRunShowSchema_JSONFormat(t *testing.T) {
 	}
 
 	// Check structure - should have direct keys for sections
-	if _, ok := result["claude"]; !ok {
-		t.Error("JSON output should have 'claude' key")
+	if _, ok := result["semantic"]; !ok {
+		t.Error("JSON output should have 'semantic' key")
 	}
 	if _, ok := result["daemon"]; !ok {
 		t.Error("JSON output should have 'daemon' key")

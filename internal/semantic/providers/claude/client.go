@@ -1,4 +1,4 @@
-package semantic
+package claude
 
 import (
 	"bytes"

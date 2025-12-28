@@ -38,7 +38,7 @@ type WizardModel struct {
 // NewWizard creates a new initialization wizard
 func NewWizard(cfg *config.Config) *WizardModel {
 	stepList := []steps.Step{
-		steps.NewAPIKeyStep(),
+		steps.NewSemanticProviderStep(),
 		steps.NewHTTPPortStep(),
 		steps.NewFalkorDBStep(),
 		steps.NewEmbeddingsStep(),

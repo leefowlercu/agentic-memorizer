@@ -9,21 +9,25 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 )
 
+// ProviderInfoGetter is a function that returns semantic provider info
+type ProviderInfoGetter func() (enabled bool, provider string, model string)
+
 // HealthMetrics tracks daemon health statistics
 type HealthMetrics struct {
-	StartTime        time.Time `json:"start_time"`
-	Uptime           string    `json:"uptime"`
-	UptimeSeconds    int64     `json:"uptime_seconds"`
-	FilesProcessed   int       `json:"files_processed"`
-	APICalls         int       `json:"api_calls"`
-	CacheHits        int       `json:"cache_hits"`
-	Errors           int       `json:"errors"`
-	LastBuildTime    time.Time `json:"last_build_time"`
-	LastBuildSuccess bool      `json:"last_build_success"`
-	IndexFileCount   int       `json:"index_file_count"`
-	WatcherActive    bool      `json:"watcher_active"`
-	cacheManager     *cache.Manager
-	mu               sync.RWMutex
+	StartTime          time.Time `json:"start_time"`
+	Uptime             string    `json:"uptime"`
+	UptimeSeconds      int64     `json:"uptime_seconds"`
+	FilesProcessed     int       `json:"files_processed"`
+	APICalls           int       `json:"api_calls"`
+	CacheHits          int       `json:"cache_hits"`
+	Errors             int       `json:"errors"`
+	LastBuildTime      time.Time `json:"last_build_time"`
+	LastBuildSuccess   bool      `json:"last_build_success"`
+	IndexFileCount     int       `json:"index_file_count"`
+	WatcherActive      bool      `json:"watcher_active"`
+	cacheManager       *cache.Manager
+	providerInfoGetter ProviderInfoGetter
+	mu                 sync.RWMutex
 }
 
 // NewHealthMetrics creates a new health metrics tracker
@@ -111,6 +115,13 @@ func (h *HealthMetrics) SetCacheManager(manager *cache.Manager) {
 	h.cacheManager = manager
 }
 
+// SetProviderInfoGetter sets the function that returns semantic provider info
+func (h *HealthMetrics) SetProviderInfoGetter(getter ProviderInfoGetter) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.providerInfoGetter = getter
+}
+
 // GetSnapshot returns a snapshot of current metrics
 // Implements api.HealthMetricsProvider interface
 func (h *HealthMetrics) GetSnapshot() api.HealthSnapshot {
@@ -140,6 +151,11 @@ func (h *HealthMetrics) GetSnapshot() api.HealthSnapshot {
 			snapshot.CacheLegacyEntries = stats.LegacyEntries
 			snapshot.CacheTotalSize = stats.TotalSize
 		}
+	}
+
+	// Get semantic provider info if getter is available
+	if h.providerInfoGetter != nil {
+		snapshot.SemanticEnabled, snapshot.SemanticProvider, snapshot.SemanticModel = h.providerInfoGetter()
 	}
 
 	return snapshot

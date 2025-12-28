@@ -53,6 +53,7 @@ func TestManager_SetAndGet(t *testing.T) {
 		Confidence:   0.95,
 	}
 	cached := &types.CachedAnalysis{
+		Provider: "claude",
 		FileHash: "sha256:abc123def456",
 		Semantic: semantic,
 	}
@@ -64,7 +65,7 @@ func TestManager_SetAndGet(t *testing.T) {
 	}
 
 	// Get cache
-	retrieved, err := manager.Get(cached.FileHash)
+	retrieved, err := manager.Get(cached.FileHash, "claude")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -86,7 +87,7 @@ func TestManager_Get_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	manager, _ := NewManager(tmpDir)
 
-	retrieved, err := manager.Get("sha256:nonexistent")
+	retrieved, err := manager.Get("sha256:nonexistent", "claude")
 	if err != nil {
 		t.Fatalf("Get() error = %v, should return nil for non-existent", err)
 	}
@@ -102,8 +103,13 @@ func TestManager_Get_CorruptedCache(t *testing.T) {
 
 	// Write corrupted JSON to both versioned and legacy paths
 	fileHash := "sha256:corrupted12345"
-	versionedPath := manager.getCachePath(fileHash)
+	versionedPath := manager.getCachePath(fileHash, "claude")
 	legacyPath := manager.getLegacyCachePath(fileHash)
+
+	// Create provider subdirectory
+	if err := os.MkdirAll(filepath.Dir(versionedPath), 0755); err != nil {
+		t.Fatalf("Failed to create provider directory: %v", err)
+	}
 
 	if err := os.WriteFile(versionedPath, []byte("invalid json"), 0644); err != nil {
 		t.Fatalf("Failed to write corrupted versioned cache: %v", err)
@@ -114,7 +120,7 @@ func TestManager_Get_CorruptedCache(t *testing.T) {
 
 	// Get returns nil on corrupted files (readCacheFile returns nil, nil on parse error)
 	// This matches the behavior where we try to parse and fallback gracefully
-	cached, _ := manager.Get(fileHash)
+	cached, _ := manager.Get(fileHash, "claude")
 	if cached != nil {
 		t.Error("Get() should return nil for corrupted cache")
 	}
@@ -126,7 +132,12 @@ func TestManager_Get_CorruptedCacheDirectRead(t *testing.T) {
 
 	// Write corrupted JSON to versioned path
 	fileHash := "sha256:corrupted12345"
-	versionedPath := manager.getCachePath(fileHash)
+	versionedPath := manager.getCachePath(fileHash, "claude")
+
+	// Create provider subdirectory
+	if err := os.MkdirAll(filepath.Dir(versionedPath), 0755); err != nil {
+		t.Fatalf("Failed to create provider directory: %v", err)
+	}
 
 	if err := os.WriteFile(versionedPath, []byte("invalid json"), 0644); err != nil {
 		t.Fatalf("Failed to write corrupted cache: %v", err)
@@ -289,6 +300,7 @@ func TestManager_Clear(t *testing.T) {
 			Summary: "Test",
 		}
 		cached := &types.CachedAnalysis{
+			Provider: "claude",
 			FileHash: fmt.Sprintf("sha256:test%016d", i),
 			Semantic: semantic,
 		}
@@ -328,50 +340,65 @@ func TestManager_Clear_EmptyCache(t *testing.T) {
 	}
 }
 
-func TestManager_Clear_WithSubdirectories(t *testing.T) {
+func TestManager_Clear_WithProviderSubdirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 	manager, _ := NewManager(tmpDir)
 
-	// Create a subdirectory in summaries (should be ignored by Clear)
 	summariesDir := filepath.Join(tmpDir, "summaries")
-	subDir := filepath.Join(summariesDir, "subdir")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
-		t.Fatalf("Failed to create subdir: %v", err)
-	}
 
-	// Add a cache file
+	// Add cache files for multiple providers
 	semantic := &types.SemanticAnalysis{
 		Summary: "Test",
 	}
-	cached := &types.CachedAnalysis{
+
+	// Add Claude cache entry
+	claudeCached := &types.CachedAnalysis{
+		Provider: "claude",
 		FileHash: "sha256:test0000000000",
 		Semantic: semantic,
 	}
-	if err := manager.Set(cached); err != nil {
+	if err := manager.Set(claudeCached); err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
-	// Clear should remove files but not directories
+	// Add OpenAI cache entry
+	openaiCached := &types.CachedAnalysis{
+		Provider: "openai",
+		FileHash: "sha256:test1111111111",
+		Semantic: semantic,
+	}
+	if err := manager.Set(openaiCached); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	// Verify both provider directories exist
+	claudeDir := filepath.Join(summariesDir, "claude")
+	openaiDir := filepath.Join(summariesDir, "openai")
+	if _, err := os.Stat(claudeDir); os.IsNotExist(err) {
+		t.Fatal("claude directory should exist before Clear()")
+	}
+	if _, err := os.Stat(openaiDir); os.IsNotExist(err) {
+		t.Fatal("openai directory should exist before Clear()")
+	}
+
+	// Clear should remove all provider directories and files
 	err := manager.Clear()
 	if err != nil {
 		t.Fatalf("Clear() error = %v", err)
 	}
 
-	// Check subdirectory still exists
-	if _, err := os.Stat(subDir); os.IsNotExist(err) {
-		t.Error("Clear() should not remove subdirectories")
+	// Check provider directories are removed
+	if _, err := os.Stat(claudeDir); !os.IsNotExist(err) {
+		t.Error("Clear() should remove claude provider directory")
+	}
+	if _, err := os.Stat(openaiDir); !os.IsNotExist(err) {
+		t.Error("Clear() should remove openai provider directory")
 	}
 
-	// Check cache file is gone
+	// Check summaries directory is empty
 	entries, _ := os.ReadDir(summariesDir)
-	fileCount := 0
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			fileCount++
-		}
-	}
-	if fileCount != 0 {
-		t.Errorf("Clear() left %d files, want 0", fileCount)
+	if len(entries) != 0 {
+		t.Errorf("Clear() left %d entries, want 0", len(entries))
 	}
 }
 
@@ -383,23 +410,32 @@ func TestManager_getCachePath(t *testing.T) {
 	tests := []struct {
 		name     string
 		fileHash string
+		provider string
 		want     string
 	}{
 		{
 			name:     "standard hash",
 			fileHash: "sha256:abcdef1234567890",
-			want:     fmt.Sprintf("/test/cache/summaries/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
+			provider: "claude",
+			want:     fmt.Sprintf("/test/cache/summaries/claude/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
 		},
 		{
 			name:     "long hash",
 			fileHash: "sha256:0123456789abcdef0123456789abcdef",
-			want:     fmt.Sprintf("/test/cache/summaries/sha256:012345678-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
+			provider: "claude",
+			want:     fmt.Sprintf("/test/cache/summaries/claude/sha256:012345678-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
+		},
+		{
+			name:     "openai provider",
+			fileHash: "sha256:abcdef1234567890",
+			provider: "openai",
+			want:     fmt.Sprintf("/test/cache/summaries/openai/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := manager.getCachePath(tt.fileHash)
+			got := manager.getCachePath(tt.fileHash, tt.provider)
 			if got != tt.want {
 				t.Errorf("getCachePath() = %q, want %q", got, tt.want)
 			}
@@ -552,6 +588,7 @@ func TestManager_GetStats(t *testing.T) {
 	}
 	for _, hash := range hashes {
 		cached := &types.CachedAnalysis{
+			Provider: "claude",
 			FileHash: hash,
 			Semantic: semantic,
 		}
@@ -640,6 +677,7 @@ func TestManager_ClearOldVersions(t *testing.T) {
 	}
 	for _, hash := range currentHashes {
 		cached := &types.CachedAnalysis{
+			Provider: "claude",
 			FileHash: hash,
 			Semantic: semantic,
 		}
@@ -728,6 +766,7 @@ func TestManager_ClearOldVersions_OnlyCurrentVersion(t *testing.T) {
 	}
 	for _, hash := range hashes {
 		cached := &types.CachedAnalysis{
+			Provider: "claude",
 			FileHash: hash,
 			Semantic: semantic,
 		}
@@ -765,13 +804,13 @@ func TestManager_Get_FallbackToLegacy(t *testing.T) {
 	}
 
 	// Verify no versioned entry exists
-	versionedPath := manager.getCachePath(fileHash)
+	versionedPath := manager.getCachePath(fileHash, "claude")
 	if _, err := os.Stat(versionedPath); !os.IsNotExist(err) {
 		t.Fatal("Versioned cache entry should not exist")
 	}
 
 	// Get should fallback to legacy
-	cached, err := manager.Get(fileHash)
+	cached, err := manager.Get(fileHash, "claude")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -810,6 +849,7 @@ func TestManager_SetPopulatesVersionFields(t *testing.T) {
 
 	// Create entry without version fields
 	cached := &types.CachedAnalysis{
+		Provider: "claude",
 		FileHash: "sha256:test123456789",
 		Semantic: &types.SemanticAnalysis{Summary: "Test"},
 	}
@@ -831,7 +871,7 @@ func TestManager_SetPopulatesVersionFields(t *testing.T) {
 	}
 
 	// Verify by reading back
-	retrieved, err := manager.Get(cached.FileHash)
+	retrieved, err := manager.Get(cached.FileHash, "claude")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}

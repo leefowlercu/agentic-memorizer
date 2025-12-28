@@ -15,7 +15,8 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
-	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/claude" // Register Claude provider
+	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -25,7 +26,7 @@ func newTestDaemon() *Daemon {
 
 	cfg := &config.Config{
 		MemoryRoot: "/test/memory",
-		Analysis:   config.AnalysisConfig{CacheDir: "/test/cache"},
+		Semantic:   config.SemanticConfig{CacheDir: "/test/cache"},
 		Daemon: config.DaemonConfig{
 			LogFile:  "/test/daemon.log",
 			LogLevel: "info",
@@ -181,16 +182,29 @@ func TestDaemon_ConfigLocking(t *testing.T) {
 	})
 }
 
-// TestDaemon_SemanticAnalyzerSwap tests atomic analyzer replacement
-func TestDaemon_SemanticAnalyzerSwap(t *testing.T) {
+// mockProvider is a simple mock semantic provider for testing
+type mockProvider struct {
+	name  string
+	model string
+}
+
+func (m *mockProvider) Analyze(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
+	return nil, nil
+}
+func (m *mockProvider) Name() string             { return m.name }
+func (m *mockProvider) Model() string            { return m.model }
+func (m *mockProvider) SupportsVision() bool     { return false }
+func (m *mockProvider) SupportsDocuments() bool  { return false }
+
+// TestDaemon_SemanticProviderSwap tests atomic provider replacement
+func TestDaemon_SemanticProviderSwap(t *testing.T) {
 	t.Run("concurrent access", func(t *testing.T) {
 		d := newTestDaemon()
 		defer d.cancel()
 
-		// Set initial analyzer
-		client := semantic.NewClient("test-key", "claude-3-sonnet", 1000, 30)
-		analyzer1 := semantic.NewAnalyzer(client, false, 10*1024*1024)
-		d.SetSemanticAnalyzer(analyzer1)
+		// Set initial provider
+		provider1 := &mockProvider{name: "test", model: "test-model"}
+		d.SetSemanticProvider(provider1)
 
 		const numReaders = 100
 		var wg sync.WaitGroup
@@ -202,9 +216,9 @@ func TestDaemon_SemanticAnalyzerSwap(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := 0; j < 10; j++ {
-					a := d.GetSemanticAnalyzer()
-					if a == nil {
-						errors <- fmt.Errorf("GetSemanticAnalyzer() returned nil")
+					p := d.GetSemanticProvider()
+					if p == nil {
+						errors <- fmt.Errorf("GetSemanticProvider() returned nil")
 						return
 					}
 					time.Sleep(time.Microsecond)
@@ -225,10 +239,9 @@ func TestDaemon_SemanticAnalyzerSwap(t *testing.T) {
 		d := newTestDaemon()
 		defer d.cancel()
 
-		// Set initial analyzer
-		client := semantic.NewClient("test-key", "claude-3-sonnet", 1000, 30)
-		analyzer1 := semantic.NewAnalyzer(client, false, 10*1024*1024)
-		d.SetSemanticAnalyzer(analyzer1)
+		// Set initial provider
+		provider1 := &mockProvider{name: "test", model: "test-model"}
+		d.SetSemanticProvider(provider1)
 
 		const numReaders = 50
 		const numWriters = 10
@@ -240,9 +253,9 @@ func TestDaemon_SemanticAnalyzerSwap(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := 0; j < 20; j++ {
-					a := d.GetSemanticAnalyzer()
-					if a == nil {
-						t.Error("GetSemanticAnalyzer() returned nil during swap")
+					p := d.GetSemanticProvider()
+					if p == nil {
+						t.Error("GetSemanticProvider() returned nil during swap")
 					}
 					time.Sleep(time.Microsecond)
 				}
@@ -255,9 +268,8 @@ func TestDaemon_SemanticAnalyzerSwap(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 				for j := 0; j < 10; j++ {
-					client := semantic.NewClient(fmt.Sprintf("key-%d", id), "claude-3-sonnet", 1000, 30)
-					analyzer := semantic.NewAnalyzer(client, false, 10*1024*1024)
-					d.SetSemanticAnalyzer(analyzer)
+					provider := &mockProvider{name: fmt.Sprintf("test-%d", id), model: "test-model"}
+					d.SetSemanticProvider(provider)
 					time.Sleep(time.Microsecond)
 				}
 			}(i)
@@ -282,26 +294,22 @@ func TestDaemon_SemanticAnalyzerSwap(t *testing.T) {
 		d := newTestDaemon()
 		defer d.cancel()
 
-		// Initially nil
-		if d.GetSemanticAnalyzer() != nil {
-			t.Error("Expected nil analyzer initially")
+		// Initially nil (not set yet)
+		if d.GetSemanticProvider() != nil {
+			t.Error("Expected nil provider initially")
 		}
 
 		// Set to non-nil
-		client := semantic.NewClient("test-key", "claude-3-sonnet", 1000, 30)
-		analyzer := semantic.NewAnalyzer(client, false, 10*1024*1024)
-		d.SetSemanticAnalyzer(analyzer)
+		provider := &mockProvider{name: "test", model: "test-model"}
+		d.SetSemanticProvider(provider)
 
-		if d.GetSemanticAnalyzer() == nil {
-			t.Error("Expected non-nil analyzer after setting")
+		if d.GetSemanticProvider() == nil {
+			t.Error("Expected non-nil provider after setting")
 		}
 
-		// Set back to nil
-		d.SetSemanticAnalyzer(nil)
-
-		if d.GetSemanticAnalyzer() != nil {
-			t.Error("Expected nil analyzer after setting to nil")
-		}
+		// Note: atomic.Value doesn't support storing nil once a value is set.
+		// To "disable" semantic analysis, the config disables it rather than
+		// clearing the provider. The provider stays set but isn't used.
 	})
 }
 
@@ -520,61 +528,74 @@ func TestDaemon_HTTPServerLifecycle(t *testing.T) {
 	})
 }
 
-// TestDaemon_UpdateSemanticAnalyzer tests analyzer recreation
-func TestDaemon_UpdateSemanticAnalyzer(t *testing.T) {
-	t.Run("create analyzer", func(t *testing.T) {
+// TestDaemon_UpdateSemanticProvider tests provider recreation
+func TestDaemon_UpdateSemanticProvider(t *testing.T) {
+	t.Run("create provider", func(t *testing.T) {
 		d := newTestDaemon()
 		defer d.cancel()
 
 		cfg := &config.Config{
-			Analysis: config.AnalysisConfig{
+			Semantic: config.SemanticConfig{
 				Enabled:     true,
+				Provider:    "claude",
 				MaxFileSize: 10 * 1024 * 1024,
-			},
-			Claude: config.ClaudeConfig{
-				APIKey:    "test-key",
-				Model:     "claude-3-sonnet",
-				MaxTokens: 1000,
+				APIKey:      "test-key",
+				Model:       "claude-sonnet-4-5-20250929",
+				MaxTokens:   1000,
+				Timeout:     30,
 			},
 		}
 
-		err := d.updateSemanticAnalyzer(cfg)
+		err := d.updateSemanticProvider(cfg)
 		if err != nil {
-			t.Fatalf("updateSemanticAnalyzer() failed: %v", err)
+			t.Fatalf("updateSemanticProvider() failed: %v", err)
 		}
 
-		analyzer := d.GetSemanticAnalyzer()
-		if analyzer == nil {
-			t.Error("Expected non-nil analyzer after update")
+		provider := d.GetSemanticProvider()
+		if provider == nil {
+			t.Error("Expected non-nil provider after update")
 		}
 	})
 
-	t.Run("disable analyzer", func(t *testing.T) {
+	t.Run("disable provider", func(t *testing.T) {
 		d := newTestDaemon()
 		defer d.cancel()
 
-		// First create analyzer
+		// First create provider
 		cfg1 := &config.Config{
-			Analysis: config.AnalysisConfig{Enabled: true, MaxFileSize: 10 * 1024 * 1024},
-			Claude:   config.ClaudeConfig{APIKey: "key", Model: "claude-3-sonnet"},
+			Semantic: config.SemanticConfig{
+				Enabled:     true,
+				Provider:    "claude",
+				MaxFileSize: 10 * 1024 * 1024,
+				APIKey:      "test-key",
+				Model:       "claude-sonnet-4-5-20250929",
+				MaxTokens:   1000,
+				Timeout:     30,
+			},
 		}
-		d.updateSemanticAnalyzer(cfg1)
+		err := d.updateSemanticProvider(cfg1)
+		if err != nil {
+			t.Fatalf("updateSemanticProvider() failed: %v", err)
+		}
 
-		if d.GetSemanticAnalyzer() == nil {
-			t.Fatal("Analyzer should be non-nil")
+		if d.GetSemanticProvider() == nil {
+			t.Fatal("Provider should be non-nil")
 		}
 
 		// Disable
 		cfg2 := &config.Config{
-			Analysis: config.AnalysisConfig{Enabled: false},
+			Semantic: config.SemanticConfig{Enabled: false},
 		}
-		err := d.updateSemanticAnalyzer(cfg2)
+		err = d.updateSemanticProvider(cfg2)
 		if err != nil {
-			t.Fatalf("updateSemanticAnalyzer() failed: %v", err)
+			t.Fatalf("updateSemanticProvider() failed: %v", err)
 		}
 
-		if d.GetSemanticAnalyzer() != nil {
-			t.Error("Expected nil analyzer after disabling")
+		// Provider stays in memory (atomic.Value can't store nil), but
+		// provider info fields are cleared to indicate disabled state
+		provider, model := d.GetProviderInfo()
+		if provider != "" || model != "" {
+			t.Errorf("Expected empty provider info after disabling, got provider=%q model=%q", provider, model)
 		}
 	})
 }
@@ -634,7 +655,7 @@ func TestDaemon_DetectChanges(t *testing.T) {
 
 	t.Run("no changes", func(t *testing.T) {
 		cfg := &config.Config{
-			Claude: config.ClaudeConfig{APIKey: "key1"},
+			Semantic: config.SemanticConfig{APIKey: "key1"},
 			Daemon: config.DaemonConfig{Workers: 3, LogLevel: "info"},
 		}
 
@@ -647,18 +668,18 @@ func TestDaemon_DetectChanges(t *testing.T) {
 		}
 	})
 
-	t.Run("claude changed", func(t *testing.T) {
+	t.Run("semantic changed", func(t *testing.T) {
 		oldCfg := &config.Config{
-			Claude: config.ClaudeConfig{APIKey: "old-key"},
+			Semantic: config.SemanticConfig{APIKey: "old-key"},
 		}
 		newCfg := &config.Config{
-			Claude: config.ClaudeConfig{APIKey: "new-key"},
+			Semantic: config.SemanticConfig{APIKey: "new-key"},
 		}
 
 		changes := d.detectChanges(oldCfg, newCfg)
 
-		if !changes["claude"] {
-			t.Error("Expected claude to be detected as changed")
+		if !changes["semantic"] {
+			t.Error("Expected semantic to be detected as changed")
 		}
 	})
 

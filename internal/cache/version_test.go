@@ -19,7 +19,7 @@ func TestCacheVersion(t *testing.T) {
 	}
 
 	// Should match current version constants
-	expected := "v1.1.1"
+	expected := "v1.1.2"
 	if version != expected {
 		t.Errorf("CacheVersion() = %q, want %q", version, expected)
 	}

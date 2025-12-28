@@ -36,14 +36,14 @@ func NewManager(cacheDir string) (*Manager, error) {
 	}, nil
 }
 
-func (m *Manager) Get(fileHash string) (*types.CachedAnalysis, error) {
-	// Try current version first
-	currentPath := m.getCachePath(fileHash)
+func (m *Manager) Get(fileHash, provider string) (*types.CachedAnalysis, error) {
+	// Try current version with provider subdirectory
+	currentPath := m.getCachePath(fileHash, provider)
 	if cached, err := m.readCacheFile(currentPath); err == nil && cached != nil {
 		return cached, nil
 	}
 
-	// Try legacy format (no version suffix)
+	// Try legacy format (no version suffix, no provider subdirectory)
 	legacyPath := m.getLegacyCachePath(fileHash)
 	if cached, err := m.readCacheFile(legacyPath); err == nil && cached != nil {
 		// Mark as legacy (version 0.0.0) - fields default to 0 in JSON if not present
@@ -77,7 +77,18 @@ func (m *Manager) Set(cached *types.CachedAnalysis) error {
 	cached.MetadataVersion = CacheMetadataVersion
 	cached.SemanticVersion = CacheSemanticVersion
 
-	cachePath := m.getCachePath(cached.FileHash)
+	// Ensure provider is set (required for subdirectory routing)
+	if cached.Provider == "" {
+		return fmt.Errorf("provider field is required in CachedAnalysis")
+	}
+
+	cachePath := m.getCachePath(cached.FileHash, cached.Provider)
+
+	// Ensure provider subdirectory exists
+	providerDir := filepath.Dir(cachePath)
+	if err := os.MkdirAll(providerDir, 0755); err != nil {
+		return fmt.Errorf("failed to create provider cache directory; %w", err)
+	}
 
 	data, err := json.MarshalIndent(cached, "", "  ")
 	if err != nil {
@@ -91,16 +102,16 @@ func (m *Manager) Set(cached *types.CachedAnalysis) error {
 	return nil
 }
 
-// getCachePath returns the versioned cache path for a file hash.
-// Format: {hash[:16]}-v{schema}-{metadata}-{semantic}.json
-func (m *Manager) getCachePath(fileHash string) string {
+// getCachePath returns the versioned cache path for a file hash with provider subdirectory.
+// Format: summaries/{provider}/{hash[:16]}-v{schema}-{metadata}-{semantic}.json
+func (m *Manager) getCachePath(fileHash, provider string) string {
 	filename := fmt.Sprintf("%s-v%d-%d-%d.json",
 		fileHash[:16],
 		CacheSchemaVersion,
 		CacheMetadataVersion,
 		CacheSemanticVersion,
 	)
-	return filepath.Join(m.cacheDir, "summaries", filename)
+	return filepath.Join(m.cacheDir, "summaries", provider, filename)
 }
 
 // getLegacyCachePath returns the legacy (unversioned) cache path for a file hash.
@@ -152,8 +163,15 @@ func (m *Manager) Clear() error {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			path := filepath.Join(summariesDir, entry.Name())
+		path := filepath.Join(summariesDir, entry.Name())
+
+		// If it's a provider subdirectory, remove it recursively
+		if entry.IsDir() {
+			if err := os.RemoveAll(path); err != nil {
+				return fmt.Errorf("failed to remove provider cache directory; %w", err)
+			}
+		} else {
+			// Legacy cache file (no provider subdirectory)
 			if err := os.Remove(path); err != nil {
 				return fmt.Errorf("failed to remove cache file; %w", err)
 			}
@@ -164,6 +182,7 @@ func (m *Manager) Clear() error {
 }
 
 // GetStats returns statistics about the cache contents including version distribution.
+// Walks both provider subdirectories and legacy files in the root summaries directory.
 func (m *Manager) GetStats() (*CacheStats, error) {
 	stats := &CacheStats{
 		VersionCounts: make(map[string]int),
@@ -179,24 +198,52 @@ func (m *Manager) GetStats() (*CacheStats, error) {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
+		// Provider subdirectory - recursively count cache files
+		if entry.IsDir() {
+			providerDir := filepath.Join(summariesDir, entry.Name())
+			providerEntries, err := os.ReadDir(providerDir)
+			if err != nil {
+				continue // Skip unreadable directories
+			}
 
-		stats.TotalEntries++
+			for _, providerEntry := range providerEntries {
+				if providerEntry.IsDir() || !strings.HasSuffix(providerEntry.Name(), ".json") {
+					continue
+				}
 
-		// Get file size
-		info, err := entry.Info()
-		if err == nil {
-			stats.TotalSize += info.Size()
-		}
+				stats.TotalEntries++
 
-		// Parse version from filename
-		version := parseVersionFromFilename(entry.Name())
-		stats.VersionCounts[version]++
+				// Get file size
+				info, err := providerEntry.Info()
+				if err == nil {
+					stats.TotalSize += info.Size()
+				}
 
-		if version == "v0.0.0" {
-			stats.LegacyEntries++
+				// Parse version from filename
+				version := parseVersionFromFilename(providerEntry.Name())
+				stats.VersionCounts[version]++
+
+				if version == "v0.0.0" {
+					stats.LegacyEntries++
+				}
+			}
+		} else if strings.HasSuffix(entry.Name(), ".json") {
+			// Legacy cache file in root summaries directory
+			stats.TotalEntries++
+
+			// Get file size
+			info, err := entry.Info()
+			if err == nil {
+				stats.TotalSize += info.Size()
+			}
+
+			// Parse version from filename
+			version := parseVersionFromFilename(entry.Name())
+			stats.VersionCounts[version]++
+
+			if version == "v0.0.0" {
+				stats.LegacyEntries++
+			}
 		}
 	}
 
@@ -224,6 +271,7 @@ func parseVersionFromFilename(filename string) string {
 }
 
 // ClearOldVersions removes all cache entries that are not the current version.
+// Walks both provider subdirectories and legacy files in the root summaries directory.
 // Returns the number of entries removed.
 func (m *Manager) ClearOldVersions() (int, error) {
 	summariesDir := filepath.Join(m.cacheDir, "summaries")
@@ -239,19 +287,42 @@ func (m *Manager) ClearOldVersions() (int, error) {
 	removed := 0
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-
-		version := parseVersionFromFilename(entry.Name())
-
-		// Remove if not current version
-		if version != currentVersion {
-			path := filepath.Join(summariesDir, entry.Name())
-			if err := os.Remove(path); err != nil {
-				return removed, fmt.Errorf("failed to remove cache file %s; %w", entry.Name(), err)
+		// Provider subdirectory - recursively remove old versions
+		if entry.IsDir() {
+			providerDir := filepath.Join(summariesDir, entry.Name())
+			providerEntries, err := os.ReadDir(providerDir)
+			if err != nil {
+				continue // Skip unreadable directories
 			}
-			removed++
+
+			for _, providerEntry := range providerEntries {
+				if providerEntry.IsDir() || !strings.HasSuffix(providerEntry.Name(), ".json") {
+					continue
+				}
+
+				version := parseVersionFromFilename(providerEntry.Name())
+
+				// Remove if not current version
+				if version != currentVersion {
+					path := filepath.Join(providerDir, providerEntry.Name())
+					if err := os.Remove(path); err != nil {
+						return removed, fmt.Errorf("failed to remove cache file %s; %w", providerEntry.Name(), err)
+					}
+					removed++
+				}
+			}
+		} else if strings.HasSuffix(entry.Name(), ".json") {
+			// Legacy cache file in root summaries directory
+			version := parseVersionFromFilename(entry.Name())
+
+			// Remove if not current version
+			if version != currentVersion {
+				path := filepath.Join(summariesDir, entry.Name())
+				if err := os.Remove(path); err != nil {
+					return removed, fmt.Errorf("failed to remove cache file %s; %w", entry.Name(), err)
+				}
+				removed++
+			}
 		}
 	}
 

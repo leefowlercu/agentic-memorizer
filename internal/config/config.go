@@ -37,8 +37,9 @@ func InitConfig() error {
 
 	// User-facing settings (see MinimalConfig for initialized config surface area)
 	viper.SetDefault("memory_root", DefaultConfig.MemoryRoot)
-	viper.SetDefault("claude.api_key", DefaultConfig.Claude.APIKey)
-	viper.SetDefault("claude.model", DefaultConfig.Claude.Model)
+	viper.SetDefault("semantic.provider", DefaultConfig.Semantic.Provider)
+	viper.SetDefault("semantic.api_key", DefaultConfig.Semantic.APIKey)
+	viper.SetDefault("semantic.model", DefaultConfig.Semantic.Model)
 	viper.SetDefault("daemon.http_port", DefaultConfig.Daemon.HTTPPort)
 	viper.SetDefault("daemon.log_level", DefaultConfig.Daemon.LogLevel)
 	viper.SetDefault("mcp.log_level", DefaultConfig.MCP.LogLevel)
@@ -49,16 +50,17 @@ func InitConfig() error {
 	viper.SetDefault("embeddings.api_key", DefaultConfig.Embeddings.APIKey)
 
 	// Power-user settings (not included in minimal initialization config)
-	viper.SetDefault("claude.max_tokens", DefaultConfig.Claude.MaxTokens)
-	viper.SetDefault("claude.timeout", DefaultConfig.Claude.Timeout)
-	viper.SetDefault("analysis.enabled", DefaultConfig.Analysis.Enabled)
-	viper.SetDefault("analysis.max_file_size", DefaultConfig.Analysis.MaxFileSize)
-	viper.SetDefault("analysis.skip_extensions", DefaultConfig.Analysis.SkipExtensions)
-	viper.SetDefault("analysis.skip_files", DefaultConfig.Analysis.SkipFiles)
-	viper.SetDefault("analysis.cache_dir", DefaultConfig.Analysis.CacheDir)
+	viper.SetDefault("semantic.enabled", DefaultConfig.Semantic.Enabled)
+	viper.SetDefault("semantic.max_tokens", DefaultConfig.Semantic.MaxTokens)
+	viper.SetDefault("semantic.timeout", DefaultConfig.Semantic.Timeout)
+	viper.SetDefault("semantic.enable_vision", DefaultConfig.Semantic.EnableVision)
+	viper.SetDefault("semantic.max_file_size", DefaultConfig.Semantic.MaxFileSize)
+	viper.SetDefault("semantic.skip_extensions", DefaultConfig.Semantic.SkipExtensions)
+	viper.SetDefault("semantic.skip_files", DefaultConfig.Semantic.SkipFiles)
+	viper.SetDefault("semantic.cache_dir", DefaultConfig.Semantic.CacheDir)
+	viper.SetDefault("semantic.rate_limit_per_min", DefaultConfig.Semantic.RateLimitPerMin)
 	viper.SetDefault("daemon.debounce_ms", DefaultConfig.Daemon.DebounceMs)
 	viper.SetDefault("daemon.workers", DefaultConfig.Daemon.Workers)
-	viper.SetDefault("daemon.rate_limit_per_min", DefaultConfig.Daemon.RateLimitPerMin)
 	viper.SetDefault("daemon.full_rebuild_interval_minutes", DefaultConfig.Daemon.FullRebuildIntervalMinutes)
 	viper.SetDefault("daemon.log_file", DefaultConfig.Daemon.LogFile)
 	viper.SetDefault("mcp.log_file", DefaultConfig.MCP.LogFile)
@@ -96,8 +98,8 @@ func GetConfig() (*Config, error) {
 	if strings.Contains(cfg.MemoryRoot, "..") {
 		return nil, fmt.Errorf("memory_root contains parent directory reference (..): %s", cfg.MemoryRoot)
 	}
-	if strings.Contains(cfg.Analysis.CacheDir, "..") {
-		return nil, fmt.Errorf("analysis.cache_dir contains parent directory reference (..): %s", cfg.Analysis.CacheDir)
+	if strings.Contains(cfg.Semantic.CacheDir, "..") {
+		return nil, fmt.Errorf("semantic.cache_dir contains parent directory reference (..): %s", cfg.Semantic.CacheDir)
 	}
 	if strings.Contains(cfg.Daemon.LogFile, "..") {
 		return nil, fmt.Errorf("daemon.log_file contains parent directory reference (..): %s", cfg.Daemon.LogFile)
@@ -107,14 +109,26 @@ func GetConfig() (*Config, error) {
 	}
 
 	cfg.MemoryRoot = ExpandHome(cfg.MemoryRoot)
-	cfg.Analysis.CacheDir = ExpandHome(cfg.Analysis.CacheDir)
+	cfg.Semantic.CacheDir = ExpandHome(cfg.Semantic.CacheDir)
 	cfg.Daemon.LogFile = ExpandHome(cfg.Daemon.LogFile)
 	cfg.MCP.LogFile = ExpandHome(cfg.MCP.LogFile)
 
 	// Resolve API keys from hardcoded environment variable names
-	if cfg.Claude.APIKey == "" {
-		cfg.Claude.APIKey = os.Getenv(ClaudeAPIKeyEnv)
+	// Support provider-specific env vars based on provider choice
+	if cfg.Semantic.APIKey == "" {
+		switch cfg.Semantic.Provider {
+		case "claude":
+			cfg.Semantic.APIKey = os.Getenv(ClaudeAPIKeyEnv)
+		case "openai":
+			cfg.Semantic.APIKey = os.Getenv("OPENAI_API_KEY")
+		case "gemini":
+			cfg.Semantic.APIKey = os.Getenv("GOOGLE_API_KEY")
+		default:
+			// Default to Claude if no provider specified
+			cfg.Semantic.APIKey = os.Getenv(ClaudeAPIKeyEnv)
+		}
 	}
+
 	if cfg.Graph.Password == "" {
 		cfg.Graph.Password = os.Getenv(GraphPasswordEnv)
 	}
@@ -122,11 +136,11 @@ func GetConfig() (*Config, error) {
 		cfg.Embeddings.APIKey = os.Getenv(EmbeddingsAPIKeyEnv)
 	}
 
-	// Derive analysis.enabled from Claude API key presence.
-	// Semantic analysis requires Claude API - automatically disable if no key.
+	// Derive semantic.enabled from API key presence
+	// Semantic analysis requires provider API key - automatically disable if no key.
 	// This simplifies config and prevents runtime errors from missing credentials.
-	if cfg.Claude.APIKey == "" {
-		cfg.Analysis.Enabled = false
+	if cfg.Semantic.APIKey == "" {
+		cfg.Semantic.Enabled = false
 	}
 
 	// Derive embeddings.enabled from embeddings API key presence.
@@ -156,7 +170,7 @@ func WriteConfig(path string, cfg *Config) error {
 // Internal settings use defaults and are not written to the initialized config file.
 type MinimalConfig struct {
 	MemoryRoot   string                    `yaml:"memory_root"`
-	Claude       MinimalClaudeConfig       `yaml:"claude,omitempty"`
+	Semantic     MinimalSemanticConfig     `yaml:"semantic,omitempty"`
 	Daemon       MinimalDaemonConfig       `yaml:"daemon,omitempty"`
 	MCP          MinimalMCPConfig          `yaml:"mcp,omitempty"`
 	Graph        MinimalGraphConfig        `yaml:"graph,omitempty"`
@@ -164,9 +178,10 @@ type MinimalConfig struct {
 	Integrations MinimalIntegrationsConfig `yaml:"integrations,omitempty"`
 }
 
-type MinimalClaudeConfig struct {
-	APIKey string `yaml:"api_key,omitempty"`
-	Model  string `yaml:"model,omitempty"`
+type MinimalSemanticConfig struct {
+	Provider string `yaml:"provider,omitempty"`
+	APIKey   string `yaml:"api_key,omitempty"`
+	Model    string `yaml:"model,omitempty"`
 }
 
 type MinimalDaemonConfig struct {
@@ -199,9 +214,10 @@ type MinimalIntegrationsConfig struct {
 func (c *Config) ToMinimalConfig() *MinimalConfig {
 	minimal := &MinimalConfig{
 		MemoryRoot: c.MemoryRoot,
-		Claude: MinimalClaudeConfig{
-			APIKey: c.Claude.APIKey,
-			Model:  c.Claude.Model,
+		Semantic: MinimalSemanticConfig{
+			Provider: c.Semantic.Provider,
+			APIKey:   c.Semantic.APIKey,
+			Model:    c.Semantic.Model,
 		},
 		Daemon: MinimalDaemonConfig{
 			HTTPPort: c.Daemon.HTTPPort,
@@ -267,10 +283,6 @@ func ExpandHome(path string) string {
 	}
 
 	return filepath.Join(home, path[2:])
-}
-
-func (c *Config) GetAPIKey() string {
-	return c.Claude.APIKey
 }
 
 // GetAppDir returns the application directory path.

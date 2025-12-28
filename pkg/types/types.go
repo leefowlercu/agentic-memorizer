@@ -124,6 +124,10 @@ type CachedAnalysis struct {
 	MetadataVersion int `json:"metadata_version"` // Metadata extraction logic version
 	SemanticVersion int `json:"semantic_version"` // Semantic analysis logic version
 
+	// Provider information - tracks which provider and model produced this analysis
+	Provider string `json:"provider"` // Provider name (e.g., "claude", "openai", "gemini")
+	Model    string `json:"model"`    // Model ID used (e.g., "claude-sonnet-4-5-20250929")
+
 	// Core fields
 	FilePath   string            `json:"file_path"`
 	FileHash   string            `json:"file_hash"`

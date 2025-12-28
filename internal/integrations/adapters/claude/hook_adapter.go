@@ -292,10 +292,10 @@ func addOrUpdateHook(events []HookEvent, matcher, command string) []HookEvent {
 	}
 
 	if matcherIdx >= 0 {
-		// Update existing matcher
+		// Update existing matcher - look for both old and new binary names
 		hookExists := false
 		for i, hook := range events[matcherIdx].Hooks {
-			if strings.Contains(hook.Command, "agentic-memorizer") {
+			if strings.Contains(hook.Command, "memorizer") {
 				events[matcherIdx].Hooks[i] = newHook
 				hookExists = true
 				break

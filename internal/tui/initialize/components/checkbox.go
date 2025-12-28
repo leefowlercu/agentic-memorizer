@@ -69,11 +69,12 @@ func (c *CheckboxList) CheckedItems() []CheckboxItem {
 	return checked
 }
 
-// CheckedValues returns the values of checked items
+// CheckedValues returns the values of checked AND enabled items
+// Disabled items are excluded even if checked (they represent pre-existing state)
 func (c *CheckboxList) CheckedValues() []any {
 	var values []any
 	for _, item := range c.items {
-		if item.Checked {
+		if item.Checked && item.Enabled {
 			values = append(values, item.Value)
 		}
 	}

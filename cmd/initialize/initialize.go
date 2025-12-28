@@ -604,6 +604,13 @@ func setupIntegrations(integrationNames []string) ([]string, error) {
 			continue
 		}
 
+		// Skip if already enabled (prevents duplicate hooks)
+		if enabled, _ := integration.IsEnabled(); enabled {
+			fmt.Printf("  Integration %s already configured (skipped)\n", name)
+			enabledIntegrations = append(enabledIntegrations, name)
+			continue
+		}
+
 		if err := integration.Setup(binaryPath); err != nil {
 			fmt.Printf("  Warning: Failed to setup %s: %v\n", name, err)
 			continue

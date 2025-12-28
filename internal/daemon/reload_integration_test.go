@@ -70,20 +70,19 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	// Create default config
 	cfg := &config.Config{
 		MemoryRoot: memoryRoot,
-		Claude: config.ClaudeConfig{
-			APIKey:    "test-api-key",
-			Model:     "claude-3-haiku-20240307",
-			MaxTokens: 1000,
-			Timeout:   30, // API request timeout in seconds (5-300)
-		},
-		Analysis: config.AnalysisConfig{
-			Enabled:     false, // Disable analysis for faster tests
-			MaxFileSize: 1024 * 1024,
-			CacheDir:    cacheDir,
+		Semantic: config.SemanticConfig{
+			Enabled:         false, // Disable analysis for faster tests
+			Provider:        "claude",
+			APIKey:          "test-api-key",
+			Model:           "claude-3-haiku-20240307",
+			MaxTokens:       1000,
+			Timeout:         30, // API request timeout in seconds (5-300)
+			MaxFileSize:     1024 * 1024,
+			CacheDir:        cacheDir,
+			RateLimitPerMin: 20,
 		},
 		Daemon: config.DaemonConfig{
 			Workers:                    2,
-			RateLimitPerMin:            20,
 			DebounceMs:                 200,
 			FullRebuildIntervalMinutes: 60,
 			HTTPPort:                   0, // Disabled
@@ -152,7 +151,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		return nil, fmt.Errorf("failed to initialize graph manager (is FalkorDB running?): %w", err)
 	}
 
-	cacheManager, err := cache.NewManager(e.Config.Analysis.CacheDir)
+	cacheManager, err := cache.NewManager(e.Config.Semantic.CacheDir)
 	if err != nil {
 		graphManager.Close()
 		return nil, fmt.Errorf("failed to create cache manager: %w", err)
@@ -167,7 +166,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		e.Config.MemoryRoot,
 		skipDirs,
 		skipFiles,
-		e.Config.Analysis.SkipExtensions,
+		e.Config.Semantic.SkipExtensions,
 		e.Config.Daemon.DebounceMs,
 		logger,
 	)
@@ -200,8 +199,8 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		httpServer:        httpServer,
 	}
 
-	// Set semantic analyzer to nil (analysis disabled for tests)
-	d.SetSemanticAnalyzer(nil)
+	// Semantic provider is left uninitialized (nil) since analysis is disabled for tests
+	// The daemon's GetSemanticProvider() handles nil gracefully
 
 	return d, nil
 }
@@ -425,12 +424,12 @@ func TestDaemon_ReloadConfig_RateLimitChange(t *testing.T) {
 		t.Fatalf("failed to create daemon: %v", err)
 	}
 
-	originalRateLimit := d.GetConfig().Daemon.RateLimitPerMin
+	originalRateLimit := d.GetConfig().Semantic.RateLimitPerMin
 
 	// Change rate limit
 	newRateLimit := originalRateLimit + 10
 	if err := env.UpdateConfig(func(cfg *config.Config) {
-		cfg.Daemon.RateLimitPerMin = newRateLimit
+		cfg.Semantic.RateLimitPerMin = newRateLimit
 	}); err != nil {
 		t.Fatalf("failed to update config: %v", err)
 	}
@@ -441,8 +440,8 @@ func TestDaemon_ReloadConfig_RateLimitChange(t *testing.T) {
 	}
 
 	// Verify rate limit changed
-	if d.GetConfig().Daemon.RateLimitPerMin != newRateLimit {
-		t.Errorf("expected rate_limit=%d, got %d", newRateLimit, d.GetConfig().Daemon.RateLimitPerMin)
+	if d.GetConfig().Semantic.RateLimitPerMin != newRateLimit {
+		t.Errorf("expected rate_limit=%d, got %d", newRateLimit, d.GetConfig().Semantic.RateLimitPerMin)
 	}
 }
 
@@ -610,7 +609,7 @@ func TestDaemon_ReloadConfig_MultipleChanges(t *testing.T) {
 	if err := env.UpdateConfig(func(cfg *config.Config) {
 		cfg.Daemon.Workers = 8
 		cfg.Daemon.LogLevel = "debug"
-		cfg.Daemon.RateLimitPerMin = 50
+		cfg.Semantic.RateLimitPerMin = 50
 		cfg.Daemon.DebounceMs = 300
 	}); err != nil {
 		t.Fatalf("failed to update config: %v", err)
@@ -629,8 +628,8 @@ func TestDaemon_ReloadConfig_MultipleChanges(t *testing.T) {
 	if cfg.Daemon.LogLevel != "debug" {
 		t.Errorf("expected log_level=debug, got %s", cfg.Daemon.LogLevel)
 	}
-	if cfg.Daemon.RateLimitPerMin != 50 {
-		t.Errorf("expected rate_limit=50, got %d", cfg.Daemon.RateLimitPerMin)
+	if cfg.Semantic.RateLimitPerMin != 50 {
+		t.Errorf("expected rate_limit=50, got %d", cfg.Semantic.RateLimitPerMin)
 	}
 	if cfg.Daemon.DebounceMs != 300 {
 		t.Errorf("expected debounce=300, got %d", cfg.Daemon.DebounceMs)

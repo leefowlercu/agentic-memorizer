@@ -14,9 +14,9 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
+	"github.com/leefowlercu/agentic-memorizer/internal/mcp/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/transport"
-	"github.com/leefowlercu/agentic-memorizer/internal/search"
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
@@ -43,14 +43,13 @@ type Server struct {
 	// Prompt registry for MCP prompts
 	promptRegistry *PromptRegistry
 
-	// Handler registries (for Phase 2+)
+	// Handler registries
 	resourceHandlers map[string]ResourceHandler
-	toolHandlers     map[string]ToolHandler
+	toolHandlers     map[string]handlers.Handler
 	promptHandlers   map[string]PromptHandler
 }
 
 type ResourceHandler func(ctx context.Context, uri string) (any, error)
-type ToolHandler func(ctx context.Context, params json.RawMessage) (any, error)
 type PromptHandler func(ctx context.Context, params json.RawMessage) (any, error)
 
 // NewServer creates a new MCP server.
@@ -61,26 +60,37 @@ func NewServer(index *types.FileIndex, logger *slog.Logger, daemonURL string) *S
 	processID := logging.NewProcessID()
 	enrichedLogger := logging.WithMCPProcess(logger, processID)
 
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	normalizedURL := strings.TrimSuffix(daemonURL, "/")
+
 	s := &Server{
 		transport:        transport.NewStdioTransport(),
 		index:            index,
 		logger:           enrichedLogger,
 		processID:        processID,
-		daemonURL:        strings.TrimSuffix(daemonURL, "/"),
-		httpClient:       &http.Client{Timeout: 30 * time.Second},
+		daemonURL:        normalizedURL,
+		httpClient:       httpClient,
 		subscriptions:    NewSubscriptionManager(),
 		promptRegistry:   NewPromptRegistry(),
 		resourceHandlers: make(map[string]ResourceHandler),
-		toolHandlers:     make(map[string]ToolHandler),
+		toolHandlers:     make(map[string]handlers.Handler),
 		promptHandlers:   make(map[string]PromptHandler),
 	}
 
+	// Create handler dependencies
+	deps := &handlers.Dependencies{
+		DaemonURL:  normalizedURL,
+		HTTPClient: httpClient,
+		Index:      s,
+		Logger:     enrichedLogger,
+	}
+
 	// Register tool handlers
-	s.toolHandlers["search_files"] = s.handleSearchFiles
-	s.toolHandlers["get_file_metadata"] = s.handleGetFileMetadata
-	s.toolHandlers["list_recent_files"] = s.handleListRecentFiles
-	s.toolHandlers["get_related_files"] = s.handleGetRelatedFiles
-	s.toolHandlers["search_entities"] = s.handleSearchEntities
+	s.registerToolHandler(handlers.NewSearchFilesHandler(deps))
+	s.registerToolHandler(handlers.NewGetFileMetadataHandler(deps))
+	s.registerToolHandler(handlers.NewListRecentFilesHandler(deps))
+	s.registerToolHandler(handlers.NewGetRelatedFilesHandler(deps))
+	s.registerToolHandler(handlers.NewSearchEntitiesHandler(deps))
 
 	// Start SSE client for real-time daemon notifications.
 	// Subscribes to index update events from daemon HTTP API.
@@ -96,6 +106,11 @@ func NewServer(index *types.FileIndex, logger *slog.Logger, daemonURL string) *S
 	}
 
 	return s
+}
+
+// registerToolHandler registers a tool handler
+func (s *Server) registerToolHandler(h handlers.Handler) {
+	s.toolHandlers[h.Name()] = h
 }
 
 // Run starts the MCP server loop
@@ -445,559 +460,15 @@ func (s *Server) formatIndexJSON() (string, error) {
 	return formatter.Format(filesContent)
 }
 
-// handleSearchFiles performs semantic search across indexed files
-func (s *Server) handleSearchFiles(ctx context.Context, args json.RawMessage) (any, error) {
-	var params struct {
-		Query      string   `json:"query"`
-		Categories []string `json:"categories,omitempty"`
-		MaxResults int      `json:"max_results,omitempty"`
-	}
-
-	if err := json.Unmarshal(args, &params); err != nil {
-		return nil, fmt.Errorf("invalid arguments; %w", err)
-	}
-
-	if params.Query == "" {
-		return nil, fmt.Errorf("query parameter is required")
-	}
-
-	if params.MaxResults == 0 {
-		params.MaxResults = 10 // default
-	}
-
-	// Try daemon API first if available
-	if s.hasDaemonAPI() {
-		// Determine category filter
-		categoryFilter := ""
-		if len(params.Categories) > 0 {
-			categoryFilter = params.Categories[0] // Use first category for filter
-		}
-
-		reqBody := map[string]any{
-			"query":    params.Query,
-			"limit":    params.MaxResults,
-			"category": categoryFilter,
-		}
-
-		respBody, err := s.callDaemonAPI(ctx, "POST", "/api/v1/search", reqBody)
-		if err == nil {
-			var searchResp struct {
-				Results []struct {
-					Path      string  `json:"path"`
-					Name      string  `json:"name"`
-					Category  string  `json:"category"`
-					Score     float64 `json:"score"`
-					MatchType string  `json:"match_type"`
-					Summary   string  `json:"summary"`
-				} `json:"results"`
-				Count int `json:"count"`
-			}
-			if json.Unmarshal(respBody, &searchResp) == nil {
-				// Format API results
-				formattedResults := make([]map[string]any, len(searchResp.Results))
-				for i, result := range searchResp.Results {
-					formattedResults[i] = map[string]any{
-						"path":       result.Path,
-						"name":       result.Name,
-						"category":   result.Category,
-						"score":      result.Score,
-						"match_type": result.MatchType,
-						"summary":    result.Summary,
-					}
-				}
-
-				return map[string]any{
-					"query":        params.Query,
-					"result_count": searchResp.Count,
-					"source":       "daemon",
-					"results":      formattedResults,
-				}, nil
-			}
-		}
-		// Fall through to index-based search on error
-		s.logger.Debug("daemon search failed, falling back to index", "error", err)
-	}
-
-	// Fallback to index-based search
-	searcher := search.NewSearcher(s.index)
-	results := searcher.Search(search.SearchQuery{
-		Query:      params.Query,
-		Categories: params.Categories,
-		MaxResults: params.MaxResults,
-	})
-
-	// Format results
-	formattedResults := make([]map[string]any, len(results))
-	for i, result := range results {
-		formattedResults[i] = map[string]any{
-			"path":       result.File.Path,
-			"name":       result.File.Name,
-			"category":   result.File.Category,
-			"score":      result.Score,
-			"match_type": result.MatchType,
-			"size_human": result.File.SizeHuman,
-			"modified":   result.File.Modified.Format(time.RFC3339),
-		}
-
-		// Add semantic fields if available
-		if result.File.Summary != "" {
-			formattedResults[i]["summary"] = result.File.Summary
-			formattedResults[i]["tags"] = result.File.Tags
-		}
-	}
-
-	return map[string]any{
-		"query":        params.Query,
-		"result_count": len(results),
-		"source":       "index",
-		"results":      formattedResults,
-	}, nil
-}
-
-// handleGetFileMetadata returns complete metadata for a specific file
-func (s *Server) handleGetFileMetadata(ctx context.Context, args json.RawMessage) (any, error) {
-	var params struct {
-		Path string `json:"path"`
-	}
-
-	if err := json.Unmarshal(args, &params); err != nil {
-		return nil, fmt.Errorf("invalid arguments; %w", err)
-	}
-
-	if params.Path == "" {
-		return nil, fmt.Errorf("path parameter is required")
-	}
-
-	// Try daemon API first if available
-	if s.hasDaemonAPI() {
-		// URL-encode the path for the API call
-		encodedPath := strings.ReplaceAll(params.Path, "/", "%2F")
-		respBody, err := s.callDaemonAPI(ctx, "GET", "/api/v1/files/"+encodedPath, nil)
-		if err == nil {
-			var fileResp struct {
-				File json.RawMessage `json:"file"`
-			}
-			if json.Unmarshal(respBody, &fileResp) == nil {
-				result := map[string]any{
-					"source": "daemon",
-				}
-				// Parse file entry
-				var file any
-				if json.Unmarshal(fileResp.File, &file) == nil {
-					result["file"] = file
-				}
-				return result, nil
-			}
-		}
-		// Fall through to index-based lookup
-		s.logger.Debug("daemon file lookup failed, falling back to index", "error", err)
-	}
-
-	// Fallback to index-based search - convert to simplified file format
-	pathLower := strings.ToLower(params.Path)
-	for _, file := range s.index.Files {
-		filePathLower := strings.ToLower(file.Path)
-		// Match if path contains the query or vice versa
-		if strings.Contains(filePathLower, pathLower) || strings.Contains(pathLower, filePathLower) {
-			// Convert FileEntry to a map for consistency
-			result := map[string]any{
-				"path":        file.Path,
-				"name":        file.Name,
-				"hash":        file.Hash,
-				"type":        file.Type,
-				"category":    file.Category,
-				"size":        file.Size,
-				"size_human":  file.SizeHuman,
-				"modified":    file.Modified.Format(time.RFC3339),
-				"is_readable": file.IsReadable,
-			}
-			if file.Summary != "" {
-				result["summary"] = file.Summary
-				result["document_type"] = file.DocumentType
-				result["tags"] = file.Tags
-				result["topics"] = file.Topics
-			}
-			return map[string]any{
-				"file":   file,
-				"source": "index",
-			}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("file not found: %s", params.Path)
-}
-
-// handleListRecentFiles returns files modified within the specified time period
-func (s *Server) handleListRecentFiles(ctx context.Context, args json.RawMessage) (any, error) {
-	var params struct {
-		Days  int `json:"days,omitempty"`
-		Limit int `json:"limit,omitempty"`
-	}
-
-	if err := json.Unmarshal(args, &params); err != nil {
-		return nil, fmt.Errorf("invalid arguments; %w", err)
-	}
-
-	if params.Days == 0 {
-		params.Days = 7 // default
-	}
-	if params.Limit == 0 {
-		params.Limit = 20 // default
-	}
-
-	// Try daemon API first if available
-	if s.hasDaemonAPI() {
-		path := fmt.Sprintf("/api/v1/files/recent?days=%d&limit=%d", params.Days, params.Limit)
-		respBody, err := s.callDaemonAPI(ctx, "GET", path, nil)
-		if err == nil {
-			var recentResp struct {
-				Files []struct {
-					Path     string `json:"path"`
-					Name     string `json:"name"`
-					Category string `json:"category"`
-					Summary  string `json:"summary"`
-				} `json:"files"`
-				Count int `json:"count"`
-			}
-			if json.Unmarshal(respBody, &recentResp) == nil {
-				// Format API results
-				formattedResults := make([]map[string]any, len(recentResp.Files))
-				for i, file := range recentResp.Files {
-					formattedResults[i] = map[string]any{
-						"path":     file.Path,
-						"name":     file.Name,
-						"category": file.Category,
-						"summary":  file.Summary,
-					}
-				}
-
-				return map[string]any{
-					"days":         params.Days,
-					"result_count": recentResp.Count,
-					"source":       "daemon",
-					"files":        formattedResults,
-				}, nil
-			}
-		}
-		// Fall through to index-based query
-		s.logger.Debug("daemon recent files query failed, falling back to index", "error", err)
-	}
-
-	// Fallback to index-based query
-	cutoff := time.Now().AddDate(0, 0, -params.Days)
-
-	// Filter recent files
-	var recentFiles []types.FileEntry
-	for _, file := range s.index.Files {
-		if file.Modified.After(cutoff) {
-			recentFiles = append(recentFiles, file)
-		}
-	}
-
-	// Sort by modified time descending
-	for i := 0; i < len(recentFiles)-1; i++ {
-		for j := i + 1; j < len(recentFiles); j++ {
-			if recentFiles[j].Modified.After(recentFiles[i].Modified) {
-				recentFiles[i], recentFiles[j] = recentFiles[j], recentFiles[i]
-			}
-		}
-	}
-
-	// Limit results
-	if len(recentFiles) > params.Limit {
-		recentFiles = recentFiles[:params.Limit]
-	}
-
-	// Format results
-	formattedResults := make([]map[string]any, len(recentFiles))
-	for i, file := range recentFiles {
-		formattedResults[i] = map[string]any{
-			"path":       file.Path,
-			"name":       file.Name,
-			"category":   file.Category,
-			"size_human": file.SizeHuman,
-			"modified":   file.Modified.Format(time.RFC3339),
-		}
-
-		// Add semantic fields if available
-		if file.Summary != "" {
-			formattedResults[i]["summary"] = file.Summary
-			formattedResults[i]["tags"] = file.Tags
-		}
-	}
-
-	return map[string]any{
-		"days":         params.Days,
-		"result_count": len(formattedResults),
-		"source":       "index",
-		"files":        formattedResults,
-	}, nil
-}
-
-// handleGetRelatedFiles finds files related to a given file through graph relationships
-func (s *Server) handleGetRelatedFiles(ctx context.Context, args json.RawMessage) (any, error) {
-	var params struct {
-		Path  string `json:"path"`
-		Limit int    `json:"limit,omitempty"`
-	}
-
-	if err := json.Unmarshal(args, &params); err != nil {
-		return nil, fmt.Errorf("invalid arguments; %w", err)
-	}
-
-	if params.Path == "" {
-		return nil, fmt.Errorf("path parameter is required")
-	}
-
-	if params.Limit == 0 {
-		params.Limit = 10 // default
-	}
-
-	// Check if daemon API is available
-	if !s.hasDaemonAPI() {
-		return nil, fmt.Errorf("daemon API not available; related files search requires daemon connection")
-	}
-
-	// Get related files from daemon API
-	path := fmt.Sprintf("/api/v1/files/related?path=%s&limit=%d", params.Path, params.Limit)
-	respBody, err := s.callDaemonAPI(ctx, "GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get related files; %w", err)
-	}
-
-	var relatedResp struct {
-		Files []struct {
-			Path           string  `json:"path"`
-			Name           string  `json:"name"`
-			Summary        string  `json:"summary"`
-			Strength       float64 `json:"strength"`
-			ConnectionType string  `json:"connection_type"`
-		} `json:"files"`
-		Count int `json:"count"`
-	}
-	if err := json.Unmarshal(respBody, &relatedResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response; %w", err)
-	}
-
-	// Format results
-	formattedResults := make([]map[string]any, len(relatedResp.Files))
-	for i, rel := range relatedResp.Files {
-		formattedResults[i] = map[string]any{
-			"path":            rel.Path,
-			"name":            rel.Name,
-			"summary":         rel.Summary,
-			"strength":        rel.Strength,
-			"connection_type": rel.ConnectionType,
-		}
-	}
-
-	return map[string]any{
-		"source_file":  params.Path,
-		"result_count": len(formattedResults),
-		"related":      formattedResults,
-	}, nil
-}
-
-// handleSearchEntities searches for files by entity name
-func (s *Server) handleSearchEntities(ctx context.Context, args json.RawMessage) (any, error) {
-	var params struct {
-		Entity     string `json:"entity"`
-		EntityType string `json:"entity_type,omitempty"`
-		MaxResults int    `json:"max_results,omitempty"`
-	}
-
-	if err := json.Unmarshal(args, &params); err != nil {
-		return nil, fmt.Errorf("invalid arguments; %w", err)
-	}
-
-	if params.Entity == "" {
-		return nil, fmt.Errorf("entity parameter is required")
-	}
-
-	if params.MaxResults == 0 {
-		params.MaxResults = 10 // default
-	}
-
-	// Check if daemon API is available
-	if !s.hasDaemonAPI() {
-		return nil, fmt.Errorf("daemon API not available; entity search requires daemon connection")
-	}
-
-	// Search by entity via daemon API
-	path := fmt.Sprintf("/api/v1/entities/search?entity=%s&limit=%d", params.Entity, params.MaxResults)
-	respBody, err := s.callDaemonAPI(ctx, "GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search entities; %w", err)
-	}
-
-	var entityResp struct {
-		Results []struct {
-			Path      string `json:"path"`
-			Name      string `json:"name"`
-			Category  string `json:"category"`
-			Summary   string `json:"summary"`
-			MatchType string `json:"match_type"`
-		} `json:"results"`
-		Count int `json:"count"`
-	}
-	if err := json.Unmarshal(respBody, &entityResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response; %w", err)
-	}
-
-	// Format results
-	formattedResults := make([]map[string]any, len(entityResp.Results))
-	for i, result := range entityResp.Results {
-		formattedResults[i] = map[string]any{
-			"path":       result.Path,
-			"name":       result.Name,
-			"category":   result.Category,
-			"summary":    result.Summary,
-			"match_type": result.MatchType,
-		}
-	}
-
-	return map[string]any{
-		"entity":       params.Entity,
-		"entity_type":  params.EntityType,
-		"result_count": len(formattedResults),
-		"results":      formattedResults,
-	}, nil
-}
-
-// formatSize formats bytes as human-readable string
-func formatSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
 func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMessage) error {
 	if !s.initialized {
 		return s.sendError(id, protocol.ServerNotReady, "Server not initialized", nil)
 	}
 
-	tools := []protocol.Tool{
-		{
-			Name:        "search_files",
-			Description: "Search for files in the memory index using semantic search. Returns ranked results based on relevance to the query.",
-			InputSchema: protocol.InputSchema{
-				Schema: "https://json-schema.org/draft/2020-12/schema",
-				Type:   "object",
-				Properties: map[string]protocol.Property{
-					"query": {
-						Type:        "string",
-						Description: "Search query to match against filenames, summaries, tags, and topics",
-					},
-					"categories": {
-						Type:        "array",
-						Description: "Optional filter by file categories (e.g., documents, code, images)",
-						Items:       &protocol.Items{Type: "string"},
-					},
-					"max_results": {
-						Type:        "integer",
-						Description: "Maximum number of results to return",
-						Default:     10,
-						Minimum:     ptrInt(1),
-						Maximum:     ptrInt(100),
-					},
-				},
-				Required: []string{"query"},
-			},
-		},
-		{
-			Name:        "get_file_metadata",
-			Description: "Get complete metadata and semantic analysis for a specific file by path. Returns all available information including summaries, tags, topics, entities, related files, and file-specific metadata in a unified FileEntry format.",
-			InputSchema: protocol.InputSchema{
-				Schema: "https://json-schema.org/draft/2020-12/schema",
-				Type:   "object",
-				Properties: map[string]protocol.Property{
-					"path": {
-						Type:        "string",
-						Description: "File path (absolute or relative) to retrieve metadata for",
-					},
-				},
-				Required: []string{"path"},
-			},
-		},
-		{
-			Name:        "list_recent_files",
-			Description: "List recently modified files within a specified time period. Returns files sorted by modification date (newest first).",
-			InputSchema: protocol.InputSchema{
-				Schema: "https://json-schema.org/draft/2020-12/schema",
-				Type:   "object",
-				Properties: map[string]protocol.Property{
-					"days": {
-						Type:        "integer",
-						Description: "Number of days to look back for recent files",
-						Default:     7,
-						Minimum:     ptrInt(1),
-						Maximum:     ptrInt(365),
-					},
-					"limit": {
-						Type:        "integer",
-						Description: "Maximum number of files to return",
-						Default:     20,
-						Minimum:     ptrInt(1),
-						Maximum:     ptrInt(100),
-					},
-				},
-			},
-		},
-		{
-			Name:        "get_related_files",
-			Description: "Find files related to a given file through shared tags, topics, or entities in the knowledge graph. Requires FalkorDB to be running.",
-			InputSchema: protocol.InputSchema{
-				Schema: "https://json-schema.org/draft/2020-12/schema",
-				Type:   "object",
-				Properties: map[string]protocol.Property{
-					"path": {
-						Type:        "string",
-						Description: "Path to the source file to find related files for",
-					},
-					"limit": {
-						Type:        "integer",
-						Description: "Maximum number of related files to return",
-						Default:     10,
-						Minimum:     ptrInt(1),
-						Maximum:     ptrInt(50),
-					},
-				},
-				Required: []string{"path"},
-			},
-		},
-		{
-			Name:        "search_entities",
-			Description: "Search for files that mention a specific entity (technology, person, concept, organization). Requires FalkorDB to be running.",
-			InputSchema: protocol.InputSchema{
-				Schema: "https://json-schema.org/draft/2020-12/schema",
-				Type:   "object",
-				Properties: map[string]protocol.Property{
-					"entity": {
-						Type:        "string",
-						Description: "Entity name to search for (e.g., 'Go', 'FalkorDB', 'authentication')",
-					},
-					"entity_type": {
-						Type:        "string",
-						Description: "Optional entity type filter (technology, person, concept, organization)",
-					},
-					"max_results": {
-						Type:        "integer",
-						Description: "Maximum number of results to return",
-						Default:     10,
-						Minimum:     ptrInt(1),
-						Maximum:     ptrInt(100),
-					},
-				},
-				Required: []string{"entity"},
-			},
-		},
+	// Build tools list from registered handlers
+	tools := make([]protocol.Tool, 0, len(s.toolHandlers))
+	for _, handler := range s.toolHandlers {
+		tools = append(tools, handler.ToolDefinition())
 	}
 
 	resp := protocol.ToolsListResponse{
@@ -1006,10 +477,6 @@ func (s *Server) handleToolsList(ctx context.Context, id any, params json.RawMes
 
 	s.logger.Info("returning tools list", "count", len(tools))
 	return s.sendResponse(id, resp)
-}
-
-func ptrInt(i int) *int {
-	return &i
 }
 
 func (s *Server) handleToolsCall(ctx context.Context, id any, params json.RawMessage) error {
@@ -1034,7 +501,7 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, params json.RawMes
 	}
 
 	// Execute handler
-	result, err := handler(ctx, req.Arguments)
+	result, err := handler.Execute(ctx, req.Arguments)
 	if err != nil {
 		// Tool execution error - return as tool response with isError flag
 		resp := protocol.ToolsCallResponse{

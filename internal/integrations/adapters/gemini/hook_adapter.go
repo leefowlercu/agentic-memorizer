@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/shared"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -111,10 +111,10 @@ func (a *GeminiCLIHookAdapter) hasMemorizerHook(settings *GeminiSettings, eventT
 	for _, event := range events {
 		for _, hook := range event.Hooks {
 			// Reject old binary name
-			if strings.Contains(hook.Command, "agentic-memorizer") {
+			if shared.ContainsOldBinaryName(hook.Command) {
 				return false
 			}
-			if strings.Contains(hook.Command, "memorizer") {
+			if shared.ContainsMemorizer(hook.Command) {
 				return true
 			}
 		}
@@ -137,7 +137,7 @@ func (a *GeminiCLIHookAdapter) Setup(binaryPath string) error {
 	originalBeforeAgent := cloneGeminiHookEvents(settings.Hooks[BeforeAgentEvent])
 
 	// Step 1: Install SessionStart hooks (for files)
-	filesCommand := a.getFilesCommand(binaryPath, a.outputFormat)
+	filesCommand := shared.GetFilesCommand(binaryPath, a.outputFormat, HookIntegrationName)
 	sessionStartEvents := settings.Hooks[SessionStartEvent]
 	if sessionStartEvents == nil {
 		sessionStartEvents = []GeminiHookEvent{}
@@ -154,7 +154,7 @@ func (a *GeminiCLIHookAdapter) Setup(binaryPath string) error {
 
 	// Step 2: Install BeforeAgent hook (for facts)
 	// Note: BeforeAgent doesn't use matchers - it fires before every agent invocation
-	factsCommand := a.getFactsCommand(binaryPath, a.outputFormat)
+	factsCommand := shared.GetFactsCommand(binaryPath, a.outputFormat, HookIntegrationName)
 	beforeAgentEvents := settings.Hooks[BeforeAgentEvent]
 	if beforeAgentEvents == nil {
 		beforeAgentEvents = []GeminiHookEvent{}
@@ -191,16 +191,6 @@ func cloneGeminiHookEvents(events []GeminiHookEvent) []GeminiHookEvent {
 	return cloned
 }
 
-// getFilesCommand returns the command for SessionStart hook (file index)
-func (a *GeminiCLIHookAdapter) getFilesCommand(binaryPath string, format integrations.OutputFormat) string {
-	return fmt.Sprintf("%s read files --format %s --integration %s", binaryPath, format, HookIntegrationName)
-}
-
-// getFactsCommand returns the command for BeforeAgent hook (facts)
-func (a *GeminiCLIHookAdapter) getFactsCommand(binaryPath string, format integrations.OutputFormat) string {
-	return fmt.Sprintf("%s read facts --format %s --integration %s", binaryPath, format, HookIntegrationName)
-}
-
 // Update updates the integration configuration
 func (a *GeminiCLIHookAdapter) Update(binaryPath string) error {
 	// For Gemini CLI, update is the same as setup
@@ -234,7 +224,7 @@ func (a *GeminiCLIHookAdapter) Remove() error {
 	}
 
 	if len(errors) > 0 {
-		return fmt.Errorf("partial removal errors: %s", strings.Join(errors, "; "))
+		return fmt.Errorf("partial removal errors: %s", shared.AggregateErrors(errors))
 	}
 
 	return nil
@@ -252,7 +242,7 @@ func (a *GeminiCLIHookAdapter) removeHooksFromEvent(settings *GeminiSettings, ev
 	for _, event := range events {
 		filteredHooks := []GeminiHook{}
 		for _, hook := range event.Hooks {
-			if !strings.Contains(hook.Command, "agentic-memorizer") && !strings.Contains(hook.Command, "memorizer") {
+			if !shared.ContainsMemorizer(hook.Command) {
 				filteredHooks = append(filteredHooks, hook)
 			}
 		}
@@ -274,7 +264,7 @@ func (a *GeminiCLIHookAdapter) removeHooksFromEvent(settings *GeminiSettings, ev
 // GetCommand returns the command that should be executed by the hook
 // Returns the SessionStart command for backwards compatibility
 func (a *GeminiCLIHookAdapter) GetCommand(binaryPath string, format integrations.OutputFormat) string {
-	return a.getFilesCommand(binaryPath, format)
+	return shared.GetFilesCommand(binaryPath, format, HookIntegrationName)
 }
 
 // FormatOutput formats the file index for Gemini CLI (SessionStart JSON wrapper)
@@ -336,7 +326,7 @@ func hasOldBinaryName(settings *GeminiSettings, eventType string) bool {
 
 	for _, event := range events {
 		for _, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "agentic-memorizer") {
+			if shared.ContainsOldBinaryName(hook.Command) {
 				return true
 			}
 		}
@@ -406,7 +396,7 @@ func addOrUpdateGeminiHook(events []GeminiHookEvent, matcher, command, name, des
 		// Update existing matcher - look for hook with same name or memorizer command
 		hookExists := false
 		for i, hook := range events[matcherIdx].Hooks {
-			if hook.Name == name || strings.Contains(hook.Command, "memorizer") {
+			if hook.Name == name || shared.ContainsMemorizer(hook.Command) {
 				events[matcherIdx].Hooks[i] = newHook
 				hookExists = true
 				break
@@ -440,7 +430,7 @@ func addOrUpdateGeminiHookNoMatcher(events []GeminiHookEvent, command, name, des
 	for i, event := range events {
 		// Look for memorizer hook in this event
 		for j, hook := range event.Hooks {
-			if hook.Name == name || strings.Contains(hook.Command, "memorizer") {
+			if hook.Name == name || shared.ContainsMemorizer(hook.Command) {
 				events[i].Hooks[j] = newHook
 				return events
 			}

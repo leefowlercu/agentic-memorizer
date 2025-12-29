@@ -3,6 +3,7 @@ package shared
 import (
 	"fmt"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -41,4 +42,19 @@ func Join(parts []string, sep string) string {
 		result += part
 	}
 	return result
+}
+
+// OutputFormatToString converts an OutputFormat to a formatter string.
+// Returns the format string (e.g., "xml", "markdown", "json") or an error for unsupported formats.
+func OutputFormatToString(format integrations.OutputFormat) (string, error) {
+	switch format {
+	case integrations.FormatXML:
+		return "xml", nil
+	case integrations.FormatMarkdown:
+		return "markdown", nil
+	case integrations.FormatJSON:
+		return "json", nil
+	default:
+		return "", fmt.Errorf("unsupported output format: %s", format)
+	}
 }

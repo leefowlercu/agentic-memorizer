@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
-	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
 func TestNewGeminiProvider_Validation(t *testing.T) {
@@ -46,109 +45,6 @@ func TestNewGeminiProvider_Validation(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestGemini_ExtractJSON(t *testing.T) {
-	tests := []struct {
-		name string
-		text string
-		want string
-	}{
-		{
-			name: "json code block",
-			text: "Here is the analysis:\n```json\n{\"summary\": \"test\"}\n```",
-			want: `{"summary": "test"}`,
-		},
-		{
-			name: "generic code block",
-			text: "Here is the analysis:\n```\n{\"summary\": \"test\"}\n```",
-			want: `{"summary": "test"}`,
-		},
-		{
-			name: "no code block",
-			text: `{"summary": "test"}`,
-			want: "",
-		},
-		{
-			name: "nested json",
-			text: "```json\n{\"entities\": [{\"name\": \"AWS\", \"type\": \"technology\"}]}\n```",
-			want: `{"entities": [{"name": "AWS", "type": "technology"}]}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractJSON(tt.text)
-			if got != tt.want {
-				t.Errorf("extractJSON() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGemini_GetMimeType(t *testing.T) {
-	tests := []struct {
-		fileType string
-		want     string
-	}{
-		{"png", "image/png"},
-		{".png", "image/png"},
-		{"PNG", "image/png"},
-		{"jpg", "image/jpeg"},
-		{".jpg", "image/jpeg"},
-		{"jpeg", "image/jpeg"},
-		{"gif", "image/gif"},
-		{"webp", "image/webp"},
-		{"heic", "image/heic"},
-		{"heif", "image/heif"},
-		{"unknown", "image/jpeg"},
-		{"", "image/jpeg"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.fileType, func(t *testing.T) {
-			got := getMimeType(tt.fileType)
-			if got != tt.want {
-				t.Errorf("getMimeType(%q) = %q, want %q", tt.fileType, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGemini_GetPageCount(t *testing.T) {
-	tests := []struct {
-		name     string
-		metadata *types.FileMetadata
-		want     int
-	}{
-		{
-			name: "with page count",
-			metadata: &types.FileMetadata{
-				PageCount: intPtr(10),
-			},
-			want: 10,
-		},
-		{
-			name: "nil page count",
-			metadata: &types.FileMetadata{
-				PageCount: nil,
-			},
-			want: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := getPageCount(tt.metadata)
-			if got != tt.want {
-				t.Errorf("getPageCount() = %d, want %d", got, tt.want)
-			}
-		})
-	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }
 
 // TestGeminiVisionModelDetection tests the vision support detection logic

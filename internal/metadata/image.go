@@ -17,6 +17,11 @@ import (
 // ImageHandler extracts metadata from image files
 type ImageHandler struct{}
 
+// SupportedExtensions returns the list of extensions this handler supports
+func (h *ImageHandler) SupportedExtensions() []string {
+	return []string{".png", ".jpg", ".jpeg", ".gif", ".webp"}
+}
+
 // CanHandle returns true if this handler can process the file
 func (h *ImageHandler) CanHandle(ext string) bool {
 	return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp"

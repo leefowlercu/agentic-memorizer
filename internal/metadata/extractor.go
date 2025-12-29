@@ -1,7 +1,6 @@
 package metadata
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,19 +10,22 @@ import (
 
 // Extractor extracts metadata from files
 type Extractor struct {
-	handlers map[string]FileHandler
+	// extensionHandlers maps file extensions to their handlers for O(1) lookup
+	extensionHandlers map[string]FileHandler
 }
 
 // FileHandler extracts metadata for a specific file type
 type FileHandler interface {
 	Extract(path string, info os.FileInfo) (*types.FileMetadata, error)
 	CanHandle(ext string) bool
+	// SupportedExtensions returns the list of extensions this handler supports
+	SupportedExtensions() []string
 }
 
 // NewExtractor creates a new metadata extractor
 func NewExtractor() *Extractor {
 	e := &Extractor{
-		handlers: make(map[string]FileHandler),
+		extensionHandlers: make(map[string]FileHandler),
 	}
 
 	// Register handlers
@@ -39,11 +41,11 @@ func NewExtractor() *Extractor {
 	return e
 }
 
-// RegisterHandler registers a file type handler
+// RegisterHandler registers a file type handler for all its supported extensions
 func (e *Extractor) RegisterHandler(handler FileHandler) {
-	// Handler registers itself for extensions it can handle
-	// This is a placeholder - handlers will implement CanHandle
-	e.handlers[fmt.Sprintf("%T", handler)] = handler
+	for _, ext := range handler.SupportedExtensions() {
+		e.extensionHandlers[ext] = handler
+	}
 }
 
 // Extract extracts metadata from a file
@@ -63,17 +65,14 @@ func (e *Extractor) Extract(path string, info os.FileInfo) (*types.FileMetadata,
 	metadata.Category = categorizeFile(ext)
 	metadata.IsReadable = isReadable(ext)
 
-	// Find appropriate handler
-	for _, handler := range e.handlers {
-		if handler.CanHandle(ext) {
-			extracted, err := handler.Extract(path, info)
-			if err != nil {
-				// Log error but continue with base metadata
-				fmt.Fprintf(os.Stderr, "Warning: handler-specific extraction failed for %s, using base metadata: %v\n", path, err)
-				return metadata, nil
-			}
-			return extracted, nil
+	// Direct O(1) lookup for handler by extension
+	if handler, ok := e.extensionHandlers[ext]; ok {
+		extracted, err := handler.Extract(path, info)
+		if err != nil {
+			// Handler failed, return base metadata
+			return metadata, nil
 		}
+		return extracted, nil
 	}
 
 	// No specific handler, return base metadata

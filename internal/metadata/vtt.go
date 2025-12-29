@@ -12,6 +12,11 @@ import (
 // VTTHandler extracts metadata from VTT transcript files
 type VTTHandler struct{}
 
+// SupportedExtensions returns the list of extensions this handler supports
+func (h *VTTHandler) SupportedExtensions() []string {
+	return []string{".vtt", ".srt"}
+}
+
 // CanHandle returns true if this handler can process the file
 func (h *VTTHandler) CanHandle(ext string) bool {
 	return ext == ".vtt" || ext == ".srt"

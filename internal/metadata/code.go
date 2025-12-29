@@ -12,6 +12,11 @@ import (
 // CodeHandler extracts metadata from source code files
 type CodeHandler struct{}
 
+// SupportedExtensions returns the list of extensions this handler supports
+func (h *CodeHandler) SupportedExtensions() []string {
+	return []string{".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".rs", ".rb", ".php"}
+}
+
 // CanHandle returns true if this handler can process the file
 func (h *CodeHandler) CanHandle(ext string) bool {
 	codeExts := map[string]bool{

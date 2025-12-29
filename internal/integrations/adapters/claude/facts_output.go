@@ -20,16 +20,9 @@ type UserPromptSubmitOutput struct {
 // formatUserPromptSubmitJSON wraps the formatted facts index in a Claude Code UserPromptSubmit JSON envelope
 func formatUserPromptSubmitJSON(facts *types.FactsIndex, outputFormat integrations.OutputFormat) (string, error) {
 	// Step 1: Get the appropriate formatter
-	var formatStr string
-	switch outputFormat {
-	case integrations.FormatXML:
-		formatStr = "xml"
-	case integrations.FormatMarkdown:
-		formatStr = "markdown"
-	case integrations.FormatJSON:
-		formatStr = "json"
-	default:
-		return "", fmt.Errorf("unsupported output format: %s", outputFormat)
+	formatStr, err := shared.OutputFormatToString(outputFormat)
+	if err != nil {
+		return "", err
 	}
 
 	formatter, err := format.GetFormatter(formatStr)

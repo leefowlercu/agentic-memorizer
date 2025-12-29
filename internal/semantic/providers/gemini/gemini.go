@@ -2,15 +2,15 @@ package gemini
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/leefowlercu/agentic-memorizer/internal/document"
 	"github.com/leefowlercu/agentic-memorizer/internal/semantic"
+	"github.com/leefowlercu/agentic-memorizer/internal/semantic/common"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 	"google.golang.org/api/option"
 )
@@ -113,7 +113,7 @@ func (p *GeminiProvider) analyzeText(ctx context.Context, metadata *types.FileMe
 	}
 
 	if !metadata.IsReadable {
-		return p.analyzeBinary(metadata)
+		return common.AnalyzeBinary(metadata), nil
 	}
 
 	contentStr := string(content)
@@ -121,7 +121,7 @@ func (p *GeminiProvider) analyzeText(ctx context.Context, metadata *types.FileMe
 		contentStr = contentStr[:100000] + "\n\n[Content truncated...]"
 	}
 
-	prompt := p.buildPrompt(metadata, contentStr)
+	prompt := common.BuildTextPrompt(metadata, contentStr)
 
 	resp, err := p.model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
@@ -133,7 +133,7 @@ func (p *GeminiProvider) analyzeText(ctx context.Context, metadata *types.FileMe
 	}
 
 	response := extractTextFromParts(resp.Candidates[0].Content.Parts)
-	return p.parseResponse(response)
+	return common.ParseAnalysisResponse(response)
 }
 
 func (p *GeminiProvider) analyzeImage(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
@@ -142,33 +142,8 @@ func (p *GeminiProvider) analyzeImage(ctx context.Context, metadata *types.FileM
 		return nil, fmt.Errorf("failed to read image; %w", err)
 	}
 
-	mimeType := getMimeType(metadata.Type)
-
-	prompt := fmt.Sprintf(`Analyze this image and provide semantic understanding.
-
-File: %s
-Type: %s
-Dimensions: %dx%d
-
-Provide a JSON response with:
-1. summary: 2-3 sentence description of what the image shows
-2. tags: 3-5 semantic tags (lowercase, hyphenated)
-3. key_topics: 3-5 main subjects or themes in the image
-4. document_type: The type/purpose of this image (e.g., "diagram", "screenshot", "photo", "chart")
-5. entities: Array of named entities visible or referenced in the image, each with:
-   - name: The entity name (e.g., brand names, people, tools shown)
-   - type: One of: technology, person, concept, organization, project
-6. references: Array of topic references if applicable, each with:
-   - topic: The referenced topic or concept
-   - type: One of: requires, extends, related-to, implements
-   - confidence: Float 0.0-1.0 indicating strength of reference
-
-Be concise but informative. Respond with ONLY valid JSON.`,
-		filepath.Base(metadata.Path),
-		metadata.Type,
-		metadata.Dimensions.Width,
-		metadata.Dimensions.Height,
-	)
+	mimeType := common.GetMediaType(metadata.Type)
+	prompt := common.BuildImagePrompt(metadata)
 
 	imagePart := genai.ImageData(mimeType, imageData)
 	textPart := genai.Text(prompt)
@@ -183,7 +158,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	}
 
 	response := extractTextFromParts(resp.Candidates[0].Content.Parts)
-	return p.parseResponse(response)
+	return common.ParseAnalysisResponse(response)
 }
 
 func (p *GeminiProvider) analyzeDocument(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
@@ -192,9 +167,53 @@ func (p *GeminiProvider) analyzeDocument(ctx context.Context, metadata *types.Fi
 		return p.analyzePDF(ctx, metadata)
 	}
 
-	// For Office docs, fall back to metadata-only analysis
-	// TODO: Add text extraction for PPTX/DOCX
-	return p.analyzeBinary(metadata)
+	var extractedText string
+	var err error
+	var prompt string
+
+	switch metadata.Type {
+	case "pptx":
+		extractedText, err = document.ExtractPptxText(metadata.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract PPTX text; %w", err)
+		}
+		if extractedText == "" {
+			return common.AnalyzeBinary(metadata), nil
+		}
+		if len(extractedText) > 50000 {
+			extractedText = extractedText[:50000] + "\n\n[Content truncated...]"
+		}
+		prompt = common.BuildPptxPrompt(metadata, extractedText)
+
+	case "docx":
+		extractedText, err = document.ExtractDocxText(metadata.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract DOCX text; %w", err)
+		}
+		if extractedText == "" {
+			return common.AnalyzeBinary(metadata), nil
+		}
+		if len(extractedText) > 50000 {
+			extractedText = extractedText[:50000] + "\n\n[Content truncated...]"
+		}
+		prompt = common.BuildDocxPrompt(metadata, extractedText)
+
+	default:
+		// Other document types - fall back to metadata-only
+		return common.AnalyzeBinary(metadata), nil
+	}
+
+	resp, err := p.model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze with Gemini; %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no response from Gemini")
+	}
+
+	response := extractTextFromParts(resp.Candidates[0].Content.Parts)
+	return common.ParseAnalysisResponse(response)
 }
 
 func (p *GeminiProvider) analyzePDF(ctx context.Context, metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
@@ -203,28 +222,7 @@ func (p *GeminiProvider) analyzePDF(ctx context.Context, metadata *types.FileMet
 		return nil, fmt.Errorf("failed to read PDF; %w", err)
 	}
 
-	prompt := fmt.Sprintf(`Analyze this PDF document and provide semantic understanding.
-
-File: %s
-Pages: %d
-
-Provide a JSON response with:
-1. summary: 2-3 sentence summary capturing the main purpose/content
-2. tags: 3-5 semantic tags (lowercase, hyphenated)
-3. key_topics: 3-5 main topics or themes
-4. document_type: The purpose/genre of this document
-5. entities: Array of named entities found in the content, each with:
-   - name: The entity name (e.g., "Terraform", "AWS", "Docker")
-   - type: One of: technology, person, concept, organization, project
-6. references: Array of topic references/dependencies, each with:
-   - topic: The referenced topic or concept
-   - type: One of: requires, extends, related-to, implements
-   - confidence: Float 0.0-1.0 indicating strength of reference
-
-Be concise but informative. Respond with ONLY valid JSON.`,
-		filepath.Base(metadata.Path),
-		getPageCount(metadata),
-	)
+	prompt := common.BuildPdfPrompt(metadata)
 
 	pdfPart := genai.Blob{
 		MIMEType: "application/pdf",
@@ -242,73 +240,7 @@ Be concise but informative. Respond with ONLY valid JSON.`,
 	}
 
 	response := extractTextFromParts(resp.Candidates[0].Content.Parts)
-	return p.parseResponse(response)
-}
-
-func (p *GeminiProvider) analyzeBinary(metadata *types.FileMetadata) (*types.SemanticAnalysis, error) {
-	summary := fmt.Sprintf("%s file", strings.ToUpper(strings.TrimPrefix(metadata.Type, ".")))
-
-	if metadata.PageCount != nil {
-		summary += fmt.Sprintf(" with %d pages", *metadata.PageCount)
-	} else if metadata.SlideCount != nil {
-		summary += fmt.Sprintf(" with %d slides", *metadata.SlideCount)
-	}
-
-	return &types.SemanticAnalysis{
-		Summary:      summary,
-		Tags:         []string{metadata.Category, metadata.Type},
-		KeyTopics:    []string{},
-		DocumentType: metadata.Category,
-		Confidence:   0.5,
-		Entities:     []types.Entity{},
-		References:   []types.Reference{},
-	}, nil
-}
-
-func (p *GeminiProvider) buildPrompt(metadata *types.FileMetadata, content string) string {
-	return fmt.Sprintf(`Analyze this file and provide semantic understanding.
-
-File: %s
-Type: %s
-Category: %s
-Size: %d bytes
-
-Content:
-%s
-
-Provide a JSON response with:
-1. summary: 2-3 sentence summary capturing the main purpose/content
-2. tags: 3-5 semantic tags (lowercase, hyphenated)
-3. key_topics: 3-5 main topics or themes
-4. document_type: The purpose/genre of this document
-5. entities: Array of named entities found in the content, each with:
-   - name: The entity name (e.g., "Terraform", "AWS", "Docker")
-   - type: One of: technology, person, concept, organization, project
-6. references: Array of topic references/dependencies, each with:
-   - topic: The referenced topic or concept
-   - type: One of: requires, extends, related-to, implements
-   - confidence: Float 0.0-1.0 indicating strength of reference
-
-Be concise but informative. Respond with ONLY valid JSON.`,
-		filepath.Base(metadata.Path),
-		metadata.Type,
-		metadata.Category,
-		metadata.Size,
-		content,
-	)
-}
-
-func (p *GeminiProvider) parseResponse(response string) (*types.SemanticAnalysis, error) {
-	var analysis types.SemanticAnalysis
-	if err := json.Unmarshal([]byte(response), &analysis); err != nil {
-		if jsonStr := extractJSON(response); jsonStr != "" {
-			if err := json.Unmarshal([]byte(jsonStr), &analysis); err == nil {
-				return &analysis, nil
-			}
-		}
-		return nil, fmt.Errorf("failed to parse analysis response; %w", err)
-	}
-	return &analysis, nil
+	return common.ParseAnalysisResponse(response)
 }
 
 func extractTextFromParts(parts []genai.Part) string {
@@ -319,48 +251,4 @@ func extractTextFromParts(parts []genai.Part) string {
 		}
 	}
 	return result.String()
-}
-
-func extractJSON(text string) string {
-	if start := strings.Index(text, "```json"); start != -1 {
-		start += 7
-		if end := strings.Index(text[start:], "```"); end != -1 {
-			return strings.TrimSpace(text[start : start+end])
-		}
-	}
-
-	if start := strings.Index(text, "```"); start != -1 {
-		start += 3
-		if end := strings.Index(text[start:], "```"); end != -1 {
-			return strings.TrimSpace(text[start : start+end])
-		}
-	}
-
-	return ""
-}
-
-func getMimeType(fileType string) string {
-	switch strings.ToLower(fileType) {
-	case ".png", "png":
-		return "image/png"
-	case ".jpg", ".jpeg", "jpg", "jpeg":
-		return "image/jpeg"
-	case ".gif", "gif":
-		return "image/gif"
-	case ".webp", "webp":
-		return "image/webp"
-	case ".heic", "heic":
-		return "image/heic"
-	case ".heif", "heif":
-		return "image/heif"
-	default:
-		return "image/jpeg"
-	}
-}
-
-func getPageCount(metadata *types.FileMetadata) int {
-	if metadata.PageCount != nil {
-		return *metadata.PageCount
-	}
-	return 0
 }

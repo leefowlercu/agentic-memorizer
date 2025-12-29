@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/shared"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -105,10 +105,10 @@ func (a *ClaudeCodeHookAdapter) hasMemorizerHook(settings *Settings, eventType s
 	for _, event := range events {
 		for _, hook := range event.Hooks {
 			// Reject old binary name
-			if strings.Contains(hook.Command, "agentic-memorizer") {
+			if shared.ContainsOldBinaryName(hook.Command) {
 				return false
 			}
-			if strings.Contains(hook.Command, "memorizer") {
+			if shared.ContainsMemorizer(hook.Command) {
 				return true
 			}
 		}
@@ -131,7 +131,7 @@ func (a *ClaudeCodeHookAdapter) Setup(binaryPath string) error {
 	originalUserPromptSubmit := cloneHookEvents(settings.Hooks[UserPromptSubmitEvent])
 
 	// Step 1: Install SessionStart hooks (for files)
-	filesCommand := a.getFilesCommand(binaryPath, a.outputFormat)
+	filesCommand := shared.GetFilesCommand(binaryPath, a.outputFormat, IntegrationName)
 	sessionStartEvents := settings.Hooks[SessionStartEvent]
 	if sessionStartEvents == nil {
 		sessionStartEvents = []HookEvent{}
@@ -148,7 +148,7 @@ func (a *ClaudeCodeHookAdapter) Setup(binaryPath string) error {
 
 	// Step 2: Install UserPromptSubmit hook (for facts)
 	// Note: UserPromptSubmit doesn't use matchers - it fires on every prompt
-	factsCommand := a.getFactsCommand(binaryPath, a.outputFormat)
+	factsCommand := shared.GetFactsCommand(binaryPath, a.outputFormat, IntegrationName)
 	userPromptSubmitEvents := settings.Hooks[UserPromptSubmitEvent]
 	if userPromptSubmitEvents == nil {
 		userPromptSubmitEvents = []HookEvent{}
@@ -185,16 +185,6 @@ func cloneHookEvents(events []HookEvent) []HookEvent {
 	return cloned
 }
 
-// getFilesCommand returns the command for SessionStart hook (file index)
-func (a *ClaudeCodeHookAdapter) getFilesCommand(binaryPath string, format integrations.OutputFormat) string {
-	return fmt.Sprintf("%s read files --format %s --integration %s", binaryPath, format, IntegrationName)
-}
-
-// getFactsCommand returns the command for UserPromptSubmit hook (facts)
-func (a *ClaudeCodeHookAdapter) getFactsCommand(binaryPath string, format integrations.OutputFormat) string {
-	return fmt.Sprintf("%s read facts --format %s --integration %s", binaryPath, format, IntegrationName)
-}
-
 // Update updates the integration configuration
 func (a *ClaudeCodeHookAdapter) Update(binaryPath string) error {
 	// For Claude Code, update is the same as setup
@@ -228,7 +218,7 @@ func (a *ClaudeCodeHookAdapter) Remove() error {
 	}
 
 	if len(errors) > 0 {
-		return fmt.Errorf("partial removal errors: %s", strings.Join(errors, "; "))
+		return fmt.Errorf("partial removal errors: %s", shared.AggregateErrors(errors))
 	}
 
 	return nil
@@ -246,7 +236,7 @@ func (a *ClaudeCodeHookAdapter) removeHooksFromEvent(settings *Settings, eventTy
 	for _, event := range events {
 		filteredHooks := []Hook{}
 		for _, hook := range event.Hooks {
-			if !strings.Contains(hook.Command, "agentic-memorizer") && !strings.Contains(hook.Command, "memorizer") {
+			if !shared.ContainsMemorizer(hook.Command) {
 				filteredHooks = append(filteredHooks, hook)
 			}
 		}
@@ -268,7 +258,7 @@ func (a *ClaudeCodeHookAdapter) removeHooksFromEvent(settings *Settings, eventTy
 // GetCommand returns the command that should be executed by the hook
 // Returns the SessionStart command for backwards compatibility
 func (a *ClaudeCodeHookAdapter) GetCommand(binaryPath string, format integrations.OutputFormat) string {
-	return a.getFilesCommand(binaryPath, format)
+	return shared.GetFilesCommand(binaryPath, format, IntegrationName)
 }
 
 // FormatOutput formats the file index for Claude Code (SessionStart JSON wrapper)
@@ -330,7 +320,7 @@ func hasOldBinaryName(settings *Settings, eventType string) bool {
 
 	for _, event := range events {
 		for _, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "agentic-memorizer") {
+			if shared.ContainsOldBinaryName(hook.Command) {
 				return true
 			}
 		}
@@ -398,7 +388,7 @@ func addOrUpdateHook(events []HookEvent, matcher, command string) []HookEvent {
 		// Update existing matcher - look for both old and new binary names
 		hookExists := false
 		for i, hook := range events[matcherIdx].Hooks {
-			if strings.Contains(hook.Command, "memorizer") {
+			if shared.ContainsMemorizer(hook.Command) {
 				events[matcherIdx].Hooks[i] = newHook
 				hookExists = true
 				break
@@ -430,7 +420,7 @@ func addOrUpdateHookNoMatcher(events []HookEvent, command string) []HookEvent {
 	for i, event := range events {
 		// Look for memorizer hook in this event
 		for j, hook := range event.Hooks {
-			if strings.Contains(hook.Command, "memorizer") {
+			if shared.ContainsMemorizer(hook.Command) {
 				events[i].Hooks[j] = newHook
 				return events
 			}

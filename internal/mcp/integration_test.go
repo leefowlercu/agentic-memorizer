@@ -14,6 +14,11 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
+// ptrInt returns a pointer to an int value
+func ptrInt(i int) *int {
+	return &i
+}
+
 // TestIntegration_FullResourcesFlow tests the complete initialization and resources flow
 func TestIntegration_FullResourcesFlow(t *testing.T) {
 	// Create a test index with sample data

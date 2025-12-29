@@ -5,6 +5,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/leefowlercu/agentic-memorizer/cmd/shared"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
 	"github.com/leefowlercu/agentic-memorizer/internal/format"
@@ -27,13 +28,9 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	if err := config.InitConfig(); err != nil {
-		return fmt.Errorf("failed to initialize config; %w", err)
-	}
-
-	cfg, err := config.GetConfig()
+	cfg, err := shared.GetConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load config; %w", err)
+		return err
 	}
 
 	pidFile, err := config.GetPIDPath()

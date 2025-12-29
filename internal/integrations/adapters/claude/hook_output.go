@@ -26,16 +26,9 @@ type HookSpecificOutput struct {
 // formatSessionStartJSON wraps the formatted file index in a Claude Code SessionStart JSON envelope
 func formatSessionStartJSON(index *types.FileIndex, outputFormat integrations.OutputFormat) (string, error) {
 	// Step 1: Get the appropriate formatter
-	var formatStr string
-	switch outputFormat {
-	case integrations.FormatXML:
-		formatStr = "xml"
-	case integrations.FormatMarkdown:
-		formatStr = "markdown"
-	case integrations.FormatJSON:
-		formatStr = "json"
-	default:
-		return "", fmt.Errorf("unsupported output format: %s", outputFormat)
+	formatStr, err := shared.OutputFormatToString(outputFormat)
+	if err != nil {
+		return "", err
 	}
 
 	formatter, err := format.GetFormatter(formatStr)

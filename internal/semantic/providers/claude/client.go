@@ -2,6 +2,7 @@ package claude
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,16 +34,25 @@ func NewClient(apiKey, model string, maxTokens, timeoutSeconds int) *Client {
 }
 
 // doWithRetry performs an HTTP request with exponential backoff retry logic
-func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
 	const maxRetries = 3
 	const baseDelay = 1 * time.Second
 
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Check context cancellation before each attempt
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("context cancelled; %w", err)
+		}
+
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			delay := time.Duration(math.Pow(2, float64(attempt-1))) * baseDelay
-			time.Sleep(delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled during retry backoff; %w", ctx.Err())
+			}
 		}
 
 		resp, err := c.httpClient.Do(req)
@@ -136,7 +146,7 @@ type Response struct {
 	} `json:"usage"`
 }
 
-func (c *Client) SendMessage(prompt string) (string, error) {
+func (c *Client) SendMessage(ctx context.Context, prompt string) (string, error) {
 	req := Request{
 		Model:     c.model,
 		MaxTokens: c.maxTokens,
@@ -158,7 +168,7 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 		return "", fmt.Errorf("failed to marshal request; %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request; %w", err)
 	}
@@ -167,7 +177,7 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	httpResp, err := c.doWithRetry(httpReq)
+	httpResp, err := c.doWithRetry(ctx, httpReq)
 	if err != nil {
 		return "", err
 	}
@@ -190,7 +200,7 @@ func (c *Client) SendMessage(prompt string) (string, error) {
 	return resp.Content[0].Text, nil
 }
 
-func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType string) (string, error) {
+func (c *Client) SendMessageWithDocument(ctx context.Context, prompt, documentBase64, mediaType string) (string, error) {
 	req := Request{
 		Model:     c.model,
 		MaxTokens: c.maxTokens,
@@ -220,7 +230,7 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 		return "", fmt.Errorf("failed to marshal request; %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request; %w", err)
 	}
@@ -229,7 +239,7 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	httpResp, err := c.doWithRetry(httpReq)
+	httpResp, err := c.doWithRetry(ctx, httpReq)
 	if err != nil {
 		return "", err
 	}
@@ -252,7 +262,7 @@ func (c *Client) SendMessageWithDocument(prompt, documentBase64, mediaType strin
 	return resp.Content[0].Text, nil
 }
 
-func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (string, error) {
+func (c *Client) SendMessageWithImage(ctx context.Context, prompt, imageBase64, mediaType string) (string, error) {
 	req := Request{
 		Model:     c.model,
 		MaxTokens: c.maxTokens,
@@ -282,7 +292,7 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 		return "", fmt.Errorf("failed to marshal request; %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request; %w", err)
 	}
@@ -291,7 +301,7 @@ func (c *Client) SendMessageWithImage(prompt, imageBase64, mediaType string) (st
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	httpResp, err := c.doWithRetry(httpReq)
+	httpResp, err := c.doWithRetry(ctx, httpReq)
 	if err != nil {
 		return "", err
 	}

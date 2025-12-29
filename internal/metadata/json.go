@@ -9,6 +9,11 @@ import (
 // JSONHandler extracts metadata from JSON/YAML files
 type JSONHandler struct{}
 
+// SupportedExtensions returns the list of extensions this handler supports
+func (h *JSONHandler) SupportedExtensions() []string {
+	return []string{".json", ".yaml", ".yml", ".toml"}
+}
+
 // CanHandle returns true if this handler can process the file
 func (h *JSONHandler) CanHandle(ext string) bool {
 	return ext == ".json" || ext == ".yaml" || ext == ".yml" || ext == ".toml"

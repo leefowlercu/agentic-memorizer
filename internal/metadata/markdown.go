@@ -11,6 +11,11 @@ import (
 // MarkdownHandler extracts metadata from Markdown files
 type MarkdownHandler struct{}
 
+// SupportedExtensions returns the list of extensions this handler supports
+func (h *MarkdownHandler) SupportedExtensions() []string {
+	return []string{".md", ".markdown"}
+}
+
 // CanHandle returns true if this handler can process the file
 func (h *MarkdownHandler) CanHandle(ext string) bool {
 	return ext == ".md" || ext == ".markdown"

@@ -299,54 +299,6 @@ func TestGetDefaultOutputFormat(t *testing.T) {
 	}
 }
 
-func TestFormatSize(t *testing.T) {
-	tests := []struct {
-		name  string
-		bytes int64
-		want  string
-	}{
-		{
-			name:  "bytes only",
-			bytes: 512,
-			want:  "512 B",
-		},
-		{
-			name:  "kilobytes",
-			bytes: 2560,
-			want:  "2.5 KB",
-		},
-		{
-			name:  "megabytes",
-			bytes: 3774873,
-			want:  "3.6 MB",
-		},
-		{
-			name:  "gigabytes",
-			bytes: 2147483648,
-			want:  "2.0 GB",
-		},
-		{
-			name:  "terabytes",
-			bytes: 1099511627776,
-			want:  "1.0 TB",
-		},
-		{
-			name:  "zero bytes",
-			bytes: 0,
-			want:  "0 B",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := FormatSize(tt.bytes)
-			if got != tt.want {
-				t.Errorf("FormatSize() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsExecutable(t *testing.T) {
 	tmpDir := t.TempDir()
 

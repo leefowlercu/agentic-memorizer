@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/shared"
 	"github.com/leefowlercu/agentic-memorizer/pkg/types"
 )
 
@@ -138,7 +139,7 @@ func TestClaudeCodeHookAdapter_SetupAndRemove(t *testing.T) {
 			if hook.Type != "command" {
 				t.Errorf("Hook type = %q, want %q", hook.Type, "command")
 			}
-			expectedCommand := adapter.getFilesCommand(binaryPath, integrations.FormatXML)
+			expectedCommand := shared.GetFilesCommand(binaryPath, integrations.FormatXML, IntegrationName)
 			if hook.Command != expectedCommand {
 				t.Errorf("Hook command = %q, want %q", hook.Command, expectedCommand)
 			}
@@ -166,7 +167,7 @@ func TestClaudeCodeHookAdapter_SetupAndRemove(t *testing.T) {
 	for _, event := range userPromptSubmitEvents {
 		for _, hook := range event.Hooks {
 			if hook.Type == "command" {
-				expectedFactsCommand := adapter.getFactsCommand(binaryPath, integrations.FormatXML)
+				expectedFactsCommand := shared.GetFactsCommand(binaryPath, integrations.FormatXML, IntegrationName)
 				if hook.Command == expectedFactsCommand {
 					foundFactsHook = true
 				}
@@ -207,7 +208,7 @@ func TestClaudeCodeHookAdapter_SetupAndRemove(t *testing.T) {
 	if ok && len(sessionStartEvents) > 0 {
 		for _, event := range sessionStartEvents {
 			for _, hook := range event.Hooks {
-				if hook.Command == adapter.getFilesCommand(binaryPath, integrations.FormatXML) {
+				if hook.Command == shared.GetFilesCommand(binaryPath, integrations.FormatXML, IntegrationName) {
 					t.Error("Files hook still exists in SessionStart after Remove()")
 				}
 			}
@@ -219,7 +220,7 @@ func TestClaudeCodeHookAdapter_SetupAndRemove(t *testing.T) {
 	if ok && len(userPromptSubmitEvents) > 0 {
 		for _, event := range userPromptSubmitEvents {
 			for _, hook := range event.Hooks {
-				if hook.Command == adapter.getFactsCommand(binaryPath, integrations.FormatXML) {
+				if hook.Command == shared.GetFactsCommand(binaryPath, integrations.FormatXML, IntegrationName) {
 					t.Error("Facts hook still exists in UserPromptSubmit after Remove()")
 				}
 			}

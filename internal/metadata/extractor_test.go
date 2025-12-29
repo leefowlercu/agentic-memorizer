@@ -12,27 +12,40 @@ func TestNewExtractor(t *testing.T) {
 		t.Fatal("NewExtractor returned nil")
 	}
 
-	if len(e.handlers) == 0 {
-		t.Fatal("NewExtractor did not register any handlers")
+	if len(e.extensionHandlers) == 0 {
+		t.Fatal("NewExtractor did not register any extension handlers")
 	}
 
-	// Should have 8 handlers registered
-	expectedHandlers := 8
-	if len(e.handlers) != expectedHandlers {
-		t.Errorf("Expected %d handlers, got %d", expectedHandlers, len(e.handlers))
+	// Should have handlers for all extensions from 8 handler types
+	// Minimum expected: 2 (md, markdown) + 1 (docx) + 1 (pptx) + 1 (pdf) +
+	// 5 (png, jpg, jpeg, gif, webp) + 2 (vtt, srt) + 4 (json, yaml, yml, toml) +
+	// 10 (go, py, js, ts, java, c, cpp, rs, rb, php) = 26 extensions
+	expectedMinExtensions := 26
+	if len(e.extensionHandlers) < expectedMinExtensions {
+		t.Errorf("Expected at least %d extension handlers, got %d", expectedMinExtensions, len(e.extensionHandlers))
 	}
 }
 
 func TestRegisterHandler(t *testing.T) {
 	e := &Extractor{
-		handlers: make(map[string]FileHandler),
+		extensionHandlers: make(map[string]FileHandler),
 	}
 
 	handler := &MarkdownHandler{}
 	e.RegisterHandler(handler)
 
-	if len(e.handlers) != 1 {
-		t.Errorf("Expected 1 handler, got %d", len(e.handlers))
+	// MarkdownHandler supports .md and .markdown
+	expectedExtensions := 2
+	if len(e.extensionHandlers) != expectedExtensions {
+		t.Errorf("Expected %d extension handlers, got %d", expectedExtensions, len(e.extensionHandlers))
+	}
+
+	// Check that both extensions are registered
+	if _, ok := e.extensionHandlers[".md"]; !ok {
+		t.Error("Expected .md extension to be registered")
+	}
+	if _, ok := e.extensionHandlers[".markdown"]; !ok {
+		t.Error("Expected .markdown extension to be registered")
 	}
 }
 

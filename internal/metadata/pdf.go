@@ -9,6 +9,11 @@ import (
 // PDFHandler extracts metadata from PDF files
 type PDFHandler struct{}
 
+// SupportedExtensions returns the list of extensions this handler supports
+func (h *PDFHandler) SupportedExtensions() []string {
+	return []string{".pdf"}
+}
+
 // CanHandle returns true if this handler can process the file
 func (h *PDFHandler) CanHandle(ext string) bool {
 	return ext == ".pdf"

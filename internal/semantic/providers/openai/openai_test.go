@@ -146,63 +146,6 @@ func TestOpenAIProvider_SupportsDocuments(t *testing.T) {
 	}
 }
 
-func TestOpenAI_ExtractJSON(t *testing.T) {
-	tests := []struct {
-		name string
-		text string
-		want string
-	}{
-		{
-			name: "json code block",
-			text: "Here is the analysis:\n```json\n{\"summary\": \"test\"}\n```",
-			want: `{"summary": "test"}`,
-		},
-		{
-			name: "generic code block",
-			text: "Here is the analysis:\n```\n{\"summary\": \"test\"}\n```",
-			want: `{"summary": "test"}`,
-		},
-		{
-			name: "no code block",
-			text: `{"summary": "test"}`,
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractJSON(tt.text)
-			if got != tt.want {
-				t.Errorf("extractJSON() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestOpenAI_GetMediaType(t *testing.T) {
-	tests := []struct {
-		fileType string
-		want     string
-	}{
-		{"png", "image/png"},
-		{".png", "image/png"},
-		{"jpg", "image/jpeg"},
-		{"jpeg", "image/jpeg"},
-		{"gif", "image/gif"},
-		{"webp", "image/webp"},
-		{"unknown", "image/jpeg"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.fileType, func(t *testing.T) {
-			got := getMediaType(tt.fileType)
-			if got != tt.want {
-				t.Errorf("getMediaType(%q) = %q, want %q", tt.fileType, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestOpenAIProvider_ImplementsInterface(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	provider, err := NewOpenAIProvider(semantic.ProviderConfig{

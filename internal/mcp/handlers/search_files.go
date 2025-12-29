@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
-	"github.com/leefowlercu/agentic-memorizer/internal/search"
 )
 
 // SearchFilesHandler handles the search_files tool
@@ -47,18 +45,12 @@ func (h *SearchFilesHandler) Execute(ctx context.Context, args json.RawMessage) 
 		params.MaxResults = 10 // default
 	}
 
-	// Try daemon API first if available
-	if h.deps.HasDaemonAPI() {
-		result, err := h.executeDaemon(ctx, params)
-		if err == nil {
-			return result, nil
-		}
-		// Fall through to index-based search on error
-		h.deps.Logger.Debug("daemon search failed, falling back to index", "error", err)
+	// Check if daemon API is available
+	if !h.deps.HasDaemonAPI() {
+		return nil, fmt.Errorf("daemon API not available; search requires daemon connection")
 	}
 
-	// Fallback to index-based search
-	return h.executeIndex(params)
+	return h.executeDaemon(ctx, params)
 }
 
 func (h *SearchFilesHandler) executeDaemon(ctx context.Context, params struct {
@@ -119,52 +111,11 @@ func (h *SearchFilesHandler) executeDaemon(ctx context.Context, params struct {
 	}, nil
 }
 
-func (h *SearchFilesHandler) executeIndex(params struct {
-	Query      string   `json:"query"`
-	Categories []string `json:"categories,omitempty"`
-	MaxResults int      `json:"max_results,omitempty"`
-}) (any, error) {
-	index := h.deps.Index.GetIndex()
-	searcher := search.NewSearcher(index)
-	results := searcher.Search(search.SearchQuery{
-		Query:      params.Query,
-		Categories: params.Categories,
-		MaxResults: params.MaxResults,
-	})
-
-	// Format results
-	formattedResults := make([]map[string]any, len(results))
-	for i, result := range results {
-		formattedResults[i] = map[string]any{
-			"path":       result.File.Path,
-			"name":       result.File.Name,
-			"category":   result.File.Category,
-			"score":      result.Score,
-			"match_type": result.MatchType,
-			"size_human": result.File.SizeHuman,
-			"modified":   result.File.Modified.Format(time.RFC3339),
-		}
-
-		// Add semantic fields if available
-		if result.File.Summary != "" {
-			formattedResults[i]["summary"] = result.File.Summary
-			formattedResults[i]["tags"] = result.File.Tags
-		}
-	}
-
-	return map[string]any{
-		"query":        params.Query,
-		"result_count": len(results),
-		"source":       "index",
-		"results":      formattedResults,
-	}, nil
-}
-
 // ToolDefinition returns the MCP tool definition
 func (h *SearchFilesHandler) ToolDefinition() protocol.Tool {
 	return protocol.Tool{
 		Name:        "search_files",
-		Description: "Search for files in the memory index using semantic search. Returns ranked results based on relevance to the query.",
+		Description: "Search for files in the memory index using semantic search. Returns ranked results based on relevance to the query. Requires FalkorDB to be running.",
 		InputSchema: protocol.InputSchema{
 			Schema: "https://json-schema.org/draft/2020-12/schema",
 			Type:   "object",

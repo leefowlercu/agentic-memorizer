@@ -409,7 +409,7 @@ Model Context Protocol implementation with JSON-RPC 2.0 messaging, stdio transpo
 - Five graph-powered tools: search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
 - Three resources: file index in XML, JSON, and Markdown formats with subscription support
 - Three built-in prompts: analyze-file, search-context, explain-summary
-- Dual-source fallback to in-memory index when daemon unavailable
+- Partial fallback for two tools (get_file_metadata, list_recent_files) when daemon unavailable
 - Real-time updates via SSE client for subscribed resource notifications
 
 **Primary Components:**
@@ -569,6 +569,7 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 
 **Recent Updates:**
 
+- Updated mcp subsystem documentation - search_files now requires daemon (2025-12-29)
 - Created cli subsystem documentation (2025-12-29)
 - Created tui subsystem documentation (2025-12-29)
 - Created logging subsystem documentation (2025-12-29)

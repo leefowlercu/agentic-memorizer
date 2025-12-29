@@ -27,7 +27,7 @@ Key capabilities include:
 - **Five graph tools** - search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
 - **Three resources** - File index in XML, JSON, and Markdown formats with subscription support
 - **Three prompts** - Built-in prompts for file analysis, search context, and summary explanation
-- **Fallback operation** - Graceful degradation to in-memory index when daemon unavailable
+- **Partial fallback** - Two tools (get_file_metadata, list_recent_files) degrade to in-memory index when daemon unavailable
 - **Real-time updates** - SSE client receives index changes and notifies subscribed clients
 
 ## Design Principles
@@ -42,7 +42,7 @@ Tool handlers implement a common Handler interface with Name, Execute, and ToolD
 
 ### Dual-Source Fallback Strategy
 
-Three of the five tools (search_files, get_file_metadata, list_recent_files) implement dual-source logic: they first attempt the daemon HTTP API for current graph data, then fall back to the in-memory index if the daemon is unavailable. This enables degraded operation without complete failure. The remaining tools (get_related_files, search_entities) require the daemon's graph database and cannot fall back.
+Two of the five tools (get_file_metadata, list_recent_files) implement dual-source logic: they first attempt the daemon HTTP API for current graph data, then fall back to the in-memory index if the daemon is unavailable. This enables degraded operation without complete failure. The remaining three tools (search_files, get_related_files, search_entities) require the daemon's graph database for their full functionality and return clear error messages when the daemon is unavailable.
 
 ### Thread-Safe Index Updates
 
@@ -74,7 +74,7 @@ The protocol package defines all JSON-RPC 2.0 and MCP message types. Core types 
 
 Five tool handlers implement the Handler interface:
 
-**search_files** - Semantic search with query, optional categories filter, and max_results limit. Tries daemon API first, falls back to index search with fuzzy matching.
+**search_files** - Semantic search with query, optional categories filter, and max_results limit. Requires daemon for graph-powered search across filenames, tags, topics, and entities.
 
 **get_file_metadata** - Complete metadata for a file by path. Tries daemon API first, falls back to case-insensitive index lookup with substring matching.
 
@@ -150,7 +150,7 @@ The cmd/mcp/subcommands/start.go command initializes the MCP server. It loads co
 A feature supported by the MCP server or client, exchanged during initialization. Server capabilities include resources (with subscribe and listChanged), tools, and prompts.
 
 **Fallback**
-The strategy of attempting the daemon API first, then using the in-memory index if unavailable. Enables degraded operation without complete failure.
+The strategy of attempting the daemon API first, then using the in-memory index if unavailable. Two tools (get_file_metadata, list_recent_files) support fallback for degraded operation.
 
 **Handler**
 An implementation of tool logic that receives dependencies and returns results. Handlers are registered by name and invoked on tools/call requests.

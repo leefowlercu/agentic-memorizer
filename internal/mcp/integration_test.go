@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -399,8 +400,8 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 		}
 	})
 
-	// Step 4: Call search_files tool
-	t.Run("tools/call_search_files", func(t *testing.T) {
+	// Step 4: Call search_files tool (requires daemon, so expect error)
+	t.Run("tools/call_search_files_requires_daemon", func(t *testing.T) {
 		callReq := protocol.JSONRPCRequest{
 			JSONRPC: "2.0",
 			ID:      3,
@@ -432,22 +433,14 @@ func TestIntegration_FullToolsFlow(t *testing.T) {
 			t.Fatalf("Failed to unmarshal tools call response: %v", err)
 		}
 
-		if callResp.IsError {
-			t.Fatalf("Tool returned error: %s", callResp.Content[0].Text)
+		// search_files requires daemon, so it should return an error
+		if !callResp.IsError {
+			t.Fatal("Expected search_files to return error when daemon is not available")
 		}
 
-		// Parse and verify result
-		var result map[string]any
-		if err := json.Unmarshal([]byte(callResp.Content[0].Text), &result); err != nil {
-			t.Fatalf("Failed to parse result JSON: %v", err)
-		}
-
-		if result["query"] != "terraform" {
-			t.Errorf("Query = %v, want terraform", result["query"])
-		}
-
-		if result["result_count"].(float64) < 1 {
-			t.Error("Expected at least 1 search result for terraform")
+		// Verify error message mentions daemon
+		if !strings.Contains(callResp.Content[0].Text, "daemon") {
+			t.Errorf("Error message should mention daemon, got: %s", callResp.Content[0].Text)
 		}
 	})
 

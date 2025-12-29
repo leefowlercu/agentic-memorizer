@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -693,7 +694,7 @@ func TestServer_ToolsList(t *testing.T) {
 	}
 }
 
-func TestServer_ToolsCall_SearchFiles(t *testing.T) {
+func TestServer_ToolsCall_SearchFiles_RequiresDaemon(t *testing.T) {
 	index := &types.FileIndex{
 		Generated:  time.Now(),
 		MemoryRoot: "/test",
@@ -712,7 +713,7 @@ func TestServer_ToolsCall_SearchFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server := NewServer(index, logger, "")
+	server := NewServer(index, logger, "") // No daemon URL
 	server.initialized = true
 
 	writeBuf := bytes.NewBuffer(nil)
@@ -721,7 +722,7 @@ func TestServer_ToolsCall_SearchFiles(t *testing.T) {
 		writeBuf: writeBuf,
 	}
 
-	// Send tools/call request for search_files
+	// Send tools/call request for search_files without daemon
 	request := protocol.JSONRPCRequest{
 		JSONRPC: "2.0",
 		ID:      1,
@@ -746,39 +747,31 @@ func TestServer_ToolsCall_SearchFiles(t *testing.T) {
 	}
 
 	if resp.Error != nil {
-		t.Fatalf("Got error response: %s", resp.Error.Message)
+		t.Fatalf("Got protocol error response: %s", resp.Error.Message)
 	}
 
-	// Parse tool call response
+	// Parse tool call response - should indicate error
 	var callResp protocol.ToolsCallResponse
 	if err := json.Unmarshal(resp.Result, &callResp); err != nil {
 		t.Fatalf("Failed to unmarshal tool call response: %v", err)
 	}
 
-	if callResp.IsError {
-		t.Fatalf("Tool returned error: %s", callResp.Content[0].Text)
+	// search_files requires daemon, so it should return an error
+	if !callResp.IsError {
+		t.Fatal("Expected tool to return error when daemon is not available")
 	}
 
 	if len(callResp.Content) != 1 {
 		t.Errorf("Content count = %d, want 1", len(callResp.Content))
 	}
 
+	// Verify error message mentions daemon
 	if callResp.Content[0].Type != "text" {
 		t.Errorf("Content type = %s, want text", callResp.Content[0].Type)
 	}
 
-	// Verify result contains expected data
-	var result map[string]any
-	if err := json.Unmarshal([]byte(callResp.Content[0].Text), &result); err != nil {
-		t.Fatalf("Failed to unmarshal result JSON: %v", err)
-	}
-
-	if result["query"] != "terraform" {
-		t.Errorf("Query = %v, want terraform", result["query"])
-	}
-
-	if result["result_count"].(float64) != 1 {
-		t.Errorf("Result count = %v, want 1", result["result_count"])
+	if !strings.Contains(callResp.Content[0].Text, "daemon") {
+		t.Errorf("Error message should mention daemon, got: %s", callResp.Content[0].Text)
 	}
 }
 

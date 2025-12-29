@@ -56,7 +56,7 @@ The following principles guide development decisions for this project:
 
 Files are processed through three distinct phases:
 
-1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 9 file type categories
+1. **Metadata Extraction** (`internal/metadata/`) - Fast, deterministic extraction using specialized handlers for 8 file type categories (Markdown, Docx, Pptx, PDF, Image, VTT, JSON, Code)
 2. **Semantic Analysis** (`internal/semantic/`) - AI-powered content understanding via provider abstraction supporting Claude, OpenAI, and Gemini
 3. **Knowledge Graph Storage** (`internal/graph/`) - FalkorDB stores files, tags, topics, entities, and relationships for semantic search
 
@@ -138,7 +138,7 @@ Detailed technical documentation for each subsystem is available in `docs/subsys
 | [integrations](docs/subsystems/integrations/) | Framework-agnostic integration with dual-hook architecture |
 | [logging](docs/subsystems/logging/) | Structured logging with slog, rotation, and context propagation |
 | [mcp](docs/subsystems/mcp/) | Model Context Protocol with JSON-RPC 2.0 and graph-powered tools |
-| [metadata](docs/subsystems/metadata/) | Fast metadata extraction with handlers for 9 file type categories |
+| [metadata](docs/subsystems/metadata/) | Fast metadata extraction with handlers for 8 file type categories |
 | [semantic](docs/subsystems/semantic/) | Multi-provider AI content understanding with intelligent routing |
 | [tui](docs/subsystems/tui/) | Interactive setup wizard built on Bubble Tea |
 | [version](docs/subsystems/version/) | Build-time version injection with embedded fallback |
@@ -293,7 +293,9 @@ make build                    # Build binary with git version info
 make install                  # Install to ~/.local/bin
 
 # Testing
-make test                     # Run all tests
+make test                     # Run unit tests
+make test-integration         # Run integration tests
+make test-all                 # Run all non-e2e tests (unit + integration)
 make test-race                # Run tests with race detector
 make test-e2e                 # Run E2E tests
 make test-e2e-quick           # Run quick E2E smoke tests
@@ -309,6 +311,7 @@ make coverage-html            # Generate HTML coverage report
 # Cleanup
 make clean                    # Clean build artifacts
 make clean-cache              # Clean cache files
+make uninstall                # Remove installed binary
 make deps                     # Download and tidy dependencies
 
 # Daemon development

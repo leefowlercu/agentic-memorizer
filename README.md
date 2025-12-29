@@ -244,7 +244,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 - Up to 50 facts, 10-500 characters each
 - Facts injected via UserPromptSubmit (Claude) / BeforeAgent (Gemini) hooks
 
-**Semantic Search** (`internal/search/`):
+**Graph Search** (`internal/graph/`):
 - Graph-powered Cypher queries
 - Full-text search on summaries
 - Entity-based file discovery
@@ -2572,7 +2572,6 @@ agentic-memorizer/
 │   ├── metadata/             # File metadata extraction (9 category handlers)
 │   ├── semantic/             # Multi-provider semantic analysis (Claude, OpenAI, Gemini)
 │   ├── cache/                # Content-addressable analysis caching
-│   ├── search/               # Semantic search engine (graph-powered)
 │   ├── format/               # Output formatting system
 │   │   ├── formatters/       # Individual formatters (text, JSON, XML, YAML, markdown)
 │   │   └── testdata/         # Test data for formatters

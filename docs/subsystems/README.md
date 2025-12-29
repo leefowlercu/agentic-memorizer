@@ -1,569 +1,562 @@
 # Subsystems Documentation
 
-This directory contains detailed technical documentation for each major subsystem of Agentic Memorizer. Each subsystem is documented in its own subdirectory with comprehensive information about architecture, implementation, usage, and troubleshooting.
+This directory contains detailed technical documentation for each major subsystem of Agentic Memorizer. Each subsystem is documented in its own subdirectory with comprehensive information about architecture, design principles, key components, and integration points.
+
+**Last Updated:** 2025-12-29
 
 ## Purpose
 
 The subsystem documentation provides:
-- **Architecture Details** - Component design and interactions
-- **Implementation Guide** - Key data structures, algorithms, and code locations
-- **Integration Points** - How subsystems interact with each other
-- **Operational Guide** - Configuration, monitoring, and troubleshooting
-- **API Reference** - Public interfaces and usage patterns
 
-## Audience
-
-This documentation is intended for:
-- **Contributors** - Understanding the codebase for development
-- **Maintainers** - System administration and troubleshooting
-- **Advanced Users** - Deep configuration and optimization
+- **Overview** - A brief, high-level description of the subsystem, its purpose, goals, and key features
+- **Design Principles** - Core design principles and architectural patterns that guide development
+- **Key Components** - High-level description of the main components or modules
+- **Integration Points** - How the subsystem integrates with other subsystems or components
+- **Glossary** - Definitions of specialized terms or concepts relevant to the subsystem
 
 ## Available Subsystems
 
 **Table of Contents:**
-- **Core Subsystems**
+
+- **Core**
+  - [CLI](#cli)
   - [Daemon](#daemon)
-- **Index Management**
-  - [Index Management](#index-management)
-  - [File Watcher](#file-watcher)
-- **File Processing**
-  - [Metadata Extractor](#metadata-extractor)
-  - [Semantic Analyzer](#semantic-analyzer)
-- **Caching System**
-  - [Cache Manager](#cache-manager)
-- **Configuration**
-  - [Config Manager](#config-manager)
-- **Integration Framework**
-  - [Integration Registry](#integration-registry)
-- **Knowledge Graph**
-  - [FalkorDB Graph](#falkordb-graph)
-- **External Integration**
-  - [MCP Server](#mcp-server)
-  - [Semantic Search](#semantic-search)
-- **Utilities**
   - [Walker](#walker)
+  - [Watcher](#watcher)
+- **Processing**
+  - [Document](#document)
+  - [Embeddings](#embeddings)
+  - [Metadata](#metadata)
+  - [Semantic](#semantic)
+- **Storage**
+  - [Cache](#cache)
+  - [Graph](#graph)
+- **Configuration**
+  - [Config](#config)
+- **Observability**
+  - [Logging](#logging)
+- **Integration**
+  - [Integrations](#integrations)
+  - [MCP](#mcp)
+- **Output**
   - [Format](#format)
+- **User Interface**
+  - [TUI](#tui)
+- **Build**
   - [Version](#version)
+- **Infrastructure**
+  - [Docker](#docker)
 - **Testing**
-  - [E2E Tests](#e2e-tests)
+  - [E2E](#e2e)
 
 ---
 
-### Core Subsystems
+### [CLI](./cli/)
 
-#### [Daemon](./daemon/)
 **Status:** ✅ Documented
 
-The background indexing daemon that maintains a FalkorDB knowledge graph through continuous file monitoring.
+Cobra-based CLI with hierarchical command structure, input validation via PreRunE hooks, and consistent output formatting for daemon management, integration setup, and memory operations.
 
 **Key Features:**
-- File system watching with fsnotify
-- Parallel file processing with worker pools
-- Real-time graph updates via FalkorDB
-- Health monitoring and metrics
-- System service integration (systemd/launchd)
+
+- Ten parent commands with subcommands organized by functional area
+- PreRunE input validation distinguishing user errors from runtime errors
+- Consistent output through format subsystem builders
+- Interactive TUI wizard and unattended scripted modes for initialization
+- Shared config loading and output helpers
+- Integration auto-detection for binary path resolution
 
 **Primary Components:**
-- `internal/daemon/daemon.go` - Core orchestrator
-- `internal/daemon/worker_pool.go` - Parallel processing
-- `internal/daemon/health.go` - Health monitoring
-- `cmd/daemon/daemon.go` - Parent CLI command
-- `cmd/daemon/subcommands/` - Daemon subcommands (start, stop, status, restart, logs, rebuild, systemctl, launchctl)
+
+- `cmd/root.go` - Root command, Execute function, and global PersistentPreRunE
+- `cmd/initialize/initialize.go` - Interactive and unattended setup modes
+- `cmd/daemon/` - Daemon lifecycle: start, stop, status, restart, rebuild, logs, systemctl, launchctl
+- `cmd/integrations/` - Integration management: list, detect, setup, remove, health
+- `cmd/read/` - Memory access: files, facts
+- `cmd/shared/` - Common config and output helpers
+
+**See:** [cli/README.md](./cli/README.md)
+
+---
+
+### [Daemon](./daemon/)
+
+**Status:** ✅ Documented
+
+Background file monitoring and knowledge graph maintenance with parallel processing, hot-reload, and HTTP API.
+
+**Key Features:**
+
+- Background file monitoring with real-time change detection via fsnotify
+- Parallel file processing through configurable worker pool with rate limiting
+- FalkorDB knowledge graph maintenance for files, tags, topics, and entities
+- Configuration hot-reload via SIGHUP without daemon restart
+- HTTP API for health monitoring, semantic search, and graph queries
+- Server-Sent Events for real-time client notifications
+- External process supervision integration (systemd, launchd)
+
+**Primary Components:**
+
+- `internal/daemon/daemon.go` - Core orchestrator and lifecycle management
+- `internal/daemon/worker/pool.go` - Parallel processing with rate limiting
+- `internal/daemon/api/server.go` - Unified HTTP API server
+- `internal/daemon/api/sse.go` - Server-Sent Events hub
+- `internal/daemon/health.go` - Health metrics tracking
+- `internal/daemon/signals.go` - Signal handling (SIGINT, SIGHUP, SIGUSR1)
 
 **See:** [daemon/README.md](./daemon/README.md)
 
 ---
 
-### Index Management
+### [Walker](./walker/)
 
-#### [Index Management](./index-management/)
 **Status:** ✅ Documented
 
-Graph-native storage architecture with on-demand export capabilities for SessionStart hooks and external integrations.
+Recursive directory scanning with configurable filtering for full directory scans during initialization and rebuilds.
 
 **Key Features:**
-- FalkorDB-backed persistent storage (nodes and relationships)
-- Real-time graph updates via Graph Manager
-- On-demand index export from live graph data
-- Thread-safe graph operations with connection pooling
-- FileIndex generation for SessionStart hooks and read command
-- No file-based persistence (fully graph-native)
+
+- Recursive traversal of directory trees using filepath.Walk
+- Directory pruning to skip entire subtrees (e.g., node_modules, .git)
+- File filtering by exact name or extension match
+- Automatic exclusion of hidden files and directories (dot-prefixed)
+- Visitor pattern for flexible file processing during traversal
+- Error tolerance continuing after access errors with warnings
 
 **Primary Components:**
-- `internal/graph/manager.go` - Graph CRUD operations and queries
-- `internal/graph/export.go` - FileIndex export from graph
-- `pkg/types/types.go` - FileIndex and FileEntry structures
 
-**See:** [index-management/README.md](./index-management/README.md)
-
----
-
-#### [File Watcher](./file-watcher/)
-**Status:** ✅ Documented
-
-Monitors the file system for changes using fsnotify with intelligent event debouncing.
-
-**Key Features:**
-- Real-time file change detection
-- Event debouncing and batching
-- Configuration hot-reload (debounce interval)
-- Recursive directory watching
-- Skip pattern support
-- Automatic new directory monitoring
-
-**Primary Components:**
-- `internal/watcher/watcher.go` - File system watcher
-- `internal/watcher/watcher_test.go` - Test suite
-
-**See:** [file-watcher/README.md](./file-watcher/README.md)
-
----
-
-### File Processing
-
-#### [Metadata Extractor](./metadata-extractor/)
-**Status:** ✅ Documented
-
-Extracts file-specific metadata from various file types without AI analysis.
-
-**Key Features:**
-- Multi-format support (markdown, images, documents, code, etc.)
-- Type-specific metadata extraction (word count, dimensions, page count)
-- Extensible handler system
-- Error handling and fallbacks
-
-**Supported File Types:**
-- Text: Markdown, plain text, JSON/YAML
-- Code: Go, Python, JavaScript, TypeScript, etc.
-- Images: PNG, JPG, GIF, WebP
-- Documents: DOCX, PPTX, PDF
-- Transcripts: VTT, SRT
-
-**Primary Components:**
-- `internal/metadata/extractor.go` - Handler orchestration
-- `internal/metadata/markdown.go` - Markdown handler
-- `internal/metadata/image.go` - Image handler
-- `internal/metadata/docx.go` - DOCX handler
-- `internal/metadata/pptx.go` - PPTX handler
-- `internal/metadata/pdf.go` - PDF handler
-- `internal/metadata/code.go` - Code file handler
-- `internal/metadata/json.go` - JSON/YAML handler
-- `internal/metadata/vtt.go` - VTT transcript handler
-
-**See:** [metadata-extractor/README.md](./metadata-extractor/README.md)
-
----
-
-#### [Semantic Analyzer](./semantic-analyzer/)
-**Status:** ✅ Documented
-
-AI-powered semantic understanding using the Claude API.
-
-**Key Features:**
-- Claude API integration
-- Vision support for images
-- Structured analysis output (summary, tags, topics, document type)
-- Rate limiting
-- Error handling and retries
-
-**Primary Components:**
-- `internal/semantic/analyzer.go` - Analysis orchestration
-- `internal/semantic/client.go` - Claude API client
-
-**See:** [semantic-analyzer/README.md](./semantic-analyzer/README.md)
-
----
-
-### Caching System
-
-#### [Cache Manager](./cache-manager/)
-**Status:** ✅ Documented
-
-Stores and retrieves semantic analysis results keyed by file content hash.
-
-**Key Features:**
-- Hash-based caching (SHA-256)
-- File-based persistence
-- Cache invalidation on content change
-- Cache statistics tracking
-- High cache hit rates (>95%)
-
-**Primary Components:**
-- `internal/cache/manager.go` - Cache operations
-
-**See:** [cache-manager/README.md](./cache-manager/README.md)
-
----
-
-### Configuration
-
-#### [Config Manager](./config-manager/)
-**Status:** ✅ Documented
-
-Loads, validates, and manages application configuration.
-
-**Key Features:**
-- YAML configuration files
-- Environment variable overrides
-- Schema validation
-- Path resolution and expansion
-- Default value management
-- Validation with actionable error messages
-
-**Primary Components:**
-- `internal/config/config.go` - Configuration loading
-- `internal/config/types.go` - Configuration structures
-- `internal/config/validate.go` - Validation logic
-- `internal/config/constants.go` - Default values
-
-**See:** [config-manager/README.md](./config-manager/README.md)
-
----
-
-### Integration Framework
-
-#### [Integration Registry](./integration-registry/)
-**Status:** ✅ Documented
-
-Framework-agnostic integration system for connecting with AI agent platforms.
-
-**Key Features:**
-- Pluggable adapter pattern
-- Automatic framework detection
-- Integration lifecycle management
-- Thread-safe registry
-- Output format processors
-
-**Supported Integrations:**
-- Claude Code Hook (claude-code-hook) - SessionStart hooks for context injection
-- Claude Code MCP (claude-code-mcp) - MCP server for on-demand tools
-- Gemini CLI Hook (gemini-cli-hook) - SessionStart hooks for context injection
-- Gemini CLI MCP (gemini-cli-mcp) - MCP server for Google Gemini CLI
-- Codex CLI MCP (codex-cli-mcp) - MCP server for Codex CLI
-
-**Primary Components:**
-- `internal/integrations/registry.go` - Integration registry
-- `internal/integrations/interface.go` - Integration interface
-- `internal/integrations/adapters/claude/` - Claude Code adapters (hook & MCP)
-- `internal/integrations/adapters/gemini/` - Gemini CLI MCP adapter
-- `internal/integrations/adapters/codex/` - Codex CLI MCP adapter
-- `internal/integrations/output/` - Output processors (XML, Markdown, JSON)
-
-**See:** [integration-registry/README.md](./integration-registry/README.md)
-
----
-
-### Knowledge Graph
-
-#### [FalkorDB Graph](./falkordb-graph/)
-**Status:** ✅ Documented
-
-FalkorDB-backed knowledge graph for persistent storage and relationship-based queries.
-
-**Key Features:**
-- Graph-based storage for files, tags, topics, entities
-- Cypher query language for semantic search
-- Relationship traversal for related file discovery
-- Docker container management via CLI commands
-- Graceful degradation when graph unavailable
-- HTTP API for graph-powered queries
-
-**Node Types:**
-- File - Indexed files with metadata
-- Tag - Semantic tags from analysis
-- Topic - Key topics from content
-- Entity - Named entities (people, organizations)
-- Category - File categories (documents, code, images)
-
-**Relationship Types:**
-- HAS_TAG - File → Tag
-- COVERS_TOPIC - File → Topic
-- MENTIONS - File → Entity
-- IN_CATEGORY - File → Category
-
-**Primary Components:**
-- `internal/graph/manager.go` - Connection management and health checks
-- `internal/graph/queries.go` - Cypher query execution
-- `internal/graph/schema.go` - Node/edge type definitions
-- `internal/graph/exporter.go` - Index export from graph
-- `internal/daemon/api/` - HTTP API handlers
-- `cmd/graph/subcommands/` - CLI commands (start, stop, status)
-
-**See:** [falkordb-graph/README.md](./falkordb-graph/README.md)
-
----
-
-### External Integration
-
-#### [MCP Server](./mcp/)
-**Status:** ✅ Documented
-
-Exposes the knowledge graph through the Model Context Protocol (MCP) as a standardized server interface for universal integration with AI development tools.
-
-**Key Features:**
-- JSON-RPC 2.0 protocol implementation
-- Static context delivery via FileIndex export in multiple formats (XML, Markdown, JSON)
-- Dynamic graph-powered semantic search across knowledge base
-- Metadata retrieval and time-based filtering via daemon HTTP API
-- Graph query tools (search, related files, entity search, recent files)
-- Support for Claude Code, Gemini CLI, Codex CLI, and any MCP-compliant client
-
-**Primary Components:**
-- `internal/mcp/server.go` - MCP server orchestrator
-- `internal/mcp/protocol/` - JSON-RPC message types and protocol definitions
-- `internal/mcp/transport/` - Transport abstraction (stdio implementation)
-- `cmd/mcp/` - CLI command for running the MCP server
-
-**See:** [mcp/README.md](./mcp/README.md)
-
----
-
-#### [Semantic Search](./semantic-search/)
-**Status:** ✅ Documented
-
-Provides graph-powered, relationship-aware search capabilities with automatic fallback to in-memory search.
-
-**Key Features:**
-- **Primary Mode**: Graph-based search using Cypher queries against FalkorDB
-  - Multi-signal search across filenames, tags, topics, entities, and summaries
-  - Relationship traversal (HAS_TAG, COVERS_TOPIC, MENTIONS edges)
-  - Related files discovery through shared connections
-  - Entity search with normalized name matching
-  - Vector similarity search (when embeddings enabled)
-  - Full-text search on summaries
-- **Fallback Mode**: Token-based in-memory search when graph unavailable
-  - Weighted proportional scoring across seven fields
-  - Stop word filtering and case-insensitive matching
-- Graceful degradation with automatic mode switching
-- Category filtering and configurable result limits
-
-**Primary Components:**
-- `internal/graph/manager.go` - Graph-powered search queries
-- `internal/search/semantic.go` - Fallback in-memory searcher
-- `internal/daemon/api/` - HTTP API search endpoints
-
-**See:** [semantic-search/README.md](./semantic-search/README.md)
-
----
-
-### Utilities
-
-#### [Walker](./walker/)
-**Status:** ✅ Documented
-
-Directory tree traversal with filtering and relative path computation.
-
-**Key Features:**
-- Recursive directory walking
-- Skip pattern support
-- Relative path computation
-- Callback-based processing
-
-**Primary Components:**
-- `internal/walker/walker.go` - Directory traversal
+- `internal/walker/walker.go` - Walk function with filtering and FileVisitor type
 
 **See:** [walker/README.md](./walker/README.md)
 
 ---
 
-#### [Format](./format/)
+### [Watcher](./watcher/)
+
 **Status:** ✅ Documented
 
-Centralized CLI output formatting with multi-format support and structured builders.
+Real-time filesystem monitoring with debounced event batching and intelligent filtering.
 
 **Key Features:**
-- Three-tier architecture (builders, formatters, writers)
-- Seven builder types for common CLI output patterns (status, section, table, list, progress, error, graph content)
-- Five output formats (text, JSON, YAML, XML, markdown)
-- Thread-safe formatter registry with extensible registration
-- Consistent styling with shared utilities (symbols, colors, number formatting)
-- Type-safe validation before rendering
+
+- Real-time detection of Create, Modify, Delete, and Rename events via fsnotify
+- Debounced event batching to coalesce rapid changes within configurable window
+- Event priority system ensuring correct final state (DELETE > CREATE > MODIFY)
+- Recursive directory watching with automatic subdirectory registration
+- Two-tier filtering for directories and files with hidden path exclusion
+- Hot-reload support for debounce interval updates without restart
 
 **Primary Components:**
-- `internal/format/builder.go` - Buildable interface and builder types
-- `internal/format/formatter.go` - Formatter interface and registry
-- `internal/format/writer.go` - Buffered I/O abstraction
-- `internal/format/status.go` - Status message builder
-- `internal/format/section.go` - Section builder with hierarchical key-value pairs
-- `internal/format/table.go` - Table builder with alignment support
-- `internal/format/list.go` - List builder with nesting
-- `internal/format/progress.go` - Progress indicator builder
-- `internal/format/error.go` - Structured error message builder
-- `internal/format/graph.go` - FilesContent builder for integration output
-- `internal/format/utils.go` - Shared formatting utilities
-- `internal/format/formatters/` - Format-specific renderers (text, JSON, YAML, XML, markdown)
+
+- `internal/watcher/watcher.go` - Core watcher with fsnotify integration and event batching
+
+**See:** [watcher/README.md](./watcher/README.md)
+
+---
+
+### [Document](./document/)
+
+**Status:** ✅ Documented
+
+Shared utilities for Microsoft Office file extraction including ZIP archive handling, XML text extraction, and format-specific metadata parsing.
+
+**Key Features:**
+
+- ZIP archive handling for Office Open XML format files
+- XML text extraction from Word (`<w:t>`) and PowerPoint (`<a:t>`) text runs
+- DOCX processing for word count and author extraction
+- PPTX processing for slide counting and text aggregation
+- Core properties parsing from docProps/core.xml
+
+**Primary Components:**
+
+- `internal/document/office.go` - Shared ZIP and XML utilities
+- `internal/document/docx.go` - Word document text and metadata extraction
+- `internal/document/pptx.go` - PowerPoint text and metadata extraction
+
+**See:** [document/README.md](./document/README.md)
+
+---
+
+### [Embeddings](./embeddings/)
+
+**Status:** ✅ Documented
+
+Provider-based text embedding generation with content-addressable caching for semantic similarity search in the knowledge graph.
+
+**Key Features:**
+
+- Provider interface pattern enabling future multi-provider support
+- OpenAI integration using text-embedding-3-small (1536 dimensions)
+- Binary caching with efficient float32 serialization
+- Batch processing for multi-text embedding in single API call
+- Separate rate limiter (500 RPM) for embedding API calls
+- HNSW vector index in FalkorDB for similarity search
+
+**Primary Components:**
+
+- `internal/embeddings/provider.go` - Provider interface and EmbeddingResult struct
+- `internal/embeddings/openai.go` - OpenAI embedding provider implementation
+- `internal/embeddings/cache.go` - Content-addressable embedding cache with binary format
+
+**See:** [embeddings/README.md](./embeddings/README.md)
+
+---
+
+### [Metadata](./metadata/)
+
+**Status:** ✅ Documented
+
+Fast, deterministic file metadata extraction with handler pattern for 9 file type categories and 26+ file extensions.
+
+**Key Features:**
+
+- 9 file categories: documents, presentations, images, transcripts, data, code, videos, audio, archives
+- Handler/adapter pattern with FileHandler interface for type-specific extraction
+- Registry pattern with O(1) extension-to-handler lookup via hash map
+- Graceful degradation returning base metadata when handlers fail
+- Readability classification for Claude Code direct access indication
+- Content hash computation for cache key generation
+
+**Primary Components:**
+
+- `internal/metadata/extractor.go` - Main orchestration, registry, and public API
+- `internal/metadata/markdown.go` - Markdown word count and section extraction
+- `internal/metadata/code.go` - Programming language detection and line counting
+- `internal/metadata/image.go` - Image dimension extraction via DecodeConfig
+- `internal/metadata/docx.go` - DOCX word count and author extraction
+- `internal/metadata/pptx.go` - PPTX slide count and author extraction
+- `internal/document/` - Shared Office file utilities for ZIP/XML handling
+
+**See:** [metadata/README.md](./metadata/README.md)
+
+---
+
+### [Semantic](./semantic/)
+
+**Status:** ✅ Documented
+
+Multi-provider AI-powered content understanding with intelligent content routing, shared prompts, and graceful fallbacks.
+
+**Key Features:**
+
+- Multi-provider support for Claude, OpenAI, and Gemini with provider-specific optimizations
+- Provider interface with Analyze, SupportsVision, and SupportsDocuments capability detection
+- Content routing based on file type: text analysis, vision API, document blocks, text extraction
+- Shared prompt templates for consistent output structure across providers
+- Native PDF handling via document blocks (Claude) and multimodal blobs (Gemini)
+- Graceful fallback producing metadata-only analysis with 0.5 confidence
+- Rate limiting integration respecting provider-specific API quotas
+
+**Primary Components:**
+
+- `internal/semantic/provider.go` - Provider interface definition
+- `internal/semantic/registry.go` - Thread-safe singleton registry with factory pattern
+- `internal/semantic/providers/claude/` - Claude provider with native document blocks
+- `internal/semantic/providers/openai/` - OpenAI provider with go-openai client
+- `internal/semantic/providers/gemini/` - Gemini provider with native multimodal support
+- `internal/semantic/common/` - Shared prompts, response parsing, media types, fallback logic
+
+**See:** [semantic/README.md](./semantic/README.md)
+
+---
+
+### [Cache](./cache/)
+
+**Status:** ✅ Documented
+
+Content-addressable caching for semantic analysis results with three-tier versioning and provider isolation.
+
+**Key Features:**
+
+- SHA-256 content-addressable storage enabling cache hits across file renames and moves
+- Three-tier versioning (schema, metadata, semantic) for intelligent cache invalidation
+- Provider isolation with separate subdirectories for Claude, OpenAI, and Gemini
+- Forward compatibility for rollback scenarios
+- Cache statistics and stale entry cleanup
+
+**Primary Components:**
+
+- `internal/cache/manager.go` - Core cache operations (Get, Set, Clear, Stats)
+- `internal/cache/version.go` - Version management and staleness detection
+
+**See:** [cache/README.md](./cache/README.md)
+
+---
+
+### [Graph](./graph/)
+
+**Status:** ✅ Documented
+
+FalkorDB-powered knowledge graph for files, semantic relationships, and intelligent discovery.
+
+**Key Features:**
+
+- Persistent storage of files, tags, topics, entities, categories, and directories in FalkorDB
+- HNSW vector indexes for embedding-based semantic similarity search
+- Entity disambiguation with 100+ built-in alias mappings and automatic normalization
+- Knowledge analytics including clustering, recommendations, temporal analysis, and gap detection
+- User facts CRUD for persistent context injection into AI conversations
+- Full-text search on summaries plus relationship-based discovery
+
+**Primary Components:**
+
+- `internal/graph/manager.go` - Facade orchestrating all graph operations
+- `internal/graph/client.go` - FalkorDB connection and query execution
+- `internal/graph/schema.go` - Node labels, edge types, and index definitions
+- `internal/graph/nodes.go` - Node CRUD operations with MERGE-based upserts
+- `internal/graph/edges.go` - Relationship creation with entity normalization
+- `internal/graph/queries.go` - Search and traversal operations
+- `internal/graph/facts.go` - User facts storage and retrieval
+- `internal/graph/export.go` - Data transformation for output formats
+
+**See:** [graph/README.md](./graph/README.md)
+
+---
+
+### [Config](./config/)
+
+**Status:** ✅ Documented
+
+Layered configuration management with YAML files, environment variable overrides, validation, and hot-reload support.
+
+**Key Features:**
+
+- Layered configuration with clear precedence (defaults, YAML, environment variables)
+- Three-tier settings (minimal, advanced, hardcoded) for appropriate user exposure
+- Error accumulation with actionable suggestions during validation
+- Hot-reload support for non-structural configuration changes
+- Path safety validation preventing directory traversal attacks
+- Automatic credential resolution from provider-specific environment variables
+
+**Primary Components:**
+
+- `internal/config/config.go` - Configuration loading and initialization
+- `internal/config/types.go` - Configuration structure definitions
+- `internal/config/validate.go` - Validation with error accumulation
+- `internal/config/reload.go` - Hot-reload compatibility checking
+- `internal/config/constants.go` - Default values and hardcoded settings
+
+**See:** [config/README.md](./config/README.md)
+
+---
+
+### [Logging](./logging/)
+
+**Status:** ✅ Documented
+
+Centralized logging infrastructure with slog integration, file rotation, context propagation, and standardized field names for consistent observability.
+
+**Key Features:**
+
+- Logger factory with functional options pattern for flexible configuration
+- Automatic file rotation via lumberjack with size, backup, and age limits
+- JSON and text handler types for machine and human readability
+- Standardized field names aligned with OpenTelemetry conventions
+- Context-based logger propagation through request handling
+- UUIDv7 identifiers for time-ordered process, session, and client correlation
+
+**Primary Components:**
+
+- `internal/logging/factory.go` - Logger factory with functional options
+- `internal/logging/rotation.go` - Lumberjack rotation configuration
+- `internal/logging/fields.go` - Standardized field name constants
+- `internal/logging/identifiers.go` - UUIDv7 identifier generation
+- `internal/logging/context.go` - Context-based logger propagation
+- `internal/logging/logging.go` - Logger enrichment helpers
+
+**See:** [logging/README.md](./logging/README.md)
+
+---
+
+### [Integrations](./integrations/)
+
+**Status:** ✅ Documented
+
+Framework-agnostic integration system with dual-hook architecture, MCP servers, and adapter pattern for Claude Code, Gemini CLI, and Codex CLI.
+
+**Key Features:**
+
+- Adapter pattern with common Integration interface and specialized implementations
+- Thread-safe registry with automatic registration via init functions
+- Dual-hook architecture: SessionStart for files, UserPromptSubmit/BeforeAgent for facts
+- MCP server integration for on-demand tools (search, metadata, related files)
+- Transactional setup with rollback on failure and configuration preservation
+- Support for JSON (Claude/Gemini) and TOML (Codex) configuration formats
+
+**Primary Components:**
+
+- `internal/integrations/interface.go` - Integration interface with 13 lifecycle methods
+- `internal/integrations/registry.go` - Thread-safe singleton registry
+- `internal/integrations/adapters/claude_code/` - Claude Code hook and MCP adapters
+- `internal/integrations/adapters/gemini_cli/` - Gemini CLI hook and MCP adapters
+- `internal/integrations/adapters/codex_cli/` - Codex CLI MCP adapter (hooks not supported)
+
+**See:** [integrations/README.md](./integrations/README.md)
+
+---
+
+### [MCP](./mcp/)
+
+**Status:** ✅ Documented
+
+Model Context Protocol implementation with JSON-RPC 2.0 messaging, stdio transport, and graph-powered tools for AI assistant integration.
+
+**Key Features:**
+
+- JSON-RPC 2.0 protocol with standard error codes and MCP-specific extensions
+- Stdio transport with line-delimited JSON for subprocess communication
+- Five graph-powered tools: search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
+- Three resources: file index in XML, JSON, and Markdown formats with subscription support
+- Three built-in prompts: analyze-file, search-context, explain-summary
+- Dual-source fallback to in-memory index when daemon unavailable
+- Real-time updates via SSE client for subscribed resource notifications
+
+**Primary Components:**
+
+- `internal/mcp/server.go` - Main server orchestrator and message routing
+- `internal/mcp/transport/stdio.go` - Line-delimited JSON over stdin/stdout
+- `internal/mcp/protocol/` - JSON-RPC 2.0 message types and MCP capabilities
+- `internal/mcp/handlers/` - Tool implementations with daemon API integration
+- `internal/mcp/sse_client.go` - Real-time index updates from daemon
+- `internal/mcp/subscriptions.go` - Thread-safe resource subscription tracking
+- `internal/mcp/prompts.go` - Prompt registry and message generation
+
+**See:** [mcp/README.md](./mcp/README.md)
+
+---
+
+### [Format](./format/)
+
+**Status:** ✅ Documented
+
+Structured CLI output with multiple format support through a builder pattern and pluggable formatters.
+
+**Key Features:**
+
+- Builder pattern with fluent API for constructing structured content with validation
+- Five output formats: text (with ANSI colors), JSON, YAML, XML, and Markdown
+- Status messaging with six severity levels and consistent symbols/colors
+- Hierarchical sections with key-value pairs and subsections up to 5 levels deep
+- Table formatting with alignment control, compact mode, and header hiding
+- Thread-safe formatter registry with auto-registration via init functions
+
+**Primary Components:**
+
+- `internal/format/formatter.go` - Formatter interface and thread-safe registry
+- `internal/format/builder.go` - Buildable interface and type definitions
+- `internal/format/section.go` - Hierarchical key-value builder
+- `internal/format/table.go` - Columnar data builder with alignment
+- `internal/format/status.go` - Severity-based status message builder
+- `internal/format/formatters/text.go` - Text formatter with ANSI color support
+- `internal/format/formatters/json.go` - JSON formatter
+- `internal/format/formatters/yaml.go` - YAML formatter
 
 **See:** [format/README.md](./format/README.md)
 
 ---
 
-#### [Version](./version/)
+### [TUI](./tui/)
+
 **Status:** ✅ Documented
 
-Version information management for build-time metadata.
+Interactive setup wizard built on Bubble Tea with multi-step navigation, reusable components, and consistent styling for guided configuration.
 
 **Key Features:**
-- Version string
-- Git commit hash
-- Build date
-- Build-time variable injection
+
+- Seven-step configuration wizard with forward/backward navigation
+- Bubble Tea integration for event-driven terminal UI
+- Reusable components (RadioGroup, TextInput, Checkbox, Progress)
+- Centralized styling via lipgloss color palette and theme
+- Environment detection for API keys, services, and integrations
+- Full-screen alternate buffer for clean terminal experience
 
 **Primary Components:**
-- `internal/version/version.go` - Version information
+
+- `internal/tui/initialize/wizard.go` - Wizard orchestrator implementing tea.Model
+- `internal/tui/initialize/steps/step.go` - Step interface definition
+- `internal/tui/initialize/steps/*.go` - Individual step implementations
+- `internal/tui/initialize/components/*.go` - Reusable UI components
+- `internal/tui/styles/styles.go` - Centralized color palette and styling
+
+**See:** [tui/README.md](./tui/README.md)
+
+---
+
+### [Version](./version/)
+
+**Status:** ✅ Documented
+
+Build-time version injection with embedded fallback and Go build info integration.
+
+**Key Features:**
+
+- Ldflags injection for version, commit, and build date at compile time
+- Embedded VERSION file fallback via go:embed directive
+- Go runtime/debug build info extraction for commit and date
+- Dirty state detection for uncommitted workspace changes
+- Short commit hash truncation (7 characters) for display
+- Formatted output combining all version components
+
+**Primary Components:**
+
+- `internal/version/version.go` - Version getters with source priority and formatting
+- `internal/version/VERSION` - Embedded version number file
 
 **See:** [version/README.md](./version/README.md)
 
 ---
 
-### Testing
+### [Docker](./docker/)
 
-#### [E2E Tests](./e2e-tests/)
 **Status:** ✅ Documented
 
-Comprehensive end-to-end testing framework for validating complete workflows across the full application stack.
+Docker container lifecycle management for FalkorDB knowledge graph with availability detection and readiness polling.
 
 **Key Features:**
-- Isolated test environments with temporary directories
-- Test harness framework for daemon management
-- HTTP, MCP, and graph client abstractions
-- Automatic cleanup and resource management
-- Build tag separation from unit tests (`//go:build e2e`)
-- Docker integration for FalkorDB testing
 
-**Test Coverage:**
-- CLI command execution and output validation
-- Daemon lifecycle management
-- File system watching and processing pipelines
-- HTTP API endpoints and SSE notifications
-- Graph database operations and queries
-- Configuration validation and hot-reload
-- Integration framework setup and teardown
-- Error handling and edge cases
+- Docker availability detection via `docker info` command
+- Container state inspection for running and existence status
+- Container lifecycle operations with timeout protection
+- Readiness polling via Redis PING until FalkorDB responds
+- Persistent storage support via bind-mounted data directories
+- Restart policy (unless-stopped) for automatic recovery
 
 **Primary Components:**
-- `e2e/harness/` - Test harness framework
-- `e2e/tests/` - Test suites (18 test files)
-- `e2e/fixtures/` - Test data and fixtures
 
-**See:** [e2e-tests/README.md](./e2e-tests/README.md)
+- `internal/docker/helpers.go` - Docker CLI wrapper functions and StartOptions struct
+
+**See:** [docker/README.md](./docker/README.md)
 
 ---
 
-## Subsystem Interactions
+### [E2E](./e2e/)
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        CLI Commands (cmd/)                           │
-│  ┌──────┐ ┌────────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────────────┐     │
-│  │ init │ │ daemon │ │ read │ │ mcp  │ │graph │ │ integrations │     │
-│  └───┬──┘ └───┬────┘ └───┬──┘ └───┬──┘ └───┬──┘ └──────┬───────┘     │
-└──────┼────────┼──────────┼────────┼────────┼───────────┼─────────────┘
-       │        │          │        │        │           │
-       v        v          v        v        v           v
-┌──────────────────────────────────────────────────────────────────────┐
-│                 Configuration (internal/config)                      │
-│            Loads settings, validates, manages paths                  │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │
-        ┌──────────────────────┼─────────────────────────────┐
-        │                      │                             │
-        v                      v                             v
-┌──────────────┐        ┌──────────────────┐       ┌──────────────────┐
-│   Daemon     │───────>│  Graph Manager   │       │   Integration    │
-│  Subsystem   │        │  (FalkorDB ops)  │       │    Registry      │
-└──────┬───────┘        └────────┬─────────┘       └────────┬─────────┘
-       │                         │                          │
-       │                ┌────────┼───────┐                  │
-   ┌───┴───────┐        │                │                  │
-   │           │        │                │                  │
-   v           v        v                v                  v
-┌────────┐ ┌──────┐ ┌───────┐  ┌──────────────────┐  ┌──────────────┐
-│Watcher │ │Worker│ │ Read  │  │   MCP Server     │  │   Output     │
-│        │ │ Pool │ │Command│  │                  │  │  Processors  │
-└────────┘ └───┬──┘ └───┬───┘  └─────────┬────────┘  └──────────────┘
-               │        │                │
-       ┌───────┴────┐   │                │
-       │            │   │                │
-       v            v   v                v
-  ┌─────────┐ ┌──────────┐       ┌───────────────┐
-  │Metadata │ │ Semantic │       │  Daemon HTTP  │
-  │Extractor│ │ Analyzer │       │     API       │
-  └────┬────┘ └────┬─────┘       └───────┬───────┘
-       │           │                     │
-       │           v                     │
-       │      ┌─────────┐                │
-       │      │ Claude  │                │
-       │      │   API   │                │
-       │      └─────────┘                │
-       │           │                     │
-       └───────┬───┘                     │
-               v                         v
-        ┌────────────┐           ┌──────────────┐
-        │   Cache    │           │   FalkorDB   │
-        │  Manager   │           │    Graph     │
-        └────────────┘           └──────┬───────┘
-                                        │
-                                        v
-                                 ┌──────────────┐
-                                 │ External MCP │
-                                 │   Clients    │
-                                 └──────────────┘
-```
+**Status:** ✅ Documented
 
-## Documentation Standards
+Comprehensive integration testing with isolated environments, Docker-based FalkorDB, and full-stack validation.
 
-Each subsystem documentation **MUST** include:
+**Key Features:**
 
-1. **Table of Contents**: An organized list of the main sections and subsections within the documentation for easy navigation.
-2. **Overview**: A brief introduction to the subsystem, its purpose, and its role within the larger system.
-3. **Design Principles**: An explanation of the core design principles and architectural patterns that guide the development of the subsystem.
-4. **Key Components**: A high-level description of the main components or modules that make up the subsystem.
-5. **Integration Points**: An outline of how the subsystem integrates with other subsystems or components within the codebase.
-6. **Glossary**: Definitions of any specialized terms or concepts relevant to the subsystem.
+- Environment isolation with unique temp directories and graph namespaces per test
+- Multi-layer client abstractions for HTTP API, MCP protocol, and FalkorDB queries
+- LIFO cleanup stack ensuring resource release even on test failure
+- Docker Compose infrastructure with FalkorDB health checks and volume cleanup
+- 21 test suites covering CLI, daemon, graph, HTTP API, MCP, integrations, and more
+- Build tag separation (`//go:build e2e`) from unit tests
 
-## Contributing Documentation
+**Primary Components:**
 
-When adding or updating subsystem documentation:
+- `e2e/harness/harness.go` - Core orchestrator for test environment setup and teardown
+- `e2e/harness/cleanup.go` - LIFO cleanup stack with graceful daemon shutdown
+- `e2e/harness/http_client.go` - Daemon HTTP API client with timeout and retry
+- `e2e/harness/mcp_client.go` - JSON-RPC 2.0 MCP protocol client via stdio
+- `e2e/harness/graph_client.go` - Direct FalkorDB Cypher query execution
+- `e2e/harness/assertions.go` - Test-specific assertion helpers
 
-1. **Create Subdirectory**
-   ```bash
-   mkdir -p docs/subsystems/your-subsystem
-   ```
+**See:** [e2e/README.md](./e2e/README.md)
 
-2. **Write README.md**
-   Use the daemon subsystem as a template.
-
-3. **Update This Index**
-   Add your subsystem to the "Available Subsystems" section above.
-
-4. **Follow Standards**
-   Ensure all required sections are included.
-
-5. **Keep It Updated**
-   Update documentation when code changes.
-
-## Documentation Checklist
-
-Before marking subsystem documentation as complete, verify:
-
-- [ ] All required sections included
-- [ ] Technical accuracy verified
-- [ ] Professional tone maintained
-
-## Related Documentation
-
-### Project Documentation
-- [README](../../README.md) - User-facing documentation
-- [CHANGELOG](../../CHANGELOG.md) - Version history
-
-## Getting Help
-
-If you're looking for specific subsystem information:
-
-1. **Check this index** for available documentation
-2. **Read the code** in `internal/`
-3. **Ask questions** via GitHub issues
-4. **Contribute docs** for undocumented subsystems
+---
 
 ## Documentation Status Legend
 
@@ -574,32 +567,25 @@ If you're looking for specific subsystem information:
 
 ---
 
-**Last Updated:** 2025-12-06
-
 **Recent Updates:**
-- Added Format subsystem documentation (2025-12-06)
-- Comprehensive subsystems index accuracy review (2025-12-05)
-  - Corrected Daemon description: "maintains FalkorDB knowledge graph" (not "precomputed memory index")
-  - Updated Daemon key features: "Real-time graph updates via FalkorDB" (not "Atomic index updates")
-  - Completely rewrote Index Management section to reflect graph-native architecture:
-    - Changed title from "Index Manager" to "Index Management" throughout
-    - Updated description: "Graph-native storage with on-demand export" (not "precomputed index file with atomic writes")
-    - Replaced key features to reflect FalkorDB storage, FileIndex export, no file persistence
-    - Updated primary components: `internal/graph/manager.go` and `export.go` (not `internal/index/`)
-  - Updated MCP Server description: "Exposes knowledge graph" (not "precomputed index")
-  - Enhanced MCP Server key features to clarify FileIndex export and daemon HTTP API integration
-  - Updated Subsystem Interactions diagram: "Graph Manager (FalkorDB ops)" replacing "Index Manager (atomic I/O)"
-  - Added missing daemon subcommands: systemctl, launchctl
-  - Fixed broken link: index-manager → index-management
-  - Added E2E Tests subsystem to index with comprehensive description
-  - Enhanced Integration Registry: added Gemini CLI MCP and Codex CLI MCP to supported integrations
-  - Updated Semantic Search description to reflect graph-powered architecture with in-memory fallback
-- Version subsystem documentation accuracy review (2025-12-05)
-  - Updated version references from 0.11.0 to 0.12.1
-  - Added MCP Server integration point
-  - Enhanced version command documentation
-- Added FalkorDB Graph subsystem documentation (2025-11-30)
-- Updated architecture diagram to include graph subsystem
-- Comprehensive accuracy review of all subsystem documentation (2025-11-22)
-- 47 inaccuracies corrected across 9 subsystems
-- MCP Server documentation completed and verified
+
+- Created cli subsystem documentation (2025-12-29)
+- Created tui subsystem documentation (2025-12-29)
+- Created logging subsystem documentation (2025-12-29)
+- Created embeddings subsystem documentation (2025-12-29)
+- Created document subsystem documentation (2025-12-29)
+- Created docker subsystem documentation (2025-12-29)
+- Created version subsystem documentation (2025-12-29)
+- Created walker subsystem documentation (2025-12-29)
+- Created semantic subsystem documentation (2025-12-29)
+- Created metadata subsystem documentation (2025-12-29)
+- Created mcp subsystem documentation (2025-12-29)
+- Created integrations subsystem documentation (2025-12-29)
+- Created format subsystem documentation (2025-12-29)
+- Created watcher subsystem documentation (2025-12-29)
+- Created graph subsystem documentation (2025-12-29)
+- Created e2e subsystem documentation (2025-12-29)
+- Created daemon subsystem documentation (2025-12-29)
+- Created config subsystem documentation (2025-12-29)
+- Created cache subsystem documentation (2025-12-29)
+- Created subsystems documentation index (2025-12-29)

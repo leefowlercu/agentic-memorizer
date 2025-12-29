@@ -221,7 +221,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 **Background Daemon** (`internal/daemon/`):
 - **Walker** (`internal/walker/`) - Full directory scans during rebuilds
 - **File Watcher** (`internal/watcher/`) - Real-time monitoring with fsnotify
-- **Worker Pool** - Parallel processing with rate limiting (default 3 workers, 20 calls/min)
+- **Worker Pool** - Parallel processing with rate limiting (default 3 workers, provider-specific rate limits: Claude 20/min, OpenAI 60/min, Gemini 100/min)
 - **HTTP API** (`internal/daemon/api/`) - RESTful endpoints and SSE for real-time updates:
   - `GET /health` - Health check with metrics
   - `GET /sse` - Server-Sent Events stream
@@ -2524,7 +2524,7 @@ agentic-memorizer/
 │   │       └── start.go      # Start MCP server
 │   ├── integrations/         # Integration management commands
 │   │   ├── integrations.go   # Parent integrations command
-│   │   └── subcommands/      # Integration subcommands (6 total)
+│   │   └── subcommands/      # Integration subcommands (5 total)
 │   │       ├── list.go
 │   │       ├── detect.go
 │   │       ├── setup.go
@@ -2567,6 +2567,8 @@ agentic-memorizer/
 │   ├── embeddings/           # Vector embeddings (optional)
 │   ├── watcher/              # File system watching (fsnotify)
 │   ├── walker/               # File system traversal with filtering
+│   ├── logging/              # Structured logging with slog, rotation, and context
+│   ├── document/             # Office document extraction (DOCX, PPTX)
 │   ├── metadata/             # File metadata extraction (9 category handlers)
 │   ├── semantic/             # Multi-provider semantic analysis (Claude, OpenAI, Gemini)
 │   ├── cache/                # Content-addressable analysis caching

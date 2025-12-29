@@ -1,746 +1,186 @@
-# MCP Subsystem Documentation
+# MCP Server
 
-**Last Updated:** 2025-12-09
+Model Context Protocol implementation with JSON-RPC 2.0 messaging, stdio transport, and graph-powered tools for AI assistant integration.
+
+**Documented Version:** v0.13.0
+
+**Last Updated:** 2025-12-29
 
 ## Table of Contents
 
-1. [Overview](#overview)
-   - [What is MCP?](#what-is-mcp)
-   - [Purpose of the MCP Subsystem](#purpose-of-the-mcp-subsystem)
-   - [Strategic Value](#strategic-value)
-2. [Design Principles](#design-principles)
-   - [JSON-RPC 2.0 Protocol Adherence](#json-rpc-20-protocol-adherence)
-   - [Handler Registry Pattern](#handler-registry-pattern)
-   - [Separation of Concerns](#separation-of-concerns)
-   - [Error Handling Strategy](#error-handling-strategy)
-3. [Key Components](#key-components)
-   - [Protocol Layer](#protocol-layer)
-   - [Transport Layer](#transport-layer)
-   - [Server Orchestrator](#server-orchestrator)
-   - [SSE Client Integration](#sse-client-integration)
-   - [Search Integration](#search-integration)
-   - [Tool Implementations](#tool-implementations)
-   - [Prompt Implementations](#prompt-implementations)
-4. [Configuration](#configuration)
-5. [Integration Points](#integration-points)
-   - [Index System Integration](#index-system-integration)
-   - [Format Package Integration](#format-package-integration)
-   - [Daemon Integration](#daemon-integration)
-   - [External Client Integration](#external-client-integration)
-6. [Glossary](#glossary)
-7. [Debugging and Logging](#debugging-and-logging)
-   - [MCP Server Logs](#mcp-server-logs)
-8. [Additional Resources](#additional-resources)
-
----
+- [Overview](#overview)
+- [Design Principles](#design-principles)
+- [Key Components](#key-components)
+- [Integration Points](#integration-points)
+- [Glossary](#glossary)
 
 ## Overview
 
-### What is MCP?
+The MCP subsystem provides a standardized Model Context Protocol server that enables AI assistants to access Memorizer's file index and knowledge graph through on-demand tool invocations. The server implements JSON-RPC 2.0 over stdio transport, supporting protocol versions 2024-11-05, 2025-06-18, and 2025-11-25. It exposes five graph-powered tools for semantic search, file metadata retrieval, recent files listing, related file discovery, and entity search.
 
-The Model Context Protocol (MCP) is an open standard for enabling AI tools to integrate with external context sources and capabilities. Introduced by Anthropic, MCP provides a standardized way for AI assistants to access data, invoke tools, and interact with external systems through a JSON-RPC 2.0-based protocol.
+The subsystem implements a three-layer architecture: the protocol layer defines JSON-RPC 2.0 message types and MCP capabilities, the transport layer handles stdio communication with line-delimited JSON, and the handlers layer implements tool business logic with daemon API integration. Real-time index updates flow through Server-Sent Events from the daemon, enabling the MCP server to serve current data without polling.
 
-### Purpose of the MCP Subsystem
+Key capabilities include:
 
-The MCP subsystem transforms agentic-memorizer from a Claude Code-specific integration into a universal memory provider for any MCP-enabled AI tool. It exposes the precomputed file index through a standardized server interface that supports:
-
-- **Static Context Delivery**: Serving the complete index in multiple formats (XML, Markdown, JSON)
-- **Dynamic Queries**: Enabling semantic search across indexed files during active sessions
-- **Metadata Retrieval**: Providing detailed file metadata and semantic analysis on demand
-- **Time-Based Filtering**: Surfacing recently modified files for context-aware workflows
-
-### Strategic Value
-
-The MCP subsystem addresses several limitations of the existing SessionStart hook integration:
-
-- **Platform Independence**: Works with GitHub Copilot CLI, Claude Code, and any future MCP client
-- **Bidirectional Communication**: Enables request/response patterns instead of one-way context injection
-- **Runtime Queries**: Allows AI tools to search and filter the index during conversations
-- **Protocol Standardization**: Aligns with industry-standard integration method for AI tool ecosystems
-
-The subsystem maintains backward compatibility with existing Claude Code hooks while opening the door to a broader range of AI development tools.
-
----
+- **JSON-RPC 2.0 protocol** - Standard request/response/notification messaging with error codes
+- **Stdio transport** - Line-delimited JSON over stdin/stdout for subprocess communication
+- **Five graph tools** - search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
+- **Three resources** - File index in XML, JSON, and Markdown formats with subscription support
+- **Three prompts** - Built-in prompts for file analysis, search context, and summary explanation
+- **Fallback operation** - Graceful degradation to in-memory index when daemon unavailable
+- **Real-time updates** - SSE client receives index changes and notifies subscribed clients
 
 ## Design Principles
 
-### JSON-RPC 2.0 Protocol Adherence
+### Separation of Protocol, Transport, and Handlers
 
-The subsystem strictly implements the JSON-RPC 2.0 specification to ensure compatibility with MCP clients:
+The subsystem cleanly separates concerns across three layers. The protocol layer (`protocol/`) defines JSON-RPC 2.0 message structures and MCP-specific types without knowledge of transport mechanics. The transport layer (`transport/`) handles stdio I/O with buffered reading and synchronized writing. The handlers layer (`handlers/`) implements tool logic using dependency injection for daemon communication. This separation enables testing each layer independently and potential transport substitution.
 
-- **Version Validation**: All messages must include `"jsonrpc": "2.0"` field
-- **Request/Response Correlation**: Request IDs are preserved in responses for proper matching
-- **Notification Handling**: Fire-and-forget messages (no ID) never receive responses
-- **Protocol Version Negotiation**: Server supports multiple MCP protocol versions (2024-11-05, 2025-06-18) and echoes back the client's requested version during handshake for backward/forward compatibility
-- **Standard Error Codes**: Uses JSON-RPC error codes (-32700 to -32603) plus MCP-specific codes
-- **Error Structure**: Errors include code, message, and optional data fields
+### Handler Registry with Dependency Injection
 
-This strict adherence ensures the server works correctly with any standards-compliant MCP client.
+Tool handlers implement a common Handler interface with Name, Execute, and ToolDefinition methods. The server maintains a handler map keyed by tool name. On tool calls, the server looks up the handler and invokes Execute with a Dependencies struct containing DaemonURL, HTTPClient, IndexProvider, and Logger. This pattern enables consistent tool behavior, shared HTTP client configuration, and testable handler implementations.
 
-### Handler Registry Pattern
+### Dual-Source Fallback Strategy
 
-The subsystem uses a registry pattern to decouple message routing from handler implementation:
+Three of the five tools (search_files, get_file_metadata, list_recent_files) implement dual-source logic: they first attempt the daemon HTTP API for current graph data, then fall back to the in-memory index if the daemon is unavailable. This enables degraded operation without complete failure. The remaining tools (get_related_files, search_entities) require the daemon's graph database and cannot fall back.
 
-- **Map-Based Dispatch**: Handler functions stored in maps keyed by tool/resource/prompt name
-- **Registration at Initialization**: Handlers registered in `NewServer()` constructor
-- **Type-Safe Signatures**: Handler functions enforce consistent context + params → result patterns
-- **Runtime Extensibility**: New capabilities can be added without modifying the router
-- **Future Plugin Support**: Enables dynamic handler registration for user-defined extensions
+### Thread-Safe Index Updates
 
-This pattern promotes clean separation between protocol handling and business logic.
+The server protects its file index with an RWMutex. The GetIndex method acquires a read lock for concurrent tool access. The ReloadIndex method acquires a write lock for atomic replacement when SSE events arrive. This avoids index corruption during concurrent operations and eliminates the need for server restarts on index changes.
 
-### Separation of Concerns
+### Subscription-Based Notifications
 
-The subsystem is organized into three distinct layers with clear responsibilities:
+The subscription manager tracks which resource URIs clients have subscribed to via resources/subscribe. When the SSE client receives index update events, it queries active subscriptions and sends notifications/resources/updated only to subscribed URIs. This prevents unnecessary notification traffic for unsubscribed resources.
 
-**Protocol Layer** (`internal/mcp/protocol/`)
-- Pure data types representing MCP messages
-- No I/O operations or business logic
-- JSON marshaling/unmarshaling only
-- Shared between transport and server layers
+### Graceful Lifecycle Management
 
-**Transport Layer** (`internal/mcp/transport/`)
-- I/O abstraction with Read/Write/Close interface
-- No knowledge of protocol semantics
-- Currently implements stdio transport (line-delimited JSON)
-- Future-proof for HTTP, WebSocket, or SSE transports
-
-**Server Layer** (`internal/mcp/server.go`)
-- Message routing and handler orchestration
-- Protocol state management (initialization, capabilities)
-- Delegates business logic to handlers
-- Coordinates between transport and subsystems
-
-This layering enables independent testing, transport swapping, and clear boundaries between concerns.
-
-### Error Handling Strategy
-
-The subsystem implements a two-tier error handling strategy:
-
-**Protocol-Level Errors** (JSON-RPC errors)
-- Malformed JSON or invalid JSON-RPC structure
-- Unknown method names
-- Server not initialized when capability invoked
-- Returned as JSON-RPC error responses with standard codes
-
-**Tool-Level Errors** (Tool response with isError flag)
-- Invalid tool arguments
-- Missing files or empty index
-- Search failures or timeouts
-- Returned as successful JSON-RPC responses with `isError: true` in tool content
-
-This separation allows tools to report failures without breaking the protocol flow, enabling clients to distinguish between communication errors and execution errors.
-
----
+The server implements a controlled lifecycle: initialize validates the client and exchanges capabilities, the message loop processes requests until EOF or context cancellation, and shutdown closes the transport cleanly. Signal handlers catch SIGTERM/SIGINT for graceful termination. Malformed messages are logged but don't crash the server, ensuring robustness against protocol violations.
 
 ## Key Components
 
-### Protocol Layer
-
-The protocol layer defines the message types that flow between MCP clients and the server. It implements the MCP specification through five key modules:
-
-**JSON-RPC 2.0 Primitives** (`protocol/messages.go`)
-- `JSONRPCRequest`: Method invocations requiring responses
-- `JSONRPCResponse`: Success or error results
-- `JSONRPCNotification`: Fire-and-forget messages
-- `JSONRPCError`: Standard error structure with codes and messages
-
-**Handshake Protocol** (`protocol/initialize.go`)
-- `InitializeRequest`: Client declares protocol version (supports 2024-11-05, 2025-06-18) and identity
-- `InitializeResponse`: Server declares capabilities and echoes client's protocol version
-- `ServerCapabilities`: Flags indicating supported features (resources, tools, prompts)
-- **Notification Compatibility**: Accepts both `initialized` and `notifications/initialized` notification methods for client compatibility
-- Enables capability negotiation, version compatibility, and backward/forward compatibility
-
-**Resource Types** (`protocol/resources.go`)
-- `Resource`: Static context endpoints with URI, name, description, MIME type
-- `ResourcesListResponse`: Array of available resources
-- `ResourcesReadRequest`: URI-based content retrieval
-- `ResourcesReadResponse`: Resource content with metadata
-
-**Tool Types** (`protocol/tools.go`)
-- `Tool`: Executable function with JSON Schema parameter definition
-- `InputSchema`: JSON Schema Draft 7 subset for parameter validation
-- `ToolsCallRequest`: Tool invocation with name and arguments
-- `ToolsCallResponse`: Result content array with optional error flag
-
-**Prompt Types** (`protocol/prompts.go`)
-- `Prompt`: Templated workflow with name, description, and arguments
-- `PromptArgument`: Parameter definition with required/optional flag
-- `PromptsListResponse`: Array of available prompts for discovery
-- `PromptsGetRequest`: Prompt invocation with name and argument values
-- `PromptsGetResponse`: Generated message array with context-aware content
-
-### Transport Layer
-
-The transport layer abstracts communication mechanisms through a simple interface:
-
-**Transport Interface** (`transport/transport.go`)
-- `Read() ([]byte, error)`: Blocking read of single message
-- `Write(data []byte) error`: Thread-safe message transmission
-- `Close() error`: Graceful connection termination
-
-**Stdio Implementation** (`transport/stdio.go`)
-- Reads from `os.Stdin` via buffered reader
-- Writes to `os.Stdout` with mutex for thread safety
-- Line-delimited JSON parsing (one message per line)
-- **Whitespace normalization**: Trims whitespace from messages and skips empty lines for protocol robustness
-- Logs to `os.Stderr` to keep stdout protocol-only (server logs to file when configured)
-- Returns EOF on client disconnect for graceful shutdown
-
-The interface design enables future transport implementations (HTTP long-polling, Server-Sent Events, WebSockets) without changes to server logic.
-
-### Server Orchestrator
-
-The server orchestrator coordinates all subsystem components and manages protocol state:
-
-**Core Responsibilities**
-- Loading precomputed index at startup
-- Initializing transport and entering message loop
-- Routing incoming requests to appropriate handlers
-- Managing initialization state and capability enforcement
-- Sending responses and errors via transport
-- Graceful shutdown on disconnect or signals
-
-**Handler Registries**
-- `resourceHandlers`: Declared for future extensibility but currently unused (resources use direct switch-case routing in `handleResourcesRead()` for simplicity)
-- `toolHandlers`: Maps tool names to execution functions (5 tools registered)
-- `promptHandlers`: Declared for consistency but unused (prompts use PromptRegistry pattern)
-
-**Message Processing Flow**
-1. Read JSON-RPC message from transport
-2. Validate JSON-RPC 2.0 version field
-3. Parse method name and route to handler
-4. Check initialization state for capability methods
-5. Execute handler with context and parameters
-6. Format result as JSON-RPC response
-7. Write response to transport
-8. Loop until EOF or shutdown signal
-
-**Lifecycle Management**
-- Signal handling for SIGINT and SIGTERM
-- Context cancellation propagation to handlers
-- Clean resource release on shutdown
-- Error recovery without server crash
-
-### SSE Client Integration
-
-The SSE client enables real-time index synchronization between daemon and MCP server:
-
-**SSE Client** (`internal/mcp/sse_client.go`)
-- Connects to daemon's Server-Sent Events endpoint (`/sse`)
-- Listens for `index_snapshot` and `index_updated` event types
-- Automatically reconnects with exponential backoff (5-second default)
-- Runs in background goroutine with context cancellation
-
-**Event Processing Flow**
-1. Daemon publishes index change events to `/sse` endpoint
-2. SSE client receives event with updated index data
-3. Client calls `server.ReloadIndex()` to update in-memory index
-4. Client sends JSON-RPC notifications to subscribed MCP clients
-5. AI tools receive `notifications/resources/updated` messages
-6. Tools can re-fetch resources to get updated data
-
-**Subscription Management** (`internal/mcp/subscriptions.go`)
-- Tracks which resources (URIs) clients have subscribed to
-- Thread-safe subscription registry using sync.RWMutex
-- Subscriptions lost on MCP server restart (in-memory only)
-- Clients re-subscribe on reconnection
-
-**Reconnection Behavior**
-- Connection failures trigger automatic retry with backoff
-- Fixed 5-second reconnection interval (not configurable)
-- Continues retrying until context cancelled or server shutdown
-- Logs connection status and errors for debugging
-
-This integration enables near-instant index propagation from daemon to AI tools without polling or manual refresh.
-
-### Search Integration
-
-The search component provides token-based semantic search capabilities over the precomputed index:
-
-**Searcher** (`internal/search/semantic.go`)
-- Wraps the index for query operations
-- Stateless design (no internal caching)
-- Read-only access to index entries
-
-**Search Query Model**
-- `Query`: Search terms processed through tokenization and stop word filtering
-- `Categories`: Optional filter by file category (documents, code, images, presentations, etc.)
-- `MaxResults`: Limit on returned results (default 10, maximum 100)
-
-**Token-Based Matching Algorithm**
-
-Queries are tokenized through a multi-step process:
-1. Convert to lowercase
-2. Split on whitespace into individual words
-3. Filter common stop words (`a`, `an`, `and`, `the`, `is`, `for`, `with`, etc.)
-4. Remove punctuation from word boundaries (`.`, `,`, `!`, `?`, `;`, `:`, `"`, `'`, `()`, `[]`, `{}`)
-5. Discard tokens shorter than 2 characters
-
-Each file is scored by counting how many query tokens substring-match in each searchable field, normalized by the total number of query tokens. Token matching uses case-insensitive substring containment (not fuzzy algorithms like Levenshtein distance), so the query token "form" would match the word "terraform". The minimum relevance threshold is hardcoded to 0.1; entries scoring below this value are filtered out.
-
-**Weighted Scoring System**
-
-Results are ranked using cumulative weighted scoring with partial token matching:
-- **Filename match**: 3.0 × (matched_tokens / total_tokens) - highest priority
-- **Summary match**: 2.0 × (matched_tokens / total_tokens)
-- **Tag match**: 1.5 × (matched_tokens / total_tokens) - aggregated across all tags
-- **Category match**: 1.0 × (matched_tokens / total_tokens) - file category field
-- **Topic match**: 1.0 × (matched_tokens / total_tokens) - aggregated across all topics
-- **File type match**: 0.5 × (matched_tokens / total_tokens) - file extension and type field
-- **Document type match**: 0.5 × (matched_tokens / total_tokens) - AI-classified document type
-
-Entries must score above 0.1 (minimum relevance threshold, hardcoded in implementation at `semantic.go:94`) to be included in results. Results are sorted by cumulative score descending and limited to the requested maximum. The match type indicating the first matching field in weighted order (not necessarily the highest-scoring field) is returned for display purposes.
-
-**Example Scoring**:
-
-Query: `"NIH terraform workshop"` → Tokens: `["nih", "terraform", "workshop"]` (3 tokens)
-
-File: `nih-cit-technical-workshop.pptx`
-- Filename contains "nih" and "workshop" → 2/3 tokens × 3.0 = 2.0 points
-- Summary contains all 3 tokens → 3/3 tokens × 2.0 = 2.0 points
-- Category "presentations" contains 0 tokens → 0 points
-- Total score: 4.0 (high relevance, ranked first)
-
-**Result Model**
-- Complete `IndexEntry` with metadata and semantic analysis
-- Relevance score (float) for ranking
-- Match type indicating the highest-weighted field that matched (filename, summary, tag, category, topic, file_type, document_type)
-
-### Tool Implementations
-
-The subsystem implements five tools for interacting with the file index:
-
-**Index-Based Tools** (work standalone without daemon):
-
-**search_files**
-- Performs token-based semantic search with stop word filtering across all indexed files
-- Searches: filename, category, file type, summary, tags, topics, document type
-- Uses weighted scoring with partial token matching (see Search Integration section for algorithm details)
-- Parameters: query (required), categories (optional filter), max_results (default 10, max 100)
-- Returns: Query echo, result count, array of matches with path/score/match_type/summary/tags
-- Fallback: Uses daemon API if available, falls back to in-memory index search
-- Use case: "Find all documents about Terraform" or "Search for PowerPoint presentations about workshops"
-
-**get_file_metadata**
-- Retrieves detailed metadata for a specific file
-- Parameters: path (required, supports partial matching)
-- Returns: Complete index entry with all metadata and semantic analysis
-- Fallback: Uses daemon API if available, falls back to in-memory index lookup
-- Use case: "Show me the metadata for the deployment guide" or "What tags are on config.yaml?"
-
-**list_recent_files**
-- Lists files modified within a specified time window
-- Parameters: days (default 7), limit (default 20)
-- Returns: Files sorted by modification time descending with full metadata
-- Fallback: Uses daemon API if available, falls back to in-memory time filtering
-- Use case: "What files changed this week?" or "Show recent documentation updates"
-
-**Graph-Based Tools** (require daemon with FalkorDB):
-
-**get_related_files**
-- Finds files related through shared tags, topics, or entities in knowledge graph
-- Parameters: path (required), limit (default 10)
-- Returns: Related files with connection strength and relationship type
-- Requires: Daemon API with FalkorDB connection (returns error if unavailable)
-- Use case: "What files are related to this deployment guide?" or "Find similar documentation"
-
-**search_entities**
-- Searches for files mentioning specific entities (people, organizations, concepts)
-- Parameters: entity (required), entity_type (optional filter), max_results (default 10)
-- Returns: Files mentioning the entity with context and relevance
-- Requires: Daemon API with FalkorDB connection (returns error if unavailable)
-- Use case: "Find all files mentioning Terraform" or "Search for documents about AWS"
-
-All tools validate inputs, handle missing data gracefully, and return structured JSON results that clients can parse and present to users.
-
-### Prompt Implementations
-
-The subsystem provides three pre-configured prompt templates that generate context-aware messages using index data:
-
-**analyze-file**
-- Deep analysis of a specific file with semantic metadata
-- Required arguments: `file_path` (string)
-- Optional arguments: None
-- Implementation: `prompts.go:118-180`
-  - Validates file exists in index
-  - Validates file has semantic analysis
-  - Generates formatted prompt including metadata (path, type, category, size), semantic summary, tags, and key topics
-  - Returns protocol.PromptMessage array with role="user" and text content
-- Use case: "I want to analyze the API documentation" or "Help me understand this configuration file"
-- Error handling: Returns error if file not found or lacks semantic analysis
-
-**search-context**
-- Builds effective semantic search queries with guidance
-- Required arguments: `topic` (string)
-- Optional arguments: `category` (string, e.g., "documents", "code", "images")
-- Implementation: `prompts.go:182-216`
-  - Generates search guidance prompt with topic and optional category filter
-  - Provides suggestions for constructing effective searches
-  - Does not require index data (generates guidance, not results)
-- Use case: "How do I search for authentication-related files?" or "Find deployment documentation"
-- Error handling: Returns error if topic is missing
-
-**explain-summary**
-- Detailed explanation of a file's AI-generated semantic analysis
-- Required arguments: `file_path` (string)
-- Optional arguments: None
-- Implementation: `prompts.go:218-276`
-  - Validates file exists in index with semantic analysis
-  - Generates explanation prompt including summary, tags, topics, document type, and confidence
-  - Returns detailed context about how the AI analyzed the file
-- Use case: "Explain the semantic analysis for this file" or "What do these tags mean?"
-- Error handling: Returns error if file not found or lacks semantic analysis
-
-**Prompt Registry** (`prompts.go:10-87`)
-- Centralized registry managing all available prompts
-- NewPromptRegistry() initializes 3 default prompts with metadata
-- ListPrompts() returns all registered prompts for client discovery
-- GetPrompt(name) retrieves prompt definition by name
-- GeneratePromptMessages(name, args, server) creates context-aware messages
-- Validates required arguments before message generation
-- Routes to specific generator functions based on prompt name
-
-**Message Format**
-All prompt generators return `protocol.PromptMessage` array with:
-- Role: "user" (all current prompts generate user messages)
-- Content: protocol.PromptContent with Type="text" and formatted Text field
-- Text includes structured markdown with file metadata, semantic data, and user guidance
-
-**Client Integration**
-MCP clients discover prompts via `prompts/list` request and invoke them using `prompts/get` with arguments. The server capabilities declare `prompts` support, making these templates available in client UI (e.g., Claude Code's prompt selector).
-
-### Configuration
-
-The MCP subsystem uses dedicated configuration settings separate from the daemon:
-
-**MCP Configuration** (`internal/config/types.go`)
-- `log_file`: Path to MCP server log file (default: `~/.memorizer/mcp.log`)
-- `log_level`: Logging verbosity - debug, info, warn, error (default: `info`)
-- `daemon_host`: Daemon hostname for API integration (default: `localhost`)
-- `daemon_port`: Daemon HTTP port (default: `0` - disables daemon integration when 0)
-- Log rotation: Automatic rotation at 10MB with 3 backups, 28-day retention, compression enabled
-
-**Note on daemon_port**: When set to 0 (default), daemon integration is disabled:
-- MCP server operates in standalone mode using in-memory index
-- Graph-based tools (get_related_files, search_entities) return errors
-- Index-based tools (search_files, get_file_metadata, list_recent_files) use fallback search
-- No SSE client started for real-time updates
-- Set to daemon's HTTP port (e.g., 8080) to enable full functionality
-
-**Config File Example** (`.agentic-memorizer/config.yaml`):
-```yaml
-mcp:
-  log_file: ~/.memorizer/mcp.log
-  log_level: info
-  daemon_host: localhost
-  daemon_port: 8080  # Set to 0 to disable daemon integration
-```
-
-**Command-Line Override**:
-```bash
-# Start with debug logging (overrides config file)
-memorizer mcp start --log-level debug
-
-# View logs in real-time
-tail -f ~/.memorizer/mcp.log
-```
-
-**Dual Output**:
-- **File**: Text-format logs written to `log_file` with rotation for persistent debugging
-- **Stderr**: Text-format real-time logs visible to MCP client for immediate feedback
-
-**Note**: Both outputs use `slog.NewTextHandler` (text format), not JSON format, despite the comment at line 164 of `cmd/mcp/subcommands/start.go` claiming JSON for file output. The actual implementation uses text format for both channels.
-
-**Environment Variables**:
-Configuration values can also be set via environment variables:
-```bash
-export MEMORIZER_MCP_LOG_FILE=~/.memorizer/mcp.log
-export MEMORIZER_MCP_LOG_LEVEL=debug
-```
-
----
+### Server (`server.go`)
+
+The Server struct orchestrates MCP operations. It holds configuration (daemon URL, process ID), state (transport, logger, initialized flag, subscriptions, prompts), and the protected file index. The Run method implements the message loop: read from transport, parse JSON-RPC, route to handler, send response. The handleMessage function dispatches on method name to specific handlers (initialize, tools/list, tools/call, resources/list, resources/read, etc.). Thread safety is achieved through RWMutex for index access and subscription manager for URI tracking.
+
+### Transport Interface and Stdio (`transport/`)
+
+The Transport interface defines Read, Write, and Close methods for message I/O. The StdioTransport implementation provides line-delimited JSON communication: Read uses a buffered reader to read until newline and returns raw JSON bytes; Write uses a mutex-protected stdout write with automatic newline termination. Empty lines are skipped during read. This enables reliable subprocess communication without complex framing.
+
+### Protocol Types (`protocol/`)
+
+The protocol package defines all JSON-RPC 2.0 and MCP message types. Core types include JSONRPCRequest, JSONRPCResponse, JSONRPCNotification, and JSONRPCError with standard error codes (-32700 through -32603) plus MCP-specific codes (-1 through -3). Specialized types include InitializeRequest/Response for capability negotiation, ToolsListResponse/ToolsCallRequest/ToolsCallResponse for tool operations, and ResourcesListResponse/ResourcesReadRequest/ResourcesReadResponse for resource operations. Prompt types define the prompts/list and prompts/get interfaces.
+
+### Handlers (`handlers/`)
+
+Five tool handlers implement the Handler interface:
+
+**search_files** - Semantic search with query, optional categories filter, and max_results limit. Tries daemon API first, falls back to index search with fuzzy matching.
+
+**get_file_metadata** - Complete metadata for a file by path. Tries daemon API first, falls back to case-insensitive index lookup with substring matching.
+
+**list_recent_files** - Files modified within a time window (days parameter) with result limit. Tries daemon API first, falls back to index filtering and sorting.
+
+**get_related_files** - Related files through graph relationships (shared tags, topics, entities). Daemon-only with no fallback.
+
+**search_entities** - Files mentioning a specific entity with optional type filter. Daemon-only with no fallback.
+
+Each handler receives Dependencies for daemon communication and index access. The BaseHandler provides common functionality including CallDaemonAPI for HTTP requests.
+
+### SSE Client (`sse_client.go`)
+
+The SSEClient maintains a persistent connection to the daemon's /sse endpoint for real-time notifications. It sends correlation headers (X-Client-ID, X-Client-Type, X-Client-Version) for distributed logging. On receiving events (index_snapshot, index_updated), it calls server.ReloadIndex to update the index atomically, then sends notifications/resources/updated for each subscribed resource URI. Automatic reconnection with 5-second backoff handles transient failures. Buffer sizing starts at 64KB and expands to 10MB for large index payloads.
+
+### Subscription Manager (`subscriptions.go`)
+
+The subscription manager provides thread-safe tracking of resource subscriptions. Subscribe and Unsubscribe modify a map of URI to bool. GetSubscriptions returns all subscribed URIs for notification delivery. IsSubscribed checks individual URIs. The manager enables efficient notification filtering without iterating all possible resources.
+
+### Prompt Registry (`prompts.go`)
+
+The prompt registry defines three built-in prompts for file analysis workflows:
+
+**analyze-file** - Takes file_path argument, generates detailed analysis prompt covering purpose, concepts, relationships, and patterns.
+
+**search-context** - Takes topic (required) and category (optional) arguments, helps construct effective search queries with key terms and file types.
+
+**explain-summary** - Takes file_path argument, explains semantic analysis results including tags, topics, and document type.
+
+GeneratePromptMessages looks up files in the index and formats contextual prompts with semantic metadata.
+
+### Resources
+
+The server exposes three resources representing the file index in different formats:
+
+**memorizer://index** - XML format with schema metadata, suitable for Claude Code integration.
+
+**memorizer://index/markdown** - Human-readable Markdown format for display.
+
+**memorizer://index/json** - Structured JSON format for programmatic access.
+
+Resources are read via the resources/read method, which formats the current index using the internal/format package. Subscriptions track which resources clients want change notifications for.
 
 ## Integration Points
 
-### Index System Integration
+### Daemon HTTP API
 
-The MCP server integrates with the index subsystem through daemon API access:
+The MCP server acts as an HTTP client to the daemon API. Tool handlers call daemon endpoints for current data: POST /api/v1/search for search_files, GET /api/v1/files/{path} for get_file_metadata, GET /api/v1/files/recent for list_recent_files, GET /api/v1/files/related for get_related_files, and GET /api/v1/entities/search for search_entities. The 30-second timeout handles slow graph queries gracefully.
 
-**Index Loading** (`cmd/mcp/subcommands/start.go:78-98`)
-- Server fetches initial index from daemon HTTP API (`/api/v1/index`) at startup
-- Falls back to empty index if daemon unavailable, then waits for SSE updates
-- No direct file system access or index.Manager usage
-- No write operations or locking required
+### Daemon SSE Endpoint
 
-**Index Schema Compatibility**
-- Uses `types.FileIndex` and `types.FileEntry` structures (graph-native format)
-- Shares type definitions with daemon and integration subsystems
-- No MCP-specific modifications to index format
-- Compatible with all existing index generation logic
-- Shares schema versioning with rest of system
+The SSE client connects to the daemon's /sse endpoint for real-time index updates. Events include index_snapshot (full replacement) and index_updated (incremental). This enables the MCP server to serve current data without polling or restart.
 
-**Error Handling**
-- Daemon unreachable: Logs warning, starts with empty index
-- Malformed index response: Logs error, starts with empty index
-- Empty index: Works correctly, returns zero results from tools
-- SSE updates populate index when daemon becomes available
+### Integration Adapters
 
-The integration maintains complete separation between index generation (daemon) and index consumption (MCP server), with all data flowing through the daemon HTTP API.
+Integration adapters (Claude Code, Gemini CLI, Codex CLI) configure their respective tools to spawn the MCP server as a subprocess. The server communicates via stdio, receiving JSON-RPC requests and returning responses. Configuration includes the binary path and "mcp start" arguments.
 
-### Format Package Integration
+### Configuration System
 
-The MCP server uses the unified format package for resource formatting, consistent with all other subsystems:
+MCP configuration is read from the config subsystem: mcp.daemon_host and mcp.daemon_port construct the daemon URL, mcp.log_file sets the log output path, and mcp.log_level controls verbosity. The --log-level flag overrides the config setting for debugging.
 
-**Format Package Architecture**
-The server delegates resource formatting to the format package (`internal/format/`) which provides a builder-formatter pattern:
-- **FilesContent Builder** - Wraps FileIndex for rendering (`format.NewFilesContent(index)`)
-- **Formatter Registry** - Provides formatter instances (`format.GetFormatter(name)`)
-- **Multiple Formatters** - XML, Markdown, JSON, YAML, Text implementations
+### Format Subsystem
 
-**Resource Formatting Implementation** (`server.go:402-430`)
-```go
-// XML resource formatting
-formatter, err := format.GetFormatter("xml")
-graphContent := format.NewFilesContent(s.index)
-content, err := formatter.Format(graphContent)
+Resource reading uses the format subsystem for output generation. FilesContent wraps the file index, and formatters (XML, JSON, Markdown) render it to the requested format. This ensures consistent output styling across resources and CLI commands.
 
-// Markdown resource formatting
-formatter, err := format.GetFormatter("markdown")
-graphContent := format.NewFilesContent(s.index)
-content, err := formatter.Format(graphContent)
+### CLI Commands
 
-// JSON resource formatting
-formatter, err := format.GetFormatter("json")
-graphContent := format.NewFilesContent(s.index)
-content, err := formatter.Format(graphContent)
-```
-
-**Benefits**
-- Zero code duplication across integration methods (hooks, MCP, read command)
-- Consistent formatting through unified format package
-- Automatic inheritance of format improvements and bug fixes
-- Shared FilesContent builder pattern across all subsystems
-
-**Resource URIs and Routing** (`server.go:309-322`)
-- `memorizer://index` → XML formatter (application/xml MIME type)
-- `memorizer://index/markdown` → Markdown formatter (text/markdown MIME type)
-- `memorizer://index/json` → JSON formatter (application/json MIME type)
-
-Clients request their preferred format through URI routing in `handleResourcesRead()`, which uses a switch-case to map URIs to formatter calls. MIME types are provided for proper content negotiation.
-
-### Daemon Integration
-
-The MCP server integrates with the daemon through a sophisticated real-time architecture:
-
-**Integration Architecture**
-- **Initial Index Loading**: MCP server fetches current index via daemon HTTP API at startup (`/api/v1/index`)
-- **Real-Time Updates**: SSE client connects to daemon notification stream (`/sse` endpoint)
-- **Fallback Mode**: MCP server can operate standalone with in-memory index if daemon unavailable
-- **Tool Routing**: Index-based tools use fallback search; graph-based tools require daemon connection
-
-**SSE Real-Time Update Flow** (`internal/mcp/sse_client.go`)
-1. MCP server starts SSE client on daemon `/sse` endpoint (if `daemon_port` configured)
-2. SSE client listens for `index_snapshot` and `index_updated` events
-3. On event received, MCP server reloads in-memory index (`ReloadIndex()`)
-4. Subscribed MCP clients receive `notifications/resources/updated` JSON-RPC notifications
-5. AI tools can re-fetch updated resources without MCP server restart
-
-**Configuration-Based Behavior**
-- `daemon_port > 0`: Full integration with daemon API and SSE updates
-- `daemon_port = 0`: Standalone mode, uses empty index or pre-loaded snapshot
-
-**Dual-Mode Operation**
-- **Connected Mode** (daemon available):
-  - Index-based tools query daemon API for graph-powered results
-  - Graph-based tools (get_related_files, search_entities) use FalkorDB
-  - Real-time index updates via SSE stream
-  - Resource subscriptions notify clients of changes
-
-- **Standalone Mode** (daemon unavailable):
-  - Index-based tools fall back to in-memory semantic search
-  - Graph-based tools return "daemon API not available" errors
-  - No real-time updates (static index snapshot)
-  - Subscriptions tracked but never notified
-
-**User Workflow (Connected Mode)**
-1. Start daemon: `memorizer daemon start`
-2. Daemon builds initial index and starts HTTP API
-3. Configure MCP: Set `daemon_port` to daemon's HTTP port (e.g., 8080)
-4. Start MCP server: `memorizer mcp start` (invoked by AI tool)
-5. MCP fetches current index from daemon API
-6. SSE client begins streaming daemon notifications
-7. Index updates propagate in real-time to MCP clients
-8. No MCP restart needed for index changes
-
-This architecture provides the best of both worlds: simple standalone operation for basic use cases and sophisticated real-time integration for production workflows.
-
-### External Client Integration
-
-The MCP server exposes a standard interface for AI tool integration:
-
-**GitHub Copilot CLI**
-- Configuration: `~/.github-copilot/config.json` MCP servers section
-- Invocation: Copilot spawns `memorizer mcp start` as subprocess
-- Transport: Stdio (line-delimited JSON over stdin/stdout)
-- Capabilities: Can list resources, read index, call search tools
-- Use case: "@memorizer find all Terraform modules" during CLI chat
-
-**Claude Code**
-- Configuration: Dual mode - SessionStart hooks (existing) OR MCP integration (future)
-- MCP mode provides richer interaction than static hook injection
-- Same stdio transport as Copilot
-- Enables dynamic search during coding sessions
-
-**Other MCP Clients**
-- Cline, Continue, Cursor, Aider (roadmap support)
-- Any tool implementing MCP client protocol
-- Standard subprocess invocation model
-- Configuration varies by tool but protocol remains consistent
-
-**Client Responsibilities**
-- Spawn server process with correct environment
-- Handle stdio transport (send/receive JSON-RPC messages)
-- Perform initialize handshake
-- Discover capabilities via list endpoints
-- Invoke resources/tools as needed
-- Clean up subprocess on exit
-
-The server remains agnostic to client implementation details, ensuring broad compatibility across the AI tool ecosystem.
-
----
-
-## Debugging and Logging
-
-### MCP Server Logs
-
-The MCP server maintains detailed logs for debugging protocol issues and client interactions:
-
-**Log Configuration** (`.agentic-memorizer/config.yaml`):
-```yaml
-mcp:
-  log_file: ~/.memorizer/mcp.log  # Log file path
-  log_level: info                          # debug, info, warn, error
-```
-
-**Log Output**:
-- **File**: `~/.memorizer/mcp.log` (structured logs for debugging and analysis)
-- **Stderr**: Real-time logs visible to MCP client (text format, live feedback)
-- **Rotation**: Automatic at 10MB file size, keeps 3 backup files, 28-day retention, compression enabled
-
-**Log Levels**:
-- `debug`: All messages including raw JSON-RPC traffic and detailed protocol flow
-- `info`: Server lifecycle events, client connections, tool invocations, resource requests
-- `warn`: Protocol violations, unrecognized methods, invalid protocol versions
-- `error`: Parsing failures, handler errors, transport issues
-
-**Viewing Logs**:
-```bash
-# Tail live logs
-tail -f ~/.memorizer/mcp.log
-
-# View with filtering
-grep -i error ~/.memorizer/mcp.log
-
-# Search for specific client session
-grep "client=claude-code" ~/.memorizer/mcp.log
-
-# Start server with debug logging
-memorizer mcp start --log-level debug
-```
-
-**Common Debugging Scenarios**:
-
-*Protocol handshake failures*:
-```bash
-# Check for initialize request and protocol version compatibility
-grep "Received initialize request" ~/.memorizer/mcp.log
-```
-Look for protocol version mismatches or missing client info.
-
-*Tool call errors*:
-```bash
-# Find tool invocations and their results
-grep "Calling tool" ~/.memorizer/mcp.log
-```
-Check for invalid arguments, missing index data, or search failures.
-
-*Client disconnects*:
-```bash
-# Search for disconnect events
-grep -E "(Client disconnected|EOF)" ~/.memorizer/mcp.log
-```
-Unexpected disconnects may indicate protocol errors or client-side issues.
-
-*Performance issues*:
-```bash
-# Enable debug logging to see message timing
-memorizer mcp start --log-level debug 2>&1 | grep -E "(Received|Sending)"
-```
-Watch for slow handlers or large response payloads.
-
-**Debug Logging Examples**:
-
-With `log_level: debug`, the server logs every JSON-RPC message:
-```
-time=2025-11-06T18:20:36.717 level=DEBUG msg="Received message" raw_data="{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",...}"
-time=2025-11-06T18:20:36.717 level=DEBUG msg="Sending response" raw_data="{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{...}}"
-```
-
-This enables complete protocol-level debugging including message contents, timing, and sequencing.
-
----
+The cmd/mcp/subcommands/start.go command initializes the MCP server. It loads configuration, constructs the daemon URL, attempts initial index fetch, creates the server with handlers and transport, and enters the message loop. Signal handling enables graceful shutdown on SIGTERM/SIGINT.
 
 ## Glossary
 
-**Capability Negotiation**
-The process during MCP handshake where client and server exchange information about supported features. Clients learn which resources, tools, and prompts are available; servers learn client identity and protocol version. Enables graceful degradation when features are unsupported.
+**Capability**
+A feature supported by the MCP server or client, exchanged during initialization. Server capabilities include resources (with subscribe and listChanged), tools, and prompts.
 
-**Handler Registry**
-A design pattern using maps to associate capability names (tool names, resource URIs, prompt names) with their implementation functions. Enables dynamic dispatch without hardcoded routing logic and supports runtime registration of new capabilities.
+**Fallback**
+The strategy of attempting the daemon API first, then using the in-memory index if unavailable. Enables degraded operation without complete failure.
+
+**Handler**
+An implementation of tool logic that receives dependencies and returns results. Handlers are registered by name and invoked on tools/call requests.
+
+**Initialize**
+The first message exchange establishing protocol version and capabilities. The server waits for initialize before processing other requests.
 
 **JSON-RPC 2.0**
-A stateless, lightweight remote procedure call protocol encoded in JSON. Defines standard message structures for requests (method calls), responses (results or errors), and notifications (fire-and-forget). Forms the transport layer for MCP.
+A stateless remote procedure call protocol using JSON encoding. MCP uses JSON-RPC for all request/response/notification messaging.
 
 **MCP (Model Context Protocol)**
-An open standard protocol introduced by Anthropic for integrating AI tools with external context sources and capabilities. Enables standardized access to data (resources), executable functions (tools), and templated workflows (prompts) across different AI assistant platforms.
+A standardized protocol for AI assistants to access external tools and resources. Memorizer's MCP server provides file discovery and search capabilities.
 
-**Prompts**
-Templated workflows in MCP that guide users through multi-step operations. Prompts can collect parameters, provide context, and return structured guidance for AI tools to follow. Planned for Phase 5 implementation in agentic-memorizer.
+**Notification**
+A JSON-RPC message that expects no response (no id field). Used for initialized acknowledgment and resources/updated events.
 
-**Resources**
-Static context endpoints in MCP that provide read-only access to data sources. In agentic-memorizer, resources expose the precomputed file index in three formats (XML, Markdown, JSON) via URIs like `memorizer://index`.
+**Prompt**
+A template for generating contextual messages that assistants can use. Prompts include arguments for customization and return formatted messages.
 
-**Semantic Search**
-A search technique that matches queries against multiple semantic fields (summaries, tags, topics) beyond simple filename matching. Uses weighted scoring to rank results by relevance, with higher weights for more specific matches like filenames.
+**Resource**
+A named data source accessible via URI. Memorizer exposes the file index as three resources in different formats.
+
+**SSE (Server-Sent Events)**
+A protocol for server-to-client streaming over HTTP. The daemon sends index updates via SSE, which the MCP server receives for real-time synchronization.
 
 **Stdio Transport**
-A communication mechanism using standard input/output streams for bidirectional message passing. MCP clients spawn server processes and exchange JSON-RPC messages over stdin/stdout, with each message terminated by a newline. Logging goes to stderr to keep protocol channels clean.
+Communication over standard input/output streams. The MCP server reads JSON-RPC from stdin and writes responses to stdout, enabling subprocess integration.
 
-**Tools**
-Executable functions in MCP that AI assistants can invoke with parameters. Tools define their inputs using JSON Schema for validation and return structured results. In agentic-memorizer, tools enable search, metadata retrieval, and time-based file filtering during AI sessions.
+**Subscription**
+A client's request to receive notifications when a resource changes. The server tracks subscriptions and sends updates only for subscribed URIs.
 
-**Weighted Scoring**
-An algorithm that assigns different point values to different types of matches when ranking search results. In agentic-memorizer's semantic search, filename matches receive the highest weight (3.0), followed by summary matches (2.0), tag matches (1.5), topic matches (1.0), and document type matches (0.5). Results are sorted by cumulative score.
-
-**Server-Sent Events (SSE)**
-A standard HTTP-based protocol for server-to-client real-time notifications using long-lived connections. The daemon publishes index update events via `/sse` endpoint; the MCP server's SSE client subscribes to receive these events and propagate index changes to connected AI tools without polling.
-
-**Resource Subscriptions**
-A mechanism where MCP clients explicitly subscribe to specific resource URIs to receive notifications when those resources change. When the daemon updates the index, subscribed clients receive `notifications/resources/updated` JSON-RPC messages prompting them to re-fetch the updated data.
-
-**Fallback Mode**
-An operational mode where the MCP server uses in-memory index search when daemon API is unavailable. Index-based tools (search_files, get_file_metadata, list_recent_files) fall back to local semantic search, while graph-based tools (get_related_files, search_entities) return errors requiring daemon connectivity.
-
----
-
-## Additional Resources
-
-For detailed implementation information, see:
-- Protocol types: `internal/mcp/protocol/`
-- Server implementation: `internal/mcp/server.go`
-- Search implementation: `internal/search/semantic.go`
-- CLI commands: `cmd/mcp/`
-
-For MCP specification details, visit: https://modelcontextprotocol.io
+**Tool**
+A callable function exposed via the MCP protocol. Memorizer provides five tools for file search, metadata, recents, related files, and entity search.

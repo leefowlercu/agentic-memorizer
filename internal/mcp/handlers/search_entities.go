@@ -50,21 +50,21 @@ func (h *SearchEntitiesHandler) Execute(ctx context.Context, args json.RawMessag
 		return nil, fmt.Errorf("daemon API not available; entity search requires daemon connection")
 	}
 
-	// Search by entity via daemon API
-	path := fmt.Sprintf("/api/v1/entities/search?entity=%s&limit=%d", params.Entity, params.MaxResults)
+	// Use unified files endpoint with entity parameter
+	path := fmt.Sprintf("/api/v1/files?entity=%s&limit=%d", params.Entity, params.MaxResults)
 	respBody, err := h.deps.CallDaemonAPI(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search entities; %w", err)
 	}
 
 	var entityResp struct {
-		Results []struct {
+		Files []struct {
 			Path      string `json:"path"`
 			Name      string `json:"name"`
 			Category  string `json:"category"`
 			Summary   string `json:"summary"`
 			MatchType string `json:"match_type"`
-		} `json:"results"`
+		} `json:"files"`
 		Count int `json:"count"`
 	}
 	if err := json.Unmarshal(respBody, &entityResp); err != nil {
@@ -72,8 +72,8 @@ func (h *SearchEntitiesHandler) Execute(ctx context.Context, args json.RawMessag
 	}
 
 	// Format results
-	formattedResults := make([]map[string]any, len(entityResp.Results))
-	for i, result := range entityResp.Results {
+	formattedResults := make([]map[string]any, len(entityResp.Files))
+	for i, result := range entityResp.Files {
 		formattedResults[i] = map[string]any{
 			"path":       result.Path,
 			"name":       result.Name,

@@ -17,7 +17,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 Agentic Memorizer is a local file memorizer for Claude Code that provides automatic awareness and understanding of files through AI-powered semantic analysis, plus user-defined facts that inject persistent context into every conversation. A background daemon watches a memory directory, extracts metadata, performs semantic analysis via multiple AI providers (Claude, OpenAI, Gemini), and maintains a knowledge graph in FalkorDB that integrates with Claude via hooks (SessionStart for files, UserPromptSubmit for facts) and MCP tools.
 
-**Current Version:** v0.13.0
+**Current Version:** v0.14.0
 
 ## Project Principles
 
@@ -81,11 +81,11 @@ Jobs flow through a worker pool:
 
 **HTTP API** (`internal/daemon/api/`):
 - `GET /health` - Health with graph metrics
-- `POST /api/v1/search` - Graph-powered semantic search
-- `GET /api/v1/files/{path}` - File metadata with connections
-- `GET /api/v1/files/recent` - Recently modified files
-- `GET /api/v1/files/related` - Related files by shared tags/topics
-- `GET /api/v1/entities/search` - Files mentioning an entity
+- `GET /api/v1/files` - Unified query endpoint with params: `q`, `entity`, `tag`, `topic`, `category`, `days`, `limit`
+- `GET /api/v1/files/index` - Complete FileIndex export
+- `GET /api/v1/files/{path}` - File metadata with connections (supports `?related_limit=N`)
+- `GET /api/v1/facts/index` - All facts with statistics
+- `GET /api/v1/facts/{id}` - Individual fact by ID
 - `POST /api/v1/rebuild` - Trigger rebuild
 - `GET /sse` - Server-Sent Events for real-time updates
 
@@ -107,7 +107,7 @@ The Integration Registry (`internal/integrations/`) provides framework-agnostic 
 The MCP server (`internal/mcp/`) implements Model Context Protocol:
 - JSON-RPC 2.0 stdio transport
 - Five tools: search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
-- Connects to daemon HTTP API for graph queries
+- Connects to daemon HTTP API using unified `GET /api/v1/files` endpoint with query parameters
 
 ### Configuration System
 
@@ -117,7 +117,7 @@ Layered configuration with precedence: defaults -> YAML file -> environment vari
 
 **Hot-reloadable:** provider, api_key, model, workers, debounce_ms, log_level, http_port
 
-**Requires restart:** memory_root, cache_dir, log_file
+**Requires restart:** memory.root, cache_dir, log_file
 
 ## Subsystems Reference
 
@@ -132,6 +132,7 @@ Detailed technical documentation for each subsystem is available in `docs/subsys
 | [docker](docs/subsystems/docker/) | Docker container lifecycle management for FalkorDB |
 | [document](docs/subsystems/document/) | Office document extraction (DOCX, PPTX) via ZIP/XML parsing |
 | [e2e](docs/subsystems/e2e/) | End-to-end testing with isolated environments and Docker FalkorDB |
+| [fileops](docs/subsystems/fileops/) | File operations utilities for copy/move with conflict resolution |
 | [embeddings](docs/subsystems/embeddings/) | Vector embeddings for semantic similarity search |
 | [format](docs/subsystems/format/) | Structured CLI output with builder pattern and pluggable formatters |
 | [graph](docs/subsystems/graph/) | FalkorDB-powered knowledge graph for files and relationships |
@@ -140,6 +141,8 @@ Detailed technical documentation for each subsystem is available in `docs/subsys
 | [mcp](docs/subsystems/mcp/) | Model Context Protocol with JSON-RPC 2.0 and graph-powered tools |
 | [metadata](docs/subsystems/metadata/) | Fast metadata extraction with handlers for 8 file type categories |
 | [semantic](docs/subsystems/semantic/) | Multi-provider AI content understanding with intelligent routing |
+| [servicemanager](docs/subsystems/servicemanager/) | Service manager integration for systemd (Linux) and launchd (macOS) |
+| [skip](docs/subsystems/skip/) | File and directory skip pattern handling for daemon filtering |
 | [tui](docs/subsystems/tui/) | Interactive setup wizard built on Bubble Tea |
 | [version](docs/subsystems/version/) | Build-time version injection with embedded fallback |
 | [walker](docs/subsystems/walker/) | Recursive directory scanning with configurable filtering |
@@ -245,6 +248,9 @@ Each major subsystem operates independently with clean boundaries:
 - `internal/logging/` - Structured logging infrastructure
 - `internal/document/` - Office document extraction
 - `internal/tui/` - Terminal UI for initialization
+- `internal/fileops/` - File operations (copy, move, conflict resolution)
+- `internal/servicemanager/` - Service manager integration (systemd, launchd)
+- `internal/skip/` - Skip pattern handling for file filtering
 
 ### Handler/Adapter Patterns
 
@@ -368,6 +374,11 @@ make goreleaser-snapshot      # Test build without release
 # Facts management
 ./memorizer remember fact "fact content"      # Add a new fact
 ./memorizer forget fact <fact-id>             # Remove a fact by ID
+
+# File management
+./memorizer remember file ~/notes/doc.md      # Copy file into memory
+./memorizer remember file ~/docs/ --dir work  # Copy to subdirectory
+./memorizer forget file ~/.memorizer/memory/old.md  # Move to .forgotten/
 
 # Service manager integration
 ./memorizer daemon systemctl                  # Generate systemd unit file (Linux)

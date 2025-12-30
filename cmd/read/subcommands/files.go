@@ -112,7 +112,7 @@ func runReadFiles(cmd *cobra.Command, args []string) error {
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
-		MemoryRoot: cfg.MemoryRoot,
+		MemoryRoot: cfg.Memory.Root,
 	}
 
 	graphManager := graph.NewManager(graphConfig, logger)
@@ -134,7 +134,7 @@ func runReadFiles(cmd *cobra.Command, args []string) error {
 
 	// Export file index format
 	// Verbose mode includes related files per entry and graph insights
-	fileIdx, err := exporter.ToFileIndex(ctx, cfg.MemoryRoot, verbose)
+	fileIdx, err := exporter.ToFileIndex(ctx, cfg.Memory.Root, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to export file index; %w", err)
 	}
@@ -149,7 +149,7 @@ func runReadFiles(cmd *cobra.Command, args []string) error {
 
 func handleEmptyFilesIndex(cmd *cobra.Command, cfg *config.Config) error {
 	emptyIndex := &types.FileIndex{
-		MemoryRoot: cfg.MemoryRoot,
+		MemoryRoot: cfg.Memory.Root,
 		Files:      []types.FileEntry{},
 		Stats:      types.IndexStats{},
 	}

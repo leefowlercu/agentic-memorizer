@@ -60,7 +60,8 @@ func (h *ListRecentFilesHandler) Execute(ctx context.Context, args json.RawMessa
 }
 
 func (h *ListRecentFilesHandler) executeDaemon(ctx context.Context, days, limit int) (any, error) {
-	path := fmt.Sprintf("/api/v1/files/recent?days=%d&limit=%d", days, limit)
+	// Use unified files endpoint with days parameter
+	path := fmt.Sprintf("/api/v1/files?days=%d&limit=%d", days, limit)
 	respBody, err := h.deps.CallDaemonAPI(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, err

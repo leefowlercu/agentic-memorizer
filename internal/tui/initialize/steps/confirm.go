@@ -142,7 +142,7 @@ func (s *ConfirmStep) renderSummary() string {
 	var b strings.Builder
 
 	// Memory root
-	b.WriteString(s.summaryLine("Memory Directory", s.config.MemoryRoot))
+	b.WriteString(s.summaryLine("Memory Directory", s.config.Memory.Root))
 
 	// Semantic Provider
 	if s.config.Semantic.Enabled && s.config.Semantic.Provider != "" {

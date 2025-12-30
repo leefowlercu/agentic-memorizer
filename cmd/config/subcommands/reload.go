@@ -30,8 +30,8 @@ var ReloadCmd = &cobra.Command{
 		"- Rebuild interval\n" +
 		"- Skip patterns\n\n" +
 		"Settings that require daemon restart:\n" +
-		"- memory_root\n" +
-		"- analysis.cache_dir\n" +
+		"- memory.root\n" +
+		"- semantic.cache_dir\n" +
 		"- daemon.log_file",
 	Example: `  # Reload configuration
   memorizer config reload

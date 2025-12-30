@@ -7,17 +7,23 @@ import (
 
 // NOTE: graph import is still needed for other types (SearchResult, RelatedFile, RebuildHandler)
 
-// SearchRequest is the request body for POST /api/v1/search
-type SearchRequest struct {
-	Query    string `json:"query"`
-	Limit    int    `json:"limit,omitempty"`
-	Category string `json:"category,omitempty"`
+// FilesQueryResponse is the unified response for GET /api/v1/files
+// This replaces POST /api/v1/search, GET /api/v1/files/recent, and GET /api/v1/entities/search
+type FilesQueryResponse struct {
+	Files []graph.SearchResult `json:"files"`
+	Count int                  `json:"count"`
+	Query FilesQueryParams     `json:"query"`
 }
 
-// SearchResponse is the response for search endpoints
-type SearchResponse struct {
-	Results []graph.SearchResult `json:"results"`
-	Count   int                  `json:"count"`
+// FilesQueryParams echoes back the query parameters used
+type FilesQueryParams struct {
+	Q        string `json:"q,omitempty"`
+	Category string `json:"category,omitempty"`
+	Days     int    `json:"days,omitempty"`
+	Entity   string `json:"entity,omitempty"`
+	Tag      string `json:"tag,omitempty"`
+	Topic    string `json:"topic,omitempty"`
+	Limit    int    `json:"limit"`
 }
 
 // FileMetadataResponse is the response for GET /api/v1/files/{path}
@@ -26,27 +32,27 @@ type FileMetadataResponse struct {
 	File *types.FileEntry `json:"file"`
 }
 
-// RecentFilesResponse is the response for GET /api/v1/files/recent
-type RecentFilesResponse struct {
-	Files []graph.SearchResult `json:"files"`
-	Count int                  `json:"count"`
-}
-
-// RelatedFilesResponse is the response for GET /api/v1/files/related
-type RelatedFilesResponse struct {
-	Files []graph.RelatedFile `json:"files"`
-	Count int                 `json:"count"`
-}
-
-// EntitySearchResponse is the response for GET /api/v1/entities/search
-type EntitySearchResponse struct {
-	Results []graph.SearchResult `json:"results"`
-	Count   int                  `json:"count"`
-}
-
-// IndexResponse is the response for GET /api/v1/index
-type IndexResponse struct {
+// FilesIndexResponse is the response for GET /api/v1/files/index
+type FilesIndexResponse struct {
 	Index *types.FileIndex `json:"index"`
+}
+
+// FactsIndexResponse is the response for GET /api/v1/facts/index
+type FactsIndexResponse struct {
+	Facts []types.Fact `json:"facts"`
+	Count int          `json:"count"`
+	Stats FactsStats   `json:"stats"`
+}
+
+// FactsStats provides summary statistics for facts
+type FactsStats struct {
+	TotalFacts int `json:"total_facts"`
+	MaxFacts   int `json:"max_facts"`
+}
+
+// FactResponse is the response for GET /api/v1/facts/{id}
+type FactResponse struct {
+	Fact *types.Fact `json:"fact"`
 }
 
 // APIError represents an error response
@@ -66,6 +72,9 @@ type RebuildResponse struct {
 type RebuildHandler interface {
 	// Rebuild triggers an immediate index rebuild
 	Rebuild() error
+	// RebuildWithSync triggers a rebuild and optionally syncs graph with filesystem
+	// When sync is true, stale graph nodes (files no longer on disk) are removed
+	RebuildWithSync(sync bool) error
 	// ClearGraph clears all data from the graph
 	ClearGraph() error
 	// IsRebuilding returns true if a rebuild is in progress

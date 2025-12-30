@@ -112,7 +112,7 @@ func (a *GeminiCLIMCPAdapter) Setup(binaryPath string) error {
 		Command: binaryPath,
 		Args:    []string{"mcp", "start"},
 		Env: map[string]string{
-			"MEMORIZER_MEMORY_ROOT": cfg.MemoryRoot,
+			"MEMORIZER_MEMORY_ROOT": cfg.Memory.Root,
 		},
 	}
 

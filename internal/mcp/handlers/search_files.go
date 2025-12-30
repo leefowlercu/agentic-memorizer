@@ -58,32 +58,26 @@ func (h *SearchFilesHandler) executeDaemon(ctx context.Context, params struct {
 	Categories []string `json:"categories,omitempty"`
 	MaxResults int      `json:"max_results,omitempty"`
 }) (any, error) {
-	// Determine category filter
-	categoryFilter := ""
+	// Build query string for unified files endpoint
+	path := fmt.Sprintf("/api/v1/files?q=%s&limit=%d", params.Query, params.MaxResults)
 	if len(params.Categories) > 0 {
-		categoryFilter = params.Categories[0] // Use first category for filter
+		path += fmt.Sprintf("&category=%s", params.Categories[0])
 	}
 
-	reqBody := map[string]any{
-		"query":    params.Query,
-		"limit":    params.MaxResults,
-		"category": categoryFilter,
-	}
-
-	respBody, err := h.deps.CallDaemonAPI(ctx, "POST", "/api/v1/search", reqBody)
+	respBody, err := h.deps.CallDaemonAPI(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var searchResp struct {
-		Results []struct {
+		Files []struct {
 			Path      string  `json:"path"`
 			Name      string  `json:"name"`
 			Category  string  `json:"category"`
 			Score     float64 `json:"score"`
 			MatchType string  `json:"match_type"`
 			Summary   string  `json:"summary"`
-		} `json:"results"`
+		} `json:"files"`
 		Count int `json:"count"`
 	}
 	if err := json.Unmarshal(respBody, &searchResp); err != nil {
@@ -91,8 +85,8 @@ func (h *SearchFilesHandler) executeDaemon(ctx context.Context, params struct {
 	}
 
 	// Format API results
-	formattedResults := make([]map[string]any, len(searchResp.Results))
-	for i, result := range searchResp.Results {
+	formattedResults := make([]map[string]any, len(searchResp.Files))
+	for i, result := range searchResp.Files {
 		formattedResults[i] = map[string]any{
 			"path":       result.Path,
 			"name":       result.Name,

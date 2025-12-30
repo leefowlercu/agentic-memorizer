@@ -11,10 +11,10 @@ func ValidateReload(oldCfg, newCfg *Config) error {
 	var errors []string
 
 	// Check immutable fields that require daemon restart
-	if oldCfg.MemoryRoot != newCfg.MemoryRoot {
+	if oldCfg.Memory.Root != newCfg.Memory.Root {
 		errors = append(errors, fmt.Sprintf(
-			"memory_root cannot be changed during reload (old: %s, new: %s) - restart daemon required",
-			oldCfg.MemoryRoot, newCfg.MemoryRoot))
+			"memory.root cannot be changed during reload (old: %s, new: %s) - restart daemon required",
+			oldCfg.Memory.Root, newCfg.Memory.Root))
 	}
 
 	if oldCfg.Semantic.CacheDir != newCfg.Semantic.CacheDir {

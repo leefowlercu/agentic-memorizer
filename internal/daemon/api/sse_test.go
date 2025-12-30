@@ -508,8 +508,7 @@ func TestHTTPServer_APITimeout(t *testing.T) {
 	// We can't easily test a real timeout without mocking, but we can verify
 	// the endpoint is wrapped with timeout middleware by checking it doesn't hang
 	start := time.Now()
-	resp, err := http.Post(baseURL+"/api/v1/search", "application/json",
-		strings.NewReader(`{"query":"test"}`))
+	resp, err := http.Get(baseURL + "/api/v1/files?q=test")
 	elapsed := time.Since(start)
 
 	// Should return error quickly (graph not available), not hang

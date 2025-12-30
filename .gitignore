@@ -40,3 +40,6 @@ docs/wip/
 # Goreleaser
 dist/
 .next-version
+
+# To-do files
+TODO.md

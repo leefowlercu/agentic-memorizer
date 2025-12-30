@@ -265,7 +265,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 		{
 			name: "valid config with MCP",
 			cfg: &Config{
-				MemoryRoot: "~/.memorizer/memory",
+				Memory: MemoryConfig{Root: "~/.memorizer/memory"},
 				Semantic: SemanticConfig{
 					Model:           "claude-sonnet-4-5-20250929",
 					MaxTokens:       1500,
@@ -295,7 +295,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 		{
 			name: "invalid MCP log level",
 			cfg: &Config{
-				MemoryRoot: "~/.memorizer/memory",
+				Memory: MemoryConfig{Root: "~/.memorizer/memory"},
 				Semantic: SemanticConfig{
 					Model:           "claude-sonnet-4-5-20250929",
 					MaxTokens:       1500,
@@ -326,7 +326,7 @@ func TestValidateConfig_MCP(t *testing.T) {
 		{
 			name: "unsafe MCP log file path",
 			cfg: &Config{
-				MemoryRoot: "~/.memorizer/memory",
+				Memory: MemoryConfig{Root: "~/.memorizer/memory"},
 				Semantic: SemanticConfig{
 					Model:           "claude-sonnet-4-5-20250929",
 					MaxTokens:       1500,

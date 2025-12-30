@@ -123,7 +123,7 @@ func (a *CodexCLIMCPAdapter) Setup(binaryPath string) error {
 		Args:    []string{"mcp", "start"},
 		Enabled: &enabled,
 		Env: map[string]string{
-			"MEMORIZER_MEMORY_ROOT": cfg.MemoryRoot,
+			"MEMORIZER_MEMORY_ROOT": cfg.Memory.Root,
 		},
 	}
 

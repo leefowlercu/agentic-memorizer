@@ -2,7 +2,7 @@
 
 Layered configuration management with YAML files, environment variable overrides, validation, and hot-reload support.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
 **Last Updated:** 2025-12-29
 
@@ -38,7 +38,7 @@ Environment variables use underscore replacement for nested keys (e.g., `MEMORIZ
 
 Settings are classified into three tiers based on user exposure:
 
-- **Minimal** - Included in initialized config files; settings users typically need to customize (memory_root, semantic provider/key/model, ports, log levels)
+- **Minimal** - Included in initialized config files; settings users typically need to customize (memory.root, semantic provider/key/model, ports, log levels)
 - **Advanced** - Use defaults but can be overridden; power-user settings (workers, debounce, rate limits, timeouts)
 - **Hardcoded** - Not configurable; conventions and internal constants (environment variable names, cache behavior, batch sizes)
 
@@ -78,8 +78,9 @@ The ValidateReload function enforces this distinction, preventing unsafe changes
 
 The Config struct (`internal/config/types.go`) defines the complete configuration structure with sections for:
 
-- **SemanticConfig** - Provider selection, credentials, analysis constraints, caching, rate limiting
-- **DaemonConfig** - Worker pool, debouncing, HTTP server, logging
+- **MemoryConfig** - Memory directory root path (`memory.root`)
+- **SemanticConfig** - AI provider selection, credentials, analysis constraints, caching, rate limiting
+- **DaemonConfig** - File watching skip patterns (`skip_hidden`, `skip_dirs`, `skip_files`, `skip_extensions`), worker pool, debouncing, HTTP server, logging
 - **MCPConfig** - MCP server logging and daemon connectivity
 - **GraphConfig** - FalkorDB connection and similarity search settings
 - **EmbeddingsConfig** - Embedding provider configuration

@@ -21,6 +21,8 @@ The subsystem documentation provides:
 - **Core**
   - [CLI](#cli)
   - [Daemon](#daemon)
+  - [Fileops](#fileops)
+  - [Skip](#skip)
   - [Walker](#walker)
   - [Watcher](#watcher)
 - **Processing**
@@ -46,6 +48,7 @@ The subsystem documentation provides:
   - [Version](#version)
 - **Infrastructure**
   - [Docker](#docker)
+  - [Servicemanager](#servicemanager)
 - **Testing**
   - [E2E](#e2e)
 
@@ -55,13 +58,14 @@ The subsystem documentation provides:
 
 **Status:** ✅ Documented
 
-Cobra-based CLI with hierarchical command structure, input validation via PreRunE hooks, and consistent output formatting for daemon management, integration setup, and memory operations.
+Cobra-based CLI with hierarchical command structure, input validation via PreRunE hooks, and consistent output formatting for daemon management, integration setup, file management, and memory operations.
 
 **Key Features:**
 
 - Ten parent commands with subcommands organized by functional area
 - PreRunE input validation distinguishing user errors from runtime errors
 - Consistent output through format subsystem builders
+- File management with copy/move, conflict resolution, and batch processing
 - Interactive TUI wizard and unattended scripted modes for initialization
 - Shared config loading and output helpers
 - Integration auto-detection for binary path resolution
@@ -72,6 +76,8 @@ Cobra-based CLI with hierarchical command structure, input validation via PreRun
 - `cmd/initialize/initialize.go` - Interactive and unattended setup modes
 - `cmd/daemon/` - Daemon lifecycle: start, stop, status, restart, rebuild, logs, systemctl, launchctl
 - `cmd/integrations/` - Integration management: list, detect, setup, remove, health
+- `cmd/remember/` - Memory addition: file (copy to memory), fact (store in graph)
+- `cmd/forget/` - Memory removal: file (move to .forgotten), fact (delete from graph)
 - `cmd/read/` - Memory access: files, facts
 - `cmd/shared/` - Common config and output helpers
 
@@ -89,9 +95,9 @@ Background file monitoring and knowledge graph maintenance with parallel process
 
 - Background file monitoring with real-time change detection via fsnotify
 - Parallel file processing through configurable worker pool with rate limiting
-- FalkorDB knowledge graph maintenance for files, tags, topics, and entities
+- FalkorDB knowledge graph maintenance for files, tags, topics, entities, and facts
 - Configuration hot-reload via SIGHUP without daemon restart
-- HTTP API for health monitoring, semantic search, and graph queries
+- Unified HTTP API with query parameters for search, filtering, and facts
 - Server-Sent Events for real-time client notifications
 - External process supervision integration (systemd, launchd)
 
@@ -105,6 +111,54 @@ Background file monitoring and knowledge graph maintenance with parallel process
 - `internal/daemon/signals.go` - Signal handling (SIGINT, SIGHUP, SIGUSR1)
 
 **See:** [daemon/README.md](./daemon/README.md)
+
+---
+
+### [Fileops](./fileops/)
+
+**Status:** ✅ Documented
+
+Filesystem utilities for copying and moving files with automatic conflict resolution, cross-filesystem support, and batch operations.
+
+**Key Features:**
+
+- Copy and move operations for files and directories with recursive support
+- Automatic conflict resolution via `-N` suffix pattern (file.md → file-1.md)
+- Cross-filesystem move fallback using copy+delete when rename fails
+- Batch processing with continue-on-failure semantics
+- Path validation to prevent directory traversal attacks
+- Permission preservation for copied files
+
+**Primary Components:**
+
+- `internal/fileops/copy.go` - Copy, CopyBatch, CopyToDir with CopyResult tracking
+- `internal/fileops/move.go` - Move, MoveBatch, MoveToDir with cross-filesystem fallback
+- `internal/fileops/conflict.go` - ResolveConflict with compound extension handling
+- `internal/fileops/paths.go` - IsInDirectory, ValidatePath, EnsureDir, PathExists utilities
+
+**See:** [fileops/README.md](./fileops/README.md)
+
+---
+
+### [Skip](./skip/)
+
+**Status:** ✅ Documented
+
+Configurable file and directory filtering for consistent skip behavior across the walker and watcher subsystems.
+
+**Key Features:**
+
+- Two-tier filtering with hardcoded always-skip directories (.git, .cache, .forgotten)
+- Configurable hidden file handling via SkipHidden toggle
+- Directory, file name, and extension-based pattern matching
+- Unified ShouldSkip interface for files and directories
+- Consistent behavior across walker and watcher subsystems
+
+**Primary Components:**
+
+- `internal/skip/skip.go` - Config struct, AlwaysSkipDirs, ShouldSkipDir, ShouldSkipFile, ShouldSkip functions
+
+**See:** [skip/README.md](./skip/README.md)
 
 ---
 
@@ -323,6 +377,7 @@ Layered configuration management with YAML files, environment variable overrides
 **Key Features:**
 
 - Layered configuration with clear precedence (defaults, YAML, environment variables)
+- Hierarchical structure with memory.root and daemon skip patterns
 - Three-tier settings (minimal, advanced, hardcoded) for appropriate user exposure
 - Error accumulation with actionable suggestions during validation
 - Hot-reload support for non-structural configuration changes
@@ -406,7 +461,7 @@ Model Context Protocol implementation with JSON-RPC 2.0 messaging, stdio transpo
 
 - JSON-RPC 2.0 protocol with standard error codes and MCP-specific extensions
 - Stdio transport with line-delimited JSON for subprocess communication
-- Five graph-powered tools: search_files, get_file_metadata, list_recent_files, get_related_files, search_entities
+- Five graph-powered tools using unified daemon API with query parameters
 - Three resources: file index in XML, JSON, and Markdown formats with subscription support
 - Three built-in prompts: analyze-file, search-context, explain-summary
 - Partial fallback for two tools (get_file_metadata, list_recent_files) when daemon unavailable
@@ -530,6 +585,31 @@ Docker container lifecycle management for FalkorDB knowledge graph with availabi
 
 ---
 
+### [Servicemanager](./servicemanager/)
+
+**Status:** ✅ Documented
+
+Platform-specific service integration for systemd (Linux) and launchd (macOS) enabling automatic daemon startup and system-level supervision.
+
+**Key Features:**
+
+- Platform detection for Linux (systemd) and macOS (launchd)
+- Binary path resolution via executable, common paths, and PATH lookup
+- User-level and system-level service installation options
+- Security hardening (NoNewPrivileges, PrivateTmp for systemd)
+- Automatic restart on failure with configurable delays
+- Complete installation instructions for each platform and mode
+
+**Primary Components:**
+
+- `internal/servicemanager/servicemanager.go` - Platform detection and binary path resolution
+- `internal/servicemanager/systemd.go` - Systemd unit file generation with user/system modes
+- `internal/servicemanager/launchd.go` - Launchd plist generation with agent/daemon modes
+
+**See:** [servicemanager/README.md](./servicemanager/README.md)
+
+---
+
 ### [E2E](./e2e/)
 
 **Status:** ✅ Documented
@@ -569,7 +649,13 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 
 **Recent Updates:**
 
-- Updated mcp subsystem documentation - search_files now requires daemon (2025-12-29)
+- Created skip subsystem documentation (2025-12-29)
+- Created servicemanager subsystem documentation (2025-12-29)
+- Created fileops subsystem documentation (2025-12-29)
+- Updated daemon subsystem documentation - unified HTTP API endpoints, facts API (2025-12-29)
+- Updated config subsystem documentation - memory.root, daemon skip patterns (2025-12-29)
+- Updated mcp subsystem documentation - unified daemon API endpoints (2025-12-29)
+- Updated cli subsystem documentation - added remember/forget file commands (2025-12-29)
 - Created cli subsystem documentation (2025-12-29)
 - Created tui subsystem documentation (2025-12-29)
 - Created logging subsystem documentation (2025-12-29)

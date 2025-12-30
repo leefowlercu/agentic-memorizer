@@ -224,7 +224,8 @@ func (h *E2EHarness) createConfigWithHTTPPort(httpPort int) error {
 	}
 
 	config := fmt.Sprintf(`# E2E Test Configuration
-memory_root: %s
+memory:
+  root: %s
 
 semantic:
   enabled: false

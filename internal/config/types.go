@@ -3,12 +3,17 @@ package config
 import "fmt"
 
 type Config struct {
-	MemoryRoot string           `mapstructure:"memory_root" yaml:"memory_root"`
+	Memory     MemoryConfig     `mapstructure:"memory" yaml:"memory"`
 	Semantic   SemanticConfig   `mapstructure:"semantic" yaml:"semantic"`
 	Daemon     DaemonConfig     `mapstructure:"daemon" yaml:"daemon"`
 	MCP        MCPConfig        `mapstructure:"mcp" yaml:"mcp"`
 	Graph      GraphConfig      `mapstructure:"graph" yaml:"graph"`
 	Embeddings EmbeddingsConfig `mapstructure:"embeddings" yaml:"embeddings"`
+}
+
+// MemoryConfig contains memory directory configuration.
+type MemoryConfig struct {
+	Root string `mapstructure:"root" yaml:"root"`
 }
 
 // SemanticConfig contains unified semantic analysis configuration.
@@ -26,9 +31,7 @@ type SemanticConfig struct {
 	EnableVision bool   `mapstructure:"enable_vision" yaml:"enable_vision"` // Enable vision API for image analysis
 
 	// Analysis constraints (provider-agnostic)
-	MaxFileSize    int64    `mapstructure:"max_file_size" yaml:"max_file_size"`
-	SkipExtensions []string `mapstructure:"skip_extensions" yaml:"skip_extensions"`
-	SkipFiles      []string `mapstructure:"skip_files" yaml:"skip_files"`
+	MaxFileSize int64 `mapstructure:"max_file_size" yaml:"max_file_size"`
 
 	// Caching
 	CacheDir string `mapstructure:"cache_dir" yaml:"cache_dir"`
@@ -44,6 +47,12 @@ type DaemonConfig struct {
 	HTTPPort                   int    `mapstructure:"http_port" yaml:"http_port"`
 	LogFile                    string `mapstructure:"log_file" yaml:"log_file"`
 	LogLevel                   string `mapstructure:"log_level" yaml:"log_level"`
+
+	// Skip patterns for file watching
+	SkipHidden     bool     `mapstructure:"skip_hidden" yaml:"skip_hidden"`         // Skip hidden files/dirs (default: true)
+	SkipDirs       []string `mapstructure:"skip_dirs" yaml:"skip_dirs"`             // Directories to skip
+	SkipFiles      []string `mapstructure:"skip_files" yaml:"skip_files"`           // Files to skip by name
+	SkipExtensions []string `mapstructure:"skip_extensions" yaml:"skip_extensions"` // Extensions to skip
 }
 
 type MCPConfig struct {

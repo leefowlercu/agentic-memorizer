@@ -134,7 +134,7 @@ func TestGeminiCLIMCPAdapter_Setup(t *testing.T) {
 	memoryRoot := filepath.Join(tempConfigDir, "memory")
 
 	// Create minimal config with memory root
-	configContent := "memory_root: " + memoryRoot + "\n"
+	configContent := "memory:\n  root: " + memoryRoot + "\n"
 	if err := os.WriteFile(memorizerConfigPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestGeminiCLIMCPAdapter_Setup_PreservesExistingServers(t *testing.T) {
 	tempConfigDir := t.TempDir()
 	memorizerConfigPath := filepath.Join(tempConfigDir, "config.yaml")
 	memoryRoot := filepath.Join(tempConfigDir, "memory")
-	configContent := "memory_root: " + memoryRoot + "\n"
+	configContent := "memory:\n  root: " + memoryRoot + "\n"
 	if err := os.WriteFile(memorizerConfigPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestGeminiCLIMCPAdapter_Update(t *testing.T) {
 	memorizerConfigPath := filepath.Join(tempConfigDir, "config.yaml")
 	memoryRoot := filepath.Join(tempConfigDir, "memory")
 
-	configContent := "memory_root: " + memoryRoot + "\n"
+	configContent := "memory:\n  root: " + memoryRoot + "\n"
 	if err := os.WriteFile(memorizerConfigPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}

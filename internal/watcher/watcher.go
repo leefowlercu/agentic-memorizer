@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/leefowlercu/agentic-memorizer/internal/skip"
 )
 
 // EventType represents the type of file system event
@@ -30,9 +30,7 @@ type Event struct {
 // Watcher watches a directory for file changes
 type Watcher struct {
 	rootPath           string
-	skipDirs           []string
-	skipFiles          []string
-	skipExtensions     []string
+	skipConfig         *skip.Config
 	debounceMs         int
 	fsWatcher          *fsnotify.Watcher
 	logger             *slog.Logger
@@ -45,7 +43,7 @@ type Watcher struct {
 }
 
 // New creates a new file system watcher
-func New(rootPath string, skipDirs []string, skipFiles []string, skipExtensions []string, debounceMs int, logger *slog.Logger) (*Watcher, error) {
+func New(rootPath string, skipCfg *skip.Config, debounceMs int, logger *slog.Logger) (*Watcher, error) {
 	fsWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create fsnotify watcher: %w", err)
@@ -53,9 +51,7 @@ func New(rootPath string, skipDirs []string, skipFiles []string, skipExtensions 
 
 	w := &Watcher{
 		rootPath:           rootPath,
-		skipDirs:           skipDirs,
-		skipFiles:          skipFiles,
-		skipExtensions:     skipExtensions,
+		skipConfig:         skipCfg,
 		debounceMs:         debounceMs,
 		fsWatcher:          fsWatcher,
 		logger:             logger,
@@ -268,49 +264,16 @@ func (w *Watcher) sendBatchedEvents() {
 	}
 }
 
-// shouldSkip checks if a path should be skipped
+// shouldSkip checks if a path should be skipped (file or directory)
 func (w *Watcher) shouldSkip(path string) bool {
-	// Skip hidden files and directories
 	base := filepath.Base(path)
-	if strings.HasPrefix(base, ".") {
-		return true
-	}
-
-	// Check if it's in skip files list
-	for _, skipFile := range w.skipFiles {
-		if base == skipFile {
-			return true
-		}
-	}
-
-	// Check if extension should be skipped
-	ext := filepath.Ext(path)
-	for _, skipExt := range w.skipExtensions {
-		if ext == skipExt {
-			return true
-		}
-	}
-
-	return false
+	return skip.ShouldSkipFile(base, w.skipConfig)
 }
 
 // shouldSkipDir checks if a directory should be skipped
 func (w *Watcher) shouldSkipDir(path string) bool {
 	base := filepath.Base(path)
-
-	// Skip hidden directories
-	if strings.HasPrefix(base, ".") {
-		return true
-	}
-
-	// Check skip directories list
-	for _, skipDir := range w.skipDirs {
-		if base == skipDir {
-			return true
-		}
-	}
-
-	return false
+	return skip.ShouldSkipDir(base, w.skipConfig)
 }
 
 // UpdateDebounceInterval signals the watcher to update its debounce interval

@@ -18,43 +18,43 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "no changes",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
+				Daemon:   DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
+				Daemon:   DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError: false,
 		},
 		{
 			name: "memory_root changed",
 			oldCfg: &Config{
-				MemoryRoot: "/old/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
+				Memory:   MemoryConfig{Root: "/old/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
+				Daemon:   DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/new/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
+				Memory:   MemoryConfig{Root: "/new/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
+				Daemon:   DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError:  true,
-			errorField: "memory_root",
+			errorField: "memory.root",
 		},
 		{
 			name: "cache_dir changed",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/old/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/old/cache"},
+				Daemon:   DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/new/cache"},
-				Daemon:     DaemonConfig{LogFile: "/test/daemon.log"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/new/cache"},
+				Daemon:   DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			wantError:  true,
 			errorField: "semantic.cache_dir",
@@ -62,14 +62,14 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "log_file changed",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/old/daemon.log"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
+				Daemon:   DaemonConfig{LogFile: "/old/daemon.log"},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
-				Daemon:     DaemonConfig{LogFile: "/new/daemon.log"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
+				Daemon:   DaemonConfig{LogFile: "/new/daemon.log"},
 			},
 			wantError:  true,
 			errorField: "daemon.log_file",
@@ -77,31 +77,31 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "multiple immutable fields changed",
 			oldCfg: &Config{
-				MemoryRoot: "/old/memory",
-				Semantic:   SemanticConfig{CacheDir: "/old/cache"},
-				Daemon:     DaemonConfig{LogFile: "/old/daemon.log"},
+				Memory:   MemoryConfig{Root: "/old/memory"},
+				Semantic: SemanticConfig{CacheDir: "/old/cache"},
+				Daemon:   DaemonConfig{LogFile: "/old/daemon.log"},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/new/memory",
-				Semantic:   SemanticConfig{CacheDir: "/new/cache"},
-				Daemon:     DaemonConfig{LogFile: "/new/daemon.log"},
+				Memory:   MemoryConfig{Root: "/new/memory"},
+				Semantic: SemanticConfig{CacheDir: "/new/cache"},
+				Daemon:   DaemonConfig{LogFile: "/new/daemon.log"},
 			},
 			wantError:  true,
-			errorField: "memory_root", // Should mention at least one field
+			errorField: "memory.root", // Should mention at least one field
 		},
 		{
 			name: "workers changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile: "/test/daemon.log",
 					Workers: 3,
 				},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile: "/test/daemon.log",
 					Workers: 8,
@@ -112,7 +112,7 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "rate_limit changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
+				Memory: MemoryConfig{Root: "/test/memory"},
 				Semantic: SemanticConfig{
 					CacheDir:        "/test/cache",
 					RateLimitPerMin: 20,
@@ -122,7 +122,7 @@ func TestValidateReload(t *testing.T) {
 				},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
+				Memory: MemoryConfig{Root: "/test/memory"},
 				Semantic: SemanticConfig{
 					CacheDir:        "/test/cache",
 					RateLimitPerMin: 40,
@@ -136,16 +136,16 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "log_level changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					LogLevel: "info",
 				},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					LogLevel: "debug",
@@ -156,7 +156,7 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "semantic api settings changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
+				Memory: MemoryConfig{Root: "/test/memory"},
 				Semantic: SemanticConfig{
 					CacheDir:  "/test/cache",
 					APIKey:    "old-key",
@@ -166,7 +166,7 @@ func TestValidateReload(t *testing.T) {
 				Daemon: DaemonConfig{LogFile: "/test/daemon.log"},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
+				Memory: MemoryConfig{Root: "/test/memory"},
 				Semantic: SemanticConfig{
 					CacheDir:  "/test/cache",
 					APIKey:    "new-key",
@@ -180,16 +180,16 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "debounce interval changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:    "/test/daemon.log",
 					DebounceMs: 500,
 				},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:    "/test/daemon.log",
 					DebounceMs: 1000,
@@ -200,16 +200,16 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "rebuild interval changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:                    "/test/daemon.log",
 					FullRebuildIntervalMinutes: 60,
 				},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:                    "/test/daemon.log",
 					FullRebuildIntervalMinutes: 120,
@@ -220,16 +220,16 @@ func TestValidateReload(t *testing.T) {
 		{
 			name: "http port changed (hot-reloadable)",
 			oldCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					HTTPPort: 8080,
 				},
 			},
 			newCfg: &Config{
-				MemoryRoot: "/test/memory",
-				Semantic:   SemanticConfig{CacheDir: "/test/cache"},
+				Memory:   MemoryConfig{Root: "/test/memory"},
+				Semantic: SemanticConfig{CacheDir: "/test/cache"},
 				Daemon: DaemonConfig{
 					LogFile:  "/test/daemon.log",
 					HTTPPort: 8081,
@@ -263,15 +263,15 @@ func TestValidateReload(t *testing.T) {
 func TestValidateReload_ErrorAccumulation(t *testing.T) {
 	// Test that multiple immutable field changes are all reported
 	oldCfg := &Config{
-		MemoryRoot: "/old/memory",
-		Semantic:   SemanticConfig{CacheDir: "/old/cache"},
-		Daemon:     DaemonConfig{LogFile: "/old/daemon.log"},
+		Memory:   MemoryConfig{Root: "/old/memory"},
+		Semantic: SemanticConfig{CacheDir: "/old/cache"},
+		Daemon:   DaemonConfig{LogFile: "/old/daemon.log"},
 	}
 
 	newCfg := &Config{
-		MemoryRoot: "/new/memory",
-		Semantic:   SemanticConfig{CacheDir: "/new/cache"},
-		Daemon:     DaemonConfig{LogFile: "/new/daemon.log"},
+		Memory:   MemoryConfig{Root: "/new/memory"},
+		Semantic: SemanticConfig{CacheDir: "/new/cache"},
+		Daemon:   DaemonConfig{LogFile: "/new/daemon.log"},
 	}
 
 	err := ValidateReload(oldCfg, newCfg)
@@ -283,8 +283,8 @@ func TestValidateReload_ErrorAccumulation(t *testing.T) {
 	errMsg := err.Error()
 
 	// All three immutable fields should be mentioned
-	if !strings.Contains(errMsg, "memory_root") {
-		t.Error("Error should mention memory_root change")
+	if !strings.Contains(errMsg, "memory.root") {
+		t.Error("Error should mention memory.root change")
 	}
 	if !strings.Contains(errMsg, "cache_dir") {
 		t.Error("Error should mention cache_dir change")

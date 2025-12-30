@@ -9,7 +9,7 @@
 
 A framework-agnostic AI agent memory system that provides automatic awareness and understanding of files in your memory directory through AI-powered semantic analysis, plus user-defined facts that inject persistent context into every conversation. Features native automatic integration for Claude Code (hooks + MCP), Gemini CLI (hooks + MCP), and OpenAI Codex CLI (MCP).
 
-**Current Version**: v0.13.0 ([CHANGELOG.md](CHANGELOG.md))
+**Current Version**: v0.14.0 ([CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 
@@ -225,12 +225,11 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 - **HTTP API** (`internal/daemon/api/`) - RESTful endpoints and SSE for real-time updates:
   - `GET /health` - Health check with metrics
   - `GET /sse` - Server-Sent Events stream
-  - `GET /api/v1/index` - Full memory index
-  - `POST /api/v1/search` - Semantic search
-  - `GET /api/v1/files/{path}` - File metadata
-  - `GET /api/v1/files/recent` - Recent files
-  - `GET /api/v1/files/related` - Related files
-  - `GET /api/v1/entities/search` - Entity search
+  - `GET /api/v1/files` - Unified query with params: `q`, `entity`, `tag`, `topic`, `category`, `days`, `limit`
+  - `GET /api/v1/files/index` - Complete FileIndex export
+  - `GET /api/v1/files/{path}` - File metadata (supports `?related_limit=N`)
+  - `GET /api/v1/facts/index` - All facts with statistics
+  - `GET /api/v1/facts/{id}` - Individual fact by ID
   - `POST /api/v1/rebuild` - Trigger rebuild
 
 **Knowledge Graph** (`internal/graph/`):
@@ -1923,6 +1922,11 @@ memorizer read facts [flags]    # Read user facts (UserPromptSubmit/BeforeAgent 
 memorizer remember fact "fact content"   # Add a new fact
 memorizer forget fact <fact-id>          # Remove a fact by ID
 
+# Manage files in memory
+memorizer remember file <path>...        # Copy files into memory
+memorizer remember file ~/docs --dir notes  # Copy to subdirectory
+memorizer forget file <path>...          # Move files to .forgotten/
+
 # Manage agent framework integrations
 memorizer integrations list
 memorizer integrations detect
@@ -2007,6 +2011,15 @@ memorizer remember fact "I prefer Go over TypeScript" --id <fact-id>
 
 # Remove a fact
 memorizer forget fact <fact-id>
+
+# Copy files into memory
+memorizer remember file ~/notes/doc.md
+memorizer remember file ~/docs/ --dir work/notes
+memorizer remember file --dry-run large-directory/
+
+# Move files from memory to .forgotten/ (non-destructive)
+memorizer forget file ~/.memorizer/memory/old-notes.md
+memorizer forget file --dry-run ~/.memorizer/memory/archived/
 
 # Note: MCP integration uses tools, not read command
 
@@ -2545,11 +2558,13 @@ agentic-memorizer/
 │   ├── remember/             # Remember (create) commands
 │   │   ├── remember.go       # Parent remember command
 │   │   └── subcommands/
-│   │       └── fact.go       # Remember a fact
+│   │       ├── fact.go       # Remember a fact
+│   │       └── file.go       # Copy files into memory
 │   ├── forget/               # Forget (delete) commands
 │   │   ├── forget.go         # Parent forget command
 │   │   └── subcommands/
-│   │       └── fact.go       # Forget a fact
+│   │       ├── fact.go       # Forget a fact
+│   │       └── file.go       # Move files to .forgotten/
 │   └── version/              # Version command
 │       └── version.go
 ├── internal/
@@ -2584,7 +2599,9 @@ agentic-memorizer/
 │   │       ├── gemini/       # Hook and MCP adapters for Gemini CLI
 │   │       └── codex/        # MCP adapter for Codex CLI
 │   ├── docker/               # Docker container management utilities
+│   ├── fileops/              # File operations (copy, move, conflict resolution)
 │   ├── servicemanager/       # Service manager integration (systemd, launchd)
+│   ├── skip/                 # Skip pattern handling for file filtering
 │   ├── tui/                  # Terminal UI components
 │   │   ├── initialize/       # Initialization wizard
 │   │   └── styles/           # TUI styling

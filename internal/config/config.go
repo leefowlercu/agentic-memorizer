@@ -36,7 +36,7 @@ func InitConfig() error {
 	viper.AddConfigPath(".") // Current directory fallback
 
 	// User-facing settings (see MinimalConfig for initialized config surface area)
-	viper.SetDefault("memory_root", DefaultConfig.MemoryRoot)
+	viper.SetDefault("memory.root", DefaultConfig.Memory.Root)
 	viper.SetDefault("semantic.provider", DefaultConfig.Semantic.Provider)
 	viper.SetDefault("semantic.api_key", DefaultConfig.Semantic.APIKey)
 	viper.SetDefault("semantic.model", DefaultConfig.Semantic.Model)
@@ -55,14 +55,16 @@ func InitConfig() error {
 	viper.SetDefault("semantic.timeout", DefaultConfig.Semantic.Timeout)
 	viper.SetDefault("semantic.enable_vision", DefaultConfig.Semantic.EnableVision)
 	viper.SetDefault("semantic.max_file_size", DefaultConfig.Semantic.MaxFileSize)
-	viper.SetDefault("semantic.skip_extensions", DefaultConfig.Semantic.SkipExtensions)
-	viper.SetDefault("semantic.skip_files", DefaultConfig.Semantic.SkipFiles)
 	viper.SetDefault("semantic.cache_dir", DefaultConfig.Semantic.CacheDir)
 	viper.SetDefault("semantic.rate_limit_per_min", DefaultConfig.Semantic.RateLimitPerMin)
 	viper.SetDefault("daemon.debounce_ms", DefaultConfig.Daemon.DebounceMs)
 	viper.SetDefault("daemon.workers", DefaultConfig.Daemon.Workers)
 	viper.SetDefault("daemon.full_rebuild_interval_minutes", DefaultConfig.Daemon.FullRebuildIntervalMinutes)
 	viper.SetDefault("daemon.log_file", DefaultConfig.Daemon.LogFile)
+	viper.SetDefault("daemon.skip_hidden", DefaultConfig.Daemon.SkipHidden)
+	viper.SetDefault("daemon.skip_dirs", DefaultConfig.Daemon.SkipDirs)
+	viper.SetDefault("daemon.skip_files", DefaultConfig.Daemon.SkipFiles)
+	viper.SetDefault("daemon.skip_extensions", DefaultConfig.Daemon.SkipExtensions)
 	viper.SetDefault("mcp.log_file", DefaultConfig.MCP.LogFile)
 	viper.SetDefault("mcp.daemon_host", DefaultConfig.MCP.DaemonHost)
 	viper.SetDefault("mcp.daemon_port", DefaultConfig.MCP.DaemonPort)
@@ -95,8 +97,8 @@ func GetConfig() (*Config, error) {
 
 	// Validate paths for safety BEFORE expansion - prevent path traversal attacks.
 	// Reject paths containing '..' to ensure they stay within expected boundaries.
-	if strings.Contains(cfg.MemoryRoot, "..") {
-		return nil, fmt.Errorf("memory_root contains parent directory reference (..): %s", cfg.MemoryRoot)
+	if strings.Contains(cfg.Memory.Root, "..") {
+		return nil, fmt.Errorf("memory.root contains parent directory reference (..): %s", cfg.Memory.Root)
 	}
 	if strings.Contains(cfg.Semantic.CacheDir, "..") {
 		return nil, fmt.Errorf("semantic.cache_dir contains parent directory reference (..): %s", cfg.Semantic.CacheDir)
@@ -108,7 +110,7 @@ func GetConfig() (*Config, error) {
 		return nil, fmt.Errorf("mcp.log_file contains parent directory reference (..): %s", cfg.MCP.LogFile)
 	}
 
-	cfg.MemoryRoot = ExpandHome(cfg.MemoryRoot)
+	cfg.Memory.Root = ExpandHome(cfg.Memory.Root)
 	cfg.Semantic.CacheDir = ExpandHome(cfg.Semantic.CacheDir)
 	cfg.Daemon.LogFile = ExpandHome(cfg.Daemon.LogFile)
 	cfg.MCP.LogFile = ExpandHome(cfg.MCP.LogFile)
@@ -169,13 +171,17 @@ func WriteConfig(path string, cfg *Config) error {
 // MinimalConfig contains only user-facing settings for initial configuration.
 // Internal settings use defaults and are not written to the initialized config file.
 type MinimalConfig struct {
-	MemoryRoot   string                    `yaml:"memory_root"`
+	Memory       MinimalMemoryConfig       `yaml:"memory"`
 	Semantic     MinimalSemanticConfig     `yaml:"semantic,omitempty"`
 	Daemon       MinimalDaemonConfig       `yaml:"daemon,omitempty"`
 	MCP          MinimalMCPConfig          `yaml:"mcp,omitempty"`
 	Graph        MinimalGraphConfig        `yaml:"graph,omitempty"`
 	Embeddings   MinimalEmbeddingsConfig   `yaml:"embeddings,omitempty"`
 	Integrations MinimalIntegrationsConfig `yaml:"integrations,omitempty"`
+}
+
+type MinimalMemoryConfig struct {
+	Root string `yaml:"root"`
 }
 
 type MinimalSemanticConfig struct {
@@ -214,7 +220,9 @@ type MinimalIntegrationsConfig struct {
 // Only user-facing settings are included; internal settings use defaults.
 func (c *Config) ToMinimalConfig() *MinimalConfig {
 	minimal := &MinimalConfig{
-		MemoryRoot: c.MemoryRoot,
+		Memory: MinimalMemoryConfig{
+			Root: c.Memory.Root,
+		},
 		Semantic: MinimalSemanticConfig{
 			Provider: c.Semantic.Provider,
 			APIKey:   c.Semantic.APIKey,
@@ -319,6 +327,20 @@ func GetPIDPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(appDir, DaemonPIDFile), nil
+}
+
+// ForgottenDirName is the name of the directory for soft-deleted files
+const ForgottenDirName = ".forgotten"
+
+// GetForgottenDir returns the path to the forgotten files directory.
+// This is where files are moved when "forgotten" via the CLI.
+// The directory is at ~/.memorizer/.forgotten/ (or $MEMORIZER_APP_DIR/.forgotten/)
+func GetForgottenDir() (string, error) {
+	appDir, err := GetAppDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(appDir, ForgottenDirName), nil
 }
 
 // ResetForTesting resets viper state for testing purposes.

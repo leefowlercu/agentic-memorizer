@@ -232,7 +232,7 @@ func (c *HTTPClient) SearchEntities(entity string, maxResults int) (any, error) 
 
 // GetIndex retrieves the full index from the graph
 func (c *HTTPClient) GetIndex() (any, error) {
-	url := fmt.Sprintf("%s/api/v1/index", c.baseURL())
+	url := fmt.Sprintf("%s/api/v1/files/index", c.baseURL())
 
 	resp, err := c.client.Get(url)
 	if err != nil {
@@ -251,4 +251,95 @@ func (c *HTTPClient) GetIndex() (any, error) {
 	}
 
 	return index, nil
+}
+
+// GetFactsIndex retrieves all facts from the graph
+func (c *HTTPClient) GetFactsIndex() (map[string]any, error) {
+	url := fmt.Sprintf("%s/api/v1/facts/index", c.baseURL())
+
+	resp, err := c.client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("facts index request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("facts index retrieval failed; status=%d; body=%s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode facts index response; %w", err)
+	}
+
+	return result, nil
+}
+
+// GetFact retrieves a specific fact by ID
+func (c *HTTPClient) GetFact(id string) (map[string]any, error) {
+	url := fmt.Sprintf("%s/api/v1/facts/%s", c.baseURL(), id)
+
+	resp, err := c.client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("fact request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("fact not found; status=404")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("fact retrieval failed; status=%d; body=%s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode fact response; %w", err)
+	}
+
+	return result, nil
+}
+
+// QueryFiles performs a unified files query with optional filters
+func (c *HTTPClient) QueryFiles(query, category, entity, tag, topic string, days, limit int) (map[string]any, error) {
+	url := fmt.Sprintf("%s/api/v1/files?limit=%d", c.baseURL(), limit)
+	if query != "" {
+		url += fmt.Sprintf("&q=%s", query)
+	}
+	if category != "" {
+		url += fmt.Sprintf("&category=%s", category)
+	}
+	if entity != "" {
+		url += fmt.Sprintf("&entity=%s", entity)
+	}
+	if tag != "" {
+		url += fmt.Sprintf("&tag=%s", tag)
+	}
+	if topic != "" {
+		url += fmt.Sprintf("&topic=%s", topic)
+	}
+	if days > 0 {
+		url += fmt.Sprintf("&days=%d", days)
+	}
+
+	resp, err := c.client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("files query request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("files query failed; status=%d; body=%s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode files query response; %w", err)
+	}
+
+	return result, nil
 }

@@ -4,29 +4,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/skip"
 )
 
 type FileVisitor func(path string, info os.FileInfo) error
 
-func Walk(root string, skipDirs []string, skipFiles []string, skipExtensions []string, visitor FileVisitor) error {
+// Walk traverses a directory tree, calling visitor for each file.
+// Uses skip.Config to determine which files and directories to skip.
+func Walk(root string, cfg *skip.Config, visitor FileVisitor) error {
 	root = filepath.Clean(root)
-
-	skipPaths := make(map[string]bool)
-	for _, dir := range skipDirs {
-		absPath := filepath.Join(root, dir)
-		skipPaths[absPath] = true
-	}
-
-	skipFileNames := make(map[string]bool)
-	for _, file := range skipFiles {
-		skipFileNames[file] = true
-	}
-
-	skipExts := make(map[string]bool)
-	for _, ext := range skipExtensions {
-		skipExts[ext] = true
-	}
 
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -38,30 +25,16 @@ func Walk(root string, skipDirs []string, skipFiles []string, skipExtensions []s
 			return nil
 		}
 
-		if info.IsDir() {
-			if strings.HasPrefix(filepath.Base(path), ".") {
-				return filepath.SkipDir
-			}
-
-			if skipPaths[path] {
-				return filepath.SkipDir
-			}
-
-			return nil
-		}
-
-		if strings.HasPrefix(filepath.Base(path), ".") {
-			return nil
-		}
-
 		basename := filepath.Base(path)
-		if skipFileNames[basename] {
+
+		if info.IsDir() {
+			if skip.ShouldSkipDir(basename, cfg) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
-		// Check skip extensions
-		ext := filepath.Ext(path)
-		if skipExts[ext] {
+		if skip.ShouldSkipFile(basename, cfg) {
 			return nil
 		}
 

@@ -2,7 +2,7 @@
 
 Cobra-based CLI with hierarchical command structure, input validation via PreRunE hooks, and consistent output formatting for daemon management, integration setup, and memory operations.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
 **Last Updated:** 2025-12-29
 
@@ -87,7 +87,7 @@ The read command in cmd/read/ exports data from the knowledge graph. The files s
 
 ### Remember and Forget Commands
 
-The remember command in cmd/remember/ adds items to memory (currently facts via the fact subcommand). The forget command in cmd/forget/ removes items (fact by ID). Both interact with the graph subsystem for persistent storage.
+The remember command in cmd/remember/ adds items to memory via two subcommands: file (copy files or directories into the memory directory with conflict resolution and batch support) and fact (store user-defined facts in the knowledge graph). The forget command in cmd/forget/ removes items via two subcommands: file (move files from memory to the `.forgotten` directory for non-destructive removal) and fact (remove a stored fact by ID). File operations use the fileops package for cross-filesystem moves, conflict resolution with `-N` suffix pattern, and batch processing. Both commands interact with the daemon watcher for automatic reindexing and the graph subsystem for fact storage.
 
 ### Integrations Command
 
@@ -150,6 +150,10 @@ The daemon start command creates a logger via logging.NewLogger() with file, lev
 ### Version Subsystem
 
 The version command and root command's version template call version.GetShortVersion(), version.GetGitCommit(), and version.GetBuildDate() for display.
+
+### Fileops Subsystem
+
+The remember file and forget file commands use internal/fileops for filesystem operations. Functions include Copy() and CopyBatch() for file copying, Move() and MoveBatch() for file moving, ResolveConflict() for automatic renaming with `-N` suffix pattern, IsInDirectory() for path validation, and EnsureDir() for directory creation.
 
 ## Glossary
 

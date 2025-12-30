@@ -448,6 +448,21 @@ func (n *Nodes) FileExists(ctx context.Context, path string) (bool, error) {
 	return false, nil
 }
 
+// ListFilePaths returns all File node paths (efficient for stale detection)
+func (n *Nodes) ListFilePaths(ctx context.Context) ([]string, error) {
+	query := `MATCH (f:File) RETURN f.path`
+	result, err := n.client.Query(ctx, query, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list file paths; %w", err)
+	}
+
+	var paths []string
+	for result.Next() {
+		paths = append(paths, result.Record().GetString(0, ""))
+	}
+	return paths, nil
+}
+
 // GetFileByHash retrieves a File node by content hash
 func (n *Nodes) GetFileByHash(ctx context.Context, hash string) (*FileNode, error) {
 	query := `

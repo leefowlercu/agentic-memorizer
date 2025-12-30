@@ -13,6 +13,28 @@ type Edges struct {
 	logger *slog.Logger
 }
 
+// extractDirName extracts the directory name from a path for display
+func extractDirName(path string) string {
+	// Handle root directory
+	if path == "/" {
+		return "/"
+	}
+	// Handle trailing slash
+	path = strings.TrimSuffix(path, "/")
+	if path == "" {
+		return "/"
+	}
+	idx := strings.LastIndex(path, "/")
+	if idx == -1 {
+		return path
+	}
+	name := path[idx+1:]
+	if name == "" {
+		return "/" // Root directory
+	}
+	return name
+}
+
 // NewEdges creates a new Edges handler
 func NewEdges(client *Client, logger *slog.Logger) *Edges {
 	if logger == nil {
@@ -161,14 +183,19 @@ func (e *Edges) LinkFileToReference(ctx context.Context, filePath, topicName, re
 
 // LinkFileToDirectory creates an IN_DIRECTORY relationship between File and Directory
 func (e *Edges) LinkFileToDirectory(ctx context.Context, filePath, dirPath string) error {
+	// Extract directory name for display purposes
+	dirName := extractDirName(dirPath)
+
 	query := `
 		MATCH (f:File {path: $filePath})
 		MERGE (d:Directory {path: $dirPath})
+		ON CREATE SET d.name = $dirName
 		MERGE (f)-[:IN_DIRECTORY]->(d)
 	`
 	params := map[string]any{
 		"filePath": filePath,
 		"dirPath":  dirPath,
+		"dirName":  dirName,
 	}
 
 	_, err := e.client.Query(ctx, query, params)
@@ -220,14 +247,20 @@ func (e *Edges) LinkTopicParent(ctx context.Context, parentTopic, childTopic str
 
 // LinkDirectoryParent creates a PARENT_OF relationship between directories
 func (e *Edges) LinkDirectoryParent(ctx context.Context, parentDir, childDir string) error {
+	parentName := extractDirName(parentDir)
+	childName := extractDirName(childDir)
 	query := `
 		MERGE (parent:Directory {path: $parentDir})
+		ON CREATE SET parent.name = $parentName
 		MERGE (child:Directory {path: $childDir})
+		ON CREATE SET child.name = $childName
 		MERGE (parent)-[:PARENT_OF]->(child)
 	`
 	params := map[string]any{
-		"parentDir": parentDir,
-		"childDir":  childDir,
+		"parentDir":  parentDir,
+		"childDir":   childDir,
+		"parentName": parentName,
+		"childName":  childName,
 	}
 
 	_, err := e.client.Query(ctx, query, params)
@@ -477,10 +510,12 @@ func (e *Edges) GetFilesMentioningEntity(ctx context.Context, entityName string)
 
 // CleanupOrphanedNodes removes nodes that are no longer connected to any File
 func (e *Edges) CleanupOrphanedNodes(ctx context.Context) (int64, error) {
-	// Remove orphaned tags
+	// Remove orphaned tags (no incoming HAS_TAG edges)
 	query := `
 		MATCH (t:Tag)
-		WHERE NOT EXISTS((t)<-[:HAS_TAG]-())
+		OPTIONAL MATCH (f:File)-[:HAS_TAG]->(t)
+		WITH t, f
+		WHERE f IS NULL
 		DELETE t
 		RETURN count(t) as deleted
 	`
@@ -494,12 +529,14 @@ func (e *Edges) CleanupOrphanedNodes(ctx context.Context) (int64, error) {
 		totalDeleted += result.Record().GetInt64(0, 0)
 	}
 
-	// Remove orphaned topics (that aren't referenced)
+	// Remove orphaned topics (no incoming edges from files or other topics)
 	query = `
 		MATCH (t:Topic)
-		WHERE NOT EXISTS((t)<-[:COVERS_TOPIC]-())
-		  AND NOT EXISTS((t)<-[:REFERENCES]-())
-		  AND NOT EXISTS((t)<-[:PARENT_OF]-())
+		OPTIONAL MATCH (f:File)-[:COVERS_TOPIC]->(t)
+		OPTIONAL MATCH (f2:File)-[:REFERENCES]->(t)
+		OPTIONAL MATCH (parent:Topic)-[:PARENT_OF]->(t)
+		WITH t, f, f2, parent
+		WHERE f IS NULL AND f2 IS NULL AND parent IS NULL
 		DELETE t
 		RETURN count(t) as deleted
 	`
@@ -512,16 +549,36 @@ func (e *Edges) CleanupOrphanedNodes(ctx context.Context) (int64, error) {
 		totalDeleted += result.Record().GetInt64(0, 0)
 	}
 
-	// Remove orphaned entities
+	// Remove orphaned entities (no incoming MENTIONS edges)
 	query = `
 		MATCH (ent:Entity)
-		WHERE NOT EXISTS((ent)<-[:MENTIONS]-())
+		OPTIONAL MATCH (f:File)-[:MENTIONS]->(ent)
+		WITH ent, f
+		WHERE f IS NULL
 		DELETE ent
 		RETURN count(ent) as deleted
 	`
 	result, err = e.client.Query(ctx, query, nil)
 	if err != nil {
 		return totalDeleted, fmt.Errorf("failed to cleanup orphaned entities; %w", err)
+	}
+
+	if result.Next() {
+		totalDeleted += result.Record().GetInt64(0, 0)
+	}
+
+	// Remove orphaned directories (no incoming IN_DIRECTORY edges from files)
+	query = `
+		MATCH (d:Directory)
+		OPTIONAL MATCH (f:File)-[:IN_DIRECTORY]->(d)
+		WITH d, f
+		WHERE f IS NULL
+		DELETE d
+		RETURN count(d) as deleted
+	`
+	result, err = e.client.Query(ctx, query, nil)
+	if err != nil {
+		return totalDeleted, fmt.Errorf("failed to cleanup orphaned directories; %w", err)
 	}
 
 	if result.Next() {

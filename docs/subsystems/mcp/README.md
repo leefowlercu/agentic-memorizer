@@ -2,7 +2,7 @@
 
 Model Context Protocol implementation with JSON-RPC 2.0 messaging, stdio transport, and graph-powered tools for AI assistant integration.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
 **Last Updated:** 2025-12-29
 
@@ -122,7 +122,7 @@ Resources are read via the resources/read method, which formats the current inde
 
 ### Daemon HTTP API
 
-The MCP server acts as an HTTP client to the daemon API. Tool handlers call daemon endpoints for current data: POST /api/v1/search for search_files, GET /api/v1/files/{path} for get_file_metadata, GET /api/v1/files/recent for list_recent_files, GET /api/v1/files/related for get_related_files, and GET /api/v1/entities/search for search_entities. The 30-second timeout handles slow graph queries gracefully.
+The MCP server acts as an HTTP client to the daemon API. Tool handlers call a unified endpoint for current data: GET /api/v1/files with query parameters (`q` for search_files, `days` for list_recent_files, `entity` for search_entities), GET /api/v1/files/{path} for get_file_metadata (with `related_limit` for get_related_files). The 30-second timeout handles slow graph queries gracefully.
 
 ### Daemon SSE Endpoint
 

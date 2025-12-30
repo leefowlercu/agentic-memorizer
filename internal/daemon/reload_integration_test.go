@@ -18,6 +18,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
+	"github.com/leefowlercu/agentic-memorizer/internal/skip"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -69,7 +70,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 
 	// Create default config
 	cfg := &config.Config{
-		MemoryRoot: memoryRoot,
+		Memory: config.MemoryConfig{Root: memoryRoot},
 		Semantic: config.SemanticConfig{
 			Enabled:         false, // Disable analysis for faster tests
 			Provider:        "claude",
@@ -88,6 +89,10 @@ func NewTestEnv(t *testing.T) *TestEnv {
 			HTTPPort:                   0, // Disabled
 			LogFile:                    logPath,
 			LogLevel:                   "info",
+			SkipHidden:                 true,
+			SkipDirs:                   []string{"node_modules", "vendor"},
+			SkipFiles:                  []string{".DS_Store"},
+			SkipExtensions:             []string{".o", ".pyc"},
 		},
 		Graph: config.GraphConfig{
 			Host:                "localhost",
@@ -159,14 +164,16 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 
 	metadataExtractor := metadata.NewExtractor()
 
-	skipDirs := []string{".cache", ".git"}
-	skipFiles := []string{"memorizer"}
+	skipCfg := &skip.Config{
+		SkipHidden:     e.Config.Daemon.SkipHidden,
+		SkipDirs:       e.Config.Daemon.SkipDirs,
+		SkipFiles:      e.Config.Daemon.SkipFiles,
+		SkipExtensions: e.Config.Daemon.SkipExtensions,
+	}
 
 	fileWatcher, err := watcher.New(
-		e.Config.MemoryRoot,
-		skipDirs,
-		skipFiles,
-		e.Config.Semantic.SkipExtensions,
+		e.Config.Memory.Root,
+		skipCfg,
 		e.Config.Daemon.DebounceMs,
 		logger,
 	)
@@ -180,7 +187,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 	// Create health metrics and SSE hub
 	healthMetrics := NewHealthMetrics()
 	sseHub := api.NewSSEHub(logger)
-	httpServer := api.NewHTTPServer(sseHub, healthMetrics, graphManager, e.Config.MemoryRoot, logger)
+	httpServer := api.NewHTTPServer(sseHub, healthMetrics, graphManager, e.Config.Memory.Root, logger)
 
 	d := &Daemon{
 		cfg:               e.Config,
@@ -322,7 +329,7 @@ func TestDaemon_ReloadConfig_ImmutableFieldRejection(t *testing.T) {
 	// Create a modified copy of config and write it to file
 	// Important: Don't modify env.Config directly, as the daemon holds a reference to it
 	modifiedCfg := *env.Config // Shallow copy
-	modifiedCfg.MemoryRoot = "/different/path"
+	modifiedCfg.Memory.Root = "/different/path"
 	if err := config.WriteConfig(env.ConfigPath, &modifiedCfg); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/skip"
 )
 
 func TestWalk(t *testing.T) {
@@ -37,15 +39,13 @@ func TestWalk(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		skipDirs     []string
-		skipFiles    []string
+		cfg          *skip.Config
 		wantFiles    []string
 		wantNotFiles []string
 	}{
 		{
-			name:      "no filters",
-			skipDirs:  []string{},
-			skipFiles: []string{},
+			name: "default config - skip hidden",
+			cfg:  &skip.Config{SkipHidden: true},
 			wantFiles: []string{
 				"file1.txt",
 				"file2.md",
@@ -62,9 +62,11 @@ func TestWalk(t *testing.T) {
 			},
 		},
 		{
-			name:      "skip specific directory",
-			skipDirs:  []string{"cache"},
-			skipFiles: []string{},
+			name: "skip specific directory",
+			cfg: &skip.Config{
+				SkipHidden: true,
+				SkipDirs:   []string{"cache"},
+			},
 			wantFiles: []string{
 				"file1.txt",
 				"file2.md",
@@ -76,9 +78,11 @@ func TestWalk(t *testing.T) {
 			},
 		},
 		{
-			name:      "skip specific file",
-			skipDirs:  []string{},
-			skipFiles: []string{"skip_me.txt"},
+			name: "skip specific file",
+			cfg: &skip.Config{
+				SkipHidden: true,
+				SkipFiles:  []string{"skip_me.txt"},
+			},
 			wantFiles: []string{
 				"file1.txt",
 				"file2.md",
@@ -89,9 +93,12 @@ func TestWalk(t *testing.T) {
 			},
 		},
 		{
-			name:      "skip multiple dirs and files",
-			skipDirs:  []string{"cache", "subdir/nested"},
-			skipFiles: []string{"file1.txt", "file4.go"},
+			name: "skip multiple dirs and files",
+			cfg: &skip.Config{
+				SkipHidden: true,
+				SkipDirs:   []string{"cache", "nested"},
+				SkipFiles:  []string{"file1.txt", "file4.go"},
+			},
 			wantFiles: []string{
 				"file2.md",
 				"subdir/file3.txt",
@@ -101,6 +108,36 @@ func TestWalk(t *testing.T) {
 				"subdir/file4.go",
 				"cache/data.bin",
 				"subdir/nested/file5.json",
+			},
+		},
+		{
+			name: "allow hidden files when SkipHidden is false",
+			cfg: &skip.Config{
+				SkipHidden: false,
+			},
+			wantFiles: []string{
+				"file1.txt",
+				".hidden.txt",
+			},
+			// .config/settings.json should be visited since hidden is allowed
+			wantNotFiles: []string{},
+		},
+		{
+			name: "skip by extension",
+			cfg: &skip.Config{
+				SkipHidden:     true,
+				SkipExtensions: []string{".txt"},
+			},
+			wantFiles: []string{
+				"file2.md",
+				"subdir/file4.go",
+				"subdir/nested/file5.json",
+				"cache/data.bin",
+			},
+			wantNotFiles: []string{
+				"file1.txt",
+				"skip_me.txt",
+				"subdir/file3.txt",
 			},
 		},
 	}
@@ -115,7 +152,7 @@ func TestWalk(t *testing.T) {
 				return nil
 			}
 
-			err := Walk(tmpDir, tt.skipDirs, tt.skipFiles, nil, visitor)
+			err := Walk(tmpDir, tt.cfg, visitor)
 			if err != nil {
 				t.Fatalf("Walk() error = %v", err)
 			}
@@ -146,6 +183,71 @@ func TestWalk(t *testing.T) {
 	}
 }
 
+func TestWalk_AlwaysSkipDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create files in always-skip directories
+	alwaysSkipFiles := []string{
+		".git/config",
+		".git/objects/test",
+		".cache/cached_file",
+		".forgotten/old_file",
+	}
+	regularFiles := []string{
+		"regular.txt",
+		"subdir/nested.md",
+	}
+
+	allFiles := append(alwaysSkipFiles, regularFiles...)
+	for _, f := range allFiles {
+		path := filepath.Join(tmpDir, f)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("Failed to create directory: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("test"), 0644); err != nil {
+			t.Fatalf("Failed to create file: %v", err)
+		}
+	}
+
+	// Even with SkipHidden=false, always-skip dirs should be skipped
+	cfg := &skip.Config{SkipHidden: false}
+
+	var visitedFiles []string
+	visitor := func(path string, info os.FileInfo) error {
+		relPath, _ := filepath.Rel(tmpDir, path)
+		visitedFiles = append(visitedFiles, relPath)
+		return nil
+	}
+
+	err := Walk(tmpDir, cfg, visitor)
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+
+	// Check always-skip dirs are not visited
+	for _, skipFile := range alwaysSkipFiles {
+		for _, visited := range visitedFiles {
+			if visited == skipFile {
+				t.Errorf("Should not visit file in always-skip dir: %q", skipFile)
+			}
+		}
+	}
+
+	// Check regular files are visited
+	for _, wantFile := range regularFiles {
+		found := false
+		for _, visited := range visitedFiles {
+			if visited == wantFile {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected to visit %q, but it was not visited. Visited: %v", wantFile, visitedFiles)
+		}
+	}
+}
+
 func TestWalk_VisitorError(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -169,7 +271,8 @@ func TestWalk_VisitorError(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, nil, visitor)
+	cfg := &skip.Config{SkipHidden: true}
+	err := Walk(tmpDir, cfg, visitor)
 	if err != testErr {
 		t.Errorf("Walk() should propagate visitor error, got %v, want %v", err, testErr)
 	}
@@ -184,7 +287,8 @@ func TestWalk_NonExistentDirectory(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(nonExistent, nil, nil, nil, visitor)
+	cfg := &skip.Config{SkipHidden: true}
+	err := Walk(nonExistent, cfg, visitor)
 
 	// Walk swallows access errors and prints to stderr, so no error is returned
 	// But it should still complete without visiting files
@@ -206,7 +310,8 @@ func TestWalk_EmptyDirectory(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, nil, visitor)
+	cfg := &skip.Config{SkipHidden: true}
+	err := Walk(tmpDir, cfg, visitor)
 	if err != nil {
 		t.Errorf("Walk() error = %v", err)
 	}
@@ -231,7 +336,8 @@ func TestWalk_RootSkipped(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, nil, visitor)
+	cfg := &skip.Config{SkipHidden: true}
+	err := Walk(tmpDir, cfg, visitor)
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
@@ -280,7 +386,8 @@ func TestWalk_HiddenFilesAndDirs(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(tmpDir, nil, nil, nil, visitor)
+	cfg := &skip.Config{SkipHidden: true}
+	err := Walk(tmpDir, cfg, visitor)
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
@@ -396,7 +503,8 @@ func TestWalk_PathCleaning(t *testing.T) {
 		return nil
 	}
 
-	err := Walk(dirtyRoot, nil, nil, nil, visitor)
+	cfg := &skip.Config{SkipHidden: true}
+	err := Walk(dirtyRoot, cfg, visitor)
 	if err != nil {
 		t.Errorf("Walk() error = %v", err)
 	}

@@ -2,7 +2,7 @@
 
 Background file monitoring and knowledge graph maintenance with parallel processing, hot-reload, and HTTP API.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
 **Last Updated:** 2025-12-29
 
@@ -95,13 +95,13 @@ The worker pool (`internal/daemon/worker/`) provides parallel file processing:
 The HTTP server (`internal/daemon/api/server.go`) provides a unified API:
 
 - **Health endpoint** (`GET /health`) - Returns daemon status, metrics, and semantic provider info
-- **Index endpoint** (`GET /api/v1/index`) - Exports current FileIndex from graph
-- **Search endpoint** (`POST /api/v1/search`) - Graph-powered semantic search
-- **File endpoint** (`GET /api/v1/files/{path}`) - File metadata with related files
-- **Recent files** (`GET /api/v1/files/recent`) - Recently modified files
-- **Related files** (`GET /api/v1/files/related`) - Files sharing tags/topics/entities
-- **Entity search** (`GET /api/v1/entities/search`) - Files mentioning an entity
-- **Rebuild endpoint** (`POST /api/v1/rebuild`) - Trigger rebuild via API
+- **Files query endpoint** (`GET /api/v1/files`) - Unified query supporting semantic search and filtering with parameters: `q` (search query), `entity`, `tag`, `topic`, `category`, `days` (recently modified), and `limit`
+- **Files index endpoint** (`GET /api/v1/files/index`) - Exports complete FileIndex from graph
+- **File metadata endpoint** (`GET /api/v1/files/{path}`) - File metadata with related files, supports `related_limit` parameter
+- **Facts index endpoint** (`GET /api/v1/facts/index`) - Lists all stored facts with statistics
+- **Fact metadata endpoint** (`GET /api/v1/facts/{id}`) - Individual fact retrieval by ID
+- **Rebuild endpoint** (`POST /api/v1/rebuild`) - Trigger rebuild via API, supports `force=true` parameter
+- **SSE endpoint** (`GET /sse`) - Real-time index update notifications
 
 API endpoints have 60-second timeouts; health and SSE endpoints have no timeout.
 

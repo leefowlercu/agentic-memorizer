@@ -25,8 +25,8 @@ func newTestDaemon() *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &config.Config{
-		MemoryRoot: "/test/memory",
-		Semantic:   config.SemanticConfig{CacheDir: "/test/cache"},
+		Memory:   config.MemoryConfig{Root: "/test/memory"},
+		Semantic: config.SemanticConfig{CacheDir: "/test/cache"},
 		Daemon: config.DaemonConfig{
 			LogFile:  "/test/daemon.log",
 			LogLevel: "info",
@@ -135,7 +135,7 @@ func TestDaemon_ConfigLocking(t *testing.T) {
 				defer wg.Done()
 				for j := 0; j < 5; j++ {
 					newCfg := &config.Config{
-						MemoryRoot: fmt.Sprintf("/test/memory-%d", id),
+						Memory: config.MemoryConfig{Root: fmt.Sprintf("/test/memory-%d", id)},
 					}
 					d.SetConfig(newCfg)
 					time.Sleep(time.Microsecond)
@@ -169,7 +169,7 @@ func TestDaemon_ConfigLocking(t *testing.T) {
 			t.Error("Multiple GetConfig() calls should return same pointer")
 		}
 
-		newCfg := &config.Config{MemoryRoot: "/new/path"}
+		newCfg := &config.Config{Memory: config.MemoryConfig{Root: "/new/path"}}
 		d.SetConfig(newCfg)
 
 		cfg3 := d.GetConfig()

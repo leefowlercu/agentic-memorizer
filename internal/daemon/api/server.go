@@ -127,13 +127,18 @@ func (s *HTTPServer) Start(port int) error {
 	// API v1 endpoints - 60 second timeout
 	// Prevents hung requests while allowing reasonable processing time
 	apiTimeout := 60 * time.Second
-	mux.HandleFunc("/api/v1/index", withTimeout(s.handleGetIndex, apiTimeout))
-	mux.HandleFunc("/api/v1/search", withTimeout(s.handleSearch, apiTimeout))
+
+	// Files endpoints
+	mux.HandleFunc("/api/v1/files", withTimeout(s.handleFilesQuery, apiTimeout))       // Unified file search
+	mux.HandleFunc("/api/v1/files/index", withTimeout(s.handleFilesIndex, apiTimeout)) // File index export
+	mux.HandleFunc("/api/v1/files/", withTimeout(s.handleGetFile, apiTimeout))         // Catch-all for /api/v1/files/{path}
+
+	// Facts endpoints
+	mux.HandleFunc("/api/v1/facts/index", withTimeout(s.handleFactsIndex, apiTimeout)) // Facts listing
+	mux.HandleFunc("/api/v1/facts/", withTimeout(s.handleGetFact, apiTimeout))         // Catch-all for /api/v1/facts/{id}
+
+	// Management endpoints
 	mux.HandleFunc("/api/v1/rebuild", withTimeout(s.handleRebuild, apiTimeout))
-	mux.HandleFunc("/api/v1/files/recent", withTimeout(s.handleRecentFiles, apiTimeout))
-	mux.HandleFunc("/api/v1/files/related", withTimeout(s.handleRelatedFiles, apiTimeout))
-	mux.HandleFunc("/api/v1/files/", withTimeout(s.handleGetFile, apiTimeout)) // Catch-all for /api/v1/files/{path}
-	mux.HandleFunc("/api/v1/entities/search", withTimeout(s.handleEntitySearch, apiTimeout))
 
 	// Create server without global timeouts
 	// Timeouts are handled per-endpoint via http.TimeoutHandler middleware
@@ -225,29 +230,6 @@ func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleGetIndex handles GET /api/v1/index
-func (s *HTTPServer) handleGetIndex(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
-	if s.exporter == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "graph not available", "")
-		return
-	}
-
-	ctx := r.Context()
-	index, err := s.exporter.ToFileIndex(ctx, s.memoryRoot)
-	if err != nil {
-		s.logger.Error("failed to export index", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "failed to export index", err.Error())
-		return
-	}
-
-	s.writeJSON(w, http.StatusOK, index)
-}
-
 // handleRebuild handles POST /api/v1/rebuild
 func (s *HTTPServer) handleRebuild(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -271,6 +253,8 @@ func (s *HTTPServer) handleRebuild(w http.ResponseWriter, r *http.Request) {
 
 	// Check for force flag (clear graph first)
 	force := r.URL.Query().Get("force") == "true"
+	// Check for sync flag (remove stale graph nodes after rebuild)
+	sync := r.URL.Query().Get("sync") == "true"
 
 	if force {
 		s.logger.Info("clearing graph before rebuild")
@@ -283,8 +267,8 @@ func (s *HTTPServer) handleRebuild(w http.ResponseWriter, r *http.Request) {
 
 	// Trigger rebuild in background
 	go func() {
-		s.logger.Info("starting rebuild via API", "force", force)
-		if err := s.rebuildHandler.Rebuild(); err != nil {
+		s.logger.Info("starting rebuild via API", "force", force, "sync", sync)
+		if err := s.rebuildHandler.RebuildWithSync(sync); err != nil {
 			s.logger.Error("rebuild failed", "error", err)
 		} else {
 			s.logger.Info("rebuild completed via API")
@@ -294,48 +278,6 @@ func (s *HTTPServer) handleRebuild(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusAccepted, RebuildResponse{
 		Status:  "started",
 		Message: "Rebuild started in background",
-	})
-}
-
-// handleSearch handles POST /api/v1/search
-func (s *HTTPServer) handleSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
-	if s.graphManager == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "graph not available", "")
-		return
-	}
-
-	var req SearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid request body", err.Error())
-		return
-	}
-
-	if req.Query == "" {
-		s.writeError(w, http.StatusBadRequest, "query is required", "")
-		return
-	}
-
-	limit := req.Limit
-	if limit <= 0 {
-		limit = 10
-	}
-
-	ctx := r.Context()
-	results, err := s.graphManager.Search(ctx, req.Query, limit, req.Category)
-	if err != nil {
-		s.logger.Error("search failed", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "search failed", err.Error())
-		return
-	}
-
-	s.writeJSON(w, http.StatusOK, SearchResponse{
-		Results: results,
-		Count:   len(results),
 	})
 }
 
@@ -393,8 +335,9 @@ func (s *HTTPServer) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleRecentFiles handles GET /api/v1/files/recent
-func (s *HTTPServer) handleRecentFiles(w http.ResponseWriter, r *http.Request) {
+// handleFilesQuery handles GET /api/v1/files with unified query parameters
+// This replaces POST /api/v1/search, GET /api/v1/files/recent, and GET /api/v1/entities/search
+func (s *HTTPServer) handleFilesQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 		return
@@ -406,14 +349,20 @@ func (s *HTTPServer) handleRecentFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse query parameters
-	days := 7
+	q := r.URL.Query().Get("q")
+	category := r.URL.Query().Get("category")
+	entity := r.URL.Query().Get("entity")
+	tag := r.URL.Query().Get("tag")
+	topic := r.URL.Query().Get("topic")
+
+	days := 0
 	if daysStr := r.URL.Query().Get("days"); daysStr != "" {
 		if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
 			days = d
 		}
 	}
 
-	limit := 20
+	limit := 10
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
@@ -421,21 +370,76 @@ func (s *HTTPServer) handleRecentFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	files, err := s.graphManager.GetRecentFiles(ctx, days, limit)
+	var results []graph.SearchResult
+	var err error
+
+	queries := s.graphManager.Queries()
+
+	// Route to appropriate query based on parameters (in priority order)
+	switch {
+	case entity != "":
+		results, err = queries.SearchByEntity(ctx, entity, limit)
+	case tag != "":
+		results, err = queries.SearchByTag(ctx, tag, limit)
+	case topic != "":
+		results, err = queries.SearchByTopic(ctx, topic, limit)
+	case days > 0:
+		results, err = queries.GetRecentFiles(ctx, days, limit)
+	case q != "":
+		results, err = s.graphManager.Search(ctx, q, limit, category)
+	case category != "":
+		results, err = queries.SearchByCategory(ctx, category, limit)
+	default:
+		// No filter - return recent files (default 7 days)
+		results, err = queries.GetRecentFiles(ctx, 7, limit)
+	}
+
 	if err != nil {
-		s.logger.Error("failed to get recent files", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "failed to get recent files", err.Error())
+		s.logger.Error("files query failed", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "query failed", err.Error())
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, RecentFilesResponse{
-		Files: files,
-		Count: len(files),
+	s.writeJSON(w, http.StatusOK, FilesQueryResponse{
+		Files: results,
+		Count: len(results),
+		Query: FilesQueryParams{
+			Q:        q,
+			Category: category,
+			Days:     days,
+			Entity:   entity,
+			Tag:      tag,
+			Topic:    topic,
+			Limit:    limit,
+		},
 	})
 }
 
-// handleRelatedFiles handles GET /api/v1/files/related
-func (s *HTTPServer) handleRelatedFiles(w http.ResponseWriter, r *http.Request) {
+// handleFilesIndex handles GET /api/v1/files/index
+func (s *HTTPServer) handleFilesIndex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
+		return
+	}
+
+	if s.exporter == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "graph not available", "")
+		return
+	}
+
+	ctx := r.Context()
+	index, err := s.exporter.ToFileIndex(ctx, s.memoryRoot)
+	if err != nil {
+		s.logger.Error("failed to export index", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to export index", err.Error())
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, FilesIndexResponse{Index: index})
+}
+
+// handleFactsIndex handles GET /api/v1/facts/index
+func (s *HTTPServer) handleFactsIndex(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 		return
@@ -446,35 +450,40 @@ func (s *HTTPServer) handleRelatedFiles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		s.writeError(w, http.StatusBadRequest, "path query parameter is required", "")
+	ctx := r.Context()
+	facts := s.graphManager.Facts()
+
+	factNodes, err := facts.List(ctx)
+	if err != nil {
+		s.logger.Error("failed to list facts", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to list facts", err.Error())
 		return
 	}
 
-	limit := 10
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
+	// Convert FactNode to types.Fact
+	typeFacts := make([]types.Fact, len(factNodes))
+	for i, fn := range factNodes {
+		typeFacts[i] = types.Fact{
+			ID:        fn.ID,
+			Content:   fn.Content,
+			CreatedAt: fn.CreatedAt,
+			UpdatedAt: fn.UpdatedAt,
+			Source:    fn.Source,
 		}
 	}
 
-	ctx := r.Context()
-	files, err := s.graphManager.GetRelatedFiles(ctx, filePath, limit)
-	if err != nil {
-		s.logger.Error("failed to get related files", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "failed to get related files", err.Error())
-		return
-	}
-
-	s.writeJSON(w, http.StatusOK, RelatedFilesResponse{
-		Files: files,
-		Count: len(files),
+	s.writeJSON(w, http.StatusOK, FactsIndexResponse{
+		Facts: typeFacts,
+		Count: len(typeFacts),
+		Stats: FactsStats{
+			TotalFacts: len(typeFacts),
+			MaxFacts:   graph.MaxTotalFacts,
+		},
 	})
 }
 
-// handleEntitySearch handles GET /api/v1/entities/search
-func (s *HTTPServer) handleEntitySearch(w http.ResponseWriter, r *http.Request) {
+// handleGetFact handles GET /api/v1/facts/{id}
+func (s *HTTPServer) handleGetFact(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 		return
@@ -485,32 +494,43 @@ func (s *HTTPServer) handleEntitySearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	entity := r.URL.Query().Get("entity")
-	if entity == "" {
-		s.writeError(w, http.StatusBadRequest, "entity query parameter is required", "")
+	// Extract ID from URL (everything after /api/v1/facts/)
+	prefix := "/api/v1/facts/"
+	if len(r.URL.Path) <= len(prefix) {
+		s.writeError(w, http.StatusBadRequest, "fact ID is required", "")
 		return
 	}
 
-	limit := 10
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
+	factID := r.URL.Path[len(prefix):]
+	if factID == "" || factID == "index" {
+		// This shouldn't happen due to routing, but handle it
+		s.writeError(w, http.StatusBadRequest, "fact ID is required", "")
+		return
 	}
 
 	ctx := r.Context()
+	facts := s.graphManager.Facts()
 
-	// Use the queries directly to search by entity
-	results, err := s.graphManager.Queries().SearchByEntity(ctx, entity, limit)
+	factNode, err := facts.GetByID(ctx, factID)
 	if err != nil {
-		s.logger.Error("failed to search entities", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "failed to search entities", err.Error())
+		s.logger.Error("failed to get fact", "id", factID, "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to get fact", err.Error())
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, EntitySearchResponse{
-		Results: results,
-		Count:   len(results),
+	if factNode == nil {
+		s.writeError(w, http.StatusNotFound, "fact not found", "")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, FactResponse{
+		Fact: &types.Fact{
+			ID:        factNode.ID,
+			Content:   factNode.Content,
+			CreatedAt: factNode.CreatedAt,
+			UpdatedAt: factNode.UpdatedAt,
+			Source:    factNode.Source,
+		},
 	})
 }
 

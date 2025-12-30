@@ -132,7 +132,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Run server
 	logger.Info("starting mcp server",
 		"protocol", "stdio",
-		"memory_root", cfg.MemoryRoot,
+		"memory_root", cfg.Memory.Root,
 	)
 
 	if err := server.Run(ctx); err != nil && err != context.Canceled {

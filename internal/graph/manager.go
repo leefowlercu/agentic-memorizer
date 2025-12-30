@@ -385,6 +385,50 @@ func (m *Manager) RemoveFile(ctx context.Context, path string) error {
 	return nil
 }
 
+// RemoveStaleFiles removes graph nodes for files that no longer exist on disk.
+// Takes a set of current filesystem paths and removes any graph nodes not in that set.
+// Returns the number of stale files removed.
+func (m *Manager) RemoveStaleFiles(ctx context.Context, currentPaths map[string]bool) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.connected {
+		return 0, fmt.Errorf("graph manager not connected")
+	}
+
+	// Get all file paths from graph
+	graphPaths, err := m.nodes.ListFilePaths(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list graph file paths; %w", err)
+	}
+
+	// Find stale paths (in graph but not on disk)
+	var stalePaths []string
+	for _, graphPath := range graphPaths {
+		if !currentPaths[graphPath] {
+			stalePaths = append(stalePaths, graphPath)
+		}
+	}
+
+	if len(stalePaths) == 0 {
+		return 0, nil
+	}
+
+	// Remove stale files
+	var removed int64
+	for _, path := range stalePaths {
+		if err := m.nodes.DeleteFile(ctx, path); err != nil {
+			m.logger.Warn("failed to delete stale file", "path", path, "error", err)
+			continue
+		}
+		removed++
+		m.logger.Debug("removed stale file from graph", "path", path)
+	}
+
+	m.logger.Info("removed stale files from graph", "count", removed)
+	return removed, nil
+}
+
 // GetAll returns all file entries (similar to index.Manager.GetCurrent)
 func (m *Manager) GetAll(ctx context.Context) ([]types.IndexEntry, error) {
 	m.mu.RLock()

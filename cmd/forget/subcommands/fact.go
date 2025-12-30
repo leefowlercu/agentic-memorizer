@@ -66,7 +66,7 @@ func runForgetFact(cmd *cobra.Command, args []string) error {
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
-		MemoryRoot: cfg.MemoryRoot,
+		MemoryRoot: cfg.Memory.Root,
 	}
 
 	graphManager := graph.NewManager(graphConfig, logger)

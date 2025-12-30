@@ -56,7 +56,7 @@ var InitializeCmd = &cobra.Command{
 
 func init() {
 	// Directory options
-	InitializeCmd.Flags().String("memory-root", config.DefaultConfig.MemoryRoot, "Memory directory")
+	InitializeCmd.Flags().String("memory-root", config.DefaultConfig.Memory.Root, "Memory directory")
 	InitializeCmd.Flags().String("cache-dir", "", "Cache directory (default: <memory-root>/.cache)")
 	InitializeCmd.Flags().Bool("force", false, "Overwrite existing config")
 
@@ -244,9 +244,9 @@ func runInteractive(cmd *cobra.Command) error {
 	// Build initial config from defaults and flags
 	cfg := config.DefaultConfig
 	if memoryRoot != "" {
-		cfg.MemoryRoot = config.ExpandHome(memoryRoot)
+		cfg.Memory.Root = config.ExpandHome(memoryRoot)
 	} else {
-		cfg.MemoryRoot = config.ExpandHome(cfg.MemoryRoot)
+		cfg.Memory.Root = config.ExpandHome(cfg.Memory.Root)
 	}
 	if cacheDir != "" {
 		cfg.Semantic.CacheDir = config.ExpandHome(cacheDir)
@@ -306,9 +306,9 @@ func runUnattended(cmd *cobra.Command) error {
 
 	// Memory root
 	if memoryRoot != "" {
-		cfg.MemoryRoot = config.ExpandHome(memoryRoot)
+		cfg.Memory.Root = config.ExpandHome(memoryRoot)
 	} else {
-		cfg.MemoryRoot = config.ExpandHome(cfg.MemoryRoot)
+		cfg.Memory.Root = config.ExpandHome(cfg.Memory.Root)
 	}
 
 	// Cache dir
@@ -532,7 +532,7 @@ func handleStartupChoices(result *tuiinit.WizardResult) error {
 
 func finalizeInit(configPath string, cfg *config.Config, integrationNames []string, skipNextSteps bool) error {
 	// Create directories
-	if err := os.MkdirAll(cfg.MemoryRoot, 0755); err != nil {
+	if err := os.MkdirAll(cfg.Memory.Root, 0755); err != nil {
 		return fmt.Errorf("failed to create memory directory; %w", err)
 	}
 
@@ -558,7 +558,7 @@ func finalizeInit(configPath string, cfg *config.Config, integrationNames []stri
 	// Print summary
 	fmt.Printf("\nConfiguration:\n")
 	fmt.Printf("  Created configuration file: %s\n", configPath)
-	fmt.Printf("  Created memory directory: %s\n", cfg.MemoryRoot)
+	fmt.Printf("  Created memory directory: %s\n", cfg.Memory.Root)
 	fmt.Printf("  Created cache directory: %s\n", cfg.Semantic.CacheDir)
 	fmt.Printf("  FalkorDB: %s:%d (database: %s)\n", cfg.Graph.Host, cfg.Graph.Port, cfg.Graph.Database)
 	if cfg.Embeddings.Enabled {
@@ -656,7 +656,7 @@ func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 		stepNum++
 	}
 
-	fmt.Printf("%d. Add files to %s\n", stepNum, cfg.MemoryRoot)
+	fmt.Printf("%d. Add files to %s\n", stepNum, cfg.Memory.Root)
 	stepNum++
 
 	// Only show daemon startup instructions if service-manager was NOT set up,

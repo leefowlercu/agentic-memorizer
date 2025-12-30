@@ -85,9 +85,9 @@ func TestRunShowSchema_TextFormat(t *testing.T) {
 		}
 	}
 
-	// Verify "memory_root:" appears with proper formatting
-	if !strings.Contains(output, "memory_root:") {
-		t.Error("Should display 'memory_root:' section")
+	// Verify "memory:" section appears with proper formatting
+	if !strings.Contains(output, "memory:") {
+		t.Error("Should display 'memory:' section")
 	}
 
 	// Verify config sections have colons

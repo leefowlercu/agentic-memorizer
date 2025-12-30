@@ -148,7 +148,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			Port:     cfg.Graph.Port,
 			Database: cfg.Graph.Database,
 		},
-		MemoryRoot: cfg.MemoryRoot,
+		MemoryRoot: cfg.Memory.Root,
 	}
 
 	// Use discard logger to suppress graph initialization logs

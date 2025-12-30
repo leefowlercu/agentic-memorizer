@@ -14,6 +14,7 @@ import (
 var (
 	forceRebuild bool
 	clearStale   bool
+	syncGraph    bool
 )
 
 var RebuildCmd = &cobra.Command{
@@ -25,6 +26,9 @@ var RebuildCmd = &cobra.Command{
 		"analysis, and rebuilding all graph relationships.\n\n" +
 		"Use --force to clear the graph before rebuilding (otherwise, existing entries " +
 		"are updated in place).\n\n" +
+		"Use --sync to synchronize the graph with the filesystem after rebuilding. This " +
+		"removes stale file nodes (files no longer on disk) and orphaned nodes (Tags, " +
+		"Topics, Entities with no file connections).\n\n" +
 		"Use --clear-stale to remove stale cache entries before rebuilding. This ensures " +
 		"files are re-analyzed with the current analysis version.",
 	PreRunE: validateRebuild,
@@ -33,6 +37,7 @@ var RebuildCmd = &cobra.Command{
 
 func init() {
 	RebuildCmd.Flags().BoolVarP(&forceRebuild, "force", "f", false, "Clear graph before rebuilding")
+	RebuildCmd.Flags().BoolVar(&syncGraph, "sync", false, "Remove stale graph nodes (files no longer on disk)")
 	RebuildCmd.Flags().BoolVar(&clearStale, "clear-stale", false, "Clear stale cache entries before rebuilding")
 }
 
@@ -109,13 +114,26 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 
 	// Trigger rebuild via daemon API
 	rebuildURL := fmt.Sprintf("%s/api/v1/rebuild", daemonURL)
+	queryParams := []string{}
 	if forceRebuild {
-		rebuildURL += "?force=true"
+		queryParams = append(queryParams, "force=true")
+	}
+	if syncGraph {
+		queryParams = append(queryParams, "sync=true")
+	}
+	if len(queryParams) > 0 {
+		rebuildURL += "?" + queryParams[0]
+		for _, p := range queryParams[1:] {
+			rebuildURL += "&" + p
+		}
 	}
 
 	fmt.Printf("Triggering index rebuild via daemon...\n")
 	if forceRebuild {
 		fmt.Printf("Note: --force flag will clear the graph before rebuilding\n")
+	}
+	if syncGraph {
+		fmt.Printf("Note: --sync flag will remove stale graph nodes after rebuilding\n")
 	}
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)

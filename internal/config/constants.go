@@ -45,9 +45,10 @@ const (
 	OutputShowRecentDays = 7
 )
 
-// Default skip patterns for analysis
+// Default skip patterns for file watching
 var DefaultSkipExtensions = []string{".zip", ".tar", ".gz", ".exe", ".bin", ".dmg", ".iso"}
 var DefaultSkipFiles = []string{"memorizer"}
+var DefaultSkipDirs = []string{"node_modules", "vendor", "__pycache__", ".venv"}
 
 // Provider-specific defaults
 const (
@@ -66,11 +67,13 @@ const (
 
 // DefaultConfig provides sensible defaults for all configuration settings.
 // INTERNAL settings (not shown in initialized config but available for power users):
-// - semantic.max_tokens, semantic.max_file_size, semantic.skip_extensions, semantic.skip_files
-// - daemon.debounce_ms, daemon.workers, daemon.full_rebuild_interval_minutes
+// - semantic.max_tokens, semantic.max_file_size
+// - daemon.debounce_ms, daemon.workers, daemon.full_rebuild_interval_minutes, daemon.skip_*
 // - graph.similarity_threshold, graph.max_similar_files
 var DefaultConfig = Config{
-	MemoryRoot: "~/" + AppDirName + "/" + MemoryDirName,
+	Memory: MemoryConfig{
+		Root: "~/" + AppDirName + "/" + MemoryDirName,
+	},
 	Semantic: SemanticConfig{
 		Enabled:         true, // Derived from API key presence in GetConfig()
 		Provider:        DefaultSemanticProvider,
@@ -79,8 +82,6 @@ var DefaultConfig = Config{
 		Timeout:         30,       // API request timeout in seconds
 		EnableVision:    true,     // Enable vision API for image analysis
 		MaxFileSize:     10485760, // 10 MB
-		SkipExtensions:  DefaultSkipExtensions,
-		SkipFiles:       DefaultSkipFiles,
 		CacheDir:        "~/" + AppDirName + "/" + CacheDirName,
 		RateLimitPerMin: DefaultClaudeRateLimit, // Default to Claude's conservative limit
 	},
@@ -91,6 +92,10 @@ var DefaultConfig = Config{
 		HTTPPort:                   0, // Disabled by default
 		LogFile:                    "~/" + AppDirName + "/" + DaemonLogFile,
 		LogLevel:                   "info",
+		SkipHidden:                 true,
+		SkipDirs:                   DefaultSkipDirs,
+		SkipFiles:                  DefaultSkipFiles,
+		SkipExtensions:             DefaultSkipExtensions,
 	},
 	MCP: MCPConfig{
 		LogFile:    "~/" + AppDirName + "/" + MCPLogFile,

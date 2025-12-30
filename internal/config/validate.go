@@ -118,28 +118,28 @@ func ValidateConfig(cfg *Config) error {
 
 // validateMemoryRoot validates the memory root directory
 func validateMemoryRoot(v *Validator, cfg *Config) {
-	if cfg.MemoryRoot == "" {
-		v.AddError("memory_root", "required", "memory_root is required", "Set memory_root to a valid directory path", nil)
+	if cfg.Memory.Root == "" {
+		v.AddError("memory.root", "required", "memory.root is required", "Set memory.root to a valid directory path", nil)
 		return
 	}
 
 	// Expand home directory
-	expandedPath := ExpandHome(cfg.MemoryRoot)
+	expandedPath := ExpandHome(cfg.Memory.Root)
 
 	// Check if path is safe (no parent directory traversal)
-	if strings.Contains(cfg.MemoryRoot, "..") {
-		v.AddError("memory_root", "security", "memory_root contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.MemoryRoot)
+	if strings.Contains(cfg.Memory.Root, "..") {
+		v.AddError("memory.root", "security", "memory.root contains parent directory references (..)", "Use an absolute path or home-relative path without '..'", cfg.Memory.Root)
 		return
 	}
 
 	// Check if directory exists (warn only, don't fail - init creates it)
 	if stat, err := os.Stat(expandedPath); err != nil {
 		if !os.IsNotExist(err) {
-			v.AddError("memory_root", "access", fmt.Sprintf("cannot access memory_root: %v", err), "Check file permissions", cfg.MemoryRoot)
+			v.AddError("memory.root", "access", fmt.Sprintf("cannot access memory.root: %v", err), "Check file permissions", cfg.Memory.Root)
 		}
 		// Directory doesn't exist is OK - init will create it
 	} else if !stat.IsDir() {
-		v.AddError("memory_root", "type", "memory_root exists but is not a directory", "Specify a directory path, not a file", cfg.MemoryRoot)
+		v.AddError("memory.root", "type", "memory.root exists but is not a directory", "Specify a directory path, not a file", cfg.Memory.Root)
 	}
 }
 

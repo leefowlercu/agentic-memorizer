@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp/protocol"
 )
@@ -49,30 +50,34 @@ func (h *GetRelatedFilesHandler) Execute(ctx context.Context, args json.RawMessa
 		return nil, fmt.Errorf("daemon API not available; related files search requires daemon connection")
 	}
 
-	// Get related files from daemon API
-	path := fmt.Sprintf("/api/v1/files/related?path=%s&limit=%d", params.Path, params.Limit)
-	respBody, err := h.deps.CallDaemonAPI(ctx, "GET", path, nil)
+	// Related files are now included in the file metadata endpoint
+	// GET /api/v1/files/{path}?related_limit=N
+	encodedPath := strings.ReplaceAll(params.Path, "/", "%2F")
+	apiPath := fmt.Sprintf("/api/v1/files/%s?related_limit=%d", encodedPath, params.Limit)
+	respBody, err := h.deps.CallDaemonAPI(ctx, "GET", apiPath, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get related files; %w", err)
+		return nil, fmt.Errorf("failed to get file metadata; %w", err)
 	}
 
-	var relatedResp struct {
-		Files []struct {
-			Path           string  `json:"path"`
-			Name           string  `json:"name"`
-			Summary        string  `json:"summary"`
-			Strength       float64 `json:"strength"`
-			ConnectionType string  `json:"connection_type"`
-		} `json:"files"`
-		Count int `json:"count"`
+	var fileResp struct {
+		File struct {
+			RelatedFiles []struct {
+				Path           string  `json:"path"`
+				Name           string  `json:"name"`
+				Summary        string  `json:"summary"`
+				Strength       float64 `json:"strength"`
+				ConnectionType string  `json:"connection_type"`
+			} `json:"related_files"`
+		} `json:"file"`
 	}
-	if err := json.Unmarshal(respBody, &relatedResp); err != nil {
+	if err := json.Unmarshal(respBody, &fileResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response; %w", err)
 	}
 
 	// Format results
-	formattedResults := make([]map[string]any, len(relatedResp.Files))
-	for i, rel := range relatedResp.Files {
+	relatedFiles := fileResp.File.RelatedFiles
+	formattedResults := make([]map[string]any, len(relatedFiles))
+	for i, rel := range relatedFiles {
 		formattedResults[i] = map[string]any{
 			"path":            rel.Path,
 			"name":            rel.Name,

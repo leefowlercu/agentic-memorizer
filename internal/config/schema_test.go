@@ -11,9 +11,9 @@ func TestGetConfigSchema(t *testing.T) {
 		t.Fatal("GetConfigSchema() returned nil")
 	}
 
-	// Test that all items are present (both RootFields and Sections)
+	// Test that all items are present (all sections)
 	expectedItems := []string{
-		"memory_root",
+		"memory",
 		"semantic",
 		"daemon",
 		"mcp",

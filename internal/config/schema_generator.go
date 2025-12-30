@@ -25,13 +25,10 @@ func generateConfigSchema() *ConfigSchema {
 }
 
 // buildMinimalFieldMap returns a map of field paths that exist in MinimalConfig.
-// Field paths use dot notation: "daemon.log_level", "claude.api_key", etc.
+// Field paths use dot notation: "daemon.log_level", "memory.root", etc.
 // This map is used to automatically determine which fields are "minimal" tier.
 func buildMinimalFieldMap() map[string]bool {
 	minimalPaths := make(map[string]bool)
-
-	// Special case: memory_root is top-level field in MinimalConfig
-	minimalPaths["memory_root"] = true
 
 	// Walk MinimalConfig struct tree
 	minimalType := reflect.TypeOf(MinimalConfig{})
@@ -308,7 +305,7 @@ func getHotReload(fieldPath string) bool {
 
 // Section descriptions (cannot be derived from reflection)
 var sectionDescriptions = map[string]string{
-	"memory_root":  "Root directory for memory files",
+	"memory":       "Memory directory configuration",
 	"semantic":     "Semantic analysis provider configuration",
 	"daemon":       "Background daemon configuration",
 	"mcp":          "MCP server configuration",
@@ -319,7 +316,7 @@ var sectionDescriptions = map[string]string{
 
 // Field descriptions (cannot be derived from reflection)
 var fieldDescriptions = map[string]string{
-	"memory_root":                          "Directory containing files to index (requires daemon restart)",
+	"memory.root":                          "Directory containing files to index (requires daemon restart)",
 	"semantic.provider":                    "Semantic analysis provider (claude, openai, gemini)",
 	"semantic.api_key":                     "Provider API key (or use provider-specific env var: ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY)",
 	"semantic.model":                       "Model to use for semantic analysis (provider-specific)",
@@ -327,8 +324,6 @@ var fieldDescriptions = map[string]string{
 	"semantic.timeout":                     "API request timeout in seconds (5-300)",
 	"semantic.enable_vision":               "Enable vision API for image analysis",
 	"semantic.max_file_size":               "Maximum file size in bytes for analysis (default: 10MB)",
-	"semantic.skip_extensions":             "File extensions to skip during analysis",
-	"semantic.skip_files":                  "Filenames to skip during analysis",
 	"semantic.cache_dir":                   "Directory for analysis cache (requires daemon restart)",
 	"semantic.rate_limit_per_min":          "Maximum API calls per minute (provider-specific, 1-200)",
 	"daemon.http_port":                     "HTTP API port (0 to disable)",
@@ -338,6 +333,10 @@ var fieldDescriptions = map[string]string{
 	"daemon.full_rebuild_interval_minutes": "Minutes between full index rebuilds (0 to disable)",
 	"daemon.log_file":                      "Log file path (requires daemon restart)",
 	"daemon.log_level":                     "Log level (debug, info, warn, error)",
+	"daemon.skip_hidden":                   "Skip hidden files and directories (starting with .)",
+	"daemon.skip_dirs":                     "Directory names to skip during scanning",
+	"daemon.skip_files":                    "Filenames to skip during scanning",
+	"daemon.skip_extensions":               "File extensions to skip during scanning",
 	"mcp.log_file":                         "MCP server log file path (requires MCP restart)",
 	"mcp.log_level":                        "MCP server log level (requires MCP restart)",
 	"mcp.daemon_host":                      "Daemon HTTP host for MCP server (requires MCP restart)",
@@ -356,7 +355,7 @@ var fieldDescriptions = map[string]string{
 
 // Hot-reload settings (cannot be derived from reflection)
 var hotReloadSettings = map[string]bool{
-	"memory_root":                          false,
+	"memory.root":                          false,
 	"semantic.provider":                    true,
 	"semantic.api_key":                     true,
 	"semantic.model":                       true,
@@ -364,8 +363,6 @@ var hotReloadSettings = map[string]bool{
 	"semantic.timeout":                     true,
 	"semantic.enable_vision":               true,
 	"semantic.max_file_size":               true,
-	"semantic.skip_extensions":             true,
-	"semantic.skip_files":                  true,
 	"semantic.cache_dir":                   false,
 	"semantic.rate_limit_per_min":          true,
 	"daemon.http_port":                     true,
@@ -375,6 +372,10 @@ var hotReloadSettings = map[string]bool{
 	"daemon.full_rebuild_interval_minutes": true,
 	"daemon.log_file":                      false,
 	"daemon.log_level":                     true,
+	"daemon.skip_hidden":                   true,
+	"daemon.skip_dirs":                     true,
+	"daemon.skip_files":                    true,
+	"daemon.skip_extensions":               true,
 	"mcp.log_file":                         false,
 	"mcp.log_level":                        false,
 	"mcp.daemon_host":                      false,

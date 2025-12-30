@@ -228,6 +228,21 @@ func TestManager_Cleanup_NotConnected(t *testing.T) {
 	}
 }
 
+func TestManager_RemoveStaleFiles_NotConnected(t *testing.T) {
+	manager := NewManager(DefaultManagerConfig(), nil)
+	ctx := context.Background()
+
+	currentPaths := map[string]bool{
+		"/test/file1.txt": true,
+		"/test/file2.txt": true,
+	}
+
+	_, err := manager.RemoveStaleFiles(ctx, currentPaths)
+	if err == nil {
+		t.Error("expected error when removing stale files on unconnected manager")
+	}
+}
+
 func TestManager_Accessors(t *testing.T) {
 	manager := NewManager(DefaultManagerConfig(), nil)
 

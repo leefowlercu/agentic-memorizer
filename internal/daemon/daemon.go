@@ -24,6 +24,7 @@ import (
 	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/claude" // Register Claude provider
 	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/gemini" // Register Gemini provider
 	_ "github.com/leefowlercu/agentic-memorizer/internal/semantic/providers/openai" // Register OpenAI provider
+	"github.com/leefowlercu/agentic-memorizer/internal/skip"
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
@@ -167,19 +168,17 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 		return nil, fmt.Errorf("failed to get PID path: %w", err)
 	}
 
-	// Create file watcher
-	skipDirs := []string{".cache", ".git"}
-	skipFiles := cfg.Semantic.SkipFiles
-	if len(skipFiles) == 0 {
-		skipFiles = []string{"memorizer"}
+	// Create skip config for watcher
+	skipCfg := &skip.Config{
+		SkipHidden:     cfg.Daemon.SkipHidden,
+		SkipDirs:       cfg.Daemon.SkipDirs,
+		SkipFiles:      cfg.Daemon.SkipFiles,
+		SkipExtensions: cfg.Daemon.SkipExtensions,
 	}
-	skipExtensions := cfg.Semantic.SkipExtensions
 
 	fileWatcher, err := watcher.New(
-		cfg.MemoryRoot,
-		skipDirs,
-		skipFiles,
-		skipExtensions,
+		cfg.Memory.Root,
+		skipCfg,
 		cfg.Daemon.DebounceMs,
 		logger,
 	)
@@ -196,7 +195,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 			Password: cfg.Graph.Password,
 		},
 		Schema:     graph.DefaultSchemaConfig(),
-		MemoryRoot: cfg.MemoryRoot,
+		MemoryRoot: cfg.Memory.Root,
 	}
 
 	graphManager := graph.NewManager(graphConfig, logger)
@@ -218,7 +217,7 @@ func New(cfg *config.Config, logger *slog.Logger, logWriter *lumberjack.Logger) 
 	sseHub := api.NewSSEHub(logger)
 
 	// Create unified HTTP server with graph manager
-	httpServer := api.NewHTTPServer(sseHub, healthMetrics, graphManager, cfg.MemoryRoot, logger)
+	httpServer := api.NewHTTPServer(sseHub, healthMetrics, graphManager, cfg.Memory.Root, logger)
 
 	// Set index provider on SSE hub for including index data in events
 	sseHub.SetIndexProvider(httpServer)
@@ -438,8 +437,14 @@ func (d *Daemon) periodicRebuild() {
 	}
 }
 
-// rebuildIndex performs a full index rebuild using worker pool
+// rebuildIndex performs a full index rebuild (backwards compatibility wrapper)
 func (d *Daemon) rebuildIndex() error {
+	return d.rebuildIndexWithSync(false)
+}
+
+// rebuildIndexWithSync performs a full index rebuild using worker pool
+// When sync is true, stale graph nodes (files no longer on disk) are removed after rebuild
+func (d *Daemon) rebuildIndexWithSync(sync bool) error {
 	// Set rebuilding flag (used by API to report status)
 	d.rebuilding.Store(true)
 	defer d.rebuilding.Store(false)
@@ -451,12 +456,13 @@ func (d *Daemon) rebuildIndex() error {
 	provider := d.GetSemanticProvider()
 	providerName, modelName := d.GetProviderInfo()
 
-	skipDirs := []string{".cache", ".git"}
-	skipFiles := cfg.Semantic.SkipFiles
-	if len(skipFiles) == 0 {
-		skipFiles = []string{"memorizer"}
+	// Create skip config for walker
+	skipCfg := &skip.Config{
+		SkipHidden:     cfg.Daemon.SkipHidden,
+		SkipDirs:       cfg.Daemon.SkipDirs,
+		SkipFiles:      cfg.Daemon.SkipFiles,
+		SkipExtensions: cfg.Daemon.SkipExtensions,
 	}
-	skipExtensions := cfg.Semantic.SkipExtensions
 
 	// Create embedding provider and cache if embeddings are enabled
 	var embeddingProvider embeddings.Provider
@@ -522,15 +528,17 @@ func (d *Daemon) rebuildIndex() error {
 	pool.Start()
 	defer pool.Stop()
 
-	// Collect all files to process
+	// Collect all files to process and track paths for sync
 	var jobs []worker.Job
-	err := walker.Walk(cfg.MemoryRoot, skipDirs, skipFiles, skipExtensions, func(path string, info os.FileInfo) error {
+	currentPaths := make(map[string]bool) // For sync: tracks files currently on disk
+	err := walker.Walk(cfg.Memory.Root, skipCfg, func(path string, info os.FileInfo) error {
 		job := worker.Job{
 			Path:     path,
 			Info:     info,
 			Priority: worker.CalculatePriority(info),
 		}
 		jobs = append(jobs, job)
+		currentPaths[path] = true
 		return nil
 	})
 
@@ -565,7 +573,7 @@ func (d *Daemon) rebuildIndex() error {
 		select {
 		case result := <-pool.Results():
 			// Set relative path
-			relPath, _ := walker.GetRelPath(cfg.MemoryRoot, result.Entry.Metadata.Path)
+			relPath, _ := walker.GetRelPath(cfg.Memory.Root, result.Entry.Metadata.Path)
 			result.Entry.Metadata.RelPath = relPath
 
 			// Write to graph with embedding if available
@@ -621,13 +629,46 @@ func (d *Daemon) rebuildIndex() error {
 		"errors", errorFiles,
 	)
 
+	// Sync: remove stale graph nodes (files no longer on disk) and orphaned nodes
+	if sync {
+		logger.Info("syncing graph with filesystem")
+		removed, err := d.graphManager.RemoveStaleFiles(d.ctx, currentPaths)
+		if err != nil {
+			logger.Warn("failed to remove stale files from graph", "error", err)
+		} else if removed > 0 {
+			logger.Info("removed stale files from graph", "count", removed)
+		}
+
+		// Cleanup orphaned nodes (Tags, Topics, Entities with no file connections)
+		orphansRemoved, err := d.graphManager.Cleanup(d.ctx)
+		if err != nil {
+			logger.Warn("failed to cleanup orphaned nodes", "error", err)
+		} else if orphansRemoved > 0 {
+			logger.Info("removed orphaned nodes from graph", "count", orphansRemoved)
+		}
+
+		// Update metrics and notify SSE clients if anything was removed
+		if removed > 0 || orphansRemoved > 0 {
+			d.healthMetrics.SetIndexFileCount(totalFiles)
+			if d.sseHub != nil {
+				d.sseHub.BroadcastIndexUpdate()
+			}
+		}
+	}
+
 	return nil
 }
 
 // Rebuild forces an immediate index rebuild
 func (d *Daemon) Rebuild() error {
 	d.GetLogger().Info("manual rebuild requested")
-	return d.rebuildIndex()
+	return d.rebuildIndexWithSync(false)
+}
+
+// RebuildWithSync forces an immediate index rebuild with optional stale node cleanup
+func (d *Daemon) RebuildWithSync(sync bool) error {
+	d.GetLogger().Info("manual rebuild requested", "sync", sync)
+	return d.rebuildIndexWithSync(sync)
 }
 
 // ClearGraph clears all data from the graph (implements api.RebuildHandler)
@@ -666,7 +707,7 @@ func (d *Daemon) handleFileEvent(event watcher.Event) {
 	provider := d.GetSemanticProvider()
 	providerName, modelName := d.GetProviderInfo()
 
-	relPath, err := walker.GetRelPath(cfg.MemoryRoot, event.Path)
+	relPath, err := walker.GetRelPath(cfg.Memory.Root, event.Path)
 	if err != nil {
 		logger.Warn("failed to get relative path", "path", event.Path, "error", err)
 		return
@@ -861,8 +902,10 @@ func (d *Daemon) detectChanges(oldCfg, newCfg *config.Config) map[string]bool {
 		"http_port":        newCfg.Daemon.HTTPPort != oldCfg.Daemon.HTTPPort,
 		"workers":          newCfg.Daemon.Workers != oldCfg.Daemon.Workers,
 		"rate_limit":       newCfg.Semantic.RateLimitPerMin != oldCfg.Semantic.RateLimitPerMin,
-		"skip_patterns": !reflect.DeepEqual(newCfg.Semantic.SkipFiles, oldCfg.Semantic.SkipFiles) ||
-			!reflect.DeepEqual(newCfg.Semantic.SkipExtensions, oldCfg.Semantic.SkipExtensions),
+		"skip_patterns": !reflect.DeepEqual(newCfg.Daemon.SkipFiles, oldCfg.Daemon.SkipFiles) ||
+			!reflect.DeepEqual(newCfg.Daemon.SkipExtensions, oldCfg.Daemon.SkipExtensions) ||
+			!reflect.DeepEqual(newCfg.Daemon.SkipDirs, oldCfg.Daemon.SkipDirs) ||
+			newCfg.Daemon.SkipHidden != oldCfg.Daemon.SkipHidden,
 	}
 }
 

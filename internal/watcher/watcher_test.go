@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/skip"
 )
 
 func TestWatcher_CreateFile(t *testing.T) {
@@ -19,7 +21,12 @@ func TestWatcher_CreateFile(t *testing.T) {
 
 	// Create watcher
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{".cache", ".git"}, []string{"test-skip"}, nil, 200, logger)
+	cfg := &skip.Config{
+		SkipHidden: true,
+		SkipDirs:   []string{".cache", ".git"},
+		SkipFiles:  []string{"test-skip"},
+	}
+	w, err := New(tmpDir, cfg, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -70,7 +77,8 @@ func TestWatcher_ModifyFile(t *testing.T) {
 
 	// Create watcher
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -116,7 +124,8 @@ func TestWatcher_DeleteFile(t *testing.T) {
 
 	// Create watcher
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -155,7 +164,8 @@ func TestWatcher_SkipHiddenFiles(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -193,7 +203,8 @@ func TestWatcher_Debouncing(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -245,7 +256,8 @@ func TestWatcher_NewDirectory(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 200, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 200, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -303,7 +315,8 @@ func TestWatcher_DebounceUpdate(t *testing.T) {
 
 	// Create watcher with initial short debounce (100ms)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 100, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 100, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -420,7 +433,8 @@ func TestWatcher_EventPriority(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	w, err := New(tmpDir, []string{}, []string{}, nil, 500, logger)
+	cfg := &skip.Config{SkipHidden: true}
+	w, err := New(tmpDir, cfg, 500, logger)
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
@@ -449,6 +463,125 @@ func TestWatcher_EventPriority(t *testing.T) {
 		}
 		if event.Path != testFile {
 			t.Errorf("expected path %s, got %s", testFile, event.Path)
+		}
+	case <-time.After(1 * time.Second):
+		t.Error("timeout waiting for create event")
+	}
+}
+
+func TestWatcher_AlwaysSkipDirs(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "watcher-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create always-skip directories
+	for _, dir := range []string{".git", ".cache", ".forgotten"} {
+		dirPath := filepath.Join(tmpDir, dir)
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			t.Fatalf("failed to create dir %s: %v", dir, err)
+		}
+	}
+
+	// Even with SkipHidden=false, always-skip dirs should not be watched
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	cfg := &skip.Config{SkipHidden: false}
+	w, err := New(tmpDir, cfg, 200, logger)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Create files in always-skip directories
+	for _, dir := range []string{".git", ".cache", ".forgotten"} {
+		testFile := filepath.Join(tmpDir, dir, "test.txt")
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file in %s: %v", dir, err)
+		}
+	}
+
+	// Wait for debounce
+	time.Sleep(300 * time.Millisecond)
+
+	// Should not receive any events
+	select {
+	case event := <-w.Events():
+		t.Errorf("unexpected event for file in always-skip dir: %v", event)
+	case <-time.After(500 * time.Millisecond):
+		// Expected - no events from always-skip directories
+	}
+}
+
+func TestWatcher_SkipExtensions(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "watcher-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	cfg := &skip.Config{
+		SkipHidden:     true,
+		SkipExtensions: []string{".tmp", ".bak"},
+	}
+	w, err := New(tmpDir, cfg, 200, logger)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Create files with skipped extensions (should be skipped)
+	tmpFile := filepath.Join(tmpDir, "file.tmp")
+	if err := os.WriteFile(tmpFile, []byte("tmp"), 0644); err != nil {
+		t.Fatalf("failed to create tmp file: %v", err)
+	}
+
+	bakFile := filepath.Join(tmpDir, "file.bak")
+	if err := os.WriteFile(bakFile, []byte("bak"), 0644); err != nil {
+		t.Fatalf("failed to create bak file: %v", err)
+	}
+
+	// Wait for debounce
+	time.Sleep(300 * time.Millisecond)
+
+	// Should not receive events for skipped extensions
+	select {
+	case event := <-w.Events():
+		t.Errorf("unexpected event for skipped extension file: %v", event)
+	case <-time.After(500 * time.Millisecond):
+		// Expected - no events
+	}
+
+	// Create a non-skipped file (should trigger event)
+	txtFile := filepath.Join(tmpDir, "file.txt")
+	if err := os.WriteFile(txtFile, []byte("txt"), 0644); err != nil {
+		t.Fatalf("failed to create txt file: %v", err)
+	}
+
+	// Wait for debounce
+	time.Sleep(300 * time.Millisecond)
+
+	// Should receive event for non-skipped file
+	select {
+	case event := <-w.Events():
+		if event.Type != EventCreate {
+			t.Errorf("expected Create event, got %v", event.Type)
+		}
+		if event.Path != txtFile {
+			t.Errorf("expected path %s, got %s", txtFile, event.Path)
 		}
 	case <-time.After(1 * time.Second):
 		t.Error("timeout waiting for create event")

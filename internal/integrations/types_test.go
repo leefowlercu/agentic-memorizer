@@ -14,11 +14,6 @@ func TestOutputFormat_IsValid(t *testing.T) {
 			want:   true,
 		},
 		{
-			name:   "FormatMarkdown is valid",
-			format: FormatMarkdown,
-			want:   true,
-		},
-		{
 			name:   "FormatJSON is valid",
 			format: FormatJSON,
 			want:   true,
@@ -55,11 +50,6 @@ func TestOutputFormat_String(t *testing.T) {
 			name:   "FormatXML",
 			format: FormatXML,
 			want:   "xml",
-		},
-		{
-			name:   "FormatMarkdown",
-			format: FormatMarkdown,
-			want:   "markdown",
 		},
 		{
 			name:   "FormatJSON",

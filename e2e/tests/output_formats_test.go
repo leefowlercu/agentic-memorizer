@@ -55,38 +55,6 @@ func TestOutputFormats_XML(t *testing.T) {
 	}
 }
 
-// TestOutputFormats_Markdown tests Markdown output format
-func TestOutputFormats_Markdown(t *testing.T) {
-	h := harness.New(t)
-	if err := h.Setup(); err != nil {
-		t.Fatalf("Setup failed: %v", err)
-	}
-	cleanup := harness.MustCleanup(t, h)
-	defer cleanup.CleanupAll()
-
-	// Add test file
-	if err := h.AddMemoryFile("test.md", "# Test\n\nMarkdown content"); err != nil {
-		t.Fatalf("Failed to add file: %v", err)
-	}
-
-	// Read with Markdown format
-	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "markdown")
-
-	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
-
-	// Verify Markdown structure
-	if !strings.Contains(stdout, "# Memory Index") && !strings.Contains(stdout, "## ") {
-		t.Error("Expected Markdown headers (# or ##)")
-	}
-
-	// Markdown should be human-readable
-	if strings.Contains(stdout, "<?xml") || strings.Contains(stdout, "{\"") {
-		t.Error("Markdown output should not contain XML or JSON")
-	}
-
-	t.Logf("Markdown output (%d bytes) is properly formatted", len(stdout))
-}
-
 // TestOutputFormats_JSON tests JSON output format
 func TestOutputFormats_JSON(t *testing.T) {
 	h := harness.New(t)
@@ -378,59 +346,3 @@ func TestOutputFormats_JSONSchemaValidation(t *testing.T) {
 	}
 }
 
-// TestOutputFormats_MarkdownReadability tests markdown is human-readable
-func TestOutputFormats_MarkdownReadability(t *testing.T) {
-	h := harness.New(t)
-	if err := h.Setup(); err != nil {
-		t.Fatalf("Setup failed: %v", err)
-	}
-	cleanup := harness.MustCleanup(t, h)
-	defer cleanup.CleanupAll()
-
-	// Add test files
-	if err := h.AddMemoryFile("readme.md", "# README\n\nProject readme"); err != nil {
-		t.Fatalf("Failed to add file: %v", err)
-	}
-	if err := h.AddMemoryFile("config.json", `{"app": "test"}`); err != nil {
-		t.Fatalf("Failed to add file: %v", err)
-	}
-
-	// Read Markdown output
-	stdout, stderr, exitCode := h.RunCommand("read", "files", "--format", "markdown")
-
-	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
-
-	// Verify human-readable elements
-	readableElements := []string{
-		"#",  // Headers
-		"##", // Subheaders
-		"-",  // Lists
-		"**", // Bold (optional)
-	}
-
-	foundCount := 0
-	for _, elem := range readableElements {
-		if strings.Contains(stdout, elem) {
-			foundCount++
-		}
-	}
-
-	if foundCount == 0 {
-		t.Error("Markdown output doesn't contain common markdown elements")
-	} else {
-		t.Logf("Markdown contains %d/%d readable elements", foundCount, len(readableElements))
-	}
-
-	// Should not contain raw JSON or XML
-	if strings.Contains(stdout, `"path":`) || strings.Contains(stdout, `<path>`) {
-		t.Error("Markdown output appears to contain raw JSON or XML")
-	}
-
-	// Verify reasonable length (not too verbose, not too terse)
-	lines := strings.Count(stdout, "\n")
-	if lines < 5 {
-		t.Logf("Warning: Markdown output is very short (%d lines)", lines)
-	}
-
-	t.Logf("Markdown output is %d lines, appears human-readable", lines)
-}

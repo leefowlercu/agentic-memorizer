@@ -306,7 +306,6 @@ func TestFacts_ReadFactsFormats(t *testing.T) {
 	}{
 		{"JSON", "json", `"content"`},
 		{"XML", "xml", "<facts"},
-		{"Markdown", "markdown", factContent},
 	}
 
 	for _, tt := range tests {

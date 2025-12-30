@@ -8,9 +8,6 @@ const (
 	// FormatXML renders the index as XML (existing format)
 	FormatXML OutputFormat = "xml"
 
-	// FormatMarkdown renders the index as Markdown (existing format)
-	FormatMarkdown OutputFormat = "markdown"
-
 	// FormatJSON renders the index as JSON (new format - not the storage format)
 	// This is a human-readable/agent-readable JSON representation
 	FormatJSON OutputFormat = "json"
@@ -19,7 +16,7 @@ const (
 // IsValid checks if the output format is valid
 func (f OutputFormat) IsValid() bool {
 	switch f {
-	case FormatXML, FormatMarkdown, FormatJSON:
+	case FormatXML, FormatJSON:
 		return true
 	default:
 		return false

@@ -46,12 +46,6 @@ func TestGeminiCLIHookAdapter_GetCommand(t *testing.T) {
 			want:       "/usr/local/bin/memorizer read files --format xml --integration gemini-cli-hook",
 		},
 		{
-			name:       "Markdown format",
-			binaryPath: "/usr/local/bin/memorizer",
-			format:     integrations.FormatMarkdown,
-			want:       "/usr/local/bin/memorizer read files --format markdown --integration gemini-cli-hook",
-		},
-		{
 			name:       "JSON format",
 			binaryPath: "/usr/local/bin/memorizer",
 			format:     integrations.FormatJSON,
@@ -269,15 +263,15 @@ func TestGeminiCLIHookAdapter_Reload(t *testing.T) {
 
 	// Test reloading output format
 	config := integrations.IntegrationConfig{
-		OutputFormat: "markdown",
+		OutputFormat: "json",
 	}
 
 	if err := adapter.Reload(config); err != nil {
 		t.Fatalf("Reload() error = %v", err)
 	}
 
-	if adapter.outputFormat != integrations.FormatMarkdown {
-		t.Errorf("Output format after reload = %v, want %v", adapter.outputFormat, integrations.FormatMarkdown)
+	if adapter.outputFormat != integrations.FormatJSON {
+		t.Errorf("Output format after reload = %v, want %v", adapter.outputFormat, integrations.FormatJSON)
 	}
 
 	// Test reloading matchers

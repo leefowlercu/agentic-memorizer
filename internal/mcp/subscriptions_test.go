@@ -41,7 +41,6 @@ func TestSubscriptionManager_MultipleURIs(t *testing.T) {
 
 	uris := []string{
 		"memorizer://index",
-		"memorizer://index/markdown",
 		"memorizer://index/json",
 	}
 
@@ -98,7 +97,6 @@ func TestSubscriptionManager_Clear(t *testing.T) {
 
 	uris := []string{
 		"memorizer://index",
-		"memorizer://index/markdown",
 		"memorizer://index/json",
 	}
 
@@ -136,7 +134,7 @@ func TestSubscriptionManager_Count(t *testing.T) {
 		t.Errorf("Expected 1 subscription, got %d", sm.Count())
 	}
 
-	sm.Subscribe("memorizer://index/markdown")
+	sm.Subscribe("memorizer://index/json")
 	if sm.Count() != 2 {
 		t.Errorf("Expected 2 subscriptions, got %d", sm.Count())
 	}
@@ -152,9 +150,8 @@ func TestSubscriptionManager_GetSubscriptions(t *testing.T) {
 	sm := NewSubscriptionManager()
 
 	expectedURIs := map[string]bool{
-		"memorizer://index":          true,
-		"memorizer://index/markdown": true,
-		"memorizer://index/json":     true,
+		"memorizer://index":      true,
+		"memorizer://index/json": true,
 	}
 
 	for uri := range expectedURIs {
@@ -183,7 +180,6 @@ func TestSubscriptionManager_ThreadSafety(t *testing.T) {
 
 	uris := []string{
 		"memorizer://index",
-		"memorizer://index/markdown",
 		"memorizer://index/json",
 	}
 

@@ -106,7 +106,7 @@ Tests MCP JSON-RPC 2.0 protocol implementation.
 
 **Coverage:**
 - Initialize handshake
-- Resources: list, read (XML/Markdown/JSON)
+- Resources: list, read (XML/JSON)
 - Tools: list, call (search_files, get_file_metadata, list_recent_files, get_related_files, search_entities)
 - Error handling
 - Shutdown sequence

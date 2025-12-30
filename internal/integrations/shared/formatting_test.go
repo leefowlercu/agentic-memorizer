@@ -85,12 +85,6 @@ func TestOutputFormatToString(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "markdown format",
-			format:      integrations.FormatMarkdown,
-			expected:    "markdown",
-			expectError: false,
-		},
-		{
 			name:        "json format",
 			format:      integrations.FormatJSON,
 			expected:    "json",

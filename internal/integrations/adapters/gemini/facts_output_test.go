@@ -151,7 +151,6 @@ func TestFormatBeforeAgentJSON_AllFormats(t *testing.T) {
 		format integrations.OutputFormat
 	}{
 		{"XML", integrations.FormatXML},
-		{"Markdown", integrations.FormatMarkdown},
 		{"JSON", integrations.FormatJSON},
 	}
 

@@ -114,7 +114,6 @@ func TestFormatGeminiHookJSON_Structure(t *testing.T) {
 		format integrations.OutputFormat
 	}{
 		{"XML format", integrations.FormatXML},
-		{"Markdown format", integrations.FormatMarkdown},
 		{"JSON format", integrations.FormatJSON},
 	}
 
@@ -152,10 +151,6 @@ func TestFormatGeminiHookJSON_Structure(t *testing.T) {
 			case integrations.FormatXML:
 				if !strings.Contains(content, "<file") {
 					t.Error("XML output should contain <file> tags")
-				}
-			case integrations.FormatMarkdown:
-				if !strings.Contains(content, "file1.txt") {
-					t.Error("Markdown output should contain file names")
 				}
 			case integrations.FormatJSON:
 				if !strings.Contains(content, `"files"`) {

@@ -298,12 +298,6 @@ func (s *Server) handleResourcesList(ctx context.Context, id any, params json.Ra
 			MimeType:    "application/xml",
 		},
 		{
-			URI:         "memorizer://index/markdown",
-			Name:        "Memory Index (Markdown)",
-			Description: "Human-readable markdown format of memory index",
-			MimeType:    "text/markdown",
-		},
-		{
 			URI:         "memorizer://index/json",
 			Name:        "Memory Index (JSON)",
 			Description: "Structured JSON format of memory index",
@@ -341,9 +335,6 @@ func (s *Server) handleResourcesRead(ctx context.Context, id any, params json.Ra
 	case "memorizer://index":
 		content, err = s.formatIndexXML()
 		mimeType = "application/xml"
-	case "memorizer://index/markdown":
-		content, err = s.formatIndexMarkdown()
-		mimeType = "text/markdown"
 	case "memorizer://index/json":
 		content, err = s.formatIndexJSON()
 		mimeType = "application/json"
@@ -389,9 +380,8 @@ func (s *Server) handleResourcesSubscribe(ctx context.Context, id any, params js
 
 	// Validate URI - only allow memorizer:// URIs
 	validURIs := map[string]bool{
-		"memorizer://index":          true,
-		"memorizer://index/markdown": true,
-		"memorizer://index/json":     true,
+		"memorizer://index":      true,
+		"memorizer://index/json": true,
 	}
 
 	if !validURIs[req.URI] {
@@ -433,16 +423,6 @@ func (s *Server) handleResourcesUnsubscribe(ctx context.Context, id any, params 
 // formatIndexXML formats the index as XML
 func (s *Server) formatIndexXML() (string, error) {
 	formatter, err := format.GetFormatter("xml")
-	if err != nil {
-		return "", fmt.Errorf("failed to get formatter; %w", err)
-	}
-	filesContent := format.NewFilesContent(s.index)
-	return formatter.Format(filesContent)
-}
-
-// formatIndexMarkdown formats the index as Markdown
-func (s *Server) formatIndexMarkdown() (string, error) {
-	formatter, err := format.GetFormatter("markdown")
 	if err != nil {
 		return "", fmt.Errorf("failed to get formatter; %w", err)
 	}

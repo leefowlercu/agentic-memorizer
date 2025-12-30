@@ -79,8 +79,8 @@ func TestMCP_ListResources(t *testing.T) {
 
 	// Verify expected resources (index formats)
 	expectedResources := map[string]bool{
-		"memorizer://index/markdown": false,
-		"memorizer://index/json":     false,
+		"memorizer://index/xml":  false,
+		"memorizer://index/json": false,
 	}
 
 	for _, res := range resources {
@@ -129,7 +129,7 @@ func TestMCP_ReadResource(t *testing.T) {
 		uri         string
 		shouldExist bool
 	}{
-		{"memorizer://index/markdown", true},
+		{"memorizer://index/xml", true},
 		{"memorizer://index/json", true},
 		{"memorizer://index/invalid", false},
 	}

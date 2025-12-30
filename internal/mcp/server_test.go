@@ -347,7 +347,7 @@ func TestServer_ResourcesList(t *testing.T) {
 			name:        "successful list after initialization",
 			initialized: true,
 			wantError:   false,
-			wantCount:   3, // XML, Markdown, JSON formats
+			wantCount:   2, // XML, JSON formats
 		},
 		{
 			name:          "list before initialization",
@@ -420,7 +420,7 @@ func TestServer_ResourcesList(t *testing.T) {
 					t.Errorf("Resource count = %d, want %d", len(listResp.Resources), tt.wantCount)
 				}
 
-				// Verify all three formats are present
+				// Verify all formats are present
 				uris := make(map[string]bool)
 				for _, r := range listResp.Resources {
 					uris[r.URI] = true
@@ -428,7 +428,6 @@ func TestServer_ResourcesList(t *testing.T) {
 
 				expectedURIs := []string{
 					"memorizer://index",
-					"memorizer://index/markdown",
 					"memorizer://index/json",
 				}
 
@@ -457,13 +456,6 @@ func TestServer_ResourcesRead(t *testing.T) {
 			initialized:  true,
 			wantError:    false,
 			wantMimeType: "application/xml",
-		},
-		{
-			name:         "read Markdown format",
-			uri:          "memorizer://index/markdown",
-			initialized:  true,
-			wantError:    false,
-			wantMimeType: "text/markdown",
 		},
 		{
 			name:         "read JSON format",
@@ -1027,12 +1019,6 @@ func TestServer_ResourcesSubscribe(t *testing.T) {
 		{
 			name:        "subscribe to index",
 			uri:         "memorizer://index",
-			initialized: true,
-			wantError:   false,
-		},
-		{
-			name:        "subscribe to markdown index",
-			uri:         "memorizer://index/markdown",
 			initialized: true,
 			wantError:   false,
 		},

@@ -22,13 +22,6 @@ func TestGetFilesCommand(t *testing.T) {
 			expected:        "/usr/local/bin/memorizer read files --format xml --integration claude-code-hook",
 		},
 		{
-			name:            "markdown format",
-			binaryPath:      "~/.local/bin/memorizer",
-			format:          integrations.FormatMarkdown,
-			integrationName: "gemini-cli-hook",
-			expected:        "~/.local/bin/memorizer read files --format markdown --integration gemini-cli-hook",
-		},
-		{
 			name:            "json format",
 			binaryPath:      "memorizer",
 			format:          integrations.FormatJSON,
@@ -63,11 +56,11 @@ func TestGetFactsCommand(t *testing.T) {
 			expected:        "/usr/local/bin/memorizer read facts --format xml --integration claude-code-hook",
 		},
 		{
-			name:            "markdown format",
-			binaryPath:      "~/.local/bin/memorizer",
-			format:          integrations.FormatMarkdown,
-			integrationName: "gemini-cli-hook",
-			expected:        "~/.local/bin/memorizer read facts --format markdown --integration gemini-cli-hook",
+			name:            "json format",
+			binaryPath:      "memorizer",
+			format:          integrations.FormatJSON,
+			integrationName: "test-integration",
+			expected:        "memorizer read facts --format json --integration test-integration",
 		},
 	}
 

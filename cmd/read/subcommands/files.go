@@ -24,11 +24,8 @@ var FilesCmd = &cobra.Command{
 		"The read files command is typically called by agent framework hooks (like Claude Code's " +
 		"SessionStart hooks) to load the memory index into the agent's context.\n\n" +
 		"Uses the graph-native format with flattened FileEntry structures.",
-	Example: `  # Plain XML output (structured format)
+	Example: `  # Plain XML output (structured format, default)
   memorizer read files
-
-  # Plain markdown output (human-readable)
-  memorizer read files --format markdown
 
   # Plain JSON output (programmatic access)
   memorizer read files --format json
@@ -46,7 +43,7 @@ var FilesCmd = &cobra.Command{
 }
 
 func init() {
-	FilesCmd.Flags().String("format", "xml", "Output format (xml/markdown/json)")
+	FilesCmd.Flags().String("format", "xml", "Output format (xml/json)")
 	FilesCmd.Flags().BoolP("verbose", "v", false, "Include related files per entry and graph insights")
 	FilesCmd.Flags().String("integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
 }
@@ -55,7 +52,7 @@ func validateReadFiles(cmd *cobra.Command, args []string) error {
 	// Validate format flag
 	formatStr, _ := cmd.Flags().GetString("format")
 	if formatStr != "" {
-		validFormats := []string{"xml", "markdown", "json"}
+		validFormats := []string{"xml", "json"}
 		valid := false
 		for _, f := range validFormats {
 			if formatStr == f {
@@ -64,7 +61,7 @@ func validateReadFiles(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if !valid {
-			return fmt.Errorf("invalid format %q (must be one of: xml, markdown, json)", formatStr)
+			return fmt.Errorf("invalid format %q (must be one of: xml, json)", formatStr)
 		}
 	}
 

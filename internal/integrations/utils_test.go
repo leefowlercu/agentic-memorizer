@@ -214,11 +214,6 @@ func TestValidateOutputFormat(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "markdown is valid",
-			format:  "markdown",
-			wantErr: false,
-		},
-		{
 			name:    "json is valid",
 			format:  "json",
 			wantErr: false,
@@ -256,12 +251,6 @@ func TestParseOutputFormat(t *testing.T) {
 			name:    "xml format",
 			format:  "xml",
 			want:    FormatXML,
-			wantErr: false,
-		},
-		{
-			name:    "markdown format",
-			format:  "markdown",
-			want:    FormatMarkdown,
 			wantErr: false,
 		},
 		{

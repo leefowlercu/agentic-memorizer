@@ -41,5 +41,7 @@ docs/wip/
 dist/
 .next-version
 
-# To-do files
+# Planning files
 TODO.md
+SPEC.md
+PLAN.md

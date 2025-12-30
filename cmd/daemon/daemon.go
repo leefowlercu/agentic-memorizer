@@ -14,7 +14,7 @@ var DaemonCmd = &cobra.Command{
 		"The daemon watches the memory directory for changes and automatically updates " +
 		"the graph database, enabling quick access via the read command.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return fmt.Errorf("please specify a subcommand: start, stop, status, restart, rebuild, logs, systemctl, or launchctl")
+		return fmt.Errorf("please specify a subcommand: start, stop, status, restart, rebuild, or logs")
 	},
 }
 
@@ -25,6 +25,4 @@ func init() {
 	DaemonCmd.AddCommand(subcommands.RestartCmd)
 	DaemonCmd.AddCommand(subcommands.RebuildCmd)
 	DaemonCmd.AddCommand(subcommands.LogsCmd)
-	DaemonCmd.AddCommand(subcommands.SystemctlCmd)
-	DaemonCmd.AddCommand(subcommands.LaunchctlCmd)
 }

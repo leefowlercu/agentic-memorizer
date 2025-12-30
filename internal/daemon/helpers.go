@@ -26,11 +26,11 @@ func DetectServiceManager() string {
 func GetServiceManagerHint(sm string) string {
 	switch sm {
 	case "systemd":
-		return "\nTip: For automatic management, set up as a systemd service:\n" +
-			"  memorizer daemon systemctl\n"
+		return "\nTip: For automatic management, set up as a systemd service.\n" +
+			"  See 'Running as a Service' in README.md\n"
 	case "launchd":
-		return "\nTip: For automatic management, set up as a launchd service:\n" +
-			"  memorizer daemon launchctl\n"
+		return "\nTip: For automatic management, set up as a launchd service.\n" +
+			"  See 'Running as a Service' in README.md\n"
 	case "linux":
 		return "\nTip: Consider running in background:\n" +
 			"  nohup memorizer daemon start &\n"

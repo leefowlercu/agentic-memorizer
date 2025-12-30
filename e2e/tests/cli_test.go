@@ -347,38 +347,3 @@ func TestCLI_MCPStart(t *testing.T) {
 	// It's tested properly in the MCP-specific test file
 }
 
-// TestCLI_DaemonSystemctl tests daemon systemctl command
-func TestCLI_DaemonSystemctl(t *testing.T) {
-	h := harness.New(t)
-	if err := h.Setup(); err != nil {
-		t.Fatalf("Setup failed: %v", err)
-	}
-	cleanup := harness.MustCleanup(t, h)
-	defer cleanup.CleanupAll()
-
-	stdout, stderr, exitCode := h.RunCommand("daemon", "systemctl")
-
-	// Should generate systemd unit file
-	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
-	harness.AssertContains(t, stdout, "[Unit]")
-	harness.AssertContains(t, stdout, "[Service]")
-	harness.AssertContains(t, stdout, "Type=notify")
-}
-
-// TestCLI_DaemonLaunchctl tests daemon launchctl command
-func TestCLI_DaemonLaunchctl(t *testing.T) {
-	h := harness.New(t)
-	if err := h.Setup(); err != nil {
-		t.Fatalf("Setup failed: %v", err)
-	}
-	cleanup := harness.MustCleanup(t, h)
-	defer cleanup.CleanupAll()
-
-	stdout, stderr, exitCode := h.RunCommand("daemon", "launchctl")
-
-	// Should generate launchd plist file
-	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
-	harness.AssertContains(t, stdout, "<?xml")
-	harness.AssertContains(t, stdout, "plist")
-	harness.AssertContains(t, stdout, "Label")
-}

@@ -694,8 +694,7 @@ func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 			fmt.Printf("   # Option B: Manual (background)\n")
 			fmt.Printf("   nohup memorizer daemon start &\n\n")
 			fmt.Printf("   # Option C: System service (background, recommended)\n")
-			fmt.Printf("   memorizer daemon systemctl  # Linux\n")
-			fmt.Printf("   memorizer daemon launchctl  # macOS\n")
+			fmt.Printf("   See 'Running as a Service' in README.md\n")
 		}
 	}
 }

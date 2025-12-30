@@ -18,6 +18,8 @@ Platform-specific service integration for systemd (Linux) and launchd (macOS) en
 
 The Service Manager subsystem generates platform-specific service configuration files that enable the daemon to run as a system-managed background process. On Linux systems, it produces systemd unit files; on macOS, it produces launchd property list (plist) files. Both platforms support user-level and system-level installation, with appropriate security settings and restart policies.
 
+This subsystem is used by the `memorizer initialize` command's interactive TUI wizard to automatically install and configure system services during setup. The TUI startup step uses the servicemanager package to detect the platform, generate appropriate service files, and install them to the correct locations.
+
 The subsystem handles platform detection, binary path resolution, configuration file generation, and installation with clear user instructions. It enables the daemon to start automatically at login or boot, restart on failure, and integrate with system logging facilities.
 
 Key capabilities include:
@@ -71,9 +73,9 @@ Installation functions include `GetUserAgentPath()` returning `~/Library/LaunchA
 
 ## Integration Points
 
-### CLI Commands
+### Initialize Command / TUI
 
-The `daemon systemctl` command uses `GenerateUserUnit()` and `GenerateSystemUnit()` to produce systemd configuration with installation instructions. The `daemon launchctl` command uses `GeneratePlist()` to produce launchd configuration with installation instructions. Both commands use `GetBinaryPath()` to locate the binary and display appropriate instructions based on the `--system` flag.
+The `memorizer initialize` command's TUI wizard uses this subsystem to offer automatic service installation during setup. The startup step (`internal/tui/initialize/steps/startup.go`) calls `DetectPlatform()` to determine the OS, then uses platform-specific functions (`GenerateUserUnit()` for systemd, `GeneratePlist()` for launchd) to create service files. The `InstallUserUnit()` and `InstallUserAgent()` functions write the files to their standard locations.
 
 ### Daemon Subsystem
 

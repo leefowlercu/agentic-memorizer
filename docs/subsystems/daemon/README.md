@@ -178,8 +178,6 @@ The daemon CLI commands (`cmd/daemon/subcommands/`) provide user-facing control:
 - `daemon restart` - Restart the daemon
 - `daemon logs` - Tail daemon logs
 - `daemon rebuild` - Trigger manual rebuild via SIGUSR1
-- `daemon systemctl` - Generate systemd unit file
-- `daemon launchctl` - Generate launchd plist file
 
 ## Glossary
 

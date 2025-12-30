@@ -416,9 +416,7 @@ This will:
 Then start the daemon:
 ```bash
 memorizer daemon start
-# OR set up as system service (recommended):
-memorizer daemon systemctl  # Linux
-memorizer daemon launchctl  # macOS
+# OR set up as system service (recommended) - see "Running as a Service" section
 ```
 
 #### Path B: Gemini CLI (Automatic Integration)
@@ -527,9 +525,7 @@ The initialize command can optionally configure AI agent integrations automatica
 After initialization, start the daemon:
 ```bash
 memorizer daemon start
-# OR set up as system service (recommended for production):
-memorizer daemon systemctl  # Linux
-memorizer daemon launchctl  # macOS
+# OR set up as system service (recommended) - see "Running as a Service" section
 ```
 
 #### Option 2: Using Makefile
@@ -1201,9 +1197,7 @@ The background daemon is the core of Agentic Memorizer. It maintains a precomput
 # Start the daemon (run in foreground - use Ctrl+C to stop)
 memorizer daemon start
 
-# OR set up as system service for automatic management (recommended):
-memorizer daemon systemctl  # Linux
-memorizer daemon launchctl  # macOS
+# OR set up as system service (recommended) - see "Running as a Service" section
 ```
 
 **Note**: If you used `initialize --integrations`, the integration is already configured. Otherwise, configure your AI agent framework to call `memorizer read` (see Integration Setup section above).
@@ -1273,7 +1267,7 @@ daemon:
 
 #### Running as a Service
 
-For production use, run the daemon as a system service that starts automatically and restarts on failure. The application provides commands to generate service configuration files for systemd (Linux) and launchd (macOS).
+For production use, run the daemon as a system service that starts automatically and restarts on failure. Below are user-level service configurations for systemd (Linux) and launchd (macOS).
 
 **Benefits of running as a service:**
 - Automatic start on system boot or user login
@@ -1282,24 +1276,48 @@ For production use, run the daemon as a system service that starts automatically
 - Health monitoring and status checking
 - No manual terminal session required
 
+**Note:** The interactive `memorizer initialize` wizard can automatically install and configure these services for you.
+
 ##### systemd (Linux)
 
-Generate a systemd unit file:
+Create the systemd unit file at `~/.config/systemd/user/memorizer.service`:
 
-```bash
-memorizer daemon systemctl
+```ini
+[Unit]
+Description=Agentic Memorizer Daemon
+Documentation=https://github.com/leefowlercu/agentic-memorizer
+After=network.target
+
+[Service]
+Type=notify
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/memorizer daemon start
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Environment
+Environment="HOME=%h"
+
+[Install]
+WantedBy=default.target
 ```
 
-This command outputs a complete systemd unit file. To install:
+**Note:** If you installed memorizer to a different location, update the `ExecStart` path accordingly. The `%h` specifier expands to your home directory.
 
-**Option A: User Service (Recommended - No root required)**
+**Install and start the service:**
 
 ```bash
 # Create directory
 mkdir -p ~/.config/systemd/user
 
-# Generate and save unit file
-memorizer daemon systemctl > ~/.config/systemd/user/memorizer.service
+# Create the unit file (copy the content above)
+nano ~/.config/systemd/user/memorizer.service
 
 # Reload systemd
 systemctl --user daemon-reload
@@ -1315,28 +1333,6 @@ systemctl --user status memorizer
 
 # View logs
 journalctl --user -u memorizer -f
-```
-
-**Option B: System-Wide Service (Requires root)**
-
-```bash
-# Generate and save unit file (requires sudo)
-memorizer daemon systemctl | sudo tee /etc/systemd/system/memorizer.service
-
-# Reload systemd
-sudo systemctl daemon-reload
-
-# Enable autostart
-sudo systemctl enable memorizer
-
-# Start service
-sudo systemctl start memorizer
-
-# Check status
-systemctl status memorizer
-
-# View logs
-journalctl -u memorizer -f
 ```
 
 **Managing the service:**
@@ -1360,26 +1356,71 @@ systemctl --user daemon-reload
 
 ##### launchd (macOS)
 
-Generate a launchd property list:
+Create the launchd plist file at `~/Library/LaunchAgents/com.$(whoami).memorizer.plist`:
 
-```bash
-memorizer daemon launchctl
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.YOUR_USERNAME.memorizer</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/YOUR_USERNAME/.local/bin/memorizer</string>
+		<string>daemon</string>
+		<string>start</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/Users/YOUR_USERNAME</string>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<key>StandardOutPath</key>
+	<string>/Users/YOUR_USERNAME/.memorizer/daemon.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/Users/YOUR_USERNAME/.memorizer/daemon.log</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/YOUR_USERNAME</string>
+	</dict>
+
+	<key>ProcessType</key>
+	<string>Background</string>
+
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+</dict>
+</plist>
 ```
 
-This command outputs a complete launchd plist file. To install:
+**Note:** Replace `YOUR_USERNAME` with your actual username, or use the shell commands below to create the file with correct paths.
+
+**Install and start the service:**
 
 ```bash
 # Create directory
 mkdir -p ~/Library/LaunchAgents
 
-# Generate and save plist
-memorizer daemon launchctl > ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
+# Create the plist file (replace YOUR_USERNAME or use the template above)
+nano ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
 
-# Load service
-launchctl load ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
-
-# Start service (if not running)
-launchctl start com.$(whoami).memorizer
+# Load and start service
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
+launchctl enable gui/$(id -u)/com.$(whoami).memorizer
+launchctl kickstart -k gui/$(id -u)/com.$(whoami).memorizer
 
 # Check if running
 launchctl list | grep memorizer
@@ -1389,17 +1430,16 @@ launchctl list | grep memorizer
 
 ```bash
 # Stop service
-launchctl stop com.$(whoami).memorizer
+launchctl kill SIGTERM gui/$(id -u)/com.$(whoami).memorizer
 
 # Restart service
-launchctl stop com.$(whoami).memorizer
-launchctl start com.$(whoami).memorizer
+launchctl kickstart -k gui/$(id -u)/com.$(whoami).memorizer
 
-# Disable autostart (unload)
-launchctl unload ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
+# Disable and unload service
+launchctl bootout gui/$(id -u)/com.$(whoami).memorizer
 
 # Remove service
-launchctl unload ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
+launchctl bootout gui/$(id -u)/com.$(whoami).memorizer 2>/dev/null
 rm ~/Library/LaunchAgents/com.$(whoami).memorizer.plist
 ```
 
@@ -1900,14 +1940,14 @@ memorizer initialize [flags]
 memorizer daemon start
 memorizer daemon stop
 memorizer daemon status
-memorizer daemon systemctl      # Generate systemd unit file
-memorizer daemon launchctl      # Generate launchd plist
+memorizer daemon restart
+memorizer daemon rebuild
+memorizer daemon logs
 
 # Manage FalkorDB knowledge graph
 memorizer graph start           # Start FalkorDB container
 memorizer graph stop            # Stop FalkorDB container
 memorizer graph status          # Check graph health and stats
-memorizer daemon rebuild        # Rebuild index/graph (use --force to clear first)
 
 # Manage semantic analysis cache
 memorizer cache status          # Show cache statistics and version info

@@ -261,7 +261,7 @@ Both metadata extraction and integration systems use handler/adapter patterns wi
 **CLI Commands:**
 - Root: `cmd/root.go`
 - Commands: `cmd/{initialize,daemon,integrations,config,read,remember,forget,mcp,graph,cache}/`
-- Daemon subcommands (8): start, stop, status, restart, logs, rebuild, systemctl, launchctl
+- Daemon subcommands (6): start, stop, status, restart, logs, rebuild
 - Integration subcommands (5): detect, list, setup, remove, health
 
 **Core Types:** `pkg/types/` - FileIndex, FileEntry, Fact, FactsIndex
@@ -379,8 +379,4 @@ make goreleaser-snapshot      # Test build without release
 ./memorizer remember file ~/notes/doc.md      # Copy file into memory
 ./memorizer remember file ~/docs/ --dir work  # Copy to subdirectory
 ./memorizer forget file ~/.memorizer/memory/old.md  # Move to .forgotten/
-
-# Service manager integration
-./memorizer daemon systemctl                  # Generate systemd unit file (Linux)
-./memorizer daemon launchctl                  # Generate launchd plist (macOS)
 ```

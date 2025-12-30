@@ -159,6 +159,21 @@ type FileIndex struct {
 
 	// Insights from graph analytics (verbose mode only)
 	Insights *IndexInsights `json:"insights,omitempty"`
+
+	// Usage guide for consuming files
+	UsageGuide *UsageGuide `json:"usage_guide,omitempty"`
+}
+
+// UsageGuide provides instructions for AI agents on how to use the memory index
+type UsageGuide struct {
+	// Description explains what the memory index is
+	Description string `json:"description"`
+	// WhenToUse provides guidance on when to access files
+	WhenToUse string `json:"when_to_use"`
+	// DirectReadable lists file types that can be read directly by the agent
+	DirectReadable string `json:"direct_readable"`
+	// ExtractionRequired lists file types that need extraction before reading
+	ExtractionRequired string `json:"extraction_required"`
 }
 
 // FileEntry represents a file in the knowledge graph

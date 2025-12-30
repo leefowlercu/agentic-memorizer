@@ -276,7 +276,6 @@ func (f *XMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
 	index := fc.Index
 	var sb strings.Builder
 
-	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	sb.WriteString("<memory_index>\n")
 
 	// Metadata section
@@ -308,7 +307,7 @@ func (f *XMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
 		sb.WriteString("    </coverage>\n")
 	}
 
-	sb.WriteString("  </metadata>\n\n")
+	sb.WriteString("  </metadata>\n")
 
 	// Knowledge summary (if available)
 	if index.Knowledge != nil {
@@ -337,7 +336,7 @@ func (f *XMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
 			}
 			sb.WriteString("    </top_entities>\n")
 		}
-		sb.WriteString("  </knowledge>\n\n")
+		sb.WriteString("  </knowledge>\n")
 	}
 
 	// Insights section (verbose mode only)
@@ -395,7 +394,7 @@ func (f *XMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
 			sb.WriteString("    </coverage_gaps>\n")
 		}
 
-		sb.WriteString("  </insights>\n\n")
+		sb.WriteString("  </insights>\n")
 	}
 
 	// Categories section
@@ -425,15 +424,17 @@ func (f *XMLFormatter) formatFiles(fc *format.FilesContent) (string, error) {
 		}
 	}
 
-	sb.WriteString("  </categories>\n\n")
+	sb.WriteString("  </categories>\n")
 
-	// Usage guide
-	sb.WriteString("  <usage_guide>\n")
-	sb.WriteString("    <direct_read_extensions>md, txt, json, yaml, vtt, go, py, js, ts, png, jpg</direct_read_extensions>\n")
-	sb.WriteString("    <direct_read_tool>Read tool</direct_read_tool>\n")
-	sb.WriteString("    <extraction_required_extensions>docx, pptx, pdf</extraction_required_extensions>\n")
-	sb.WriteString("    <extraction_required_tool>Bash + conversion tools</extraction_required_tool>\n")
-	sb.WriteString("  </usage_guide>\n")
+	// Usage guide - no escaping needed as content is AI-readable context, not XML data interchange
+	if index.UsageGuide != nil {
+		sb.WriteString("  <usage_guide>\n")
+		sb.WriteString(fmt.Sprintf("    <description>%s</description>\n", index.UsageGuide.Description))
+		sb.WriteString(fmt.Sprintf("    <when_to_use>%s</when_to_use>\n", index.UsageGuide.WhenToUse))
+		sb.WriteString(fmt.Sprintf("    <direct_readable>%s</direct_readable>\n", index.UsageGuide.DirectReadable))
+		sb.WriteString(fmt.Sprintf("    <extraction_required>%s</extraction_required>\n", index.UsageGuide.ExtractionRequired))
+		sb.WriteString("  </usage_guide>\n")
+	}
 
 	sb.WriteString("</memory_index>\n")
 
@@ -570,7 +571,6 @@ func (f *XMLFormatter) formatFacts(fc *format.FactsContent) (string, error) {
 	index := fc.Index
 	var sb strings.Builder
 
-	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	sb.WriteString("<facts_index>\n")
 
 	// Metadata section
@@ -578,7 +578,7 @@ func (f *XMLFormatter) formatFacts(fc *format.FactsContent) (string, error) {
 	sb.WriteString(fmt.Sprintf("    <generated>%s</generated>\n", index.Generated.Format(time.RFC3339)))
 	sb.WriteString(fmt.Sprintf("    <total_facts>%d</total_facts>\n", index.Stats.TotalFacts))
 	sb.WriteString(fmt.Sprintf("    <max_facts>%d</max_facts>\n", index.Stats.MaxFacts))
-	sb.WriteString("  </metadata>\n\n")
+	sb.WriteString("  </metadata>\n")
 
 	// Facts section
 	sb.WriteString("  <facts>\n")

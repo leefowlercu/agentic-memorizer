@@ -411,7 +411,9 @@ func (f *MarkdownFormatter) formatFiles(fc *format.FilesContent) (string, error)
 	}
 
 	// Usage guide
-	sb.WriteString(formatUsageGuideMarkdown())
+	if index.UsageGuide != nil {
+		sb.WriteString(formatUsageGuideMarkdown(index.UsageGuide))
+	}
 
 	return sb.String(), nil
 }
@@ -561,17 +563,17 @@ func getCategoryEmoji(category string) string {
 }
 
 // formatUsageGuideMarkdown returns the usage guide section
-func formatUsageGuideMarkdown() string {
-	return `## Usage Guide
+func formatUsageGuideMarkdown(guide *types.UsageGuide) string {
+	var sb strings.Builder
 
-**Reading Files**:
-- ✅ **Direct**: Markdown, text, VTT, JSON, YAML, images → Use Read tool
-- ⚠️ **Extraction needed**: DOCX, PPTX, PDF → Use Bash + conversion tools
+	sb.WriteString("## Usage Guide\n\n")
+	sb.WriteString(fmt.Sprintf("**About**: %s\n\n", guide.Description))
+	sb.WriteString(fmt.Sprintf("**When to use**: %s\n\n", guide.WhenToUse))
+	sb.WriteString("**Reading Files**:\n")
+	sb.WriteString(fmt.Sprintf("- ✅ **Direct**: %s\n", guide.DirectReadable))
+	sb.WriteString(fmt.Sprintf("- ⚠️ **Extraction needed**: %s\n", guide.ExtractionRequired))
 
-**When to access**: Ask me to read any file when relevant to your query. I'll use the appropriate method based on file type.
-
-**Re-indexing**: Index auto-updates on session start. Manual re-index: run memorizer
-`
+	return sb.String()
 }
 
 // formatFacts renders FactsIndex as Markdown

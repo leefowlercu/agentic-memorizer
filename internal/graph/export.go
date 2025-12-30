@@ -118,7 +118,8 @@ func (e *Exporter) ToFileIndex(ctx context.Context, memoryRoot string, verbose .
 			FilesWithEntities: coverage.filesWithEntities,
 			AvgTagsPerFile:    coverage.avgTagsPerFile,
 		},
-		Knowledge: knowledge,
+		Knowledge:  knowledge,
+		UsageGuide: defaultUsageGuide(),
 	}
 
 	// In verbose mode, add graph insights
@@ -630,6 +631,18 @@ func formatSizeHuman(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// defaultUsageGuide returns the default usage guide for the memory index
+func defaultUsageGuide() *types.UsageGuide {
+	return &types.UsageGuide{
+		Description: "This is a curated collection of files with AI-generated semantic understanding. " +
+			"Each file has been analyzed to extract summaries, tags, topics, and entities.",
+		WhenToUse: "Reference this index when you need context about available files. " +
+			"Read individual files when their content is relevant to the user's query.",
+		DirectReadable:     "md, txt, json, yaml, vtt, go, py, js, ts, png, jpg",
+		ExtractionRequired: "docx, pptx, pdf",
+	}
 }
 
 // GetFileEntry retrieves a single file and returns it as a FileEntry with related files

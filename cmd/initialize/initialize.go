@@ -29,14 +29,11 @@ var (
 	initializeUnattended bool
 
 	// Semantic provider configuration
-	initializeSemanticProvider string
-	initializeSemanticModel    string
-	initializeSemanticAPIKey   string
-	initializeSkipSemantic     bool
-
-	// Claude API configuration (legacy)
-	initializeAnthropicAPIKey       string
-	initializeUseEnvAnthropicAPIKey bool
+	initializeSemanticProvider     string
+	initializeSemanticModel        string
+	initializeSemanticAPIKey       string
+	initializeUseEnvSemanticAPIKey bool
+	initializeSkipSemantic         bool
 
 	// HTTP API configuration
 	initializeHTTPPort int
@@ -44,6 +41,7 @@ var (
 	// FalkorDB configuration
 	initializeGraphHost           string
 	initializeGraphPort           int
+	initializeGraphDatabase       string
 	initializeGraphPassword       string
 	initializeStartFalkorDBDocker bool
 	initializeStartFalkorDBPodman bool
@@ -57,10 +55,6 @@ var (
 
 	// Integration configuration
 	initializeIntegrations []string
-
-	// Deprecated flags (kept for backward compatibility)
-	initializeSetupIntegrations bool
-	initializeSkipIntegrations  bool
 )
 
 var InitializeCmd = &cobra.Command{
@@ -78,25 +72,23 @@ var InitializeCmd = &cobra.Command{
 	Example: `  # Interactive initialization (TUI wizard)
   memorizer initialize
 
-  # Unattended initialization with Docker
+  # Unattended initialization with environment variable
   memorizer initialize --unattended \
-    --use-env-anthropic-api-key \
+    --use-env-semantic-api-key \
     --start-falkordb-docker \
     --integrations claude-code-hook,claude-code-mcp
 
-  # Unattended initialization with Podman
+  # Unattended with explicit API key and custom database
   memorizer initialize --unattended \
-    --use-env-anthropic-api-key \
-    --start-falkordb-podman \
+    --semantic-api-key sk-... \
+    --graph-database my-project \
     --integrations claude-code-hook
 
-  # Unattended with explicit API keys
+  # Using Gemini as semantic provider
   memorizer initialize --unattended \
-    --anthropic-api-key sk-ant-... \
-    --openai-api-key sk-... \
-    --enable-embeddings \
-    --graph-host localhost \
-    --graph-port 6379
+    --semantic-provider gemini \
+    --use-env-semantic-api-key \
+    --start-falkordb-podman
 
   # Force overwrite existing config
   memorizer initialize --force`,
@@ -117,11 +109,8 @@ func init() {
 	InitializeCmd.Flags().StringVar(&initializeSemanticProvider, "semantic-provider", "", "Semantic analysis provider (claude, openai, gemini)")
 	InitializeCmd.Flags().StringVar(&initializeSemanticModel, "semantic-model", "", "Model for semantic analysis (provider-specific)")
 	InitializeCmd.Flags().StringVar(&initializeSemanticAPIKey, "semantic-api-key", "", "API key for semantic analysis")
+	InitializeCmd.Flags().BoolVar(&initializeUseEnvSemanticAPIKey, "use-env-semantic-api-key", false, "Use environment variable for semantic provider API key")
 	InitializeCmd.Flags().BoolVar(&initializeSkipSemantic, "skip-semantic", false, "Disable semantic analysis")
-
-	// Claude API configuration (legacy, still supported)
-	InitializeCmd.Flags().StringVar(&initializeAnthropicAPIKey, "anthropic-api-key", "", "Anthropic API key value (legacy; use --semantic-api-key)")
-	InitializeCmd.Flags().BoolVar(&initializeUseEnvAnthropicAPIKey, "use-env-anthropic-api-key", false, "Use ANTHROPIC_API_KEY from environment")
 
 	// HTTP API configuration
 	InitializeCmd.Flags().IntVar(&initializeHTTPPort, "http-port", -1, "HTTP API port (0 to disable, -1 for wizard default)")
@@ -129,6 +118,7 @@ func init() {
 	// FalkorDB configuration
 	InitializeCmd.Flags().StringVar(&initializeGraphHost, "graph-host", config.DefaultConfig.Graph.Host, "FalkorDB host")
 	InitializeCmd.Flags().IntVar(&initializeGraphPort, "graph-port", config.DefaultConfig.Graph.Port, "FalkorDB port")
+	InitializeCmd.Flags().StringVar(&initializeGraphDatabase, "graph-database", config.DefaultConfig.Graph.Database, "FalkorDB database name")
 	InitializeCmd.Flags().StringVar(&initializeGraphPassword, "graph-password", "", "FalkorDB password")
 	InitializeCmd.Flags().BoolVar(&initializeStartFalkorDBDocker, "start-falkordb-docker", false, "Start FalkorDB using Docker")
 	InitializeCmd.Flags().BoolVar(&initializeStartFalkorDBPodman, "start-falkordb-podman", false, "Start FalkorDB using Podman")
@@ -142,12 +132,6 @@ func init() {
 
 	// Integration configuration
 	InitializeCmd.Flags().StringSliceVar(&initializeIntegrations, "integrations", []string{}, "Integrations to setup (comma-separated)")
-
-	// Deprecated flags (kept for backward compatibility)
-	InitializeCmd.Flags().BoolVar(&initializeSetupIntegrations, "setup-integrations", false, "Deprecated: use --integrations instead")
-	InitializeCmd.Flags().BoolVar(&initializeSkipIntegrations, "skip-integrations", false, "Deprecated: omit --integrations instead")
-	InitializeCmd.Flags().MarkDeprecated("setup-integrations", "use --integrations flag instead")
-	InitializeCmd.Flags().MarkDeprecated("skip-integrations", "simply omit --integrations flag")
 
 	InitializeCmd.Flags().SortFlags = false
 }
@@ -163,8 +147,8 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--enable-embeddings and --disable-embeddings are mutually exclusive")
 	}
 
-	if initializeAnthropicAPIKey != "" && initializeUseEnvAnthropicAPIKey {
-		return fmt.Errorf("--anthropic-api-key and --use-env-anthropic-api-key are mutually exclusive")
+	if initializeSemanticAPIKey != "" && initializeUseEnvSemanticAPIKey {
+		return fmt.Errorf("--semantic-api-key and --use-env-semantic-api-key are mutually exclusive")
 	}
 
 	if initializeOpenAIAPIKey != "" && initializeUseEnvOpenAIAPIKey {
@@ -174,6 +158,11 @@ func validateInit(cmd *cobra.Command, args []string) error {
 	// Validate http-port flag if provided
 	if initializeHTTPPort < -1 || initializeHTTPPort > 65535 {
 		return fmt.Errorf("--http-port must be -1 (default), 0 (disabled), or 1-65535")
+	}
+
+	// Validate graph-port range
+	if initializeGraphPort < 1 || initializeGraphPort > 65535 {
+		return fmt.Errorf("--graph-port must be between 1 and 65535")
 	}
 
 	// Validate semantic provider if specified
@@ -207,20 +196,14 @@ func validateInit(cmd *cobra.Command, args []string) error {
 			// Check for API key based on provider
 			hasKey := initializeSemanticAPIKey != ""
 			if !hasKey {
-				// Check legacy Anthropic flags for backward compatibility
-				if provider == "claude" && (initializeAnthropicAPIKey != "" || initializeUseEnvAnthropicAPIKey) {
-					hasKey = true
-				}
-				// Check environment variable for provider
-				if !hasKey {
-					switch provider {
-					case "claude":
-						hasKey = os.Getenv(config.ClaudeAPIKeyEnv) != ""
-					case "openai":
-						hasKey = os.Getenv(config.OpenAIAPIKeyEnv) != ""
-					case "gemini":
-						hasKey = os.Getenv(config.GoogleAPIKeyEnv) != ""
-					}
+				// Check --use-env-semantic-api-key flag or implicit env var presence
+				switch provider {
+				case "claude":
+					hasKey = os.Getenv(config.ClaudeAPIKeyEnv) != ""
+				case "openai":
+					hasKey = os.Getenv(config.OpenAIAPIKeyEnv) != ""
+				case "gemini":
+					hasKey = os.Getenv(config.GoogleAPIKeyEnv) != ""
 				}
 			}
 
@@ -232,7 +215,7 @@ func validateInit(cmd *cobra.Command, args []string) error {
 				case "gemini":
 					envVar = config.GoogleAPIKeyEnv
 				}
-				return fmt.Errorf("unattended mode requires --semantic-api-key or %s environment variable (or use --skip-semantic)", envVar)
+				return fmt.Errorf("unattended mode requires --semantic-api-key, --use-env-semantic-api-key, or %s environment variable (or use --skip-semantic)", envVar)
 			}
 		}
 
@@ -389,17 +372,21 @@ func runUnattended(cmd *cobra.Command) error {
 			}
 		}
 
-		// API key - check new flag, then legacy flags, then env vars
+		// API key - check explicit flag, then use-env flag, then implicit env vars
 		if initializeSemanticAPIKey != "" {
 			cfg.Semantic.APIKey = initializeSemanticAPIKey
-		} else if cfg.Semantic.Provider == "claude" && initializeAnthropicAPIKey != "" {
-			// Legacy support
-			cfg.Semantic.APIKey = initializeAnthropicAPIKey
-		} else if cfg.Semantic.Provider == "claude" && initializeUseEnvAnthropicAPIKey {
-			// Legacy support
-			cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+		} else if initializeUseEnvSemanticAPIKey {
+			// Unified env var flag - read from provider-appropriate env var
+			switch cfg.Semantic.Provider {
+			case "claude":
+				cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
+			case "openai":
+				cfg.Semantic.APIKey = os.Getenv(config.OpenAIAPIKeyEnv)
+			case "gemini":
+				cfg.Semantic.APIKey = os.Getenv(config.GoogleAPIKeyEnv)
+			}
 		} else {
-			// Try to get from environment based on provider
+			// Try to get from environment based on provider (implicit)
 			switch cfg.Semantic.Provider {
 			case "claude":
 				cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
@@ -423,6 +410,7 @@ func runUnattended(cmd *cobra.Command) error {
 	// FalkorDB
 	cfg.Graph.Host = initializeGraphHost
 	cfg.Graph.Port = initializeGraphPort
+	cfg.Graph.Database = initializeGraphDatabase
 	cfg.Graph.Password = initializeGraphPassword
 
 	// Start FalkorDB if requested

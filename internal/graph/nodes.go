@@ -111,8 +111,12 @@ func (n *Nodes) UpsertFile(ctx context.Context, file FileNode) error {
 }
 
 // UpsertFileWithEmbedding creates or updates a File node including embedding
-func (n *Nodes) UpsertFileWithEmbedding(ctx context.Context, file FileNode, embedding []float32) error {
-	query := `
+// The provider parameter determines which embedding property to set (e.g., "openai" -> "embedding_openai")
+func (n *Nodes) UpsertFileWithEmbedding(ctx context.Context, file FileNode, embedding []float32, provider string) error {
+	embeddingProp := EmbeddingPropertyName(provider)
+
+	// Build query dynamically with provider-specific embedding property
+	query := fmt.Sprintf(`
 		MERGE (f:File {path: $path})
 		SET f.hash = $hash,
 		    f.name = $name,
@@ -123,9 +127,16 @@ func (n *Nodes) UpsertFileWithEmbedding(ctx context.Context, file FileNode, embe
 		    f.summary = $summary,
 		    f.document_type = $document_type,
 		    f.confidence = $confidence,
-		    f.embedding = vecf32($embedding)
+		    f.%s = vecf32($embedding)
 		RETURN f
-	`
+	`, embeddingProp)
+
+	// Convert []float32 to []interface{} for FalkorDB driver compatibility
+	// The driver's ToString function only handles []interface{}, not []float32
+	embeddingAny := make([]interface{}, len(embedding))
+	for i, v := range embedding {
+		embeddingAny[i] = float64(v)
+	}
 
 	params := map[string]any{
 		"path":          file.Path,
@@ -138,7 +149,7 @@ func (n *Nodes) UpsertFileWithEmbedding(ctx context.Context, file FileNode, embe
 		"summary":       file.Summary,
 		"document_type": file.DocumentType,
 		"confidence":    file.Confidence,
-		"embedding":     embedding,
+		"embedding":     embeddingAny,
 	}
 
 	_, err := n.client.Query(ctx, query, params)
@@ -146,7 +157,11 @@ func (n *Nodes) UpsertFileWithEmbedding(ctx context.Context, file FileNode, embe
 		return fmt.Errorf("failed to upsert file node with embedding; %w", err)
 	}
 
-	n.logger.Debug("upserted file node with embedding", "path", file.Path)
+	n.logger.Debug("upserted file node with embedding",
+		"path", file.Path,
+		"provider", provider,
+		"property", embeddingProp,
+	)
 	return nil
 }
 

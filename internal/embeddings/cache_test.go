@@ -90,7 +90,7 @@ func TestCacheOperations(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	cache, err := NewCache(tempDir, nil)
+	cache, err := NewCache(tempDir, "openai", nil)
 	if err != nil {
 		t.Fatalf("failed to create cache: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestCacheOperations(t *testing.T) {
 }
 
 func TestCachePath(t *testing.T) {
-	cache := &Cache{dir: "/tmp/cache"}
+	cache := &Cache{dir: "/tmp/cache", provider: "openai"}
 
 	tests := []struct {
 		hash     string
@@ -168,15 +168,20 @@ func TestCachePath(t *testing.T) {
 	}{
 		{
 			hash:     "ab",
-			expected: "/tmp/cache/embeddings/ab.emb",
+			expected: "/tmp/cache/embeddings/openai/ab.emb",
 		},
 		{
 			hash:     "abc",
-			expected: "/tmp/cache/embeddings/abc.emb",
+			expected: "/tmp/cache/embeddings/openai/abc.emb",
 		},
 		{
 			hash:     "abcd1234",
-			expected: "/tmp/cache/embeddings/ab/cd/abcd1234.emb",
+			expected: "/tmp/cache/embeddings/openai/ab/cd/abcd1234.emb",
+		},
+		{
+			// sha256: prefix should be skipped for sharding, using "41" and "d6" from hash value
+			hash:     "sha256:41d63309faf26bf95fba3b553dba9fd793effe0116d9237a012499587f8ce94b",
+			expected: "/tmp/cache/embeddings/openai/41/d6/sha256:41d63309faf26bf95fba3b553dba9fd793effe0116d9237a012499587f8ce94b.emb",
 		},
 	}
 
@@ -187,5 +192,71 @@ func TestCachePath(t *testing.T) {
 				t.Errorf("got %s, want %s", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestCacheProviderSegregation(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "embedding-cache-segregation-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create caches for different providers
+	openaiCache, err := NewCache(tempDir, "openai", nil)
+	if err != nil {
+		t.Fatalf("failed to create openai cache: %v", err)
+	}
+
+	voyageCache, err := NewCache(tempDir, "voyage", nil)
+	if err != nil {
+		t.Fatalf("failed to create voyage cache: %v", err)
+	}
+
+	testHash := "abc123def456"
+	openaiEmbedding := []float32{0.1, 0.2, 0.3}
+	voyageEmbedding := []float32{0.4, 0.5, 0.6}
+
+	// Store different embeddings for same hash in different providers
+	if err := openaiCache.Set(testHash, openaiEmbedding); err != nil {
+		t.Fatalf("Set openai failed: %v", err)
+	}
+	if err := voyageCache.Set(testHash, voyageEmbedding); err != nil {
+		t.Fatalf("Set voyage failed: %v", err)
+	}
+
+	// Verify each cache returns its own embedding
+	gotOpenAI, found := openaiCache.Get(testHash)
+	if !found {
+		t.Fatal("expected openai cache hit")
+	}
+	if !reflect.DeepEqual(gotOpenAI, openaiEmbedding) {
+		t.Errorf("openai cache: got %v, want %v", gotOpenAI, openaiEmbedding)
+	}
+
+	gotVoyage, found := voyageCache.Get(testHash)
+	if !found {
+		t.Fatal("expected voyage cache hit")
+	}
+	if !reflect.DeepEqual(gotVoyage, voyageEmbedding) {
+		t.Errorf("voyage cache: got %v, want %v", gotVoyage, voyageEmbedding)
+	}
+
+	// Clear openai cache should not affect voyage cache
+	if err := openaiCache.Clear(); err != nil {
+		t.Fatalf("Clear openai failed: %v", err)
+	}
+
+	_, found = openaiCache.Get(testHash)
+	if found {
+		t.Error("expected openai cache miss after clear")
+	}
+
+	gotVoyage, found = voyageCache.Get(testHash)
+	if !found {
+		t.Fatal("expected voyage cache hit after openai clear")
+	}
+	if !reflect.DeepEqual(gotVoyage, voyageEmbedding) {
+		t.Errorf("voyage cache after openai clear: got %v, want %v", gotVoyage, voyageEmbedding)
 	}
 }

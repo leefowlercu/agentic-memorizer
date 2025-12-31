@@ -159,6 +159,7 @@ func TestGetConfigSchema_SemanticSectionHasNewFields(t *testing.T) {
 
 	// Check for new fields
 	expectedFields := map[string]string{
+		"enabled":       "minimal", // explicit enable flag for user intent
 		"timeout":       "advanced",
 		"enable_vision": "advanced",
 		"provider":      "minimal",
@@ -198,9 +199,10 @@ func TestGetConfigSchema_EmbeddingsSectionHasNewFields(t *testing.T) {
 
 	// Check for new fields
 	expectedFields := map[string]string{
+		"enabled":    "minimal", // explicit enable flag for user intent
 		"provider":   "minimal",
-		"model":      "advanced",
-		"dimensions": "advanced",
+		"model":      "minimal",
+		"dimensions": "advanced", // dimensions derived from model, only for power users
 	}
 
 	for fieldName, expectedTier := range expectedFields {

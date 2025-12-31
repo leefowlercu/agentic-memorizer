@@ -1,10 +1,10 @@
 # Vector Embeddings
 
-Provider-based text embedding generation with content-addressable caching for semantic similarity search in the knowledge graph.
+Multi-provider text embedding generation with content-addressable caching for semantic similarity search in the knowledge graph.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 
@@ -16,24 +16,24 @@ Provider-based text embedding generation with content-addressable caching for se
 
 ## Overview
 
-The Vector Embeddings subsystem converts file content into high-dimensional vector representations that enable semantic similarity search. When files are processed, their summaries are embedded into vectors stored in FalkorDB, enabling queries like "find files similar to this one" without relying solely on tag or topic matches. The subsystem currently supports OpenAI's embedding API with plans for additional providers.
+The Vector Embeddings subsystem converts file content into high-dimensional vector representations that enable semantic similarity search. When files are processed, their summaries are embedded into vectors stored in FalkorDB, enabling queries like "find files similar to this one" without relying solely on tag or topic matches. The subsystem supports three embedding providers: OpenAI, Voyage AI, and Google Gemini.
 
-The subsystem follows the same provider pattern used by semantic analysis: a Provider interface enabling future multi-provider support, with OpenAI as the initial implementation. A dedicated cache stores embeddings by content hash, avoiding redundant API calls for unchanged content. The worker pool generates embeddings during file processing and stores them alongside semantic analysis results in the knowledge graph.
+The subsystem follows the same provider pattern used by semantic analysis: a Provider interface with a registry enabling multi-provider support. Providers self-register via Go init() functions. A dedicated cache stores embeddings by content hash with provider segregation, avoiding redundant API calls for unchanged content. The worker pool generates embeddings during file processing and stores them in provider-prefixed properties in the knowledge graph.
 
 Key capabilities include:
 
-- **Provider interface** - Abstract contract for embedding generation with batch support
-- **OpenAI integration** - Production-ready implementation using text-embedding-3-small (1536 dimensions)
-- **Binary caching** - Content-addressable storage with efficient float32 serialization
+- **Provider registry** - Self-registering providers via init() functions and factory pattern
+- **Three providers** - OpenAI (1536d), Voyage AI (1024d), and Gemini (768d) with model selection
+- **Binary caching** - Content-addressable storage with provider-segregated directories
 - **Batch processing** - EmbedBatch method for efficient multi-text embedding in single API call
-- **Rate limiting** - Separate rate limiter (500 RPM) for embedding API calls
-- **Vector storage** - HNSW index in FalkorDB for similarity search
+- **Rate limiting** - Provider-specific rate limits (OpenAI: 500, Voyage: 300, Gemini: 100 RPM)
+- **Vector storage** - Provider-prefixed HNSW indexes in FalkorDB for similarity search
 
 ## Design Principles
 
-### Provider Interface Pattern
+### Provider Registry Pattern
 
-The subsystem defines a Provider interface with four methods: Embed for single texts, EmbedBatch for efficient multi-text embedding, Dimensions for vector size, and Model for identification. This abstraction enables future provider additions (Voyage AI, Cohere, local models) without changing consuming code. The interface matches patterns used in the semantic analysis subsystem.
+The subsystem uses a registry pattern with self-registering providers. Each provider registers via Go init() functions through blank imports. The registry stores factory functions that create provider instances on demand. This pattern enables adding new providers without modifying core code - just import the provider package and it registers itself.
 
 ### Batch-First API Design
 
@@ -41,7 +41,7 @@ The Embed method delegates to EmbedBatch with a single-element array. This ensur
 
 ### Binary Cache Format
 
-Embeddings are cached as binary files rather than JSON. The format stores dimension count as a uint32 followed by little-endian float32 values. This binary format is more compact than JSON (4 bytes per float vs ~10+ characters) and faster to read/write. The cache uses a two-level directory structure (first 4 hash characters) to avoid filesystem limitations with many files.
+Embeddings are cached as binary files rather than JSON. The format stores dimension count as a uint32 followed by little-endian float32 values. This binary format is more compact than JSON (4 bytes per float vs ~10+ characters) and faster to read/write. The cache uses a two-level directory structure (first 4 hash characters) with provider-specific subdirectories (embeddings/openai, embeddings/voyage, embeddings/gemini) to segregate embeddings by provider.
 
 ### Content-Addressable Storage
 
@@ -49,29 +49,37 @@ Like the semantic analysis cache, embeddings are keyed by content hash. If a fil
 
 ### Separate Rate Limiting
 
-The worker pool maintains a separate rate limiter for embedding API calls (500 RPM) distinct from semantic analysis rate limiting. OpenAI's embedding API has different rate limits than their chat/completion API, and this separation prevents one from starving the other.
+The worker pool maintains a separate rate limiter for embedding API calls distinct from semantic analysis rate limiting. Each provider has specific default rate limits: OpenAI (500 RPM), Voyage AI (300 RPM), Gemini (100 RPM). This separation prevents embedding generation from consuming semantic analysis quota and vice versa.
 
 ### Optional Enablement
 
-Embeddings require an OpenAI API key and are disabled by default. The configuration derives embeddings.enabled from API key presence. When disabled, files are processed without embeddings and vector similarity search falls back to relationship-based queries.
+Embeddings require a provider-specific API key and are disabled by default. Configuration specifies provider (openai, voyage, gemini), model, and API key. When disabled, files are processed without embeddings and vector similarity search falls back to relationship-based queries.
 
 ## Key Components
 
 ### Provider Interface
 
-The Provider interface defines the contract for embedding generation with four methods: Embed generates a single vector, EmbedBatch generates vectors for multiple texts efficiently, Dimensions returns vector size (e.g., 1536), and Model returns the model identifier. All providers must implement this interface.
+The Provider interface defines the contract for embedding generation with six methods: Embed generates a single vector, EmbedBatch generates vectors for multiple texts efficiently, Dimensions returns vector size, Model returns the model identifier, Name returns the provider name, and DefaultRateLimit returns the provider's recommended rate limit. All providers must implement this interface.
+
+### Registry
+
+The Registry provides thread-safe registration and retrieval of embedding providers. Providers register via Register() with a factory function. The Get() method returns a new provider instance by name. List() returns all registered provider names. The GlobalRegistry() function returns the singleton registry instance.
 
 ### EmbeddingResult Struct
 
 The EmbeddingResult struct pairs original text with its embedding vector and model name. Used for returning embedding results with context about what was embedded.
 
-### OpenAIProvider
+### OpenAI Provider
 
-The OpenAI provider implements the Provider interface using the go-openai client library. Default configuration uses text-embedding-3-small with 1536 dimensions. The provider logs embedding generation with timing, token usage, and dimension information.
+Located in providers/openai/. Implements the Provider interface using the go-openai client library. Supports models: text-embedding-3-small (1536d), text-embedding-3-large (3072d), text-embedding-ada-002 (1536d). Default rate limit: 500 RPM. Self-registers via init().
 
-### OpenAIConfig Struct
+### Voyage Provider
 
-The OpenAIConfig struct holds configuration for the OpenAI provider: APIKey for authentication, Model for model selection (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002), and Dimensions for vector size. DefaultOpenAIConfig returns sensible defaults.
+Located in providers/voyage/. Implements the Provider interface for Voyage AI's embedding API. Supports models: voyage-3 (1024d), voyage-3-lite (512d), voyage-code-3 (1024d). Default rate limit: 300 RPM. Self-registers via init().
+
+### Gemini Provider
+
+Located in providers/gemini/. Implements the Provider interface for Google's Gemini embedding API. Supports models: text-embedding-004 (768d), embedding-001 (768d). Default rate limit: 100 RPM. Self-registers via init().
 
 ### Cache Struct
 
@@ -101,15 +109,15 @@ The worker pool receives an optional embedding provider and cache at constructio
 
 ### Configuration System
 
-The config subsystem defines embeddings settings: api_key (or OPENAI_API_KEY env var), provider (only "openai" supported), model, and dimensions. The embeddings.enabled flag is derived from API key presence. Validation ensures model and dimension compatibility.
+The config subsystem defines embeddings settings: enabled, provider (openai, voyage, gemini), model, dimensions, and api_key. Environment variables are provider-specific: OPENAI_API_KEY, VOYAGE_API_KEY, GOOGLE_API_KEY. Validation ensures model and dimension compatibility for each provider.
 
 ### Knowledge Graph Storage
 
-File nodes in FalkorDB include an optional embedding property storing the float32 vector. The graph subsystem provides UpsertFileWithEmbedding for storing embeddings during updates. The schema creates an HNSW vector index on File.embedding for similarity search.
+File nodes in FalkorDB include provider-prefixed embedding properties (embedding_openai, embedding_voyage, embedding_gemini). The graph subsystem provides UpsertFileWithEmbedding with a provider parameter for storing embeddings during updates. The schema creates separate HNSW vector indexes for each provider with appropriate dimensions.
 
 ### Vector Similarity Search
 
-The graph Manager exposes VectorSearch for finding similar files. The Queries struct implements the actual search using FalkorDB's vector query API (db.idx.vector.queryNodes). Results include similarity scores enabling ranked results.
+The graph Manager exposes VectorSearch with a provider parameter for finding similar files. The Queries struct implements the actual search using FalkorDB's vector query API (db.idx.vector.queryNodes) on the provider-specific property. Results include similarity scores enabling ranked results.
 
 ### Semantic Analysis Workflow
 
@@ -117,7 +125,7 @@ Embeddings are generated from the summary field of semantic analysis output, not
 
 ### Rate Limiting
 
-The worker pool creates a separate rate limiter for embeddings (500 RPM with burst of 10) distinct from semantic analysis rate limiting. This prevents embedding generation from consuming all available API quota and vice versa.
+The worker pool creates a separate rate limiter for embeddings distinct from semantic analysis rate limiting. The rate limit uses the provider's DefaultRateLimit() (OpenAI: 500, Voyage: 300, Gemini: 100 RPM). This prevents embedding generation from consuming all available API quota and vice versa.
 
 ## Glossary
 
@@ -125,7 +133,7 @@ The worker pool creates a separate rate limiter for embeddings (500 RPM with bur
 SHA-256 hash of file contents used as cache key. Enables cache hits across file renames and automatic invalidation on content changes.
 
 **Dimensions**
-The number of elements in an embedding vector. OpenAI's text-embedding-3-small produces 1536-dimensional vectors. Higher dimensions can capture more nuance but require more storage.
+The number of elements in an embedding vector. OpenAI uses 1536-3072d, Voyage uses 512-1024d, Gemini uses 768d. Higher dimensions can capture more nuance but require more storage.
 
 **Embedding**
 A dense vector representation of text in high-dimensional space. Similar texts produce vectors that are geometrically close, enabling similarity search.
@@ -134,13 +142,16 @@ A dense vector representation of text in high-dimensional space. Similar texts p
 Hierarchical Navigable Small World graph algorithm for approximate nearest neighbor search. FalkorDB uses HNSW indexes for efficient vector similarity queries.
 
 **Provider**
-An implementation of the embedding generation interface. Currently only OpenAI is supported; the interface enables future provider additions.
+An implementation of the embedding generation interface. Supported providers: OpenAI, Voyage AI, Google Gemini. Each provider self-registers via init() functions.
 
 **Rate Limiter**
-Token bucket rate limiter controlling API call frequency. The embeddings subsystem uses a separate limiter (500 RPM) from semantic analysis.
+Token bucket rate limiter controlling API call frequency. The embeddings subsystem uses provider-specific rate limits separate from semantic analysis.
+
+**Registry**
+Thread-safe container for provider factory functions. Enables self-registration via init() and dynamic provider creation by name.
 
 **Vector Index**
-A specialized database index optimized for nearest neighbor search in high-dimensional vector space. Created on the File.embedding property in FalkorDB.
+A specialized database index optimized for nearest neighbor search in high-dimensional vector space. Created on provider-specific properties (embedding_openai, embedding_voyage, embedding_gemini) in FalkorDB.
 
 **Vector Search**
-Finding items with similar embedding vectors using distance metrics (cosine similarity, Euclidean distance). Returns ranked results by similarity score.
+Finding items with similar embedding vectors using distance metrics (cosine similarity). Returns ranked results by similarity score using the appropriate provider-specific index.

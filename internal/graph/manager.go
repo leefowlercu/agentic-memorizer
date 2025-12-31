@@ -237,7 +237,8 @@ func (m *Manager) UpdateSingle(ctx context.Context, entry types.IndexEntry, info
 }
 
 // UpdateSingleWithEmbedding updates a single file entry in the graph with an embedding vector
-func (m *Manager) UpdateSingleWithEmbedding(ctx context.Context, entry types.IndexEntry, info UpdateInfo, embedding []float32) (UpdateResult, error) {
+// The provider parameter determines which embedding property to set (e.g., "openai" -> "embedding_openai")
+func (m *Manager) UpdateSingleWithEmbedding(ctx context.Context, entry types.IndexEntry, info UpdateInfo, embedding []float32, provider string) (UpdateResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -256,7 +257,7 @@ func (m *Manager) UpdateSingleWithEmbedding(ctx context.Context, entry types.Ind
 	// Create/update file node with embedding
 	fileNode := FileNodeFromEntry(entry)
 	if len(embedding) > 0 {
-		if err := m.nodes.UpsertFileWithEmbedding(ctx, fileNode, embedding); err != nil {
+		if err := m.nodes.UpsertFileWithEmbedding(ctx, fileNode, embedding, provider); err != nil {
 			return result, fmt.Errorf("failed to upsert file node with embedding; %w", err)
 		}
 	} else {
@@ -660,7 +661,8 @@ func (m *Manager) Search(ctx context.Context, query string, limit int, categoryF
 }
 
 // VectorSearch performs vector similarity search
-func (m *Manager) VectorSearch(ctx context.Context, embedding []float32, limit int) ([]SearchResult, error) {
+// The provider parameter determines which embedding property to search (e.g., "openai" -> "embedding_openai")
+func (m *Manager) VectorSearch(ctx context.Context, embedding []float32, limit int, provider string) ([]SearchResult, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -668,7 +670,7 @@ func (m *Manager) VectorSearch(ctx context.Context, embedding []float32, limit i
 		return nil, fmt.Errorf("graph manager not connected")
 	}
 
-	return m.queries.VectorSearch(ctx, embedding, limit)
+	return m.queries.VectorSearch(ctx, embedding, limit, provider)
 }
 
 // GetRecentFiles returns recently modified files

@@ -229,6 +229,23 @@ Three-tier versioning in `internal/cache/version.go`:
 2. Bump appropriate version
 3. Mention cache version bump in commit message
 
+### Configuration Example File
+
+The `config.yaml.example` file shows minimal configuration for new users. Keep it synchronized with `MinimalConfig` structs in `internal/config/config.go`.
+
+**When to Update:**
+- Adding/removing fields from `MinimalSemanticConfig`, `MinimalEmbeddingsConfig`, etc.
+- Changing default values for user-facing settings
+- Adding new configuration sections
+
+**Guidelines:**
+- Only include minimal tier settings (not advanced)
+- Show sensible defaults, not empty values
+- Include brief comments explaining each option
+- Reference `memorizer config show-schema` for advanced options
+
+**Do NOT create multiple example files** (e.g., minimal vs advanced). The schema command provides comprehensive documentation for advanced settings.
+
 ## Code Organization Principles
 
 ### Subsystem Independence

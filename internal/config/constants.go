@@ -27,18 +27,63 @@ const (
 
 // Hardcoded Embeddings environment variable names and internal settings
 const (
-	EmbeddingsAPIKeyEnv = "OPENAI_API_KEY"
+	VoyageAPIKeyEnv = "VOYAGE_API_KEY"
 	// Internal settings - not configurable
 	EmbeddingsCacheEnabled = true // Always enabled for performance
-	EmbeddingsBatchSize    = 100  // Optimized for OpenAI API rate limits
+	EmbeddingsBatchSize    = 100  // Optimized for batch processing
 )
 
 // Embeddings defaults - can be overridden in config.yaml
 const (
-	DefaultEmbeddingsProvider   = "openai"
-	DefaultEmbeddingsModel      = "text-embedding-3-small"
-	DefaultEmbeddingsDimensions = 1536
+	DefaultEmbeddingsProvider         = "openai"
+	DefaultEmbeddingsModel            = "text-embedding-3-small"
+	DefaultEmbeddingsDimensions       = 1536
+	DefaultOpenAIEmbeddingsModel      = "text-embedding-3-small"
+	DefaultOpenAIEmbeddingsDimensions = 1536
 )
+
+// Voyage embedding defaults
+const (
+	DefaultVoyageEmbeddingsModel      = "voyage-3"
+	DefaultVoyageEmbeddingsDimensions = 1024
+)
+
+// Gemini embedding defaults
+const (
+	DefaultGeminiEmbeddingsModel      = "text-embedding-004"
+	DefaultGeminiEmbeddingsDimensions = 768
+)
+
+// embeddingModelDimensions maps provider:model to dimension count
+var embeddingModelDimensions = map[string]map[string]int{
+	"openai": {
+		"text-embedding-3-small": 1536,
+		"text-embedding-3-large": 3072,
+		"text-embedding-ada-002": 1536,
+	},
+	"voyage": {
+		"voyage-3":         1024,
+		"voyage-3-lite":    512,
+		"voyage-code-3":    1024,
+		"voyage-finance-2": 1024,
+		"voyage-law-2":     1024,
+	},
+	"gemini": {
+		"text-embedding-004": 768,
+		"embedding-001":      768,
+	},
+}
+
+// GetEmbeddingModelDimensions returns the dimension count for a provider/model pair.
+// Returns 0 if the model is not recognized.
+func GetEmbeddingModelDimensions(provider, model string) int {
+	if models, ok := embeddingModelDimensions[provider]; ok {
+		if dims, ok := models[model]; ok {
+			return dims
+		}
+	}
+	return 0
+}
 
 // Hardcoded Output settings (convention over configuration)
 const (

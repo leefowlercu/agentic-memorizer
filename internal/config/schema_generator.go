@@ -151,11 +151,6 @@ func generateSchemaItem(name string, t reflect.Type, v reflect.Value, minimalFie
 		// Build field path for lookups
 		fieldPath := name + "." + fieldTag
 
-		// Skip derived fields (computed from other config, not user-configurable)
-		if isDerivedField(fieldPath) {
-			continue
-		}
-
 		fields = append(fields, SchemaField{
 			Name:        fieldTag,
 			Type:        getTypeString(field.Type),
@@ -181,16 +176,6 @@ func determineTier(fieldPath string, minimalFields map[string]bool) string {
 		return "minimal"
 	}
 	return "advanced"
-}
-
-// isDerivedField returns true if the field is computed from other configuration
-// and not directly user-configurable. Derived fields should not appear in schema.
-func isDerivedField(fieldPath string) bool {
-	derivedFields := map[string]bool{
-		"semantic.enabled":   true, // Derived from semantic.api_key presence
-		"embeddings.enabled": true, // Derived from embeddings.api_key presence
-	}
-	return derivedFields[fieldPath]
 }
 
 // getTypeString converts reflect.Type to schema type string
@@ -233,9 +218,9 @@ func getHardcodedSettings() []HardcodedSetting {
 			Reason: "Standard Google convention (used when semantic.provider=gemini)",
 		},
 		{
-			Name:   "EmbeddingsAPIKeyEnv",
-			Value:  EmbeddingsAPIKeyEnv,
-			Reason: "Standard OpenAI convention (for embeddings)",
+			Name:   "VoyageAPIKeyEnv",
+			Value:  VoyageAPIKeyEnv,
+			Reason: "Standard Voyage AI convention (used when embeddings.provider=voyage)",
 		},
 		{
 			Name:   "GraphPasswordEnv",
@@ -317,6 +302,7 @@ var sectionDescriptions = map[string]string{
 // Field descriptions (cannot be derived from reflection)
 var fieldDescriptions = map[string]string{
 	"memory.root":                          "Directory containing files to index (requires daemon restart)",
+	"semantic.enabled":                     "Enable semantic analysis (requires API key)",
 	"semantic.provider":                    "Semantic analysis provider (claude, openai, gemini)",
 	"semantic.api_key":                     "Provider API key (or use provider-specific env var: ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY)",
 	"semantic.model":                       "Model to use for semantic analysis (provider-specific)",
@@ -347,8 +333,9 @@ var fieldDescriptions = map[string]string{
 	"graph.password":                       "FalkorDB password (or use FALKORDB_PASSWORD env var)",
 	"graph.similarity_threshold":           "Similarity threshold for related files (0.0-1.0)",
 	"graph.max_similar_files":              "Maximum related files to return (1-100)",
-	"embeddings.api_key":                   "OpenAI API key for embeddings (or use OPENAI_API_KEY env var)",
-	"embeddings.provider":                  "Embedding provider (only 'openai' currently supported)",
+	"embeddings.enabled":                   "Enable vector embeddings for similarity search (requires API key)",
+	"embeddings.api_key":                   "Embeddings API key (or use provider-specific env var)",
+	"embeddings.provider":                  "Embedding provider (openai, voyage, gemini)",
 	"embeddings.model":                     "Embedding model (text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002)",
 	"embeddings.dimensions":                "Vector dimensions (must match model: 1536 for small/ada-002, 3072 for large)",
 }
@@ -356,6 +343,7 @@ var fieldDescriptions = map[string]string{
 // Hot-reload settings (cannot be derived from reflection)
 var hotReloadSettings = map[string]bool{
 	"memory.root":                          false,
+	"semantic.enabled":                     true,
 	"semantic.provider":                    true,
 	"semantic.api_key":                     true,
 	"semantic.model":                       true,
@@ -386,6 +374,7 @@ var hotReloadSettings = map[string]bool{
 	"graph.password":                       false,
 	"graph.similarity_threshold":           true,
 	"graph.max_similar_files":              true,
+	"embeddings.enabled":                   true,
 	"embeddings.api_key":                   true,
 	"embeddings.provider":                  true,
 	"embeddings.model":                     true,

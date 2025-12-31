@@ -153,9 +153,9 @@ func (s *ConfirmStep) renderSummary() string {
 		b.WriteString(s.summaryLine("Semantic Provider", providerDisplay))
 
 		if s.config.Semantic.APIKey != "" {
-			b.WriteString(s.summaryLine("API Key", s.maskKey(s.config.Semantic.APIKey)))
+			b.WriteString(s.summaryLine("Semantic Key", s.maskKey(s.config.Semantic.APIKey)))
 		} else {
-			b.WriteString(s.summaryLine("API Key", "Using environment variable"))
+			b.WriteString(s.summaryLine("Semantic Key", "Using environment variable"))
 		}
 	} else {
 		b.WriteString(s.summaryLine("Semantic Analysis", "Disabled"))
@@ -173,10 +173,16 @@ func (s *ConfirmStep) renderSummary() string {
 
 	// Embeddings
 	if s.config.Embeddings.Enabled {
+		embeddingsDisplay := s.config.Embeddings.Provider
+		if s.config.Embeddings.Model != "" {
+			embeddingsDisplay += " (" + s.config.Embeddings.Model + ")"
+		}
+		b.WriteString(s.summaryLine("Embeddings Provider", embeddingsDisplay))
+
 		if s.config.Embeddings.APIKey != "" {
-			b.WriteString(s.summaryLine("Embeddings", "Enabled (key in config)"))
+			b.WriteString(s.summaryLine("Embeddings Key", s.maskKey(s.config.Embeddings.APIKey)))
 		} else {
-			b.WriteString(s.summaryLine("Embeddings", "Enabled (using env var)"))
+			b.WriteString(s.summaryLine("Embeddings Key", "Using environment variable"))
 		}
 	} else {
 		b.WriteString(s.summaryLine("Embeddings", "Disabled"))
@@ -193,7 +199,7 @@ func (s *ConfirmStep) renderSummary() string {
 }
 
 func (s *ConfirmStep) summaryLine(label, value string) string {
-	labelStr := styles.Label.Render(fmt.Sprintf("  %-19s", label+":"))
+	labelStr := styles.Label.Render(fmt.Sprintf("  %-21s", label+":"))
 	valueStr := styles.SuccessText.Render(value)
 	return labelStr + valueStr + "\n"
 }

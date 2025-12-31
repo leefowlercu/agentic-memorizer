@@ -1,106 +1,78 @@
-# Agentic Memory Configuration
+# Agentic Memorizer Configuration
 #
-# This file shows the minimal configuration needed for most users.
+# This file shows the minimal configuration for most users.
 # Many settings have optimal defaults and are not shown here.
-# For advanced configuration, see docs/configuration.md
+# Run 'memorizer config show-schema' to see all available options.
 
-# Root directory for memory files
-memory_root: ~/.memorizer/memory
-
-# Claude API Configuration
-claude:
-  # API key (set directly or via ANTHROPIC_API_KEY environment variable)
-  api_key: ""
-
-  # Claude model to use
-  model: claude-sonnet-4-5-20250929
-
-  # Maximum tokens for each analysis
-  max_tokens: 1500
+# Memory directory configuration
+memory:
+  # Root directory for memory files
+  root: ~/.memorizer/memory
 
 # Semantic Analysis Configuration
-analysis:
-  # Maximum file size for analysis (bytes) - 10MB default
-  max_file_size: 10485760
+# AI-powered content understanding via Claude, OpenAI, or Gemini
+semantic:
+  # Enable semantic analysis (requires API key)
+  enabled: true
 
-  # File extensions to skip analysis
-  skip_extensions:
-    - .zip
-    - .tar
-    - .gz
-    - .exe
-    - .bin
-    - .dmg
-    - .iso
+  # Provider: claude, openai, or gemini
+  provider: claude
 
-  # Specific files to skip by name (system files)
-  skip_files:
-    - memorizer
+  # API key (or use environment variable: ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY)
+  api_key: ""
 
-  # Cache directory for semantic analysis results
-  cache_dir: ~/.memorizer/.cache
+  # Model (provider-specific)
+  # Claude: claude-sonnet-4-5-20250929
+  # OpenAI: gpt-4o, gpt-4o-mini
+  # Gemini: gemini-2.0-flash, gemini-1.5-pro
+  model: claude-sonnet-4-5-20250929
 
 # Background Daemon Configuration
 daemon:
-  # Debounce period for file changes (milliseconds)
-  debounce_ms: 500
-
-  # Number of parallel workers for processing files
-  workers: 3
-
-  # Rate limit for Claude API calls (per minute)
-  rate_limit_per_min: 20
-
-  # Full rebuild interval (minutes)
-  full_rebuild_interval_minutes: 60
-
-  # HTTP server port for health check and SSE endpoints (0 to disable)
-  # When enabled, MCP servers can connect for real-time updates
+  # HTTP server port for API and SSE endpoints (0 to disable)
   http_port: 0
-
-  # Log file location
-  log_file: ~/.memorizer/daemon.log
 
   # Log level: debug, info, warn, error
   log_level: info
 
 # MCP Server Configuration
 mcp:
-  # Log file for MCP server
-  log_file: ~/.memorizer/mcp.log
-
-  # Log level for MCP server: debug, info, warn, error
+  # Log level for MCP server
   log_level: info
 
-  # Daemon API connectivity (set automatically during 'integrations setup')
-  # The port should match daemon.http_port when enabled
+  # Daemon API connectivity (set during 'memorizer initialize')
+  # Should match daemon.http_port when enabled
   daemon_host: localhost
   daemon_port: 0
 
 # FalkorDB Knowledge Graph Configuration
 graph:
-  # FalkorDB host (default: localhost)
+  # FalkorDB host
   host: localhost
 
-  # FalkorDB port (default: 6379)
+  # FalkorDB port
   port: 6379
 
-  # Password for FalkorDB authentication (optional, or set FALKORDB_PASSWORD)
+  # Graph database name
+  database: memorizer
+
+  # Password (or use FALKORDB_PASSWORD environment variable)
   password: ""
 
-  # Minimum similarity threshold for related file recommendations (0.0-1.0)
-  similarity_threshold: 0.7
-
-  # Maximum number of similar files to return per query
-  max_similar_files: 10
-
 # Embeddings Configuration (Optional)
-# Automatically enabled when OPENAI_API_KEY is set
+# Enable for vector similarity search across your files
 embeddings:
-  # API key (set directly or via OPENAI_API_KEY environment variable)
-  api_key: ""
+  # Enable embeddings (requires API key)
+  enabled: false
 
-# Integration Configuration
-# Integration state is automatically detected from framework configuration files
-# (e.g., ~/.claude/settings.json, ~/.config/gemini.json)
-# Use 'memorizer integrations list' to see configured integrations
+  # Provider: openai, voyage, or gemini
+  provider: openai
+
+  # Model (provider-specific, dimensions auto-derived)
+  # OpenAI: text-embedding-3-small (1536d), text-embedding-3-large (3072d)
+  # Voyage: voyage-3 (1024d), voyage-3-lite (512d), voyage-code-3 (1024d)
+  # Gemini: text-embedding-004 (768d)
+  model: text-embedding-3-small
+
+  # API key (or use environment variable: OPENAI_API_KEY, VOYAGE_API_KEY, GOOGLE_API_KEY)
+  api_key: ""

@@ -12,15 +12,21 @@ import (
 
 // Cache provides content-hash-based caching for embeddings
 type Cache struct {
-	dir    string
-	logger *slog.Logger
-	mu     sync.RWMutex
+	dir      string
+	provider string
+	logger   *slog.Logger
+	mu       sync.RWMutex
 }
 
-// NewCache creates a new embedding cache
-func NewCache(dir string, logger *slog.Logger) (*Cache, error) {
+// NewCache creates a new embedding cache for a specific provider.
+// The provider name is used to segregate cache entries by provider.
+func NewCache(dir string, provider string, logger *slog.Logger) (*Cache, error) {
 	if logger == nil {
 		logger = slog.Default()
+	}
+
+	if provider == "" {
+		provider = "default"
 	}
 
 	// Create cache directory if it doesn't exist
@@ -29,8 +35,9 @@ func NewCache(dir string, logger *slog.Logger) (*Cache, error) {
 	}
 
 	return &Cache{
-		dir:    dir,
-		logger: logger.With("component", "embedding-cache"),
+		dir:      dir,
+		provider: provider,
+		logger:   logger.With("component", "embedding-cache", "provider", provider),
 	}, nil
 }
 
@@ -92,25 +99,44 @@ func (c *Cache) Delete(hash string) error {
 	return nil
 }
 
-// Clear removes all cached embeddings
+// Clear removes all cached embeddings for this provider
 func (c *Cache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	embeddingsDir := filepath.Join(c.dir, "embeddings")
+	embeddingsDir := filepath.Join(c.dir, "embeddings", c.provider)
 	if err := os.RemoveAll(embeddingsDir); err != nil {
 		return fmt.Errorf("failed to clear embedding cache; %w", err)
 	}
 	return nil
 }
 
-// cachePath returns the cache file path for a given hash
-// Uses a two-level directory structure to avoid too many files in one directory
-func (c *Cache) cachePath(hash string) string {
-	if len(hash) < 4 {
-		return filepath.Join(c.dir, "embeddings", hash+".emb")
+// ClearAll removes all cached embeddings for all providers
+func (c *Cache) ClearAll() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	embeddingsDir := filepath.Join(c.dir, "embeddings")
+	if err := os.RemoveAll(embeddingsDir); err != nil {
+		return fmt.Errorf("failed to clear all embedding caches; %w", err)
 	}
-	return filepath.Join(c.dir, "embeddings", hash[:2], hash[2:4], hash+".emb")
+	return nil
+}
+
+// cachePath returns the cache file path for a given hash
+// Uses provider subdirectory and two-level directory structure to avoid too many files in one directory
+func (c *Cache) cachePath(hash string) string {
+	// Extract the hash value for sharding, skipping "sha256:" prefix if present
+	shardKey := hash
+	const prefix = "sha256:"
+	if len(hash) > len(prefix) && hash[:len(prefix)] == prefix {
+		shardKey = hash[len(prefix):]
+	}
+
+	if len(shardKey) < 4 {
+		return filepath.Join(c.dir, "embeddings", c.provider, hash+".emb")
+	}
+	return filepath.Join(c.dir, "embeddings", c.provider, shardKey[:2], shardKey[2:4], hash+".emb")
 }
 
 // encodeEmbedding converts a float32 slice to bytes

@@ -1,4 +1,4 @@
-.PHONY: help setup build test test-quick test-verbose test-cli test-daemon test-mcp test-integrations test-config test-graph test-semantic test-e2e test-facts test-integrations-facts clean clean-volumes logs shell
+.PHONY: help setup build test test-quick test-verbose test-cli test-daemon test-mcp test-integrations test-config test-graph test-semantic test-embeddings test-e2e test-facts test-integrations-facts clean clean-volumes logs shell
 
 help: ## Show this help message
 	@echo "E2E Test Suite - Agentic Memorizer"
@@ -111,6 +111,16 @@ test-semantic: setup ## Run semantic provider tests only
 	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
 	@echo "Running semantic provider tests..."
 	docker compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/semantic_providers_test.go
+	@echo "Stopping services and cleaning volumes..."
+	docker compose down -v
+
+test-embeddings: setup ## Run embeddings provider tests only
+	@echo "Starting FalkorDB..."
+	docker compose up -d falkordb
+	@echo "Waiting for FalkorDB..."
+	@sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do docker compose exec -T falkordb redis-cli ping 2>/dev/null | grep -q PONG && break || sleep 3; done'
+	@echo "Running embeddings provider tests..."
+	docker compose run --rm test-runner go test -tags=e2e -v -timeout 10m ./e2e/tests/embeddings_providers_test.go
 	@echo "Stopping services and cleaning volumes..."
 	docker compose down -v
 

@@ -353,6 +353,101 @@ mcp:
 	return nil
 }
 
+// EmbeddingsProviderConfig holds embeddings provider configuration for tests
+type EmbeddingsProviderConfig struct {
+	Enabled    bool
+	Provider   string // "openai", "voyage", "gemini"
+	Model      string
+	Dimensions int
+	APIKey     string
+}
+
+// CreateConfigWithEmbeddings creates a config file with specific embeddings settings
+func (h *E2EHarness) CreateConfigWithEmbeddings(httpPort int, semantic SemanticProviderConfig, embeddings EmbeddingsProviderConfig) error {
+	h.t.Helper()
+
+	graphHost := os.Getenv("FALKORDB_HOST")
+	if graphHost == "" {
+		graphHost = "localhost"
+	}
+	graphPort := os.Getenv("FALKORDB_PORT")
+	if graphPort == "" {
+		graphPort = "6379"
+	}
+
+	// Build semantic config section
+	semanticConfig := fmt.Sprintf(`semantic:
+  enabled: %t
+  provider: %s`, semantic.Enabled, semantic.Provider)
+
+	if semantic.Model != "" {
+		semanticConfig += fmt.Sprintf("\n  model: %s", semantic.Model)
+	}
+	if semantic.APIKey != "" {
+		semanticConfig += fmt.Sprintf("\n  api_key: %s", semantic.APIKey)
+	}
+	semanticConfig += fmt.Sprintf(`
+  timeout: 30
+  max_file_size: 10485760
+  skip_extensions: []
+  skip_files: []
+  cache_dir: %s`, filepath.Join(h.MemoryRoot, ".cache"))
+
+	// Build embeddings config section
+	embeddingsConfig := fmt.Sprintf(`embeddings:
+  enabled: %t`, embeddings.Enabled)
+
+	if embeddings.Provider != "" {
+		embeddingsConfig += fmt.Sprintf("\n  provider: %s", embeddings.Provider)
+	}
+	if embeddings.Model != "" {
+		embeddingsConfig += fmt.Sprintf("\n  model: %s", embeddings.Model)
+	}
+	if embeddings.Dimensions > 0 {
+		embeddingsConfig += fmt.Sprintf("\n  dimensions: %d", embeddings.Dimensions)
+	}
+	if embeddings.APIKey != "" {
+		embeddingsConfig += fmt.Sprintf("\n  api_key: %s", embeddings.APIKey)
+	}
+
+	config := fmt.Sprintf(`# E2E Test Configuration
+memory_root: %s
+
+%s
+
+%s
+
+daemon:
+  workers: 2
+  rate_limit_per_min: 20
+  debounce_ms: 200
+  full_rebuild_interval_minutes: 60
+  http_port: %d
+  log_file: %s
+  log_level: info
+
+graph:
+  host: %s
+  port: %s
+  database: %s
+
+mcp:
+  log_file: %s
+  log_level: info
+  daemon_host: localhost
+  daemon_port: %d
+`, h.MemoryRoot, semanticConfig, embeddingsConfig, httpPort, h.LogPath, graphHost, graphPort, h.GraphName, filepath.Join(h.AppDir, "mcp.log"), httpPort)
+
+	if err := os.WriteFile(h.ConfigPath, []byte(config), 0644); err != nil {
+		return fmt.Errorf("failed to write config file; %w", err)
+	}
+
+	// Update HTTP client with the new port
+	h.HTTPClient = NewHTTPClient("localhost", httpPort)
+
+	return nil
+}
+
 // findBinary locates the agentic-memorizer binary for testing
 func findBinary(t testing.TB) string {
 	t.Helper()

@@ -274,11 +274,31 @@ func validateGraph(v *Validator, cfg *Config) {
 	}
 }
 
-// OpenAI embedding model dimensions
+// Embedding model dimensions by provider
 var openAIEmbeddingModels = map[string]int{
 	"text-embedding-3-small": 1536,
 	"text-embedding-3-large": 3072,
 	"text-embedding-ada-002": 1536,
+}
+
+var voyageEmbeddingModels = map[string]int{
+	"voyage-3":         1024,
+	"voyage-3-lite":    512,
+	"voyage-code-3":    1024,
+	"voyage-finance-2": 1024,
+	"voyage-law-2":     1024,
+}
+
+var geminiEmbeddingModels = map[string]int{
+	"text-embedding-004": 768,
+	"embedding-001":      768,
+}
+
+// Provider-specific API key environment variable names for error messages
+var embeddingProviderEnvVars = map[string]string{
+	"openai": "OPENAI_API_KEY",
+	"voyage": "VOYAGE_API_KEY",
+	"gemini": "GOOGLE_API_KEY",
 }
 
 // validateEmbeddings validates embeddings provider configuration.
@@ -289,28 +309,49 @@ func validateEmbeddings(v *Validator, cfg *Config) {
 		return
 	}
 
+	// Validate provider
+	validProviders := []string{"openai", "voyage", "gemini"}
+	if cfg.Embeddings.Provider != "" && !contains(validProviders, cfg.Embeddings.Provider) {
+		v.AddError("embeddings.provider", "enum", fmt.Sprintf("provider '%s' is not supported", cfg.Embeddings.Provider), "Use 'openai', 'voyage', or 'gemini'", cfg.Embeddings.Provider)
+		return // Can't validate further without valid provider
+	}
+
 	// If enabled, API key must be present (already resolved from env in GetConfig)
 	if cfg.Embeddings.APIKey == "" {
-		v.AddError("embeddings.api_key", "required", "embeddings.api_key is required when embeddings is enabled", "Set OPENAI_API_KEY environment variable or configure api_key in config", nil)
+		envVar := embeddingProviderEnvVars[cfg.Embeddings.Provider]
+		if envVar == "" {
+			envVar = "OPENAI_API_KEY"
+		}
+		v.AddError("embeddings.api_key", "required", "embeddings.api_key is required when embeddings is enabled", fmt.Sprintf("Set %s environment variable or configure api_key in config", envVar), nil)
 	}
 
-	// Validate provider (only OpenAI is currently supported)
-	validProviders := []string{"openai"}
-	if cfg.Embeddings.Provider != "" && !contains(validProviders, cfg.Embeddings.Provider) {
-		v.AddError("embeddings.provider", "enum", fmt.Sprintf("provider '%s' is not supported", cfg.Embeddings.Provider), "Only 'openai' is currently supported", cfg.Embeddings.Provider)
+	// Validate model and dimensions based on provider
+	provider := cfg.Embeddings.Provider
+	if provider == "" {
+		provider = "openai" // Default provider
 	}
 
-	// Validate model and dimensions for OpenAI provider
-	if cfg.Embeddings.Provider == "" || cfg.Embeddings.Provider == "openai" {
-		expectedDim, validModel := openAIEmbeddingModels[cfg.Embeddings.Model]
-		if !validModel && cfg.Embeddings.Model != "" {
-			v.AddError("embeddings.model", "enum", fmt.Sprintf("unknown OpenAI embedding model: %s", cfg.Embeddings.Model), "Use text-embedding-3-small, text-embedding-3-large, or text-embedding-ada-002", cfg.Embeddings.Model)
-		}
+	switch provider {
+	case "openai":
+		validateEmbeddingModelDimensions(v, cfg, openAIEmbeddingModels, "OpenAI", "text-embedding-3-small, text-embedding-3-large, or text-embedding-ada-002")
+	case "voyage":
+		validateEmbeddingModelDimensions(v, cfg, voyageEmbeddingModels, "Voyage", "voyage-3, voyage-3-lite, voyage-code-3, voyage-finance-2, or voyage-law-2")
+	case "gemini":
+		validateEmbeddingModelDimensions(v, cfg, geminiEmbeddingModels, "Gemini", "text-embedding-004 or embedding-001")
+	}
+}
 
-		// Validate dimensions match model
-		if validModel && cfg.Embeddings.Dimensions != expectedDim {
-			v.AddError("embeddings.dimensions", "model_match", fmt.Sprintf("dimensions %d don't match model %s (expected %d)", cfg.Embeddings.Dimensions, cfg.Embeddings.Model, expectedDim), fmt.Sprintf("Use dimensions %d for model %s", expectedDim, cfg.Embeddings.Model), cfg.Embeddings.Dimensions)
-		}
+// validateEmbeddingModelDimensions validates model and dimensions for a specific provider
+func validateEmbeddingModelDimensions(v *Validator, cfg *Config, models map[string]int, providerName, modelSuggestion string) {
+	expectedDim, validModel := models[cfg.Embeddings.Model]
+	if !validModel && cfg.Embeddings.Model != "" {
+		v.AddError("embeddings.model", "enum", fmt.Sprintf("unknown %s embedding model: %s", providerName, cfg.Embeddings.Model), fmt.Sprintf("Use %s", modelSuggestion), cfg.Embeddings.Model)
+		return
+	}
+
+	// Validate dimensions match model
+	if validModel && cfg.Embeddings.Dimensions != expectedDim {
+		v.AddError("embeddings.dimensions", "model_match", fmt.Sprintf("dimensions %d don't match model %s (expected %d)", cfg.Embeddings.Dimensions, cfg.Embeddings.Model, expectedDim), fmt.Sprintf("Use dimensions %d for model %s", expectedDim, cfg.Embeddings.Model), cfg.Embeddings.Dimensions)
 	}
 }
 

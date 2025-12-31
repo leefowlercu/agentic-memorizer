@@ -7,23 +7,45 @@ import (
 	"strings"
 )
 
+// EmbeddingProviderConfig contains settings for a single embedding provider
+type EmbeddingProviderConfig struct {
+	Property   string // Property name (e.g., "embedding_openai")
+	Dimensions int    // Vector dimensions for this provider
+}
+
 // SchemaConfig contains schema configuration settings
 type SchemaConfig struct {
 	// Vector index settings
-	EmbeddingDimensions    int    // Default: 1536 for OpenAI text-embedding-3-small
 	SimilarityFunction     string // "cosine" or "euclidean", default: "cosine"
 	VectorIndexM           int    // HNSW M parameter, default: 16
 	VectorIndexEfConstruct int    // HNSW efConstruction, default: 200
+
+	// All supported embedding providers and their configurations
+	// Indexes are created upfront for all providers
+	EmbeddingProviders []EmbeddingProviderConfig
 }
 
 // DefaultSchemaConfig returns default schema configuration
 func DefaultSchemaConfig() SchemaConfig {
 	return SchemaConfig{
-		EmbeddingDimensions:    1536,
 		SimilarityFunction:     "cosine",
 		VectorIndexM:           16,
 		VectorIndexEfConstruct: 200,
+		EmbeddingProviders: []EmbeddingProviderConfig{
+			{Property: "embedding_openai", Dimensions: 1536},
+			{Property: "embedding_voyage", Dimensions: 1024},
+			{Property: "embedding_gemini", Dimensions: 768},
+		},
 	}
+}
+
+// EmbeddingPropertyName returns the graph property name for an embedding provider
+// e.g., "openai" -> "embedding_openai"
+func EmbeddingPropertyName(provider string) string {
+	if provider == "" {
+		provider = "openai" // Default to OpenAI
+	}
+	return "embedding_" + provider
 }
 
 // Schema handles graph schema initialization and management
@@ -138,13 +160,17 @@ func (s *Schema) createIndexes(ctx context.Context) error {
 		)
 	}
 
-	// Create vector index for embedding similarity search
-	if err := s.createVectorIndex(ctx, "File", "embedding"); err != nil {
-		s.logger.Warn("failed to create vector index (may already exist)",
-			"label", "File",
-			"property", "embedding",
-			"error", err,
-		)
+	// Create vector indexes for all embedding providers
+	// Each provider has its own property with specific dimensions
+	for _, provider := range s.config.EmbeddingProviders {
+		if err := s.createVectorIndexWithDimensions(ctx, "File", provider.Property, provider.Dimensions); err != nil {
+			s.logger.Warn("failed to create vector index (may already exist)",
+				"label", "File",
+				"property", provider.Property,
+				"dimensions", provider.Dimensions,
+				"error", err,
+			)
+		}
 	}
 
 	return nil
@@ -198,13 +224,13 @@ func (s *Schema) createFullTextIndex(ctx context.Context, label, property string
 	return nil
 }
 
-// createVectorIndex creates a vector index for similarity search
-func (s *Schema) createVectorIndex(ctx context.Context, label, property string) error {
+// createVectorIndexWithDimensions creates a vector index for similarity search with specific dimensions
+func (s *Schema) createVectorIndexWithDimensions(ctx context.Context, label, property string, dimensions int) error {
 	query := fmt.Sprintf(
 		"CREATE VECTOR INDEX FOR (n:%s) ON (n.%s) OPTIONS {dimension:%d, similarityFunction:'%s', M:%d, efConstruction:%d}",
 		label,
 		property,
-		s.config.EmbeddingDimensions,
+		dimensions,
 		s.config.SimilarityFunction,
 		s.config.VectorIndexM,
 		s.config.VectorIndexEfConstruct,
@@ -226,7 +252,7 @@ func (s *Schema) createVectorIndex(ctx context.Context, label, property string) 
 	s.logger.Debug("created vector index",
 		"label", label,
 		"property", property,
-		"dimensions", s.config.EmbeddingDimensions,
+		"dimensions", dimensions,
 	)
 	return nil
 }

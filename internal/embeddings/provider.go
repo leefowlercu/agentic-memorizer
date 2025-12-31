@@ -16,6 +16,13 @@ type Provider interface {
 
 	// Model returns the model name being used
 	Model() string
+
+	// Name returns the provider identifier (e.g., "openai", "voyage", "gemini")
+	Name() string
+
+	// DefaultRateLimit returns the default rate limit in requests per minute
+	// Used when rate limit headers are unavailable from the API
+	DefaultRateLimit() int
 }
 
 // EmbeddingResult contains the result of an embedding operation

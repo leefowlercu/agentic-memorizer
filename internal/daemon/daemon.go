@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -17,6 +16,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/api"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon/worker"
 	"github.com/leefowlercu/agentic-memorizer/internal/embeddings"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/embeddings/providers" // Register embedding providers
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/leefowlercu/agentic-memorizer/internal/metadata"
@@ -472,48 +472,77 @@ func (d *Daemon) rebuildIndexWithSync(sync bool) error {
 		apiKey := cfg.Embeddings.APIKey
 
 		if apiKey != "" {
-			// Validate provider (only OpenAI supported for now)
-			if cfg.Embeddings.Provider != "" && cfg.Embeddings.Provider != "openai" {
-				logger.Warn("only openai embeddings provider supported",
-					"configured", cfg.Embeddings.Provider,
-					"using", "openai",
-				)
+			// Get provider from config or default to openai
+			embProviderName := cfg.Embeddings.Provider
+			if embProviderName == "" {
+				embProviderName = "openai"
 			}
 
-			embConfig := embeddings.OpenAIConfig{
-				APIKey:     apiKey,
-				Model:      cfg.Embeddings.Model,
-				Dimensions: cfg.Embeddings.Dimensions,
-			}
-			var err error
-			embeddingProvider, err = embeddings.NewOpenAIProvider(embConfig, logger)
+			// Look up provider factory from registry
+			embRegistry := embeddings.GlobalRegistry()
+			embFactory, err := embRegistry.Get(embProviderName)
 			if err != nil {
-				logger.Warn("failed to create embedding provider", "error", err)
-			} else {
-				logger.Info("embedding provider initialized",
-					"provider", "openai",
-					"model", cfg.Embeddings.Model,
-					"dimensions", cfg.Embeddings.Dimensions,
+				logger.Warn("embedding provider not found, falling back to openai",
+					"configured", embProviderName,
+					"error", err,
 				)
+				embProviderName = "openai"
+				embFactory, err = embRegistry.Get("openai")
+				if err != nil {
+					logger.Warn("failed to get openai embedding provider", "error", err)
+				}
 			}
 
-			// Create embedding cache
-			embCacheDir := filepath.Join(cfg.Semantic.CacheDir, "embeddings")
-			embeddingCache, err = embeddings.NewCache(embCacheDir, logger)
+			if embFactory != nil {
+				embConfig := embeddings.ProviderConfig{
+					APIKey:     apiKey,
+					Model:      cfg.Embeddings.Model,
+					Dimensions: cfg.Embeddings.Dimensions,
+				}
+				embeddingProvider, err = embFactory(embConfig, logger)
+				if err != nil {
+					logger.Warn("failed to create embedding provider", "error", err)
+				} else {
+					logger.Info("embedding provider initialized",
+						"provider", embeddingProvider.Name(),
+						"model", embeddingProvider.Model(),
+						"dimensions", embeddingProvider.Dimensions(),
+					)
+				}
+			}
+
+			// Create embedding cache (cache.go adds "embeddings" subdirectory)
+			embeddingCache, err = embeddings.NewCache(cfg.Semantic.CacheDir, embProviderName, logger)
 			if err != nil {
 				logger.Warn("failed to create embedding cache", "error", err)
 			}
 		} else {
+			// Determine which env var to mention based on provider
+			envVar := config.OpenAIAPIKeyEnv
+			switch cfg.Embeddings.Provider {
+			case "voyage":
+				envVar = config.VoyageAPIKeyEnv
+			case "gemini":
+				envVar = config.GoogleAPIKeyEnv
+			}
 			logger.Warn("embeddings enabled but no API key found",
-				"api_key_env", config.EmbeddingsAPIKeyEnv,
+				"provider", cfg.Embeddings.Provider,
+				"api_key_env", envVar,
 			)
 		}
+	}
+
+	// Determine embedding rate limit from provider or use default
+	embeddingRateLimitPerMin := 500 // Conservative default
+	if embeddingProvider != nil {
+		embeddingRateLimitPerMin = embeddingProvider.DefaultRateLimit()
 	}
 
 	// Create worker pool
 	pool := worker.NewPool(
 		cfg.Daemon.Workers,
 		cfg.Semantic.RateLimitPerMin,
+		embeddingRateLimitPerMin,
 		d.metadataExtractor,
 		provider,
 		providerName,
@@ -583,7 +612,15 @@ func (d *Daemon) rebuildIndexWithSync(sync bool) error {
 			}
 
 			if len(result.Embedding) > 0 {
-				if _, err := d.graphManager.UpdateSingleWithEmbedding(d.ctx, graphEntry, graph.UpdateInfo{}, result.Embedding); err != nil {
+				// Get embeddings provider name from config for graph property naming
+				d.cfgMu.RLock()
+				embProvider := d.cfg.Embeddings.Provider
+				if embProvider == "" {
+					embProvider = "openai"
+				}
+				d.cfgMu.RUnlock()
+
+				if _, err := d.graphManager.UpdateSingleWithEmbedding(d.ctx, graphEntry, graph.UpdateInfo{}, result.Embedding, embProvider); err != nil {
 					logger.Warn("failed to update graph with embedding", "path", relPath, "error", err)
 				}
 				embeddingsGenerated++

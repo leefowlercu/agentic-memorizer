@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -10,15 +11,43 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
 
-// EmbeddingsStep handles embeddings configuration
+// embeddingsPhase represents the current sub-phase within the step
+type embeddingsPhase int
+
+const (
+	embeddingsPhaseProvider embeddingsPhase = iota
+	embeddingsPhaseModel
+	embeddingsPhaseAPIKey
+)
+
+// EmbeddingsProviderInfo holds embeddings provider configuration details
+type EmbeddingsProviderInfo struct {
+	Name        string
+	DisplayName string
+	EnvVar      string
+	KeyDetected bool
+	Models      []EmbeddingsModelInfo
+}
+
+// EmbeddingsModelInfo holds embeddings model configuration details
+type EmbeddingsModelInfo struct {
+	ID          string
+	DisplayName string
+	Description string
+	Dimensions  int
+}
+
+// EmbeddingsStep handles embeddings provider selection and configuration
 type EmbeddingsStep struct {
-	enableRadio  *components.RadioGroup
-	keyRadio     *components.RadioGroup
-	keyInput     *components.TextInput
-	envKeyFound  bool
-	err          error
-	focusIndex   int // 0 = enable radio, 1 = key radio, 2 = key input
-	showKeySetup bool
+	phase         embeddingsPhase
+	providers     []EmbeddingsProviderInfo
+	providerRadio *components.RadioGroup
+	modelRadio    *components.RadioGroup
+	keyInput      *components.TextInput
+	selectedProv  int
+	selectedModel int
+	focusIndex    int
+	err           error
 }
 
 // NewEmbeddingsStep creates a new embeddings configuration step
@@ -31,53 +60,142 @@ func (s *EmbeddingsStep) Title() string {
 	return "Embeddings"
 }
 
+// buildProviders creates the embeddings provider list with detection status
+func (s *EmbeddingsStep) buildProviders() []EmbeddingsProviderInfo {
+	return []EmbeddingsProviderInfo{
+		{
+			Name:        "openai",
+			DisplayName: "OpenAI",
+			EnvVar:      config.OpenAIAPIKeyEnv,
+			KeyDetected: os.Getenv(config.OpenAIAPIKeyEnv) != "",
+			Models: []EmbeddingsModelInfo{
+				{ID: "text-embedding-3-small", DisplayName: "text-embedding-3-small (Recommended)", Description: "Fast, cost-effective", Dimensions: 1536},
+				{ID: "text-embedding-3-large", DisplayName: "text-embedding-3-large", Description: "Highest quality", Dimensions: 3072},
+				{ID: "text-embedding-ada-002", DisplayName: "text-embedding-ada-002", Description: "Legacy model", Dimensions: 1536},
+			},
+		},
+		{
+			Name:        "voyage",
+			DisplayName: "Voyage AI",
+			EnvVar:      config.VoyageAPIKeyEnv,
+			KeyDetected: os.Getenv(config.VoyageAPIKeyEnv) != "",
+			Models: []EmbeddingsModelInfo{
+				{ID: "voyage-3", DisplayName: "voyage-3 (Recommended)", Description: "Best overall performance", Dimensions: 1024},
+				{ID: "voyage-3-lite", DisplayName: "voyage-3-lite", Description: "Fast, cost-effective", Dimensions: 512},
+				{ID: "voyage-code-3", DisplayName: "voyage-code-3", Description: "Optimized for code", Dimensions: 1024},
+			},
+		},
+		{
+			Name:        "gemini",
+			DisplayName: "Google Gemini",
+			EnvVar:      config.GoogleAPIKeyEnv,
+			KeyDetected: os.Getenv(config.GoogleAPIKeyEnv) != "",
+			Models: []EmbeddingsModelInfo{
+				{ID: "text-embedding-004", DisplayName: "text-embedding-004 (Recommended)", Description: "Latest model", Dimensions: 768},
+				{ID: "embedding-001", DisplayName: "embedding-001", Description: "Legacy model", Dimensions: 768},
+			},
+		},
+	}
+}
+
 // Init initializes the step
 func (s *EmbeddingsStep) Init(cfg *config.Config) tea.Cmd {
-	s.envKeyFound = os.Getenv(config.EmbeddingsAPIKeyEnv) != ""
+	s.phase = embeddingsPhaseProvider
+	s.providers = s.buildProviders()
 	s.err = nil
 	s.focusIndex = 0
-	s.showKeySetup = false
+	s.selectedProv = 0
+	s.selectedModel = 0
 
-	// Enable/disable options
-	var enableOptions []components.RadioOption
-	if s.envKeyFound {
-		enableOptions = []components.RadioOption{
-			{Label: "Enable embeddings", Description: config.EmbeddingsAPIKeyEnv + " detected"},
-			{Label: "Disable embeddings", Description: "Skip vector similarity search"},
+	// Build provider options with API key detection status
+	options := make([]components.RadioOption, len(s.providers)+1)
+	for i, prov := range s.providers {
+		status := "API Key: Not found"
+		if prov.KeyDetected {
+			status = "API Key: Detected"
+		}
+		options[i] = components.RadioOption{
+			Label:       prov.DisplayName,
+			Description: status,
+		}
+	}
+	options[len(s.providers)] = components.RadioOption{
+		Label:       "Skip (Disable embeddings)",
+		Description: "No vector similarity search",
+	}
+
+	s.providerRadio = components.NewRadioGroup(options)
+	s.providerRadio.Focus()
+
+	// Pre-select based on existing config or first detected key
+	if cfg.Embeddings.Provider != "" {
+		for i, prov := range s.providers {
+			if prov.Name == cfg.Embeddings.Provider {
+				s.providerRadio.SetSelected(i)
+				s.selectedProv = i
+				break
+			}
 		}
 	} else {
-		enableOptions = []components.RadioOption{
-			{Label: "Enable embeddings", Description: "Requires OpenAI API key"},
-			{Label: "Disable embeddings", Description: "Skip vector similarity search"},
+		// Auto-select first provider with detected key
+		for i, prov := range s.providers {
+			if prov.KeyDetected {
+				s.providerRadio.SetSelected(i)
+				s.selectedProv = i
+				break
+			}
 		}
 	}
 
-	s.enableRadio = components.NewRadioGroup(enableOptions)
-	s.enableRadio.Focus()
+	// Initialize model radio (will be rebuilt when provider changes)
+	s.initModelRadio(cfg)
 
-	// Key configuration options (only shown when env var not found)
-	// When env var IS found, we just show a success message instead
-	keyOptions := []components.RadioOption{
-		{Label: "Enter API key directly", Description: "Will be stored in config file"},
-	}
-	s.keyRadio = components.NewRadioGroup(keyOptions)
-
-	s.keyInput = components.NewTextInput("OpenAI API Key").
-		WithPlaceholder("sk-...").
+	// Initialize API key input
+	s.keyInput = components.NewTextInput("API Key").
+		WithPlaceholder("Enter API key...").
 		WithMasked().
 		WithWidth(60)
 
-	// Default to "Enable embeddings" (recommended)
-	s.enableRadio.SetSelected(0)
-	s.showKeySetup = true
+	return nil
+}
 
-	// Pre-populate API key if already configured
-	if cfg.Embeddings.APIKey != "" {
-		s.keyRadio.SetSelected(0) // "Enter directly" is always option 0 now
-		s.keyInput.SetValue(cfg.Embeddings.APIKey)
+// initModelRadio initializes the model radio for the current provider
+func (s *EmbeddingsStep) initModelRadio(cfg *config.Config) {
+	if s.selectedProv >= len(s.providers) {
+		return
 	}
 
-	return nil
+	prov := s.providers[s.selectedProv]
+	options := make([]components.RadioOption, len(prov.Models))
+	for i, model := range prov.Models {
+		options[i] = components.RadioOption{
+			Label:       model.DisplayName,
+			Description: model.Description + " | " + formatDimensions(model.Dimensions),
+		}
+	}
+
+	s.modelRadio = components.NewRadioGroup(options)
+
+	// Pre-select based on existing config
+	if cfg.Embeddings.Model != "" {
+		for i, model := range prov.Models {
+			if model.ID == cfg.Embeddings.Model {
+				s.modelRadio.SetSelected(i)
+				s.selectedModel = i
+				break
+			}
+		}
+	}
+}
+
+// formatDimensions formats dimension count for display
+func formatDimensions(dim int) string {
+	switch {
+	case dim >= 1000:
+		return fmt.Sprintf("%dk dimensions", dim/1000)
+	default:
+		return fmt.Sprintf("%d dimensions", dim)
+	}
 }
 
 // Update handles input
@@ -86,55 +204,41 @@ func (s *EmbeddingsStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			if err := s.Validate(); err != nil {
-				s.err = err
-				return nil, StepContinue
-			}
-			s.err = nil
-			return nil, StepNext
+			return s.handleEnter()
 
 		case "esc":
-			return nil, StepPrev
+			return s.handleEsc()
 
 		case "tab":
-			return s.nextFocus(), StepContinue
+			if s.phase == embeddingsPhaseAPIKey {
+				s.focusIndex = (s.focusIndex + 1) % 2
+				if s.focusIndex == 0 {
+					s.keyInput.Blur()
+				} else {
+					return s.keyInput.Focus(), StepContinue
+				}
+			}
+			return nil, StepContinue
 
 		case "shift+tab":
-			return s.prevFocus(), StepContinue
+			if s.phase == embeddingsPhaseAPIKey && s.focusIndex == 1 {
+				s.focusIndex = 0
+				s.keyInput.Blur()
+			}
+			return nil, StepContinue
 		}
 	}
 
-	// Delegate to focused component
-	switch s.focusIndex {
-	case 0:
-		oldSelected := s.enableRadio.Selected()
-		s.enableRadio.Update(msg)
-		newSelected := s.enableRadio.Selected()
-
-		// Toggle key setup visibility
-		if newSelected == 0 {
-			s.showKeySetup = true
-		} else {
-			s.showKeySetup = false
-		}
-
-		// Auto-advance to key setup
-		if oldSelected != 0 && newSelected == 0 && !s.envKeyFound {
-			s.focusIndex = 1
-			s.enableRadio.Blur()
-			s.keyRadio.Focus()
-		}
-
-	case 1:
-		if s.showKeySetup && !s.envKeyFound {
-			// When env var not found, keyRadio only has one option, so auto-focus input
-			s.focusIndex = 2
-			s.keyRadio.Blur()
-			return s.keyInput.Focus(), StepContinue
-		}
-
-	case 2:
-		if s.showKeySetup && !s.envKeyFound {
+	// Delegate to current phase component
+	switch s.phase {
+	case embeddingsPhaseProvider:
+		s.providerRadio.Update(msg)
+		s.selectedProv = s.providerRadio.Selected()
+	case embeddingsPhaseModel:
+		s.modelRadio.Update(msg)
+		s.selectedModel = s.modelRadio.Selected()
+	case embeddingsPhaseAPIKey:
+		if s.focusIndex == 1 {
 			cmd := s.keyInput.Update(msg)
 			return cmd, StepContinue
 		}
@@ -143,35 +247,106 @@ func (s *EmbeddingsStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	return nil, StepContinue
 }
 
+// handleEnter processes enter key for current phase
+func (s *EmbeddingsStep) handleEnter() (tea.Cmd, StepResult) {
+	switch s.phase {
+	case embeddingsPhaseProvider:
+		s.selectedProv = s.providerRadio.Selected()
+
+		// Skip selected
+		if s.selectedProv >= len(s.providers) {
+			return nil, StepNext
+		}
+
+		// Move to model selection
+		s.phase = embeddingsPhaseModel
+		s.initModelRadio(&config.DefaultConfig)
+		s.modelRadio.Focus()
+		return nil, StepContinue
+
+	case embeddingsPhaseModel:
+		s.selectedModel = s.modelRadio.Selected()
+		prov := s.providers[s.selectedProv]
+
+		// If API key detected, we're done
+		if prov.KeyDetected {
+			return nil, StepNext
+		}
+
+		// Move to API key input
+		s.phase = embeddingsPhaseAPIKey
+		s.focusIndex = 1
+		return s.keyInput.Focus(), StepContinue
+
+	case embeddingsPhaseAPIKey:
+		if err := s.Validate(); err != nil {
+			s.err = err
+			return nil, StepContinue
+		}
+		s.err = nil
+		return nil, StepNext
+	}
+
+	return nil, StepContinue
+}
+
+// handleEsc processes escape key for current phase
+func (s *EmbeddingsStep) handleEsc() (tea.Cmd, StepResult) {
+	switch s.phase {
+	case embeddingsPhaseProvider:
+		return nil, StepPrev
+
+	case embeddingsPhaseModel:
+		s.phase = embeddingsPhaseProvider
+		s.providerRadio.Focus()
+		return nil, StepContinue
+
+	case embeddingsPhaseAPIKey:
+		s.phase = embeddingsPhaseModel
+		s.modelRadio.Focus()
+		s.keyInput.Blur()
+		s.focusIndex = 0
+		return nil, StepContinue
+	}
+
+	return nil, StepPrev
+}
+
 // View renders the step
 func (s *EmbeddingsStep) View() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Subtitle.Render("Configure vector embeddings for similarity search"))
-	b.WriteString("\n\n")
-
-	b.WriteString(s.enableRadio.View())
-
-	if s.showKeySetup && !s.envKeyFound {
+	switch s.phase {
+	case embeddingsPhaseProvider:
+		b.WriteString(styles.Subtitle.Render("Select embeddings provider for vector similarity search"))
 		b.WriteString("\n\n")
-		b.WriteString(styles.Label.Render("API Key Configuration:"))
-		b.WriteString("\n")
-		b.WriteString(s.keyInput.View())
-	} else if s.showKeySetup && s.envKeyFound {
+		b.WriteString(s.providerRadio.View())
 		b.WriteString("\n\n")
-		b.WriteString(styles.SuccessText.Render("Using " + config.EmbeddingsAPIKeyEnv + " from environment"))
-	}
-
-	if s.err != nil {
-		b.WriteString("\n\n")
-		b.WriteString(styles.ErrorText.Render("Error: " + s.err.Error()))
-	}
-
-	b.WriteString("\n\n")
-	if s.showKeySetup && !s.envKeyFound {
-		b.WriteString(styles.HelpText.Render(NavigationHelpWithInput()))
-	} else {
 		b.WriteString(styles.HelpText.Render(NavigationHelp()))
+
+	case embeddingsPhaseModel:
+		prov := s.providers[s.selectedProv]
+		b.WriteString(styles.Subtitle.Render("Select " + prov.DisplayName + " embedding model"))
+		b.WriteString("\n\n")
+		b.WriteString(s.modelRadio.View())
+		b.WriteString("\n\n")
+		b.WriteString(styles.HelpText.Render("↑/↓: navigate  enter: next  esc: back to providers  ctrl+c: quit"))
+
+	case embeddingsPhaseAPIKey:
+		prov := s.providers[s.selectedProv]
+		b.WriteString(styles.Subtitle.Render("Enter " + prov.DisplayName + " API Key"))
+		b.WriteString("\n\n")
+		b.WriteString(styles.MutedText.Render("No " + prov.EnvVar + " found. Please enter your API key:"))
+		b.WriteString("\n\n")
+		b.WriteString(s.keyInput.View())
+
+		if s.err != nil {
+			b.WriteString("\n\n")
+			b.WriteString(styles.ErrorText.Render("Error: " + s.err.Error()))
+		}
+
+		b.WriteString("\n\n")
+		b.WriteString(styles.HelpText.Render("enter: continue  esc: back to models  ctrl+c: quit"))
 	}
 
 	return b.String()
@@ -179,88 +354,48 @@ func (s *EmbeddingsStep) View() string {
 
 // Validate validates the step
 func (s *EmbeddingsStep) Validate() error {
-	// All options are valid
+	// Skip selected - always valid
+	if s.selectedProv >= len(s.providers) {
+		return nil
+	}
+
+	// If in API key phase, require a key
+	if s.phase == embeddingsPhaseAPIKey {
+		prov := s.providers[s.selectedProv]
+		if !prov.KeyDetected && s.keyInput.Value() == "" {
+			return nil // Allow empty (can skip)
+		}
+	}
+
 	return nil
 }
 
 // Apply applies the step values to config
 func (s *EmbeddingsStep) Apply(cfg *config.Config) error {
-	if s.enableRadio.Selected() == 0 {
-		cfg.Embeddings.Enabled = true
-		if s.envKeyFound {
-			// Env var detected - write it to config for service manager compatibility
-			cfg.Embeddings.APIKey = os.Getenv(config.EmbeddingsAPIKeyEnv)
-		} else {
-			// No env var - use direct entry from input field
-			cfg.Embeddings.APIKey = s.keyInput.Value()
-		}
-	} else {
+	// Skip selected
+	if s.selectedProv >= len(s.providers) {
 		cfg.Embeddings.Enabled = false
 		cfg.Embeddings.APIKey = ""
-	}
-	return nil
-}
-
-// Helper methods
-
-func (s *EmbeddingsStep) nextFocus() tea.Cmd {
-	if !s.showKeySetup {
+		cfg.Embeddings.Provider = ""
+		cfg.Embeddings.Model = ""
+		cfg.Embeddings.Dimensions = 0
 		return nil
 	}
 
-	// When env var not found, focus cycles: enable radio (0) -> input (2)
-	// When env var found, only enable radio (0) is focusable
-	if s.envKeyFound {
-		return nil // No cycling needed
+	prov := s.providers[s.selectedProv]
+	model := prov.Models[s.selectedModel]
+
+	cfg.Embeddings.Enabled = true
+	cfg.Embeddings.Provider = prov.Name
+	cfg.Embeddings.Model = model.ID
+	cfg.Embeddings.Dimensions = model.Dimensions
+
+	// Set API key
+	if prov.KeyDetected {
+		cfg.Embeddings.APIKey = os.Getenv(prov.EnvVar)
+	} else {
+		cfg.Embeddings.APIKey = s.keyInput.Value()
 	}
 
-	s.focusIndex++
-	if s.focusIndex > 2 {
-		s.focusIndex = 0
-	}
-	// Skip keyRadio (1) since it's not shown
-	if s.focusIndex == 1 {
-		s.focusIndex = 2
-	}
-
-	return s.updateFocus()
-}
-
-func (s *EmbeddingsStep) prevFocus() tea.Cmd {
-	if !s.showKeySetup {
-		return nil
-	}
-
-	if s.envKeyFound {
-		return nil // No cycling needed
-	}
-
-	s.focusIndex--
-	if s.focusIndex < 0 {
-		s.focusIndex = 2
-	}
-	// Skip keyRadio (1) since it's not shown
-	if s.focusIndex == 1 {
-		s.focusIndex = 0
-	}
-
-	return s.updateFocus()
-}
-
-func (s *EmbeddingsStep) updateFocus() tea.Cmd {
-	s.enableRadio.Blur()
-	s.keyRadio.Blur()
-	s.keyInput.Blur()
-
-	switch s.focusIndex {
-	case 0:
-		s.enableRadio.Focus()
-		return nil
-	case 1:
-		s.keyRadio.Focus()
-		return nil
-	case 2:
-		return s.keyInput.Focus()
-	}
 	return nil
 }

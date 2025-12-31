@@ -236,7 +236,7 @@ Agentic Memorizer integrates with multiple AI agent frameworks, providing automa
 - FalkorDB (Redis-compatible graph database)
 - Node types: File, Tag, Topic, Entity, Category, Directory, Fact
 - Relationship types: HAS_TAG, COVERS_TOPIC, MENTIONS, IN_CATEGORY, REFERENCES, SIMILAR_TO, IN_DIRECTORY, PARENT_OF
-- Vector embeddings for semantic similarity (optional, requires OpenAI API)
+- Vector embeddings for semantic similarity (optional, supports OpenAI, Voyage AI, Gemini)
 
 **Facts Storage** (`internal/graph/facts.go`):
 - CRUD operations for user-defined facts
@@ -2150,7 +2150,8 @@ The configuration system follows "convention over configuration" principles. Mos
 - `mcp.log_level` - MCP server log verbosity
 - `graph.host` / `graph.port` - FalkorDB connection settings
 - `graph.password` - FalkorDB password (or set `FALKORDB_PASSWORD` env var)
-- `embeddings.api_key` - OpenAI API key for embeddings (or set `OPENAI_API_KEY` env var)
+- `embeddings.provider` - Embedding provider (openai, voyage, or gemini)
+- `embeddings.api_key` - Provider API key (or use env var: `OPENAI_API_KEY`, `VOYAGE_API_KEY`, or `GOOGLE_API_KEY`)
 
 **Advanced Settings** (available but not in initialized config):
 
@@ -2188,9 +2189,12 @@ mcp:
 
 # Embeddings tuning
 embeddings:
-  provider: openai           # Embedding provider (only 'openai' currently supported)
-  model: text-embedding-3-small  # Embedding model
-  dimensions: 1536           # Vector dimensions (must match model)
+  provider: openai           # Embedding provider: openai, voyage, or gemini
+  model: text-embedding-3-small  # Provider-specific model (dimensions auto-derived)
+  # OpenAI: text-embedding-3-small (1536d), text-embedding-3-large (3072d)
+  # Voyage: voyage-3 (1024d), voyage-3-lite (512d), voyage-code-3 (1024d)
+  # Gemini: text-embedding-004 (768d)
+  dimensions: 1536           # Override dimensions (OpenAI only, for dimensionality reduction)
 
 # Graph tuning
 graph:
@@ -2203,10 +2207,6 @@ To discover all available settings:
 ```bash
 memorizer config show-schema --advanced-only
 ```
-
-**Derived Settings** (computed automatically):
-- `semantic.enabled` - Automatically enabled when provider API key is set
-- `embeddings.enabled` - Automatically enabled when OpenAI API key is set
 
 See `config.yaml.example` for a complete reference with all available options
 
@@ -2275,15 +2275,23 @@ export ANTHROPIC_API_KEY="your-claude-api-key"
 
 **OPENAI_API_KEY**
 
-OpenAI API key for semantic analysis when `semantic.provider: openai`, or for vector embeddings (optional). Falls back to `semantic.api_key` or `embeddings.api_key` in config.
+OpenAI API key for semantic analysis when `semantic.provider: openai`, or for vector embeddings when `embeddings.provider: openai`. Falls back to `semantic.api_key` or `embeddings.api_key` in config.
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
 ```
 
+**VOYAGE_API_KEY**
+
+Voyage AI API key for vector embeddings when `embeddings.provider: voyage`. Falls back to `embeddings.api_key` in config.
+
+```bash
+export VOYAGE_API_KEY="your-voyage-api-key"
+```
+
 **GOOGLE_API_KEY**
 
-Google API key for semantic analysis when `semantic.provider: gemini`. If not set, falls back to `semantic.api_key` in config.
+Google API key for semantic analysis when `semantic.provider: gemini`, or for vector embeddings when `embeddings.provider: gemini`. Falls back to `semantic.api_key` or `embeddings.api_key` in config.
 
 ```bash
 export GOOGLE_API_KEY="your-google-api-key"
@@ -2621,7 +2629,7 @@ agentic-memorizer/
 │   │   ├── schema.go         # Node/edge types and constraints
 │   │   ├── export.go         # Graph to index export
 │   │   └── facts.go          # Facts CRUD operations
-│   ├── embeddings/           # Vector embeddings (optional)
+│   ├── embeddings/           # Multi-provider vector embeddings (OpenAI, Voyage, Gemini)
 │   ├── watcher/              # File system watching (fsnotify)
 │   ├── walker/               # File system traversal with filtering
 │   ├── logging/              # Structured logging with slog, rotation, and context

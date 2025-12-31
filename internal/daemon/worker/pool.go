@@ -51,6 +51,7 @@ type Pool struct {
 func NewPool(
 	workers int,
 	rateLimitPerMin int,
+	embeddingRateLimitPerMin int,
 	metadataExtractor *metadata.Extractor,
 	semanticProvider semantic.Provider,
 	providerName string,
@@ -67,10 +68,10 @@ func NewPool(
 	perSecond := float64(rateLimitPerMin) / 60.0
 	limiter := rate.NewLimiter(rate.Limit(perSecond), 3)
 
-	// Embedding API rate limiter (OpenAI allows 3000 RPM for embeddings).
-	// Conservative 500 RPM default leaves headroom for other API usage.
+	// Embedding API rate limiter using provider's default rate.
 	// Burst of 10 handles initial batch processing without hitting limits.
-	embeddingLimiter := rate.NewLimiter(rate.Limit(500.0/60.0), 10)
+	embeddingPerSecond := float64(embeddingRateLimitPerMin) / 60.0
+	embeddingLimiter := rate.NewLimiter(rate.Limit(embeddingPerSecond), 10)
 
 	return &Pool{
 		workers:           workers,

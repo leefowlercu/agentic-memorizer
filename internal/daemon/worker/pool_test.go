@@ -42,7 +42,7 @@ func TestPool_BasicProcessing(t *testing.T) {
 	ctx := context.Background()
 
 	// Create worker pool (no semantic analyzer or embeddings for faster tests)
-	pool := NewPool(2, 60, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
+	pool := NewPool(2, 60, 500, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 	defer pool.Stop()
 
@@ -139,7 +139,7 @@ func TestPool_RateLimiting(t *testing.T) {
 	ctx := context.Background()
 
 	// Create pool with very low rate limit (6 per minute = 1 per 10 seconds)
-	pool := NewPool(1, 6, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
+	pool := NewPool(1, 6, 500, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 	defer pool.Stop()
 
@@ -179,7 +179,7 @@ func TestPool_GracefulShutdown(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	ctx := context.Background()
 
-	pool := NewPool(2, 60, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
+	pool := NewPool(2, 60, 500, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 
 	// Submit some jobs
@@ -224,7 +224,7 @@ func TestPool_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	pool := NewPool(2, 60, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
+	pool := NewPool(2, 60, 500, metadataExtractor, nil, "", "", nil, nil, cacheManager, logger, ctx)
 	pool.Start()
 	defer pool.Stop()
 

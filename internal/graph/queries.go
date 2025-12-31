@@ -40,15 +40,26 @@ type SearchResult struct {
 }
 
 // VectorSearch performs similarity search using embeddings
-func (q *Queries) VectorSearch(ctx context.Context, embedding []float32, limit int) ([]SearchResult, error) {
-	query := `
-		CALL db.idx.vector.queryNodes('File', 'embedding', $limit, vecf32($embedding))
+// The provider parameter determines which embedding property to search (e.g., "openai" -> "embedding_openai")
+func (q *Queries) VectorSearch(ctx context.Context, embedding []float32, limit int, provider string) ([]SearchResult, error) {
+	embeddingProp := EmbeddingPropertyName(provider)
+
+	// Build query dynamically with provider-specific embedding property
+	query := fmt.Sprintf(`
+		CALL db.idx.vector.queryNodes('File', '%s', $limit, vecf32($embedding))
 		YIELD node, score
 		RETURN node.path, node.name, node.type, node.category, node.summary, node.document_type, score
 		ORDER BY score DESC
-	`
+	`, embeddingProp)
+
+	// Convert []float32 to []interface{} for FalkorDB driver compatibility
+	embeddingAny := make([]interface{}, len(embedding))
+	for i, v := range embedding {
+		embeddingAny[i] = float64(v)
+	}
+
 	params := map[string]any{
-		"embedding": embedding,
+		"embedding": embeddingAny,
 		"limit":     limit,
 	}
 

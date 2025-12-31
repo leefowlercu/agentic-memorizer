@@ -48,10 +48,12 @@ var (
 	initializeSkipFalkorDBCheck   bool
 
 	// Embeddings configuration
-	initializeEnableEmbeddings   bool
-	initializeDisableEmbeddings  bool
-	initializeOpenAIAPIKey       string
-	initializeUseEnvOpenAIAPIKey bool
+	initializeEnableEmbeddings       bool
+	initializeDisableEmbeddings      bool
+	initializeEmbeddingsProvider     string
+	initializeEmbeddingsModel        string
+	initializeEmbeddingsAPIKey       string
+	initializeUseEnvEmbeddingsAPIKey bool
 
 	// Integration configuration
 	initializeIntegrations []string
@@ -90,6 +92,22 @@ var InitializeCmd = &cobra.Command{
     --use-env-semantic-api-key \
     --start-falkordb-podman
 
+  # Enable embeddings with OpenAI (default provider)
+  memorizer initialize --unattended \
+    --use-env-semantic-api-key \
+    --enable-embeddings \
+    --use-env-embeddings-api-key \
+    --start-falkordb-docker
+
+  # Enable embeddings with Voyage AI
+  memorizer initialize --unattended \
+    --use-env-semantic-api-key \
+    --enable-embeddings \
+    --embeddings-provider voyage \
+    --embeddings-model voyage-code-3 \
+    --use-env-embeddings-api-key \
+    --start-falkordb-docker
+
   # Force overwrite existing config
   memorizer initialize --force`,
 	PreRunE: validateInit,
@@ -127,8 +145,10 @@ func init() {
 	// Embeddings configuration
 	InitializeCmd.Flags().BoolVar(&initializeEnableEmbeddings, "enable-embeddings", false, "Enable embeddings")
 	InitializeCmd.Flags().BoolVar(&initializeDisableEmbeddings, "disable-embeddings", false, "Disable embeddings (default)")
-	InitializeCmd.Flags().StringVar(&initializeOpenAIAPIKey, "openai-api-key", "", "OpenAI API key for embeddings")
-	InitializeCmd.Flags().BoolVar(&initializeUseEnvOpenAIAPIKey, "use-env-openai-api-key", false, "Use OPENAI_API_KEY from environment")
+	InitializeCmd.Flags().StringVar(&initializeEmbeddingsProvider, "embeddings-provider", "", "Embeddings provider (openai, voyage, gemini)")
+	InitializeCmd.Flags().StringVar(&initializeEmbeddingsModel, "embeddings-model", "", "Model for embeddings (provider-specific)")
+	InitializeCmd.Flags().StringVar(&initializeEmbeddingsAPIKey, "embeddings-api-key", "", "API key for embeddings")
+	InitializeCmd.Flags().BoolVar(&initializeUseEnvEmbeddingsAPIKey, "use-env-embeddings-api-key", false, "Use environment variable for embeddings API key")
 
 	// Integration configuration
 	InitializeCmd.Flags().StringSliceVar(&initializeIntegrations, "integrations", []string{}, "Integrations to setup (comma-separated)")
@@ -151,8 +171,16 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--semantic-api-key and --use-env-semantic-api-key are mutually exclusive")
 	}
 
-	if initializeOpenAIAPIKey != "" && initializeUseEnvOpenAIAPIKey {
-		return fmt.Errorf("--openai-api-key and --use-env-openai-api-key are mutually exclusive")
+	if initializeEmbeddingsAPIKey != "" && initializeUseEnvEmbeddingsAPIKey {
+		return fmt.Errorf("--embeddings-api-key and --use-env-embeddings-api-key are mutually exclusive")
+	}
+
+	// Validate embeddings provider if specified
+	if initializeEmbeddingsProvider != "" {
+		validProviders := map[string]bool{"openai": true, "voyage": true, "gemini": true}
+		if !validProviders[initializeEmbeddingsProvider] {
+			return fmt.Errorf("--embeddings-provider must be one of: openai, voyage, gemini")
+		}
 	}
 
 	// Validate http-port flag if provided
@@ -230,11 +258,37 @@ func validateInit(cmd *cobra.Command, args []string) error {
 
 		// Embeddings validation
 		if initializeEnableEmbeddings {
-			if initializeOpenAIAPIKey == "" && !initializeUseEnvOpenAIAPIKey {
-				envKey := os.Getenv(config.EmbeddingsAPIKeyEnv)
-				if envKey == "" {
-					return fmt.Errorf("--enable-embeddings requires --openai-api-key or --use-env-openai-api-key (or %s environment variable)", config.EmbeddingsAPIKeyEnv)
+			provider := initializeEmbeddingsProvider
+			if provider == "" {
+				provider = "openai" // default
+			}
+
+			// Check for API key based on provider
+			hasKey := initializeEmbeddingsAPIKey != ""
+			if !hasKey && initializeUseEnvEmbeddingsAPIKey {
+				hasKey = true // will be read from env
+			}
+			if !hasKey {
+				// Check implicit env var presence
+				switch provider {
+				case "openai":
+					hasKey = os.Getenv(config.OpenAIAPIKeyEnv) != ""
+				case "voyage":
+					hasKey = os.Getenv(config.VoyageAPIKeyEnv) != ""
+				case "gemini":
+					hasKey = os.Getenv(config.GoogleAPIKeyEnv) != ""
 				}
+			}
+
+			if !hasKey {
+				envVar := config.OpenAIAPIKeyEnv
+				switch provider {
+				case "voyage":
+					envVar = config.VoyageAPIKeyEnv
+				case "gemini":
+					envVar = config.GoogleAPIKeyEnv
+				}
+				return fmt.Errorf("--enable-embeddings requires --embeddings-api-key, --use-env-embeddings-api-key, or %s environment variable", envVar)
 			}
 		}
 	}
@@ -439,15 +493,57 @@ func runUnattended(cmd *cobra.Command) error {
 	// Embeddings
 	if initializeEnableEmbeddings {
 		cfg.Embeddings.Enabled = true
-		if initializeOpenAIAPIKey != "" {
-			cfg.Embeddings.APIKey = initializeOpenAIAPIKey
-		} else if initializeUseEnvOpenAIAPIKey {
-			// Detect and write env var to config for service manager compatibility
-			envKey := os.Getenv(config.EmbeddingsAPIKeyEnv)
-			cfg.Embeddings.APIKey = envKey
-		} else if os.Getenv(config.EmbeddingsAPIKeyEnv) != "" {
-			// Env var exists but not explicitly requested - still capture it
-			cfg.Embeddings.APIKey = os.Getenv(config.EmbeddingsAPIKeyEnv)
+
+		// Provider selection
+		if initializeEmbeddingsProvider != "" {
+			cfg.Embeddings.Provider = initializeEmbeddingsProvider
+		} else {
+			cfg.Embeddings.Provider = config.DefaultEmbeddingsProvider
+		}
+
+		// Model selection and dimensions
+		if initializeEmbeddingsModel != "" {
+			cfg.Embeddings.Model = initializeEmbeddingsModel
+			// Set dimensions based on model
+			cfg.Embeddings.Dimensions = config.GetEmbeddingModelDimensions(cfg.Embeddings.Provider, initializeEmbeddingsModel)
+		} else {
+			// Use provider defaults
+			switch cfg.Embeddings.Provider {
+			case "openai":
+				cfg.Embeddings.Model = config.DefaultOpenAIEmbeddingsModel
+				cfg.Embeddings.Dimensions = 1536
+			case "voyage":
+				cfg.Embeddings.Model = config.DefaultVoyageEmbeddingsModel
+				cfg.Embeddings.Dimensions = 1024
+			case "gemini":
+				cfg.Embeddings.Model = config.DefaultGeminiEmbeddingsModel
+				cfg.Embeddings.Dimensions = 768
+			}
+		}
+
+		// API key - check explicit flag, then use-env flag, then implicit env vars
+		if initializeEmbeddingsAPIKey != "" {
+			cfg.Embeddings.APIKey = initializeEmbeddingsAPIKey
+		} else if initializeUseEnvEmbeddingsAPIKey {
+			// Unified env var flag - read from provider-appropriate env var
+			switch cfg.Embeddings.Provider {
+			case "openai":
+				cfg.Embeddings.APIKey = os.Getenv(config.OpenAIAPIKeyEnv)
+			case "voyage":
+				cfg.Embeddings.APIKey = os.Getenv(config.VoyageAPIKeyEnv)
+			case "gemini":
+				cfg.Embeddings.APIKey = os.Getenv(config.GoogleAPIKeyEnv)
+			}
+		} else {
+			// Try to get from environment based on provider (implicit)
+			switch cfg.Embeddings.Provider {
+			case "openai":
+				cfg.Embeddings.APIKey = os.Getenv(config.OpenAIAPIKeyEnv)
+			case "voyage":
+				cfg.Embeddings.APIKey = os.Getenv(config.VoyageAPIKeyEnv)
+			case "gemini":
+				cfg.Embeddings.APIKey = os.Getenv(config.GoogleAPIKeyEnv)
+			}
 		}
 	}
 
@@ -661,9 +757,27 @@ func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 		stepNum++
 	}
 
-	if cfg.Embeddings.Enabled && os.Getenv(config.EmbeddingsAPIKeyEnv) == "" && cfg.Embeddings.APIKey == "" {
-		fmt.Printf("%d. Set your OpenAI API key: export OPENAI_API_KEY=\"your-key-here\"\n", stepNum)
-		stepNum++
+	if cfg.Embeddings.Enabled && cfg.Embeddings.APIKey == "" {
+		// Check if env var is present for the configured provider
+		var envVar, envName string
+		switch cfg.Embeddings.Provider {
+		case "openai":
+			envVar = os.Getenv(config.OpenAIAPIKeyEnv)
+			envName = "OPENAI_API_KEY"
+		case "voyage":
+			envVar = os.Getenv(config.VoyageAPIKeyEnv)
+			envName = "VOYAGE_API_KEY"
+		case "gemini":
+			envVar = os.Getenv(config.GoogleAPIKeyEnv)
+			envName = "GOOGLE_API_KEY"
+		default:
+			envVar = os.Getenv(config.OpenAIAPIKeyEnv)
+			envName = "OPENAI_API_KEY"
+		}
+		if envVar == "" {
+			fmt.Printf("%d. Set your %s API key: export %s=\"your-key-here\"\n", stepNum, cfg.Embeddings.Provider, envName)
+			stepNum++
+		}
 	}
 
 	if !falkorDBRunning {

@@ -134,8 +134,20 @@ func GetConfig() (*Config, error) {
 	if cfg.Graph.Password == "" {
 		cfg.Graph.Password = os.Getenv(GraphPasswordEnv)
 	}
+
+	// Resolve embeddings API key from provider-specific env vars
 	if cfg.Embeddings.APIKey == "" {
-		cfg.Embeddings.APIKey = os.Getenv(EmbeddingsAPIKeyEnv)
+		switch cfg.Embeddings.Provider {
+		case "openai":
+			cfg.Embeddings.APIKey = os.Getenv(OpenAIAPIKeyEnv)
+		case "voyage":
+			cfg.Embeddings.APIKey = os.Getenv(VoyageAPIKeyEnv)
+		case "gemini":
+			cfg.Embeddings.APIKey = os.Getenv(GoogleAPIKeyEnv)
+		default:
+			// Default to OpenAI if no provider specified
+			cfg.Embeddings.APIKey = os.Getenv(OpenAIAPIKeyEnv)
+		}
 	}
 
 	// Derive semantic.enabled from API key presence
@@ -146,7 +158,7 @@ func GetConfig() (*Config, error) {
 	}
 
 	// Derive embeddings.enabled from embeddings API key presence.
-	// Embeddings require OpenAI API - automatically disable if no key.
+	// Embeddings require provider API key - automatically disable if no key.
 	// This simplifies config and prevents runtime errors from missing credentials.
 	if cfg.Embeddings.APIKey == "" {
 		cfg.Embeddings.Enabled = false
@@ -185,6 +197,7 @@ type MinimalMemoryConfig struct {
 }
 
 type MinimalSemanticConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty"`
 	Provider string `yaml:"provider,omitempty"`
 	APIKey   string `yaml:"api_key,omitempty"`
 	Model    string `yaml:"model,omitempty"`
@@ -208,8 +221,10 @@ type MinimalGraphConfig struct {
 }
 
 type MinimalEmbeddingsConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty"`
 	APIKey   string `yaml:"api_key,omitempty"`
 	Provider string `yaml:"provider,omitempty"`
+	Model    string `yaml:"model,omitempty"`
 }
 
 type MinimalIntegrationsConfig struct {
@@ -222,11 +237,6 @@ func (c *Config) ToMinimalConfig() *MinimalConfig {
 	minimal := &MinimalConfig{
 		Memory: MinimalMemoryConfig{
 			Root: c.Memory.Root,
-		},
-		Semantic: MinimalSemanticConfig{
-			Provider: c.Semantic.Provider,
-			APIKey:   c.Semantic.APIKey,
-			Model:    c.Semantic.Model,
 		},
 		Daemon: MinimalDaemonConfig{
 			HTTPPort: c.Daemon.HTTPPort,
@@ -242,16 +252,33 @@ func (c *Config) ToMinimalConfig() *MinimalConfig {
 		},
 	}
 
+	// Include semantic config if enabled
+	// Explicit enabled flag ensures user intent is respected, not just key presence
+	if c.Semantic.Enabled {
+		minimal.Semantic.Enabled = c.Semantic.Enabled
+		minimal.Semantic.Provider = c.Semantic.Provider
+		minimal.Semantic.Model = c.Semantic.Model
+		if c.Semantic.APIKey != "" {
+			minimal.Semantic.APIKey = c.Semantic.APIKey
+		}
+	}
+
 	// Only include MCP daemon connectivity if enabled
 	if c.MCP.DaemonPort > 0 {
 		minimal.MCP.DaemonHost = c.MCP.DaemonHost
 		minimal.MCP.DaemonPort = c.MCP.DaemonPort
 	}
 
-	// Include embeddings provider (always) and API key (if set)
-	minimal.Embeddings.Provider = c.Embeddings.Provider
-	if c.Embeddings.APIKey != "" {
-		minimal.Embeddings.APIKey = c.Embeddings.APIKey
+	// Include embeddings config if enabled
+	// Note: dimensions is intentionally omitted - it's derived from model and only
+	// exposed as an advanced setting for power users needing dimensionality reduction
+	if c.Embeddings.Enabled {
+		minimal.Embeddings.Enabled = c.Embeddings.Enabled
+		minimal.Embeddings.Provider = c.Embeddings.Provider
+		minimal.Embeddings.Model = c.Embeddings.Model
+		if c.Embeddings.APIKey != "" {
+			minimal.Embeddings.APIKey = c.Embeddings.APIKey
+		}
 	}
 
 	return minimal

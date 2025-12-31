@@ -139,9 +139,9 @@ The integrations command imports integration adapters via blank imports to trigg
 
 The read files command creates a graph.Manager to connect to FalkorDB and uses graph.Exporter to convert the knowledge graph to FileIndex format. The read facts command uses graph.Manager.GetAllFacts() for fact retrieval.
 
-### Docker Subsystem
+### Container Subsystem
 
-The initialize command uses internal/docker helpers for FalkorDB container setup during first-time configuration: docker.IsAvailable(), docker.IsFalkorDBRunning(), docker.StartFalkorDB().
+The initialize command uses internal/container helpers for FalkorDB container setup during first-time configuration. The container package supports both Docker and Podman: container.IsDockerAvailable(), container.IsPodmanAvailable(), container.IsFalkorDBRunning(), container.StartFalkorDB(). The TUI and CLI offer runtime-specific options based on which runtimes are detected.
 
 ### Logging Subsystem
 

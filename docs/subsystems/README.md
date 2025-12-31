@@ -2,7 +2,7 @@
 
 This directory contains detailed technical documentation for each major subsystem of Agentic Memorizer. Each subsystem is documented in its own subdirectory with comprehensive information about architecture, design principles, key components, and integration points.
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-30
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The subsystem documentation provides:
 - **Build**
   - [Version](#version)
 - **Infrastructure**
-  - [Docker](#docker)
+  - [Container](#container)
   - [Servicemanager](#servicemanager)
 - **Testing**
   - [E2E](#e2e)
@@ -562,26 +562,27 @@ Build-time version injection with embedded fallback and Go build info integratio
 
 ---
 
-### [Docker](./docker/)
+### [Container](./container/)
 
 **Status:** ✅ Documented
 
-Docker container lifecycle management for FalkorDB knowledge graph with availability detection and readiness polling.
+Container runtime abstraction for FalkorDB lifecycle management supporting both Docker and Podman with availability detection and readiness polling.
 
 **Key Features:**
 
-- Docker availability detection via `docker info` command
+- Multi-runtime support for Docker and Podman with runtime-specific configurations
+- Runtime detection via `docker info` and `podman info` commands
 - Container state inspection for running and existence status
 - Container lifecycle operations with timeout protection
 - Readiness polling via Redis PING until FalkorDB responds
+- Podman uses `--network=host` for reliable localhost connectivity
 - Persistent storage support via bind-mounted data directories
-- Restart policy (unless-stopped) for automatic recovery
 
 **Primary Components:**
 
-- `internal/docker/helpers.go` - Docker CLI wrapper functions and StartOptions struct
+- `internal/container/container.go` - Runtime abstraction with Docker/Podman support
 
-**See:** [docker/README.md](./docker/README.md)
+**See:** [container/README.md](./container/README.md)
 
 ---
 
@@ -649,6 +650,7 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 
 **Recent Updates:**
 
+- Renamed docker to container subsystem with Docker/Podman support (2025-12-30)
 - Created skip subsystem documentation (2025-12-29)
 - Created servicemanager subsystem documentation (2025-12-29)
 - Created fileops subsystem documentation (2025-12-29)
@@ -661,7 +663,7 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 - Created logging subsystem documentation (2025-12-29)
 - Created embeddings subsystem documentation (2025-12-29)
 - Created document subsystem documentation (2025-12-29)
-- Created docker subsystem documentation (2025-12-29)
+- Created container subsystem documentation (2025-12-29)
 - Created version subsystem documentation (2025-12-29)
 - Created walker subsystem documentation (2025-12-29)
 - Created semantic subsystem documentation (2025-12-29)

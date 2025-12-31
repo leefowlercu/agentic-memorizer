@@ -129,7 +129,7 @@ Detailed technical documentation for each subsystem is available in `docs/subsys
 | [cli](docs/subsystems/cli/) | Cobra-based CLI with hierarchical commands and PreRunE validation |
 | [config](docs/subsystems/config/) | Layered configuration with YAML, environment overrides, and hot-reload |
 | [daemon](docs/subsystems/daemon/) | Background file monitoring with parallel processing and HTTP API |
-| [docker](docs/subsystems/docker/) | Docker container lifecycle management for FalkorDB |
+| [container](docs/subsystems/container/) | Container runtime abstraction for FalkorDB (Docker/Podman) |
 | [document](docs/subsystems/document/) | Office document extraction (DOCX, PPTX) via ZIP/XML parsing |
 | [e2e](docs/subsystems/e2e/) | End-to-end testing with isolated environments and Docker FalkorDB |
 | [fileops](docs/subsystems/fileops/) | File operations utilities for copy/move with conflict resolution |

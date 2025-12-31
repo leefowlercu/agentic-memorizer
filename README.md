@@ -279,17 +279,23 @@ Unlike flat file indexes, a knowledge graph enables:
 
 ### Starting FalkorDB
 
-FalkorDB runs as a Docker container. Start it before the daemon:
+FalkorDB runs as a container in Docker or Podman. Start it before the daemon:
 
 ```bash
-# Start FalkorDB container (pulls image on first run)
-memorizer graph start
+# Using Docker
+docker run -d --name memorizer-falkordb \
+  -p 6379:6379 -p 3000:3000 \
+  --restart unless-stopped \
+  falkordb/falkordb:latest
+
+# Using Podman (uses host networking)
+podman run -d --name memorizer-falkordb \
+  --network=host \
+  --restart unless-stopped \
+  falkordb/falkordb:latest
 
 # Check status
 memorizer graph status
-
-# Stop when done
-memorizer graph stop
 ```
 
 Or use docker-compose:
@@ -302,12 +308,6 @@ docker-compose down       # Stop FalkorDB
 ### Graph Commands
 
 ```bash
-# Start FalkorDB Docker container
-memorizer graph start [--detach]
-
-# Stop FalkorDB container
-memorizer graph stop [--remove]
-
 # Check FalkorDB status and graph statistics
 memorizer graph status
 ```
@@ -343,14 +343,14 @@ FalkorDB stores data at `/data` inside the container, which is bind-mounted to `
 ```bash
 # Option A: Delete persistence files and restart (simplest)
 rm -rf ~/.memorizer/falkordb/*
-docker restart memorizer-falkordb
+docker restart memorizer-falkordb   # or: podman restart memorizer-falkordb
 
 # Option B: Clear and rebuild via daemon
 memorizer daemon rebuild --force
 
 # Option C: Remove and recreate container
 docker stop memorizer-falkordb && docker rm memorizer-falkordb
-memorizer graph start
+# Then recreate using docker run or podman run commands above
 ```
 
 ### FalkorDB Availability
@@ -360,7 +360,7 @@ memorizer graph start
 If FalkorDB is unavailable:
 - Daemon initialization will fail with "failed to initialize graph"
 - You must start FalkorDB before starting the daemon
-- Use `memorizer graph start` to launch the FalkorDB container
+- See [Starting FalkorDB](#starting-falkordb) for Docker and Podman commands
 
 If an index rebuild fails but existing graph data is present, the daemon will continue running with the existing data (degraded mode). However, this does not apply to FalkorDB connection failures.
 
@@ -394,8 +394,16 @@ You only need to set the key for your chosen semantic analysis provider. The ini
 ### 3. Start FalkorDB
 
 ```bash
-# Start the knowledge graph database (requires Docker)
-memorizer graph start
+# Using Docker
+docker run -d --name memorizer-falkordb \
+  -p 6379:6379 -p 3000:3000 \
+  --restart unless-stopped \
+  falkordb/falkordb:latest
+
+# Or using Podman
+podman run -d --name memorizer-falkordb \
+  --network=host --restart unless-stopped \
+  falkordb/falkordb:latest
 ```
 
 ### 4. Choose Your Integration Path
@@ -492,7 +500,7 @@ For detailed installation options, configuration, and advanced usage, see the se
 ### Prerequisites
 
 - Go 1.25.1 or later
-- Docker (for FalkorDB knowledge graph)
+- Docker or Podman (for FalkorDB knowledge graph)
 - AI provider API key: [Claude](https://console.anthropic.com/), [OpenAI](https://platform.openai.com/), or [Google Gemini](https://aistudio.google.com/)
 - An AI agent framework: Claude Code, Gemini CLI, or Codex CLI
 
@@ -1687,7 +1695,7 @@ Response includes uptime, files processed, API calls, errors, and build status.
      ```bash
      memorizer daemon stop
      rm -rf ~/.memorizer/falkordb/*
-     docker restart memorizer-falkordb
+     docker restart memorizer-falkordb  # or: podman restart memorizer-falkordb
      memorizer daemon start
      ```
 
@@ -1945,8 +1953,6 @@ memorizer daemon rebuild
 memorizer daemon logs
 
 # Manage FalkorDB knowledge graph
-memorizer graph start           # Start FalkorDB container
-memorizer graph stop            # Stop FalkorDB container
 memorizer graph status          # Check graph health and stats
 
 # Manage semantic analysis cache
@@ -2557,14 +2563,10 @@ agentic-memorizer/
 │   │       ├── status.go
 │   │       ├── restart.go
 │   │       ├── rebuild.go
-│   │       ├── logs.go
-│   │       ├── systemctl.go  # Generate systemd unit files
-│   │       └── launchctl.go  # Generate launchd plist files
+│   │       └── logs.go
 │   ├── graph/                # FalkorDB graph management commands
 │   │   ├── graph.go          # Parent graph command
-│   │   └── subcommands/      # Graph subcommands (3 total)
-│   │       ├── start.go      # Start FalkorDB container
-│   │       ├── stop.go       # Stop FalkorDB container
+│   │   └── subcommands/      # Graph subcommands
 │   │       └── status.go     # Check graph health
 │   ├── cache/                # Cache management commands
 │   │   ├── cache.go          # Parent cache command
@@ -2638,7 +2640,7 @@ agentic-memorizer/
 │   │       ├── claude/       # Hook and MCP adapters for Claude Code
 │   │       ├── gemini/       # Hook and MCP adapters for Gemini CLI
 │   │       └── codex/        # MCP adapter for Codex CLI
-│   ├── docker/               # Docker container management utilities
+│   ├── container/            # Container runtime abstraction (Docker/Podman)
 │   ├── fileops/              # File operations (copy, move, conflict resolution)
 │   ├── servicemanager/       # Service manager integration (systemd, launchd)
 │   ├── skip/                 # Skip pattern handling for file filtering
@@ -2865,7 +2867,7 @@ memorizer daemon stop
 rm -rf ~/.memorizer/falkordb/*
 
 # Restart FalkorDB container
-docker restart memorizer-falkordb
+docker restart memorizer-falkordb  # or: podman restart memorizer-falkordb
 
 # Start daemon (will rebuild from memory files)
 memorizer daemon start

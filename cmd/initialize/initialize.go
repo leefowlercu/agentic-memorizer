@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/docker"
+	"github.com/leefowlercu/agentic-memorizer/internal/container"
 	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/claude" // Register Claude adapter
 	_ "github.com/leefowlercu/agentic-memorizer/internal/integrations/adapters/codex"  // Register Codex adapter
@@ -42,11 +42,12 @@ var (
 	initializeHTTPPort int
 
 	// FalkorDB configuration
-	initializeGraphHost         string
-	initializeGraphPort         int
-	initializeGraphPassword     string
-	initializeStartFalkorDB     bool
-	initializeSkipFalkorDBCheck bool
+	initializeGraphHost           string
+	initializeGraphPort           int
+	initializeGraphPassword       string
+	initializeStartFalkorDBDocker bool
+	initializeStartFalkorDBPodman bool
+	initializeSkipFalkorDBCheck   bool
 
 	// Embeddings configuration
 	initializeEnableEmbeddings   bool
@@ -77,11 +78,17 @@ var InitializeCmd = &cobra.Command{
 	Example: `  # Interactive initialization (TUI wizard)
   memorizer initialize
 
-  # Unattended initialization with required flags
+  # Unattended initialization with Docker
   memorizer initialize --unattended \
     --use-env-anthropic-api-key \
-    --start-falkordb \
+    --start-falkordb-docker \
     --integrations claude-code-hook,claude-code-mcp
+
+  # Unattended initialization with Podman
+  memorizer initialize --unattended \
+    --use-env-anthropic-api-key \
+    --start-falkordb-podman \
+    --integrations claude-code-hook
 
   # Unattended with explicit API keys
   memorizer initialize --unattended \
@@ -123,7 +130,8 @@ func init() {
 	InitializeCmd.Flags().StringVar(&initializeGraphHost, "graph-host", config.DefaultConfig.Graph.Host, "FalkorDB host")
 	InitializeCmd.Flags().IntVar(&initializeGraphPort, "graph-port", config.DefaultConfig.Graph.Port, "FalkorDB port")
 	InitializeCmd.Flags().StringVar(&initializeGraphPassword, "graph-password", "", "FalkorDB password")
-	InitializeCmd.Flags().BoolVar(&initializeStartFalkorDB, "start-falkordb", false, "Start FalkorDB in Docker")
+	InitializeCmd.Flags().BoolVar(&initializeStartFalkorDBDocker, "start-falkordb-docker", false, "Start FalkorDB using Docker")
+	InitializeCmd.Flags().BoolVar(&initializeStartFalkorDBPodman, "start-falkordb-podman", false, "Start FalkorDB using Podman")
 	InitializeCmd.Flags().BoolVar(&initializeSkipFalkorDBCheck, "skip-falkordb-check", false, "Skip FalkorDB connectivity verification")
 
 	// Embeddings configuration
@@ -176,6 +184,17 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--semantic-provider must be one of: claude, openai, gemini")
 	}
 
+	// Validate FalkorDB container runtime flags
+	if initializeStartFalkorDBDocker && initializeStartFalkorDBPodman {
+		return fmt.Errorf("--start-falkordb-docker and --start-falkordb-podman are mutually exclusive")
+	}
+	if initializeStartFalkorDBDocker && !container.IsDockerAvailable() {
+		return fmt.Errorf("--start-falkordb-docker specified but Docker is not available")
+	}
+	if initializeStartFalkorDBPodman && !container.IsPodmanAvailable() {
+		return fmt.Errorf("--start-falkordb-podman specified but Podman is not available")
+	}
+
 	// Unattended mode validation
 	if initializeUnattended {
 		// Semantic analysis: require API key unless skipped
@@ -218,10 +237,11 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		}
 
 		// FalkorDB must be addressed
-		if !initializeStartFalkorDB && !initializeSkipFalkorDBCheck {
+		startingFalkorDB := initializeStartFalkorDBDocker || initializeStartFalkorDBPodman
+		if !startingFalkorDB && !initializeSkipFalkorDBCheck {
 			// Check if FalkorDB is already running
-			if !docker.IsFalkorDBRunning(initializeGraphPort) {
-				return fmt.Errorf("unattended mode requires FalkorDB to be running, use --start-falkordb to auto-start, or --skip-falkordb-check to bypass")
+			if !container.IsFalkorDBRunning(initializeGraphPort) {
+				return fmt.Errorf("unattended mode requires FalkorDB to be running, use --start-falkordb-docker or --start-falkordb-podman to auto-start, or --skip-falkordb-check to bypass")
 			}
 		}
 
@@ -406,14 +426,21 @@ func runUnattended(cmd *cobra.Command) error {
 	cfg.Graph.Password = initializeGraphPassword
 
 	// Start FalkorDB if requested
-	if initializeStartFalkorDB {
-		fmt.Println("Starting FalkorDB in Docker...")
-		opts := docker.StartOptions{
+	if initializeStartFalkorDBDocker || initializeStartFalkorDBPodman {
+		var runtime container.Runtime
+		if initializeStartFalkorDBDocker {
+			runtime = container.RuntimeDocker
+		} else {
+			runtime = container.RuntimePodman
+		}
+
+		fmt.Printf("Starting FalkorDB in %s...\n", container.GetRuntime(runtime))
+		opts := container.StartOptions{
 			Port:    initializeGraphPort,
 			DataDir: fmt.Sprintf("%s/falkordb", appDir),
 			Detach:  true,
 		}
-		if err := docker.StartFalkorDB(opts); err != nil {
+		if err := container.StartFalkorDB(runtime, opts); err != nil {
 			return fmt.Errorf("failed to start FalkorDB; %w", err)
 		}
 		fmt.Println("FalkorDB started successfully.")
@@ -636,7 +663,7 @@ type StartupInfo struct {
 
 func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 	apiKeyConfigured := cfg.Semantic.APIKey != "" || os.Getenv(config.ClaudeAPIKeyEnv) != ""
-	falkorDBRunning := docker.IsFalkorDBRunning(cfg.Graph.Port)
+	falkorDBRunning := container.IsFalkorDBRunning(cfg.Graph.Port)
 
 	fmt.Printf("\nNext steps:\n")
 	stepNum := 1
@@ -652,8 +679,26 @@ func printNextSteps(cfg *config.Config, startup *StartupInfo) {
 	}
 
 	if !falkorDBRunning {
+		dockerAvailable := container.IsDockerAvailable()
+		podmanAvailable := container.IsPodmanAvailable()
+
 		fmt.Printf("%d. Start FalkorDB (required):\n", stepNum)
-		fmt.Printf("   docker run -d --name memorizer-falkordb -p %d:6379 falkordb/falkordb\n", cfg.Graph.Port)
+
+		if dockerAvailable && podmanAvailable {
+			// Show both options
+			fmt.Printf("   # Using Docker:\n")
+			fmt.Printf("   docker run -d --name memorizer-falkordb -p %d:6379 -p 3000:3000 falkordb/falkordb\n\n", cfg.Graph.Port)
+			fmt.Printf("   # Using Podman:\n")
+			fmt.Printf("   podman run -d --name memorizer-falkordb --network=host falkordb/falkordb\n")
+		} else if dockerAvailable {
+			fmt.Printf("   docker run -d --name memorizer-falkordb -p %d:6379 -p 3000:3000 falkordb/falkordb\n", cfg.Graph.Port)
+		} else if podmanAvailable {
+			fmt.Printf("   podman run -d --name memorizer-falkordb --network=host falkordb/falkordb\n")
+		} else {
+			// Neither available - show generic message
+			fmt.Printf("   Install Docker or Podman, then run:\n")
+			fmt.Printf("   docker run -d --name memorizer-falkordb -p %d:6379 -p 3000:3000 falkordb/falkordb\n", cfg.Graph.Port)
+		}
 		stepNum++
 	}
 

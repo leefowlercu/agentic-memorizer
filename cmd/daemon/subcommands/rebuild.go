@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	forceRebuild bool
-	clearStale   bool
-	syncGraph    bool
+	rebuildForce      bool
+	rebuildClearStale bool
+	rebuildSync       bool
 )
 
 var RebuildCmd = &cobra.Command{
@@ -36,9 +36,9 @@ var RebuildCmd = &cobra.Command{
 }
 
 func init() {
-	RebuildCmd.Flags().BoolVarP(&forceRebuild, "force", "f", false, "Clear graph before rebuilding")
-	RebuildCmd.Flags().BoolVar(&syncGraph, "sync", false, "Remove stale graph nodes (files no longer on disk)")
-	RebuildCmd.Flags().BoolVar(&clearStale, "clear-stale", false, "Clear stale cache entries before rebuilding")
+	RebuildCmd.Flags().BoolVarP(&rebuildForce, "force", "f", false, "Clear graph before rebuilding")
+	RebuildCmd.Flags().BoolVar(&rebuildSync, "sync", false, "Remove stale graph nodes (files no longer on disk)")
+	RebuildCmd.Flags().BoolVar(&rebuildClearStale, "clear-stale", false, "Clear stale cache entries before rebuilding")
 }
 
 func validateRebuild(cmd *cobra.Command, args []string) error {
@@ -58,7 +58,7 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	// Clear stale cache entries if requested
-	if clearStale {
+	if rebuildClearStale {
 		cacheManager, err := cache.NewManager(cfg.Semantic.CacheDir)
 		if err != nil {
 			return fmt.Errorf("failed to initialize cache manager; %w", err)
@@ -115,10 +115,10 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	// Trigger rebuild via daemon API
 	rebuildURL := fmt.Sprintf("%s/api/v1/rebuild", daemonURL)
 	queryParams := []string{}
-	if forceRebuild {
+	if rebuildForce {
 		queryParams = append(queryParams, "force=true")
 	}
-	if syncGraph {
+	if rebuildSync {
 		queryParams = append(queryParams, "sync=true")
 	}
 	if len(queryParams) > 0 {
@@ -129,10 +129,10 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Triggering index rebuild via daemon...\n")
-	if forceRebuild {
+	if rebuildForce {
 		fmt.Printf("Note: --force flag will clear the graph before rebuilding\n")
 	}
-	if syncGraph {
+	if rebuildSync {
 		fmt.Printf("Note: --sync flag will remove stale graph nodes after rebuilding\n")
 	}
 

@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	fileDir    string
-	fileForce  bool
-	fileDryRun bool
+	rememberFileDir    string
+	rememberFileForce  bool
+	rememberFileDryRun bool
 )
 
 // largeFileBatchThreshold is the number of files that triggers a warning
@@ -53,9 +53,9 @@ var FileCmd = &cobra.Command{
 }
 
 func init() {
-	FileCmd.Flags().StringVar(&fileDir, "dir", "", "Subdirectory within memory root to copy files into")
-	FileCmd.Flags().BoolVar(&fileForce, "force", false, "Overwrite existing files and skip confirmation for large batches")
-	FileCmd.Flags().BoolVar(&fileDryRun, "dry-run", false, "Show what would be copied without making changes")
+	FileCmd.Flags().StringVar(&rememberFileDir, "dir", "", "Subdirectory within memory root to copy files into")
+	FileCmd.Flags().BoolVar(&rememberFileForce, "force", false, "Overwrite existing files and skip confirmation for large batches")
+	FileCmd.Flags().BoolVar(&rememberFileDryRun, "dry-run", false, "Show what would be copied without making changes")
 }
 
 func validateFile(cmd *cobra.Command, args []string) error {
@@ -86,14 +86,14 @@ func validateFile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate --dir if provided
-	if fileDir != "" {
-		if err := fileops.ValidateSubdirectory(fileDir); err != nil {
+	if rememberFileDir != "" {
+		if err := fileops.ValidateSubdirectory(rememberFileDir); err != nil {
 			return fmt.Errorf("invalid --dir value; %w", err)
 		}
 	}
 
 	// Count total files for large batch warning
-	if !fileForce {
+	if !rememberFileForce {
 		totalFiles := 0
 		for _, path := range args {
 			count, err := countFilesInPath(path)
@@ -125,12 +125,12 @@ func runFile(cmd *cobra.Command, args []string) error {
 
 	memoryRoot := cfg.Memory.Root
 	destDir := memoryRoot
-	if fileDir != "" {
-		destDir = filepath.Join(memoryRoot, fileDir)
+	if rememberFileDir != "" {
+		destDir = filepath.Join(memoryRoot, rememberFileDir)
 	}
 
 	// Ensure destination directory exists
-	if !fileDryRun {
+	if !rememberFileDryRun {
 		if err := fileops.EnsureDir(destDir); err != nil {
 			return fmt.Errorf("failed to create destination directory; %w", err)
 		}
@@ -193,10 +193,10 @@ func runFile(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		if fileDryRun {
+		if rememberFileDryRun {
 			// Determine what the final path would be
 			finalPath := dstPath
-			if !fileForce && fileops.PathExists(dstPath) {
+			if !rememberFileForce && fileops.PathExists(dstPath) {
 				resolved, _ := fileops.ResolveConflict(dstPath)
 				finalPath = resolved
 			}
@@ -212,7 +212,7 @@ func runFile(cmd *cobra.Command, args []string) error {
 		}
 
 		// Perform the copy
-		result, err := fileops.Copy(absPath, dstPath, fileForce)
+		result, err := fileops.Copy(absPath, dstPath, rememberFileForce)
 		if err != nil {
 			results = append(results, fileResult{
 				path:    srcPath,
@@ -240,7 +240,7 @@ func runFile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output results
-	return outputFileResults(results, warnings, successCount, errorCount, fileDryRun)
+	return outputFileResults(results, warnings, successCount, errorCount, rememberFileDryRun)
 }
 
 type fileResult struct {

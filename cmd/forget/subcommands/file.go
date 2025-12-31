@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var fileDryRun bool
+var forgetFileDryRun bool
 
 var FileCmd = &cobra.Command{
 	Use:   "file <path>...",
@@ -38,7 +38,7 @@ var FileCmd = &cobra.Command{
 }
 
 func init() {
-	FileCmd.Flags().BoolVar(&fileDryRun, "dry-run", false, "Show what would be moved without making changes")
+	FileCmd.Flags().BoolVar(&forgetFileDryRun, "dry-run", false, "Show what would be moved without making changes")
 }
 
 func validateForgetFile(cmd *cobra.Command, args []string) error {
@@ -97,7 +97,7 @@ func runForgetFile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Ensure forgotten directory exists
-	if !fileDryRun {
+	if !forgetFileDryRun {
 		if err := fileops.EnsureDir(forgottenDir); err != nil {
 			return fmt.Errorf("failed to create forgotten directory; %w", err)
 		}
@@ -135,7 +135,7 @@ func runForgetFile(cmd *cobra.Command, args []string) error {
 		// Calculate destination in forgotten directory
 		dstPath := filepath.Join(forgottenDir, relPath)
 
-		if fileDryRun {
+		if forgetFileDryRun {
 			// Determine what the final path would be
 			finalPath := dstPath
 			if fileops.PathExists(dstPath) {
@@ -182,7 +182,7 @@ func runForgetFile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output results
-	return outputForgetFileResults(results, successCount, errorCount, fileDryRun)
+	return outputForgetFileResults(results, successCount, errorCount, forgetFileDryRun)
 }
 
 type forgetFileResult struct {

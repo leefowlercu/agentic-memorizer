@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var mcpStartLogLevel string
+
 var StartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the MCP server",
@@ -43,7 +45,7 @@ var StartCmd = &cobra.Command{
 }
 
 func init() {
-	StartCmd.Flags().String("log-level", "info", "Log level (debug, info, warn, error)")
+	StartCmd.Flags().StringVar(&mcpStartLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 }
 
 func validateStart(cmd *cobra.Command, args []string) error {
@@ -66,7 +68,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Determine log level (flag overrides config)
 	logLevel := cfg.MCP.LogLevel
 	if cmd.Flags().Changed("log-level") {
-		logLevel, _ = cmd.Flags().GetString("log-level")
+		logLevel = mcpStartLogLevel
 	}
 
 	// Setup logger with dual output (stderr + file)

@@ -47,7 +47,7 @@ func TestValidateForgetFile_NonExistentPath(t *testing.T) {
 	defer cleanup()
 
 	// Reset flags
-	fileDryRun = false
+	forgetFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{filepath.Join(memoryRoot, "nonexistent.md")}
@@ -67,7 +67,7 @@ func TestValidateForgetFile_ValidFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reset flags
-	fileDryRun = false
+	forgetFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testFile}
@@ -87,7 +87,7 @@ func TestValidateForgetFile_PathOutsideMemory(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reset flags
-	fileDryRun = false
+	forgetFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testFile}
@@ -111,7 +111,7 @@ func TestValidateForgetFile_ValidDirectory(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reset flags
-	fileDryRun = false
+	forgetFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testDir}

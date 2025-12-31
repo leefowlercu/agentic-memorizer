@@ -15,6 +15,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	readFilesFormat      string
+	readFilesVerbose     bool
+	readFilesIntegration string
+)
+
 var FilesCmd = &cobra.Command{
 	Use:   "files",
 	Short: "Read the file memory index",
@@ -43,39 +49,37 @@ var FilesCmd = &cobra.Command{
 }
 
 func init() {
-	FilesCmd.Flags().String("format", "xml", "Output format (xml/json)")
-	FilesCmd.Flags().BoolP("verbose", "v", false, "Include related files per entry and graph insights")
-	FilesCmd.Flags().String("integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
+	FilesCmd.Flags().StringVar(&readFilesFormat, "format", "xml", "Output format (xml/json)")
+	FilesCmd.Flags().BoolVarP(&readFilesVerbose, "verbose", "v", false, "Include related files per entry and graph insights")
+	FilesCmd.Flags().StringVar(&readFilesIntegration, "integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
 }
 
 func validateReadFiles(cmd *cobra.Command, args []string) error {
 	// Validate format flag
-	formatStr, _ := cmd.Flags().GetString("format")
-	if formatStr != "" {
+	if readFilesFormat != "" {
 		validFormats := []string{"xml", "json"}
 		valid := false
 		for _, f := range validFormats {
-			if formatStr == f {
+			if readFilesFormat == f {
 				valid = true
 				break
 			}
 		}
 		if !valid {
-			return fmt.Errorf("invalid format %q (must be one of: xml, json)", formatStr)
+			return fmt.Errorf("invalid format %q (must be one of: xml, json)", readFilesFormat)
 		}
 	}
 
 	// Validate integration flag if provided
-	integrationName, _ := cmd.Flags().GetString("integration")
-	if integrationName != "" {
+	if readFilesIntegration != "" {
 		registry := integrations.GlobalRegistry()
 		available := registry.List()
-		if _, err := registry.Get(integrationName); err != nil {
+		if _, err := registry.Get(readFilesIntegration); err != nil {
 			var names []string
 			for _, i := range available {
 				names = append(names, i.GetName())
 			}
-			return fmt.Errorf("integration %q not found (available: %s)", integrationName, strings.Join(names, ", "))
+			return fmt.Errorf("integration %q not found (available: %s)", readFilesIntegration, strings.Join(names, ", "))
 		}
 	}
 
@@ -120,12 +124,12 @@ func runReadFiles(cmd *cobra.Command, args []string) error {
 	defer graphManager.Close()
 
 	// Get flags
-	formatStr, _ := cmd.Flags().GetString("format")
+	formatStr := readFilesFormat
 	if formatStr == "" {
 		formatStr = "xml" // Hardcoded default
 	}
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	integrationName, _ := cmd.Flags().GetString("integration")
+	verbose := readFilesVerbose
+	integrationName := readFilesIntegration
 
 	exporter := graph.NewExporter(graphManager, logger)
 
@@ -151,7 +155,7 @@ func handleEmptyFilesIndex(cmd *cobra.Command, cfg *config.Config) error {
 		Stats:      types.IndexStats{},
 	}
 
-	formatStr, _ := cmd.Flags().GetString("format")
+	formatStr := readFilesFormat
 	if formatStr == "" {
 		formatStr = "xml" // Hardcoded default
 	}

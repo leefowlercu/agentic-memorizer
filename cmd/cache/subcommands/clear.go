@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	clearAll   bool
-	clearStale bool
+	cacheClearAll   bool
+	cacheClearStale bool
 )
 
 var ClearCmd = &cobra.Command{
@@ -29,15 +29,15 @@ var ClearCmd = &cobra.Command{
 }
 
 func init() {
-	ClearCmd.Flags().BoolVar(&clearAll, "all", false, "Clear all cached entries")
-	ClearCmd.Flags().BoolVar(&clearStale, "stale", false, "Clear only stale/legacy entries")
+	ClearCmd.Flags().BoolVar(&cacheClearAll, "all", false, "Clear all cached entries")
+	ClearCmd.Flags().BoolVar(&cacheClearStale, "stale", false, "Clear only stale/legacy entries")
 }
 
 func validateClear(cmd *cobra.Command, args []string) error {
-	if !clearAll && !clearStale {
+	if !cacheClearAll && !cacheClearStale {
 		return fmt.Errorf("please specify --all or --stale")
 	}
-	if clearAll && clearStale {
+	if cacheClearAll && cacheClearStale {
 		return fmt.Errorf("cannot use both --all and --stale")
 	}
 	cmd.SilenceUsage = true
@@ -55,7 +55,7 @@ func runClear(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize cache manager; %w", err)
 	}
 
-	if clearAll {
+	if cacheClearAll {
 		return runClearAll(manager)
 	}
 

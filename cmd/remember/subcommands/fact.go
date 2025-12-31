@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var factID string
+var rememberFactID string
 
 var FactCmd = &cobra.Command{
 	Use:   "fact <fact-text>",
@@ -41,7 +41,7 @@ var FactCmd = &cobra.Command{
 }
 
 func init() {
-	FactCmd.Flags().StringVar(&factID, "id", "", "Fact ID for updating an existing fact (upsert)")
+	FactCmd.Flags().StringVar(&rememberFactID, "id", "", "Fact ID for updating an existing fact (upsert)")
 }
 
 func validateFact(cmd *cobra.Command, args []string) error {
@@ -58,9 +58,9 @@ func validateFact(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate UUID format if --id provided
-	if factID != "" {
-		if _, err := uuid.Parse(factID); err != nil {
-			return fmt.Errorf("invalid fact id format; expected UUID (got %q)", factID)
+	if rememberFactID != "" {
+		if _, err := uuid.Parse(rememberFactID); err != nil {
+			return fmt.Errorf("invalid fact id format; expected UUID (got %q)", rememberFactID)
 		}
 	}
 
@@ -105,8 +105,8 @@ func runFact(cmd *cobra.Command, args []string) error {
 	facts := graphManager.Facts()
 
 	// If updating existing fact
-	if factID != "" {
-		return updateFact(ctx, facts, factID, content)
+	if rememberFactID != "" {
+		return updateFact(ctx, facts, rememberFactID, content)
 	}
 
 	// Creating new fact - check for duplicates and count limit

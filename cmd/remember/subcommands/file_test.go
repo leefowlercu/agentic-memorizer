@@ -12,9 +12,9 @@ import (
 
 func TestValidateFile_NonExistentPath(t *testing.T) {
 	// Reset flags
-	fileDir = ""
-	fileForce = false
-	fileDryRun = false
+	rememberFileDir = ""
+	rememberFileForce = false
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{"/nonexistent/path/file.md"}
@@ -32,9 +32,9 @@ func TestValidateFile_ValidFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reset flags
-	fileDir = ""
-	fileForce = false
-	fileDryRun = false
+	rememberFileDir = ""
+	rememberFileForce = false
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testFile}
@@ -55,9 +55,9 @@ func TestValidateFile_ValidDirectory(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reset flags
-	fileDir = ""
-	fileForce = false
-	fileDryRun = false
+	rememberFileDir = ""
+	rememberFileForce = false
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testDir}
@@ -74,9 +74,9 @@ func TestValidateFile_InvalidDir(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set invalid --dir flag
-	fileDir = "../escape"
-	fileForce = false
-	fileDryRun = false
+	rememberFileDir = "../escape"
+	rememberFileForce = false
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testFile}
@@ -86,7 +86,7 @@ func TestValidateFile_InvalidDir(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid --dir value")
 
 	// Clean up flag
-	fileDir = ""
+	rememberFileDir = ""
 }
 
 func TestValidateFile_LargeBatchWarning(t *testing.T) {
@@ -104,9 +104,9 @@ func TestValidateFile_LargeBatchWarning(t *testing.T) {
 	}
 
 	// Reset flags (not forcing)
-	fileDir = ""
-	fileForce = false
-	fileDryRun = false
+	rememberFileDir = ""
+	rememberFileForce = false
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testDir}
@@ -131,9 +131,9 @@ func TestValidateFile_LargeBatchWithForce(t *testing.T) {
 	}
 
 	// Set force flag
-	fileDir = ""
-	fileForce = true
-	fileDryRun = false
+	rememberFileDir = ""
+	rememberFileForce = true
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testDir}
@@ -142,7 +142,7 @@ func TestValidateFile_LargeBatchWithForce(t *testing.T) {
 	assert.NoError(t, err) // Should pass with --force
 
 	// Clean up flag
-	fileForce = false
+	rememberFileForce = false
 }
 
 func TestValidateFile_UnreadableFile(t *testing.T) {
@@ -153,9 +153,9 @@ func TestValidateFile_UnreadableFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reset flags
-	fileDir = ""
-	fileForce = false
-	fileDryRun = false
+	rememberFileDir = ""
+	rememberFileForce = false
+	rememberFileDryRun = false
 
 	cmd := FileCmd
 	args := []string{testFile}

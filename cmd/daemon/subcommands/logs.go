@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	followLogs bool
-	tailLines  int
+	logsFollow bool
+	logsTail   int
 )
 
 var LogsCmd = &cobra.Command{
@@ -25,8 +25,8 @@ var LogsCmd = &cobra.Command{
 }
 
 func init() {
-	LogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
-	LogsCmd.Flags().IntVarP(&tailLines, "tail", "n", 50, "Number of lines to show from the end")
+	LogsCmd.Flags().BoolVarP(&logsFollow, "follow", "f", false, "Follow log output")
+	LogsCmd.Flags().IntVarP(&logsTail, "tail", "n", 50, "Number of lines to show from the end")
 }
 
 func validateLogs(cmd *cobra.Command, args []string) error {
@@ -60,10 +60,10 @@ func runLogs(cmd *cobra.Command, args []string) error {
 
 	// Use tail command to show logs
 	var tailCmd *exec.Cmd
-	if followLogs {
-		tailCmd = exec.Command("tail", "-f", "-n", fmt.Sprintf("%d", tailLines), logFile)
+	if logsFollow {
+		tailCmd = exec.Command("tail", "-f", "-n", fmt.Sprintf("%d", logsTail), logFile)
 	} else {
-		tailCmd = exec.Command("tail", "-n", fmt.Sprintf("%d", tailLines), logFile)
+		tailCmd = exec.Command("tail", "-n", fmt.Sprintf("%d", logsTail), logFile)
 	}
 
 	tailCmd.Stdout = os.Stdout

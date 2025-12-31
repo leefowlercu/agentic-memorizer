@@ -19,6 +19,49 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	// Directory options
+	initializeMemoryRoot string
+	initializeCacheDir   string
+	initializeForce      bool
+
+	// Mode selection
+	initializeUnattended bool
+
+	// Semantic provider configuration
+	initializeSemanticProvider string
+	initializeSemanticModel    string
+	initializeSemanticAPIKey   string
+	initializeSkipSemantic     bool
+
+	// Claude API configuration (legacy)
+	initializeAnthropicAPIKey       string
+	initializeUseEnvAnthropicAPIKey bool
+
+	// HTTP API configuration
+	initializeHTTPPort int
+
+	// FalkorDB configuration
+	initializeGraphHost          string
+	initializeGraphPort          int
+	initializeGraphPassword      string
+	initializeStartFalkorDB      bool
+	initializeSkipFalkorDBCheck  bool
+
+	// Embeddings configuration
+	initializeEnableEmbeddings  bool
+	initializeDisableEmbeddings bool
+	initializeOpenAIAPIKey      string
+	initializeUseEnvOpenAIAPIKey bool
+
+	// Integration configuration
+	initializeIntegrations []string
+
+	// Deprecated flags (kept for backward compatibility)
+	initializeSetupIntegrations bool
+	initializeSkipIntegrations  bool
+)
+
 var InitializeCmd = &cobra.Command{
 	Use:   "initialize",
 	Short: "Initialize configuration and memory directory",
@@ -56,45 +99,45 @@ var InitializeCmd = &cobra.Command{
 
 func init() {
 	// Directory options
-	InitializeCmd.Flags().String("memory-root", config.DefaultConfig.Memory.Root, "Memory directory")
-	InitializeCmd.Flags().String("cache-dir", "", "Cache directory (default: <memory-root>/.cache)")
-	InitializeCmd.Flags().Bool("force", false, "Overwrite existing config")
+	InitializeCmd.Flags().StringVar(&initializeMemoryRoot, "memory-root", config.DefaultConfig.Memory.Root, "Memory directory")
+	InitializeCmd.Flags().StringVar(&initializeCacheDir, "cache-dir", "", "Cache directory (default: <memory-root>/.cache)")
+	InitializeCmd.Flags().BoolVar(&initializeForce, "force", false, "Overwrite existing config")
 
 	// Mode selection
-	InitializeCmd.Flags().Bool("unattended", false, "Run in unattended mode without interactive prompts")
+	InitializeCmd.Flags().BoolVar(&initializeUnattended, "unattended", false, "Run in unattended mode without interactive prompts")
 
 	// Semantic provider configuration
-	InitializeCmd.Flags().String("semantic-provider", "", "Semantic analysis provider (claude, openai, gemini)")
-	InitializeCmd.Flags().String("semantic-model", "", "Model for semantic analysis (provider-specific)")
-	InitializeCmd.Flags().String("semantic-api-key", "", "API key for semantic analysis")
-	InitializeCmd.Flags().Bool("skip-semantic", false, "Disable semantic analysis")
+	InitializeCmd.Flags().StringVar(&initializeSemanticProvider, "semantic-provider", "", "Semantic analysis provider (claude, openai, gemini)")
+	InitializeCmd.Flags().StringVar(&initializeSemanticModel, "semantic-model", "", "Model for semantic analysis (provider-specific)")
+	InitializeCmd.Flags().StringVar(&initializeSemanticAPIKey, "semantic-api-key", "", "API key for semantic analysis")
+	InitializeCmd.Flags().BoolVar(&initializeSkipSemantic, "skip-semantic", false, "Disable semantic analysis")
 
 	// Claude API configuration (legacy, still supported)
-	InitializeCmd.Flags().String("anthropic-api-key", "", "Anthropic API key value (legacy; use --semantic-api-key)")
-	InitializeCmd.Flags().Bool("use-env-anthropic-api-key", false, "Use ANTHROPIC_API_KEY from environment")
+	InitializeCmd.Flags().StringVar(&initializeAnthropicAPIKey, "anthropic-api-key", "", "Anthropic API key value (legacy; use --semantic-api-key)")
+	InitializeCmd.Flags().BoolVar(&initializeUseEnvAnthropicAPIKey, "use-env-anthropic-api-key", false, "Use ANTHROPIC_API_KEY from environment")
 
 	// HTTP API configuration
-	InitializeCmd.Flags().Int("http-port", -1, "HTTP API port (0 to disable, -1 for wizard default)")
+	InitializeCmd.Flags().IntVar(&initializeHTTPPort, "http-port", -1, "HTTP API port (0 to disable, -1 for wizard default)")
 
 	// FalkorDB configuration
-	InitializeCmd.Flags().String("graph-host", config.DefaultConfig.Graph.Host, "FalkorDB host")
-	InitializeCmd.Flags().Int("graph-port", config.DefaultConfig.Graph.Port, "FalkorDB port")
-	InitializeCmd.Flags().String("graph-password", "", "FalkorDB password")
-	InitializeCmd.Flags().Bool("start-falkordb", false, "Start FalkorDB in Docker")
-	InitializeCmd.Flags().Bool("skip-falkordb-check", false, "Skip FalkorDB connectivity verification")
+	InitializeCmd.Flags().StringVar(&initializeGraphHost, "graph-host", config.DefaultConfig.Graph.Host, "FalkorDB host")
+	InitializeCmd.Flags().IntVar(&initializeGraphPort, "graph-port", config.DefaultConfig.Graph.Port, "FalkorDB port")
+	InitializeCmd.Flags().StringVar(&initializeGraphPassword, "graph-password", "", "FalkorDB password")
+	InitializeCmd.Flags().BoolVar(&initializeStartFalkorDB, "start-falkordb", false, "Start FalkorDB in Docker")
+	InitializeCmd.Flags().BoolVar(&initializeSkipFalkorDBCheck, "skip-falkordb-check", false, "Skip FalkorDB connectivity verification")
 
 	// Embeddings configuration
-	InitializeCmd.Flags().Bool("enable-embeddings", false, "Enable embeddings")
-	InitializeCmd.Flags().Bool("disable-embeddings", false, "Disable embeddings (default)")
-	InitializeCmd.Flags().String("openai-api-key", "", "OpenAI API key for embeddings")
-	InitializeCmd.Flags().Bool("use-env-openai-api-key", false, "Use OPENAI_API_KEY from environment")
+	InitializeCmd.Flags().BoolVar(&initializeEnableEmbeddings, "enable-embeddings", false, "Enable embeddings")
+	InitializeCmd.Flags().BoolVar(&initializeDisableEmbeddings, "disable-embeddings", false, "Disable embeddings (default)")
+	InitializeCmd.Flags().StringVar(&initializeOpenAIAPIKey, "openai-api-key", "", "OpenAI API key for embeddings")
+	InitializeCmd.Flags().BoolVar(&initializeUseEnvOpenAIAPIKey, "use-env-openai-api-key", false, "Use OPENAI_API_KEY from environment")
 
 	// Integration configuration
-	InitializeCmd.Flags().StringSlice("integrations", []string{}, "Integrations to setup (comma-separated)")
+	InitializeCmd.Flags().StringSliceVar(&initializeIntegrations, "integrations", []string{}, "Integrations to setup (comma-separated)")
 
 	// Deprecated flags (kept for backward compatibility)
-	InitializeCmd.Flags().Bool("setup-integrations", false, "Deprecated: use --integrations instead")
-	InitializeCmd.Flags().Bool("skip-integrations", false, "Deprecated: omit --integrations instead")
+	InitializeCmd.Flags().BoolVar(&initializeSetupIntegrations, "setup-integrations", false, "Deprecated: use --integrations instead")
+	InitializeCmd.Flags().BoolVar(&initializeSkipIntegrations, "skip-integrations", false, "Deprecated: omit --integrations instead")
 	InitializeCmd.Flags().MarkDeprecated("setup-integrations", "use --integrations flag instead")
 	InitializeCmd.Flags().MarkDeprecated("skip-integrations", "simply omit --integrations flag")
 
@@ -107,58 +150,46 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("service manager integration only supported on Linux and macOS; current platform: %s", runtime.GOOS)
 	}
 
-	unattended, _ := cmd.Flags().GetBool("unattended")
-
 	// Validate mutually exclusive flags
-	enableEmbeddings, _ := cmd.Flags().GetBool("enable-embeddings")
-	disableEmbeddings, _ := cmd.Flags().GetBool("disable-embeddings")
-	if enableEmbeddings && disableEmbeddings {
+	if initializeEnableEmbeddings && initializeDisableEmbeddings {
 		return fmt.Errorf("--enable-embeddings and --disable-embeddings are mutually exclusive")
 	}
 
-	anthropicKey, _ := cmd.Flags().GetString("anthropic-api-key")
-	useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
-	if anthropicKey != "" && useEnvAnthropic {
+	if initializeAnthropicAPIKey != "" && initializeUseEnvAnthropicAPIKey {
 		return fmt.Errorf("--anthropic-api-key and --use-env-anthropic-api-key are mutually exclusive")
 	}
 
-	openaiKey, _ := cmd.Flags().GetString("openai-api-key")
-	useEnvOpenai, _ := cmd.Flags().GetBool("use-env-openai-api-key")
-	if openaiKey != "" && useEnvOpenai {
+	if initializeOpenAIAPIKey != "" && initializeUseEnvOpenAIAPIKey {
 		return fmt.Errorf("--openai-api-key and --use-env-openai-api-key are mutually exclusive")
 	}
 
 	// Validate http-port flag if provided
-	httpPort, _ := cmd.Flags().GetInt("http-port")
-	if httpPort < -1 || httpPort > 65535 {
+	if initializeHTTPPort < -1 || initializeHTTPPort > 65535 {
 		return fmt.Errorf("--http-port must be -1 (default), 0 (disabled), or 1-65535")
 	}
 
 	// Validate semantic provider if specified
-	semanticProvider, _ := cmd.Flags().GetString("semantic-provider")
-	skipSemantic, _ := cmd.Flags().GetBool("skip-semantic")
-	if semanticProvider != "" && skipSemantic {
+	if initializeSemanticProvider != "" && initializeSkipSemantic {
 		return fmt.Errorf("--semantic-provider and --skip-semantic are mutually exclusive")
 	}
-	if semanticProvider != "" && semanticProvider != "claude" && semanticProvider != "openai" && semanticProvider != "gemini" {
+	if initializeSemanticProvider != "" && initializeSemanticProvider != "claude" && initializeSemanticProvider != "openai" && initializeSemanticProvider != "gemini" {
 		return fmt.Errorf("--semantic-provider must be one of: claude, openai, gemini")
 	}
 
 	// Unattended mode validation
-	if unattended {
+	if initializeUnattended {
 		// Semantic analysis: require API key unless skipped
-		if !skipSemantic {
-			semanticAPIKey, _ := cmd.Flags().GetString("semantic-api-key")
-			provider := semanticProvider
+		if !initializeSkipSemantic {
+			provider := initializeSemanticProvider
 			if provider == "" {
 				provider = "claude" // default
 			}
 
 			// Check for API key based on provider
-			hasKey := semanticAPIKey != ""
+			hasKey := initializeSemanticAPIKey != ""
 			if !hasKey {
 				// Check legacy Anthropic flags for backward compatibility
-				if provider == "claude" && (anthropicKey != "" || useEnvAnthropic) {
+				if provider == "claude" && (initializeAnthropicAPIKey != "" || initializeUseEnvAnthropicAPIKey) {
 					hasKey = true
 				}
 				// Check environment variable for provider
@@ -187,19 +218,16 @@ func validateInit(cmd *cobra.Command, args []string) error {
 		}
 
 		// FalkorDB must be addressed
-		startFalkorDB, _ := cmd.Flags().GetBool("start-falkordb")
-		skipCheck, _ := cmd.Flags().GetBool("skip-falkordb-check")
-		if !startFalkorDB && !skipCheck {
+		if !initializeStartFalkorDB && !initializeSkipFalkorDBCheck {
 			// Check if FalkorDB is already running
-			graphPort, _ := cmd.Flags().GetInt("graph-port")
-			if !docker.IsFalkorDBRunning(graphPort) {
+			if !docker.IsFalkorDBRunning(initializeGraphPort) {
 				return fmt.Errorf("unattended mode requires FalkorDB to be running, use --start-falkordb to auto-start, or --skip-falkordb-check to bypass")
 			}
 		}
 
 		// Embeddings validation
-		if enableEmbeddings {
-			if openaiKey == "" && !useEnvOpenai {
+		if initializeEnableEmbeddings {
+			if initializeOpenAIAPIKey == "" && !initializeUseEnvOpenAIAPIKey {
 				envKey := os.Getenv(config.EmbeddingsAPIKeyEnv)
 				if envKey == "" {
 					return fmt.Errorf("--enable-embeddings requires --openai-api-key or --use-env-openai-api-key (or %s environment variable)", config.EmbeddingsAPIKeyEnv)
@@ -214,19 +242,13 @@ func validateInit(cmd *cobra.Command, args []string) error {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	unattended, _ := cmd.Flags().GetBool("unattended")
-
-	if unattended {
+	if initializeUnattended {
 		return runUnattended(cmd)
 	}
 	return runInteractive(cmd)
 }
 
 func runInteractive(cmd *cobra.Command) error {
-	force, _ := cmd.Flags().GetBool("force")
-	memoryRoot, _ := cmd.Flags().GetString("memory-root")
-	cacheDir, _ := cmd.Flags().GetString("cache-dir")
-
 	// Get app directory
 	appDir, err := config.GetAppDir()
 	if err != nil {
@@ -235,7 +257,7 @@ func runInteractive(cmd *cobra.Command) error {
 	configPath := filepath.Join(appDir, config.ConfigFile)
 
 	// Check for existing config
-	if !force {
+	if !initializeForce {
 		if _, err := os.Stat(configPath); err == nil {
 			return fmt.Errorf("config file already exists at %s (use --force to overwrite)", configPath)
 		}
@@ -243,13 +265,13 @@ func runInteractive(cmd *cobra.Command) error {
 
 	// Build initial config from defaults and flags
 	cfg := config.DefaultConfig
-	if memoryRoot != "" {
-		cfg.Memory.Root = config.ExpandHome(memoryRoot)
+	if initializeMemoryRoot != "" {
+		cfg.Memory.Root = config.ExpandHome(initializeMemoryRoot)
 	} else {
 		cfg.Memory.Root = config.ExpandHome(cfg.Memory.Root)
 	}
-	if cacheDir != "" {
-		cfg.Semantic.CacheDir = config.ExpandHome(cacheDir)
+	if initializeCacheDir != "" {
+		cfg.Semantic.CacheDir = config.ExpandHome(initializeCacheDir)
 	} else {
 		cfg.Semantic.CacheDir = config.ExpandHome(cfg.Semantic.CacheDir)
 	}
@@ -283,10 +305,6 @@ func runInteractive(cmd *cobra.Command) error {
 }
 
 func runUnattended(cmd *cobra.Command) error {
-	force, _ := cmd.Flags().GetBool("force")
-	memoryRoot, _ := cmd.Flags().GetString("memory-root")
-	cacheDir, _ := cmd.Flags().GetString("cache-dir")
-
 	// Get app directory
 	appDir, err := config.GetAppDir()
 	if err != nil {
@@ -295,7 +313,7 @@ func runUnattended(cmd *cobra.Command) error {
 	configPath := filepath.Join(appDir, config.ConfigFile)
 
 	// Check for existing config
-	if !force {
+	if !initializeForce {
 		if _, err := os.Stat(configPath); err == nil {
 			return fmt.Errorf("config file already exists at %s (use --force to overwrite)", configPath)
 		}
@@ -305,22 +323,21 @@ func runUnattended(cmd *cobra.Command) error {
 	cfg := config.DefaultConfig
 
 	// Memory root
-	if memoryRoot != "" {
-		cfg.Memory.Root = config.ExpandHome(memoryRoot)
+	if initializeMemoryRoot != "" {
+		cfg.Memory.Root = config.ExpandHome(initializeMemoryRoot)
 	} else {
 		cfg.Memory.Root = config.ExpandHome(cfg.Memory.Root)
 	}
 
 	// Cache dir
-	if cacheDir != "" {
-		cfg.Semantic.CacheDir = config.ExpandHome(cacheDir)
+	if initializeCacheDir != "" {
+		cfg.Semantic.CacheDir = config.ExpandHome(initializeCacheDir)
 	} else {
 		cfg.Semantic.CacheDir = config.ExpandHome(cfg.Semantic.CacheDir)
 	}
 
 	// Semantic provider configuration
-	skipSemantic, _ := cmd.Flags().GetBool("skip-semantic")
-	if skipSemantic {
+	if initializeSkipSemantic {
 		cfg.Semantic.Enabled = false
 		cfg.Semantic.Provider = ""
 		cfg.Semantic.Model = ""
@@ -329,17 +346,15 @@ func runUnattended(cmd *cobra.Command) error {
 		cfg.Semantic.Enabled = true
 
 		// Provider selection
-		semanticProvider, _ := cmd.Flags().GetString("semantic-provider")
-		if semanticProvider != "" {
-			cfg.Semantic.Provider = semanticProvider
+		if initializeSemanticProvider != "" {
+			cfg.Semantic.Provider = initializeSemanticProvider
 		} else {
 			cfg.Semantic.Provider = config.DefaultSemanticProvider
 		}
 
 		// Model selection (use provider default if not specified)
-		semanticModel, _ := cmd.Flags().GetString("semantic-model")
-		if semanticModel != "" {
-			cfg.Semantic.Model = semanticModel
+		if initializeSemanticModel != "" {
+			cfg.Semantic.Model = initializeSemanticModel
 		} else {
 			switch cfg.Semantic.Provider {
 			case "claude":
@@ -355,16 +370,12 @@ func runUnattended(cmd *cobra.Command) error {
 		}
 
 		// API key - check new flag, then legacy flags, then env vars
-		semanticAPIKey, _ := cmd.Flags().GetString("semantic-api-key")
-		anthropicKey, _ := cmd.Flags().GetString("anthropic-api-key")
-		useEnvAnthropic, _ := cmd.Flags().GetBool("use-env-anthropic-api-key")
-
-		if semanticAPIKey != "" {
-			cfg.Semantic.APIKey = semanticAPIKey
-		} else if cfg.Semantic.Provider == "claude" && anthropicKey != "" {
+		if initializeSemanticAPIKey != "" {
+			cfg.Semantic.APIKey = initializeSemanticAPIKey
+		} else if cfg.Semantic.Provider == "claude" && initializeAnthropicAPIKey != "" {
 			// Legacy support
-			cfg.Semantic.APIKey = anthropicKey
-		} else if cfg.Semantic.Provider == "claude" && useEnvAnthropic {
+			cfg.Semantic.APIKey = initializeAnthropicAPIKey
+		} else if cfg.Semantic.Provider == "claude" && initializeUseEnvAnthropicAPIKey {
 			// Legacy support
 			cfg.Semantic.APIKey = os.Getenv(config.ClaudeAPIKeyEnv)
 		} else {
@@ -381,29 +392,24 @@ func runUnattended(cmd *cobra.Command) error {
 	}
 
 	// HTTP port
-	httpPort, _ := cmd.Flags().GetInt("http-port")
-	if httpPort >= 0 {
-		cfg.Daemon.HTTPPort = httpPort
-		if httpPort > 0 {
-			cfg.MCP.DaemonPort = httpPort
+	if initializeHTTPPort >= 0 {
+		cfg.Daemon.HTTPPort = initializeHTTPPort
+		if initializeHTTPPort > 0 {
+			cfg.MCP.DaemonPort = initializeHTTPPort
 			cfg.MCP.DaemonHost = "localhost"
 		}
 	}
 
 	// FalkorDB
-	graphHost, _ := cmd.Flags().GetString("graph-host")
-	graphPort, _ := cmd.Flags().GetInt("graph-port")
-	graphPassword, _ := cmd.Flags().GetString("graph-password")
-	cfg.Graph.Host = graphHost
-	cfg.Graph.Port = graphPort
-	cfg.Graph.Password = graphPassword
+	cfg.Graph.Host = initializeGraphHost
+	cfg.Graph.Port = initializeGraphPort
+	cfg.Graph.Password = initializeGraphPassword
 
 	// Start FalkorDB if requested
-	startFalkorDBFlag, _ := cmd.Flags().GetBool("start-falkordb")
-	if startFalkorDBFlag {
+	if initializeStartFalkorDB {
 		fmt.Println("Starting FalkorDB in Docker...")
 		opts := docker.StartOptions{
-			Port:    graphPort,
+			Port:    initializeGraphPort,
 			DataDir: fmt.Sprintf("%s/falkordb", appDir),
 			Detach:  true,
 		}
@@ -411,19 +417,16 @@ func runUnattended(cmd *cobra.Command) error {
 			return fmt.Errorf("failed to start FalkorDB; %w", err)
 		}
 		fmt.Println("FalkorDB started successfully.")
-		fmt.Printf("  Redis port: %d\n", graphPort)
+		fmt.Printf("  Redis port: %d\n", initializeGraphPort)
 		fmt.Printf("  Browser UI: http://localhost:3000\n")
 	}
 
 	// Embeddings
-	enableEmbeddings, _ := cmd.Flags().GetBool("enable-embeddings")
-	openaiKey, _ := cmd.Flags().GetString("openai-api-key")
-	useEnvOpenai, _ := cmd.Flags().GetBool("use-env-openai-api-key")
-	if enableEmbeddings {
+	if initializeEnableEmbeddings {
 		cfg.Embeddings.Enabled = true
-		if openaiKey != "" {
-			cfg.Embeddings.APIKey = openaiKey
-		} else if useEnvOpenai {
+		if initializeOpenAIAPIKey != "" {
+			cfg.Embeddings.APIKey = initializeOpenAIAPIKey
+		} else if initializeUseEnvOpenAIAPIKey {
 			// Detect and write env var to config for service manager compatibility
 			envKey := os.Getenv(config.EmbeddingsAPIKeyEnv)
 			cfg.Embeddings.APIKey = envKey
@@ -434,10 +437,8 @@ func runUnattended(cmd *cobra.Command) error {
 	}
 
 	// Integrations (for setup, not config tracking)
-	integrationNames, _ := cmd.Flags().GetStringSlice("integrations")
-
 	// Finalize configuration (print next steps for unattended mode)
-	return finalizeInit(configPath, &cfg, integrationNames, false)
+	return finalizeInit(configPath, &cfg, initializeIntegrations, false)
 }
 
 func handleStartupChoices(result *tuiinit.WizardResult) error {

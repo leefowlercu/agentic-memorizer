@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var setupBinaryPath string
+
 var SetupCmd = &cobra.Command{
 	Use:   "setup <integration-name>",
 	Short: "Setup a specific integration",
@@ -26,7 +28,7 @@ var SetupCmd = &cobra.Command{
 }
 
 func init() {
-	SetupCmd.Flags().String("binary-path", "", "Custom path to memorizer binary (auto-detected if not specified)")
+	SetupCmd.Flags().StringVar(&setupBinaryPath, "binary-path", "", "Custom path to memorizer binary (auto-detected if not specified)")
 }
 
 func validateSetup(cmd *cobra.Command, args []string) error {
@@ -39,15 +41,14 @@ func validateSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate binary path if provided
-	binaryPath, _ := cmd.Flags().GetString("binary-path")
-	if binaryPath != "" {
-		if _, err := os.Stat(binaryPath); err != nil {
-			return fmt.Errorf("binary-path %q is not accessible; %w", binaryPath, err)
+	if setupBinaryPath != "" {
+		if _, err := os.Stat(setupBinaryPath); err != nil {
+			return fmt.Errorf("binary-path %q is not accessible; %w", setupBinaryPath, err)
 		}
 		// Check if executable
-		info, _ := os.Stat(binaryPath)
+		info, _ := os.Stat(setupBinaryPath)
 		if info.Mode()&0111 == 0 {
-			return fmt.Errorf("binary-path %q is not executable", binaryPath)
+			return fmt.Errorf("binary-path %q is not executable", setupBinaryPath)
 		}
 	}
 
@@ -58,7 +59,7 @@ func validateSetup(cmd *cobra.Command, args []string) error {
 
 func runSetup(cmd *cobra.Command, args []string) error {
 	integrationName := args[0]
-	binaryPath, _ := cmd.Flags().GetString("binary-path")
+	binaryPath := setupBinaryPath
 
 	// Find binary path if not specified
 	if binaryPath == "" {

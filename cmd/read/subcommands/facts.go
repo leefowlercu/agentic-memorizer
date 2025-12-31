@@ -16,6 +16,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	readFactsFormat      string
+	readFactsIntegration string
+)
+
 var FactsCmd = &cobra.Command{
 	Use:   "facts",
 	Short: "Read stored facts",
@@ -39,38 +44,36 @@ var FactsCmd = &cobra.Command{
 }
 
 func init() {
-	FactsCmd.Flags().String("format", "xml", "Output format (xml/json)")
-	FactsCmd.Flags().String("integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
+	FactsCmd.Flags().StringVar(&readFactsFormat, "format", "xml", "Output format (xml/json)")
+	FactsCmd.Flags().StringVar(&readFactsIntegration, "integration", "", "Wrap output for specific integration (e.g., claude-code-hook)")
 }
 
 func validateReadFacts(cmd *cobra.Command, args []string) error {
 	// Validate format flag
-	formatStr, _ := cmd.Flags().GetString("format")
-	if formatStr != "" {
+	if readFactsFormat != "" {
 		validFormats := []string{"xml", "json"}
 		valid := false
 		for _, f := range validFormats {
-			if formatStr == f {
+			if readFactsFormat == f {
 				valid = true
 				break
 			}
 		}
 		if !valid {
-			return fmt.Errorf("invalid format %q (must be one of: xml, json)", formatStr)
+			return fmt.Errorf("invalid format %q (must be one of: xml, json)", readFactsFormat)
 		}
 	}
 
 	// Validate integration flag if provided
-	integrationName, _ := cmd.Flags().GetString("integration")
-	if integrationName != "" {
+	if readFactsIntegration != "" {
 		registry := integrations.GlobalRegistry()
 		available := registry.List()
-		if _, err := registry.Get(integrationName); err != nil {
+		if _, err := registry.Get(readFactsIntegration); err != nil {
 			var names []string
 			for _, i := range available {
 				names = append(names, i.GetName())
 			}
-			return fmt.Errorf("integration %q not found (available: %s)", integrationName, strings.Join(names, ", "))
+			return fmt.Errorf("integration %q not found (available: %s)", readFactsIntegration, strings.Join(names, ", "))
 		}
 	}
 
@@ -111,11 +114,11 @@ func runReadFacts(cmd *cobra.Command, args []string) error {
 	defer graphManager.Close()
 
 	// Get flags
-	formatStr, _ := cmd.Flags().GetString("format")
+	formatStr := readFactsFormat
 	if formatStr == "" {
 		formatStr = "xml" // Hardcoded default
 	}
-	integrationName, _ := cmd.Flags().GetString("integration")
+	integrationName := readFactsIntegration
 
 	// Fetch all facts
 	facts := graphManager.Facts()

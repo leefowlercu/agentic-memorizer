@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var detached bool
+var graphStartDetached bool
 
 var StartCmd = &cobra.Command{
 	Use:   "start",
@@ -23,7 +23,7 @@ var StartCmd = &cobra.Command{
 }
 
 func init() {
-	StartCmd.Flags().BoolVarP(&detached, "detach", "d", true, "Run container in background")
+	StartCmd.Flags().BoolVarP(&graphStartDetached, "detach", "d", true, "Run container in background")
 }
 
 func validateStart(cmd *cobra.Command, args []string) error {
@@ -65,7 +65,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	opts := docker.StartOptions{
 		Port:    cfg.Graph.Port,
 		DataDir: fmt.Sprintf("%s/falkordb", appDir),
-		Detach:  detached,
+		Detach:  graphStartDetached,
 	}
 
 	if err := docker.StartFalkorDB(opts); err != nil {

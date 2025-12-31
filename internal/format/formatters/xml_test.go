@@ -301,9 +301,8 @@ func TestXMLFormatter_FormatFacts(t *testing.T) {
 	output, err := formatter.Format(fc)
 	require.NoError(t, err)
 
-	// Verify XML structure
-	assert.True(t, strings.HasPrefix(output, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"))
-	assert.Contains(t, output, "<facts_index>")
+	// Verify XML structure (no XML declaration needed for context injection)
+	assert.True(t, strings.HasPrefix(output, "<facts_index>"))
 	assert.Contains(t, output, "</facts_index>")
 	assert.Contains(t, output, "<metadata>")
 	assert.Contains(t, output, "<total_facts>2</total_facts>")

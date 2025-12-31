@@ -16,9 +16,11 @@ import (
 
 var StatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Check FalkorDB status",
+	Short: "Check FalkorDB status and graph statistics",
 	Long: "\nCheck the health and status of the FalkorDB knowledge graph.\n\n" +
 		"Displays whether the FalkorDB container is running and configuration details.",
+	Example: `  # Check FalkorDB container and graph status
+  memorizer graph status`,
 	PreRunE: validateStatus,
 	RunE:    runStatus,
 }

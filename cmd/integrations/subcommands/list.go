@@ -10,9 +10,11 @@ import (
 
 var ListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all available integrations",
+	Short: "List all available integrations with status",
 	Long: "\nList all integrations registered in the system.\n\n" +
 		"Shows the name, description, and current status (configured/not configured) of each integration.",
+	Example: `  # List all available integrations
+  memorizer integrations list`,
 	PreRunE: validateList,
 	RunE:    runList,
 }

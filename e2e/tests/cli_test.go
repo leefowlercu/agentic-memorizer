@@ -346,4 +346,3 @@ func TestCLI_MCPStart(t *testing.T) {
 	// This test is skipped because mcp start runs indefinitely
 	// It's tested properly in the MCP-specific test file
 }
-

@@ -42,16 +42,16 @@ var (
 	initializeHTTPPort int
 
 	// FalkorDB configuration
-	initializeGraphHost          string
-	initializeGraphPort          int
-	initializeGraphPassword      string
-	initializeStartFalkorDB      bool
-	initializeSkipFalkorDBCheck  bool
+	initializeGraphHost         string
+	initializeGraphPort         int
+	initializeGraphPassword     string
+	initializeStartFalkorDB     bool
+	initializeSkipFalkorDBCheck bool
 
 	// Embeddings configuration
-	initializeEnableEmbeddings  bool
-	initializeDisableEmbeddings bool
-	initializeOpenAIAPIKey      string
+	initializeEnableEmbeddings   bool
+	initializeDisableEmbeddings  bool
+	initializeOpenAIAPIKey       string
 	initializeUseEnvOpenAIAPIKey bool
 
 	// Integration configuration

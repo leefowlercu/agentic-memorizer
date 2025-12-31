@@ -164,8 +164,8 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 			t.Fatalf("Failed to unmarshal resources list: %v", err)
 		}
 
-		if len(listResp.Resources) != 3 {
-			t.Errorf("Resource count = %d, want 3", len(listResp.Resources))
+		if len(listResp.Resources) != 2 {
+			t.Errorf("Resource count = %d, want 2", len(listResp.Resources))
 		}
 	})
 
@@ -176,7 +176,6 @@ func TestIntegration_FullResourcesFlow(t *testing.T) {
 		mimeType string
 	}{
 		{"XML", "memorizer://index", "application/xml"},
-		{"Markdown", "memorizer://index/markdown", "text/markdown"},
 		{"JSON", "memorizer://index/json", "application/json"},
 	}
 

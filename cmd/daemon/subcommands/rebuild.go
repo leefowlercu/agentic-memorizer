@@ -19,7 +19,7 @@ var (
 
 var RebuildCmd = &cobra.Command{
 	Use:   "rebuild",
-	Short: "Force immediate index rebuild",
+	Short: "Force immediate index rebuild via daemon API",
 	Long: "\nForce the daemon to perform an immediate full index rebuild.\n\n" +
 		"This triggers a rebuild via the daemon's HTTP API. The daemon will re-process " +
 		"all files in the memory directory, extracting metadata, performing semantic " +
@@ -31,6 +31,20 @@ var RebuildCmd = &cobra.Command{
 		"Topics, Entities with no file connections).\n\n" +
 		"Use --clear-stale to remove stale cache entries before rebuilding. This ensures " +
 		"files are re-analyzed with the current analysis version.",
+	Example: `  # Rebuild with default settings
+  memorizer daemon rebuild
+
+  # Force full rebuild, clearing graph first
+  memorizer daemon rebuild --force
+
+  # Rebuild and remove stale graph nodes
+  memorizer daemon rebuild --sync
+
+  # Clear stale cache entries before rebuilding
+  memorizer daemon rebuild --clear-stale
+
+  # Full rebuild with all cleanup options
+  memorizer daemon rebuild --force --sync --clear-stale`,
 	PreRunE: validateRebuild,
 	RunE:    runRebuild,
 }

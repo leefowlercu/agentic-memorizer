@@ -13,9 +13,11 @@ import (
 
 var StopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the running daemon",
+	Short: "Stop the running daemon gracefully",
 	Long: "\nStop the running background indexing daemon by sending a SIGTERM signal.\n\n" +
 		"The daemon will gracefully shut down, completing any in-progress operations before exiting.",
+	Example: `  # Stop the running daemon
+  memorizer daemon stop`,
 	PreRunE: validateStop,
 	RunE:    runStop,
 }

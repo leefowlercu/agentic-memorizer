@@ -11,11 +11,13 @@ import (
 
 var StatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show cache statistics",
+	Short: "Show cache statistics and version distribution",
 	Long: "\nShow statistics about the semantic analysis cache.\n\n" +
 		"Displays the total number of cached entries, their size, and version distribution. " +
 		"Legacy entries (v0.0.0) are entries created before versioning was implemented and " +
 		"will be re-analyzed on next daemon rebuild.",
+	Example: `  # Show cache status and statistics
+  memorizer cache status`,
 	PreRunE: validateStatus,
 	RunE:    runStatus,
 }

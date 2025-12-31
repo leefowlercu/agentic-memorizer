@@ -12,12 +12,17 @@ var graphStartDetached bool
 
 var StartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the FalkorDB container",
+	Short: "Start the FalkorDB Docker container",
 	Long: "\nStart the FalkorDB Docker container for knowledge graph storage.\n\n" +
 		"FalkorDB is required for the daemon to store file metadata, semantic analysis results, " +
 		"and embeddings. The container is started using Docker and persists data in ~/.memorizer/falkordb/.\n\n" +
 		"Use --detach to run the container in the background (default). Without --detach, " +
 		"the container runs in foreground mode and can be stopped with Ctrl+C.",
+	Example: `  # Start FalkorDB in background (default)
+  memorizer graph start
+
+  # Start FalkorDB in foreground
+  memorizer graph start --detach=false`,
 	PreRunE: validateStart,
 	RunE:    runStart,
 }

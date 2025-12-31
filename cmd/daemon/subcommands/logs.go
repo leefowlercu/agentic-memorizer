@@ -16,10 +16,21 @@ var (
 
 var LogsCmd = &cobra.Command{
 	Use:   "logs",
-	Short: "Show daemon logs",
+	Short: "Show daemon logs from log file",
 	Long: "\nShow logs from the background indexing daemon.\n\n" +
 		"By default, displays the last 50 lines. Use -f to follow logs in real-time, " +
 		"or -n to specify the number of lines to display.",
+	Example: `  # Show last 50 lines of logs
+  memorizer daemon logs
+
+  # Follow logs in real-time
+  memorizer daemon logs -f
+
+  # Show last 100 lines
+  memorizer daemon logs -n 100
+
+  # Follow logs starting from last 20 lines
+  memorizer daemon logs -f -n 20`,
 	PreRunE: validateLogs,
 	RunE:    runLogs,
 }

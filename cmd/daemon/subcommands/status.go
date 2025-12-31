@@ -14,9 +14,11 @@ import (
 
 var StatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show daemon status",
+	Short: "Show daemon status and configuration",
 	Long: "\nShow the current status of the background indexing daemon.\n\n" +
 		"Displays whether the daemon is running and configuration details.",
+	Example: `  # Check if daemon is running
+  memorizer daemon status`,
 	PreRunE: validateStatus,
 	RunE:    runStatus,
 }

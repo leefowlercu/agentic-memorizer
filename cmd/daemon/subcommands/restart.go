@@ -13,10 +13,12 @@ import (
 
 var RestartCmd = &cobra.Command{
 	Use:   "restart",
-	Short: "Restart the daemon",
+	Short: "Restart the daemon with graceful shutdown",
 	Long: "\nRestart the background indexing daemon by stopping and starting it.\n\n" +
 		"Performs a graceful shutdown by sending SIGTERM to the running daemon, " +
 		"then waits up to 3 seconds for the daemon to stop before starting a new instance.",
+	Example: `  # Restart the daemon
+  memorizer daemon restart`,
 	PreRunE: validateRestart,
 	RunE:    runRestart,
 }

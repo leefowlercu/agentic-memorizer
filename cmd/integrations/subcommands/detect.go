@@ -10,10 +10,12 @@ import (
 
 var DetectCmd = &cobra.Command{
 	Use:   "detect",
-	Short: "Detect installed agent frameworks",
+	Short: "Detect installed agent frameworks on system",
 	Long: "\nDetect which agent frameworks are installed on this system.\n\n" +
 		"Scans for configuration files and directories of supported frameworks like Claude Code, " +
 		"Continue.dev, Cline, etc.",
+	Example: `  # Detect installed agent frameworks
+  memorizer integrations detect`,
 	PreRunE: validateDetect,
 	RunE:    runDetect,
 }

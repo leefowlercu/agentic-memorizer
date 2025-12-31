@@ -11,11 +11,16 @@ var removeContainer bool
 
 var StopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the FalkorDB container",
+	Short: "Stop the FalkorDB Docker container gracefully",
 	Long: "\nStop the FalkorDB Docker container.\n\n" +
 		"This gracefully stops the FalkorDB container. Data is preserved in the persistent volume " +
 		"and will be available when the container is started again.\n\n" +
 		"Use --remove to also remove the container (data is still preserved in the volume).",
+	Example: `  # Stop the FalkorDB container
+  memorizer graph stop
+
+  # Stop and remove the container
+  memorizer graph stop --remove`,
 	PreRunE: validateStop,
 	RunE:    runStop,
 }

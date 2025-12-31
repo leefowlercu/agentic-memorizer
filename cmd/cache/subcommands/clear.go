@@ -17,13 +17,18 @@ var (
 
 var ClearCmd = &cobra.Command{
 	Use:   "clear",
-	Short: "Clear the semantic analysis cache",
+	Short: "Clear entries from the semantic analysis cache",
 	Long: "\nClear entries from the semantic analysis cache.\n\n" +
 		"By default, this command requires a flag to specify what to clear:\n" +
 		"  --all    Clear all cached entries\n" +
 		"  --stale  Clear only stale entries (non-current versions)\n\n" +
 		"Cleared entries will be re-analyzed on next daemon rebuild or when " +
 		"the corresponding files are modified.",
+	Example: `  # Clear all cache entries
+  memorizer cache clear --all
+
+  # Clear only stale/legacy entries
+  memorizer cache clear --stale`,
 	PreRunE: validateClear,
 	RunE:    runClear,
 }

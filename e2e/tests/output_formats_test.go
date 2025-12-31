@@ -345,4 +345,3 @@ func TestOutputFormats_JSONSchemaValidation(t *testing.T) {
 		}
 	}
 }
-

@@ -141,7 +141,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	configSection.AddKeyValuef("Similarity Threshold", "%.1f", cfg.Graph.SimilarityThreshold)
 	configSection.AddKeyValuef("Max Similar Files", "%d", cfg.Graph.MaxSimilarFiles)
-	section.AddSubsection(configSection)
 
 	// Connect to FalkorDB and get stats
 	managerConfig := graph.ManagerConfig{
@@ -160,7 +159,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	if err := manager.Initialize(ctx); err != nil {
-		section.AddKeyValue("Connection", fmt.Sprintf("failed (%s)", err))
+		configSection.AddKeyValue("Connection", fmt.Sprintf("failed (%s)", err))
+		section.AddSubsection(configSection)
 
 		formatter, err := format.GetFormatter("text")
 		if err != nil {
@@ -175,16 +175,19 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	defer manager.Close()
 
-	section.AddKeyValue("Connection", "connected")
+	configSection.AddKeyValue("Connection", "connected")
 
 	// Get health status
 	health, err := manager.Health(ctx)
 	if err != nil {
-		section.AddKeyValue("Health", fmt.Sprintf("error (%s)", err))
+		configSection.AddKeyValue("Health", fmt.Sprintf("error (%s)", err))
 	} else if health.Stats != nil {
-		section.AddKeyValue("Database", health.Database)
+		configSection.AddKeyValue("Connected DB", health.Database)
+	}
+	section.AddSubsection(configSection)
 
-		// Add graph statistics subsection
+	// Add graph statistics subsection if available
+	if health.Stats != nil {
 		graphStats := format.NewSection("Graph Statistics").SetLevel(1).AddDivider()
 		graphStats.AddKeyValuef("Nodes", "%d", health.Stats.NodeCount)
 		graphStats.AddKeyValuef("Relationships", "%d", health.Stats.RelationshipCount)

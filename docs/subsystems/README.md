@@ -2,7 +2,7 @@
 
 This directory contains detailed technical documentation for each major subsystem of Agentic Memorizer. Each subsystem is documented in its own subdirectory with comprehensive information about architecture, design principles, key components, and integration points.
 
-**Last Updated:** 2025-12-30
+**Last Updated:** 2025-12-31
 
 ## Purpose
 
@@ -319,13 +319,14 @@ Multi-provider AI-powered content understanding with intelligent content routing
 
 **Status:** ✅ Documented
 
-Content-addressable caching for semantic analysis results with three-tier versioning and provider isolation.
+Content-addressable caching for semantic analysis results with three-tier versioning, provider isolation, and directory sharding.
 
 **Key Features:**
 
 - SHA-256 content-addressable storage enabling cache hits across file renames and moves
 - Three-tier versioning (schema, metadata, semantic) for intelligent cache invalidation
 - Provider isolation with separate subdirectories for Claude, OpenAI, and Gemini
+- Two-level directory sharding for filesystem performance at scale
 - Forward compatibility for rollback scenarios
 - Cache statistics and stale entry cleanup
 
@@ -333,6 +334,7 @@ Content-addressable caching for semantic analysis results with three-tier versio
 
 - `internal/cache/manager.go` - Core cache operations (Get, Set, Clear, Stats)
 - `internal/cache/version.go` - Version management and staleness detection
+- `internal/cache/shard.go` - Shared directory sharding utilities
 
 **See:** [cache/README.md](./cache/README.md)
 
@@ -650,6 +652,7 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 
 **Recent Updates:**
 
+- Updated cache subsystem documentation - directory sharding, shared shard utilities (2025-12-31)
 - Renamed docker to container subsystem with Docker/Podman support (2025-12-30)
 - Created skip subsystem documentation (2025-12-29)
 - Created servicemanager subsystem documentation (2025-12-29)

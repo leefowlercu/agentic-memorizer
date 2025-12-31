@@ -1,10 +1,10 @@
 # Cache
 
-Content-addressable caching for semantic analysis results with three-tier versioning and provider isolation.
+Content-addressable caching for semantic analysis results with three-tier versioning, provider isolation, and directory sharding.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 
@@ -21,6 +21,8 @@ The Cache subsystem provides persistent caching for semantic analysis results, e
 The subsystem implements a three-tier versioning system that tracks changes to the cache structure, metadata extraction logic, and semantic analysis logic independently. This allows cache entries to be intelligently invalidated when processing logic changes, while preserving valid entries when unrelated components are updated.
 
 Provider isolation ensures that cache entries from different semantic analysis providers (Claude, OpenAI, Gemini) are stored separately, preventing cross-contamination and enabling clean provider switching.
+
+Directory sharding distributes cache files across a two-level directory hierarchy based on content hash prefixes, preventing filesystem performance degradation when the cache grows large. This sharding mechanism is shared with the embeddings cache subsystem for consistency.
 
 ## Design Principles
 
@@ -47,7 +49,7 @@ Version mismatches trigger selective re-analysis: schema mismatches always inval
 Each semantic analysis provider stores cache entries in its own subdirectory:
 
 ```
-~/.memorizer/cache/summaries/
+~/.memorizer/.cache/summaries/
 ├── claude/   # Claude provider entries
 ├── openai/   # OpenAI provider entries
 └── gemini/   # Gemini provider entries
@@ -58,6 +60,27 @@ This isolation enables:
 - Clean provider switching without cache conflicts
 - Independent cache management per provider
 - Clear visibility into per-provider cache usage
+
+### Directory Sharding
+
+Cache files are distributed across a two-level directory hierarchy based on content hash prefixes:
+
+```
+~/.memorizer/.cache/summaries/claude/
+├── 41/
+│   └── d6/
+│       └── sha256:41d63309f-v1-1-2.json
+├── ab/
+│   └── cd/
+│       └── sha256:abcdef123-v1-1-2.json
+```
+
+This sharding approach:
+
+- Prevents filesystem performance degradation with many cached entries
+- Distributes entries across up to 65,536 possible subdirectories (256 × 256)
+- Uses the first four characters of the hash value (after stripping the "sha256:" prefix) for directory names
+- Is shared with the embeddings cache for consistent storage patterns
 
 ### Forward Compatibility
 
@@ -89,6 +112,16 @@ Version management functions (`internal/cache/version.go`) handle version compar
 ### HashFile Function
 
 The HashFile utility computes SHA-256 content hashes for files, producing cache keys in the format `sha256:{hex-encoded-hash}`.
+
+### Shard Functions
+
+The shard utilities (`internal/cache/shard.go`) provide directory sharding capabilities:
+
+- **ShardPath** - Generates a two-level sharded directory path for a given hash and filename
+- **extractHashValue** - Extracts the hash value from a prefixed hash string (strips "sha256:" prefix)
+- **HashPrefix** - Constant defining the standard prefix for SHA-256 content hashes
+
+These functions are used by both the semantic cache Manager and the embeddings cache to ensure consistent directory sharding across the application.
 
 ### CacheStats
 
@@ -133,16 +166,22 @@ The cache CLI commands (`cmd/cache/`) provide user-facing cache management:
 
 During daemon rebuild operations with `--clear-stale`, the ClearOldVersions function removes entries that would be detected as stale, reducing unnecessary API calls during the rebuild.
 
+### Embeddings Cache
+
+The embeddings subsystem uses the shared ShardPath function from this subsystem to maintain consistent directory sharding. Both caches use the same two-level sharding strategy based on content hash prefixes, ensuring uniform storage patterns across the application.
+
 ## Glossary
 
 | Term | Definition |
 |------|------------|
 | Content Hash | SHA-256 hash of file contents, used as the primary cache key component |
 | Cache Key | Composite identifier combining content hash prefix, version tuple, and file extension |
+| Directory Sharding | Storage strategy that distributes cache files across a two-level directory hierarchy based on hash prefixes |
 | Legacy Entry | Cache entry from before versioning was implemented, identified by version v0.0.0 |
 | Provider Isolation | Storage strategy where each semantic provider uses a separate subdirectory |
 | Schema Version | Version number tracking changes to the CachedAnalysis structure |
 | Metadata Version | Version number tracking changes to metadata extraction logic |
 | Semantic Version | Version number tracking changes to semantic analysis logic |
+| Shard Key | First four characters of a content hash (after prefix), used to determine subdirectory placement |
 | Staleness | Condition where a cache entry is outdated due to content or version changes |
 | Version Tuple | Combined version identifier in format v{schema}.{metadata}.{semantic} |

@@ -103,7 +103,8 @@ func (m *Manager) Set(cached *types.CachedAnalysis) error {
 }
 
 // getCachePath returns the versioned cache path for a file hash with provider subdirectory.
-// Format: summaries/{provider}/{hash[:16]}-v{schema}-{metadata}-{semantic}.json
+// Uses two-level sharding to prevent filesystem performance degradation.
+// Format: summaries/{provider}/{shard1}/{shard2}/{hash[:16]}-v{schema}-{metadata}-{semantic}.json
 func (m *Manager) getCachePath(fileHash, provider string) string {
 	filename := fmt.Sprintf("%s-v%d-%d-%d.json",
 		fileHash[:16],
@@ -111,7 +112,8 @@ func (m *Manager) getCachePath(fileHash, provider string) string {
 		CacheMetadataVersion,
 		CacheSemanticVersion,
 	)
-	return filepath.Join(m.cacheDir, "summaries", provider, filename)
+	basePath := filepath.Join(m.cacheDir, "summaries", provider)
+	return ShardPath(basePath, fileHash, filename)
 }
 
 // getLegacyCachePath returns the legacy (unversioned) cache path for a file hash.
@@ -182,69 +184,53 @@ func (m *Manager) Clear() error {
 }
 
 // GetStats returns statistics about the cache contents including version distribution.
-// Walks both provider subdirectories and legacy files in the root summaries directory.
+// Recursively walks all subdirectories (provider and shard directories).
 func (m *Manager) GetStats() (*CacheStats, error) {
 	stats := &CacheStats{
 		VersionCounts: make(map[string]int),
 	}
 
 	summariesDir := filepath.Join(m.cacheDir, "summaries")
-	entries, err := os.ReadDir(summariesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return stats, nil // Empty cache is valid
+
+	err := filepath.WalkDir(summariesDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil // Empty cache is valid
+			}
+			return nil // Skip unreadable entries
 		}
-		return nil, fmt.Errorf("failed to read cache directory; %w", err)
-	}
 
-	for _, entry := range entries {
-		// Provider subdirectory - recursively count cache files
-		if entry.IsDir() {
-			providerDir := filepath.Join(summariesDir, entry.Name())
-			providerEntries, err := os.ReadDir(providerDir)
-			if err != nil {
-				continue // Skip unreadable directories
-			}
-
-			for _, providerEntry := range providerEntries {
-				if providerEntry.IsDir() || !strings.HasSuffix(providerEntry.Name(), ".json") {
-					continue
-				}
-
-				stats.TotalEntries++
-
-				// Get file size
-				info, err := providerEntry.Info()
-				if err == nil {
-					stats.TotalSize += info.Size()
-				}
-
-				// Parse version from filename
-				version := parseVersionFromFilename(providerEntry.Name())
-				stats.VersionCounts[version]++
-
-				if version == "v0.0.0" {
-					stats.LegacyEntries++
-				}
-			}
-		} else if strings.HasSuffix(entry.Name(), ".json") {
-			// Legacy cache file in root summaries directory
-			stats.TotalEntries++
-
-			// Get file size
-			info, err := entry.Info()
-			if err == nil {
-				stats.TotalSize += info.Size()
-			}
-
-			// Parse version from filename
-			version := parseVersionFromFilename(entry.Name())
-			stats.VersionCounts[version]++
-
-			if version == "v0.0.0" {
-				stats.LegacyEntries++
-			}
+		// Skip directories
+		if d.IsDir() {
+			return nil
 		}
+
+		// Only process JSON files
+		if !strings.HasSuffix(d.Name(), ".json") {
+			return nil
+		}
+
+		stats.TotalEntries++
+
+		// Get file size
+		info, err := d.Info()
+		if err == nil {
+			stats.TotalSize += info.Size()
+		}
+
+		// Parse version from filename
+		version := parseVersionFromFilename(d.Name())
+		stats.VersionCounts[version]++
+
+		if version == "v0.0.0" {
+			stats.LegacyEntries++
+		}
+
+		return nil
+	})
+
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to walk cache directory; %w", err)
 	}
 
 	return stats, nil
@@ -271,59 +257,46 @@ func parseVersionFromFilename(filename string) string {
 }
 
 // ClearOldVersions removes all cache entries that are not the current version.
-// Walks both provider subdirectories and legacy files in the root summaries directory.
+// Recursively walks all subdirectories (provider and shard directories).
 // Returns the number of entries removed.
 func (m *Manager) ClearOldVersions() (int, error) {
 	summariesDir := filepath.Join(m.cacheDir, "summaries")
-	entries, err := os.ReadDir(summariesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil // Empty cache is valid
-		}
-		return 0, fmt.Errorf("failed to read cache directory; %w", err)
-	}
-
 	currentVersion := CacheVersion()
 	removed := 0
 
-	for _, entry := range entries {
-		// Provider subdirectory - recursively remove old versions
-		if entry.IsDir() {
-			providerDir := filepath.Join(summariesDir, entry.Name())
-			providerEntries, err := os.ReadDir(providerDir)
-			if err != nil {
-				continue // Skip unreadable directories
+	err := filepath.WalkDir(summariesDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil // Empty cache is valid
 			}
-
-			for _, providerEntry := range providerEntries {
-				if providerEntry.IsDir() || !strings.HasSuffix(providerEntry.Name(), ".json") {
-					continue
-				}
-
-				version := parseVersionFromFilename(providerEntry.Name())
-
-				// Remove if not current version
-				if version != currentVersion {
-					path := filepath.Join(providerDir, providerEntry.Name())
-					if err := os.Remove(path); err != nil {
-						return removed, fmt.Errorf("failed to remove cache file %s; %w", providerEntry.Name(), err)
-					}
-					removed++
-				}
-			}
-		} else if strings.HasSuffix(entry.Name(), ".json") {
-			// Legacy cache file in root summaries directory
-			version := parseVersionFromFilename(entry.Name())
-
-			// Remove if not current version
-			if version != currentVersion {
-				path := filepath.Join(summariesDir, entry.Name())
-				if err := os.Remove(path); err != nil {
-					return removed, fmt.Errorf("failed to remove cache file %s; %w", entry.Name(), err)
-				}
-				removed++
-			}
+			return nil // Skip unreadable entries
 		}
+
+		// Skip directories
+		if d.IsDir() {
+			return nil
+		}
+
+		// Only process JSON files
+		if !strings.HasSuffix(d.Name(), ".json") {
+			return nil
+		}
+
+		version := parseVersionFromFilename(d.Name())
+
+		// Remove if not current version
+		if version != currentVersion {
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("failed to remove cache file %s; %w", d.Name(), err)
+			}
+			removed++
+		}
+
+		return nil
+	})
+
+	if err != nil && !os.IsNotExist(err) {
+		return removed, err
 	}
 
 	return removed, nil

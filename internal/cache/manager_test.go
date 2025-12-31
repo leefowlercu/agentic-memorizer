@@ -414,22 +414,25 @@ func TestManager_getCachePath(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "standard hash",
+			name:     "standard hash with sharding",
 			fileHash: "sha256:abcdef1234567890",
 			provider: "claude",
-			want:     fmt.Sprintf("/test/cache/summaries/claude/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
+			// Shard key is "abcdef1234567890" (after sha256:), shards are ab/cd
+			want: fmt.Sprintf("/test/cache/summaries/claude/ab/cd/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
 		},
 		{
-			name:     "long hash",
+			name:     "long hash with sharding",
 			fileHash: "sha256:0123456789abcdef0123456789abcdef",
 			provider: "claude",
-			want:     fmt.Sprintf("/test/cache/summaries/claude/sha256:012345678-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
+			// Shard key is "0123456789abcdef...", shards are 01/23
+			want: fmt.Sprintf("/test/cache/summaries/claude/01/23/sha256:012345678-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
 		},
 		{
-			name:     "openai provider",
+			name:     "openai provider with sharding",
 			fileHash: "sha256:abcdef1234567890",
 			provider: "openai",
-			want:     fmt.Sprintf("/test/cache/summaries/openai/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
+			// Same sharding as above, different provider
+			want: fmt.Sprintf("/test/cache/summaries/openai/ab/cd/sha256:abcdef123-v%d-%d-%d.json", CacheSchemaVersion, CacheMetadataVersion, CacheSemanticVersion),
 		},
 	}
 

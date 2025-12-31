@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 )
 
 // Cache provides content-hash-based caching for embeddings
@@ -126,17 +128,9 @@ func (c *Cache) ClearAll() error {
 // cachePath returns the cache file path for a given hash
 // Uses provider subdirectory and two-level directory structure to avoid too many files in one directory
 func (c *Cache) cachePath(hash string) string {
-	// Extract the hash value for sharding, skipping "sha256:" prefix if present
-	shardKey := hash
-	const prefix = "sha256:"
-	if len(hash) > len(prefix) && hash[:len(prefix)] == prefix {
-		shardKey = hash[len(prefix):]
-	}
-
-	if len(shardKey) < 4 {
-		return filepath.Join(c.dir, "embeddings", c.provider, hash+".emb")
-	}
-	return filepath.Join(c.dir, "embeddings", c.provider, shardKey[:2], shardKey[2:4], hash+".emb")
+	basePath := filepath.Join(c.dir, "embeddings", c.provider)
+	filename := hash + ".emb"
+	return cache.ShardPath(basePath, hash, filename)
 }
 
 // encodeEmbedding converts a float32 slice to bytes

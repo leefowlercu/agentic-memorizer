@@ -135,12 +135,17 @@ func TestCLI_GraphStatus(t *testing.T) {
 
 	stdout, stderr, exitCode := h.RunCommand("graph", "status")
 
-	// Graph status should work (may show not running or running depending on test env)
-	// Just verify command executes
-	if exitCode != 0 && exitCode != 1 {
-		t.Errorf("Unexpected exit code %d for graph status. Stdout: %s, Stderr: %s",
-			exitCode, stdout, stderr)
+	// Graph status should always exit 0 (status is data, not success/failure)
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+
+	// Should always show Connection status (either "connected" or "failed")
+	output := stdout + stderr
+	if !strings.Contains(output, "Connection") {
+		t.Errorf("Expected 'Connection' in output, got: %s", output)
 	}
+
+	// Should show Graph Status header
+	harness.AssertContains(t, stdout, "Graph Status")
 }
 
 // TestCLI_IntegrationsList tests integrations list command

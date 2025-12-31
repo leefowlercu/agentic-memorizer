@@ -12,7 +12,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/e2e/harness"
 )
 
-// TestGraph_Status tests graph status command
+// TestGraph_Status tests graph status command output format
 func TestGraph_Status(t *testing.T) {
 	h := harness.New(t)
 	if err := h.Setup(); err != nil {
@@ -23,14 +23,71 @@ func TestGraph_Status(t *testing.T) {
 
 	stdout, stderr, exitCode := h.RunCommand("graph", "status")
 
-	// Graph status should work (may show not running or running depending on test env)
-	if exitCode != 0 && exitCode != 1 {
-		t.Errorf("Unexpected exit code %d for graph status. Stdout: %s, Stderr: %s",
-			exitCode, stdout, stderr)
-	}
+	// Graph status should always exit 0
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
 
 	output := stdout + stderr
-	t.Logf("Graph status: %s", output)
+
+	// Should always show Connection status
+	if !strings.Contains(output, "Connection") {
+		t.Errorf("Expected 'Connection' in output, got: %s", output)
+	}
+
+	// Should show Graph Status header
+	harness.AssertContains(t, stdout, "Graph Status")
+
+	// If connected, should show Configuration subsection
+	if strings.Contains(output, "connected") {
+		harness.AssertContains(t, stdout, "Configuration")
+		harness.AssertContains(t, stdout, "Host")
+		harness.AssertContains(t, stdout, "Port")
+		harness.AssertContains(t, stdout, "Database")
+		t.Log("Graph connected - verified full output format")
+	} else {
+		// If failed, should show Host and Port for diagnostics
+		harness.AssertContains(t, stdout, "Host")
+		harness.AssertContains(t, stdout, "Port")
+		t.Log("Graph not connected - verified minimal output format")
+	}
+
+	// Should NOT contain Docker-specific output
+	if strings.Contains(output, "Docker") {
+		t.Errorf("Output should not contain Docker references: %s", output)
+	}
+	if strings.Contains(output, "Container") {
+		t.Errorf("Output should not contain Container references: %s", output)
+	}
+	if strings.Contains(output, "Browser UI") {
+		t.Errorf("Output should not contain Browser UI URL: %s", output)
+	}
+
+	t.Logf("Graph status output: %s", output)
+}
+
+// TestGraph_StatusTimeout tests graph status --timeout flag
+func TestGraph_StatusTimeout(t *testing.T) {
+	h := harness.New(t)
+	if err := h.Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	cleanup := harness.MustCleanup(t, h)
+	defer cleanup.CleanupAll()
+
+	// Test with short timeout
+	start := time.Now()
+	stdout, stderr, exitCode := h.RunCommand("graph", "status", "--timeout", "2")
+	elapsed := time.Since(start)
+
+	// Should still exit 0
+	harness.AssertExitCode(t, 0, exitCode, stdout, stderr)
+
+	// Should complete within timeout + buffer (if connection fails quickly)
+	// or within timeout if it needs to wait
+	if elapsed > 10*time.Second {
+		t.Errorf("Command took too long (%v), timeout should limit it", elapsed)
+	}
+
+	t.Logf("Command completed in %v", elapsed)
 }
 
 // TestGraph_Connection tests FalkorDB connection

@@ -2,9 +2,9 @@
 
 Comprehensive integration testing with isolated environments, Docker-based FalkorDB, and full-stack validation.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 
 The End-to-End (E2E) testing subsystem provides a comprehensive integration testing framework for validating the complete Agentic Memorizer system. Unlike unit tests that verify individual components in isolation, E2E tests exercise full workflows from CLI commands through daemon processing to graph storage, ensuring all subsystems work together correctly.
 
-The subsystem consists of three main layers: a test harness framework that orchestrates isolated test environments, a collection of 21 test suites covering all major features, and Docker Compose infrastructure for running FalkorDB in a controlled environment. Tests use Go's standard testing package with build tags (`//go:build e2e`) to separate them from unit tests.
+The subsystem consists of three main layers: a test harness framework that orchestrates isolated test environments, a collection of 25 test suites covering all major features, and Docker Compose infrastructure for running FalkorDB in a controlled environment. Tests use Go's standard testing package with build tags (`//go:build e2e`) to separate them from unit tests.
 
 Key capabilities include:
 
@@ -78,7 +78,7 @@ The harness package provides the core testing infrastructure:
 
 ### Test Suites (`e2e/tests/`)
 
-Twenty-one test files organized by subsystem:
+Twenty-five test files organized by subsystem:
 
 - **smoke_test.go** - Quick sanity checks (harness, version, help)
 - **cli_test.go** - All CLI commands with output validation
@@ -86,16 +86,19 @@ Twenty-one test files organized by subsystem:
 - **config_test.go** - Validation, hot-reload, environment overrides
 - **graph_test.go** / **graph_advanced_test.go** - Graph operations and queries
 - **http_api_test.go** - All HTTP endpoints with status codes
+- **api_facts_test.go** - Facts HTTP API endpoints
 - **mcp_test.go** - Protocol handshake, resources, tools
 - **integration_test.go** - Claude Code, Gemini, Codex adapter testing
 - **facts_test.go** / **integrations_facts_test.go** - User facts CRUD and hook injection
 - **filesystem_test.go** - File watching, modification, deletion
+- **remember_file_test.go** / **forget_file_test.go** - File copy/move operations
 - **cache_test.go** - Hit/miss behavior, versioning, provider isolation
 - **semantic_providers_test.go** - Provider configuration and routing
+- **embeddings_providers_test.go** - Embeddings multi-provider testing
 - **metadata_test.go** - Extraction accuracy by file type
 - **walker_test.go** - Directory scanning and filtering
 - **sse_test.go** - Server-Sent Events streaming
-- **output_formats_test.go** - JSON, YAML, XML, Markdown output
+- **output_formats_test.go** - JSON, YAML, XML output
 - **error_handling_test.go** / **edge_cases_test.go** - Error conditions and boundaries
 - **e2e_test.go** - Complete workflow tests
 

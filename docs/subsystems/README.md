@@ -62,7 +62,7 @@ Cobra-based CLI with hierarchical command structure, input validation via PreRun
 
 **Key Features:**
 
-- Ten parent commands with subcommands organized by functional area
+- Eleven parent commands with subcommands organized by functional area
 - PreRunE input validation distinguishing user errors from runtime errors
 - Consistent output through format subsystem builders
 - File management with copy/move, conflict resolution, and batch processing
@@ -74,7 +74,7 @@ Cobra-based CLI with hierarchical command structure, input validation via PreRun
 
 - `cmd/root.go` - Root command, Execute function, and global PersistentPreRunE
 - `cmd/initialize/initialize.go` - Interactive and unattended setup modes
-- `cmd/daemon/` - Daemon lifecycle: start, stop, status, restart, rebuild, logs, systemctl, launchctl
+- `cmd/daemon/` - Daemon lifecycle: start, stop, status, restart, rebuild, logs
 - `cmd/integrations/` - Integration management: list, detect, setup, remove, health
 - `cmd/remember/` - Memory addition: file (copy to memory), fact (store in graph)
 - `cmd/forget/` - Memory removal: file (move to .forgotten), fact (delete from graph)
@@ -625,7 +625,7 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 - Multi-layer client abstractions for HTTP API, MCP protocol, and FalkorDB queries
 - LIFO cleanup stack ensuring resource release even on test failure
 - Docker Compose infrastructure with FalkorDB health checks and volume cleanup
-- 21 test suites covering CLI, daemon, graph, HTTP API, MCP, integrations, and more
+- 25 test suites covering CLI, daemon, graph, HTTP API, MCP, integrations, and more
 - Build tag separation (`//go:build e2e`) from unit tests
 
 **Primary Components:**
@@ -652,6 +652,11 @@ Comprehensive integration testing with isolated environments, Docker-based Falko
 
 **Recent Updates:**
 
+- Reconciled all subsystems to v0.14.0 for release (2025-12-31)
+- Updated e2e documentation - 25 test files (was 21), added new test files (2025-12-31)
+- Updated format documentation - removed markdown formatter (2025-12-31)
+- Updated graph documentation - multi-provider embedding indexes (2025-12-31)
+- Updated cli subsystem documentation - removed systemctl/launchctl, corrected command count (2025-12-31)
 - Updated cache subsystem documentation - directory sharding, shared shard utilities (2025-12-31)
 - Renamed docker to container subsystem with Docker/Podman support (2025-12-30)
 - Created skip subsystem documentation (2025-12-29)

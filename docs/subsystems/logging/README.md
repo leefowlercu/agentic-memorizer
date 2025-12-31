@@ -2,9 +2,9 @@
 
 Centralized logging infrastructure with slog integration, file rotation, context propagation, and standardized field names for consistent observability.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 

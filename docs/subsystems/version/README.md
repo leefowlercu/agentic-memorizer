@@ -2,9 +2,9 @@
 
 Build-time version injection with embedded fallback and Go build info integration.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 

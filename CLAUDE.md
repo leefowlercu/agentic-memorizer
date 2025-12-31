@@ -196,7 +196,7 @@ All CLI commands use `internal/format` package. **Never use `fmt.Printf` for com
 
 **Available Builders:** Status, Section, Table, List, Progress, Error, FilesContent
 
-**Output Formats:** text (default), json, yaml, xml, markdown
+**Output Formats:** text (default), json, yaml, xml
 
 ### Git Workflow
 
@@ -296,7 +296,7 @@ The project uses Go's standard testing package with table-based tests.
 
 **End-to-End Testing:**
 - Test harness (`e2e/harness/`) provides isolated environments
-- 18 test files covering CLI, daemon, filesystem, HTTP API, SSE, config, graph
+- 25 test files covering CLI, daemon, filesystem, HTTP API, SSE, config, graph, facts, embeddings
 - Build tags: `//go:build e2e` separates from unit tests
 - Docker integration for realistic FalkorDB testing
 
@@ -359,10 +359,8 @@ make goreleaser-snapshot      # Test build without release
 ./memorizer initialize                        # Interactive setup
 ./memorizer initialize --integrations claude-code-hook,claude-code-mcp
 
-# Graph database (required before daemon)
-./memorizer graph start                       # Start FalkorDB
+# Graph database (use docker-compose or initialize wizard to start)
 ./memorizer graph status                      # Check graph status
-./memorizer graph stop                        # Stop FalkorDB
 
 # Daemon management
 ./memorizer daemon start                      # Start daemon

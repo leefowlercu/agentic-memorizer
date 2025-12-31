@@ -2,9 +2,9 @@
 
 Structured CLI output with multiple format support through a builder pattern and pluggable formatters.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 
@@ -18,12 +18,12 @@ Structured CLI output with multiple format support through a builder pattern and
 
 The Format subsystem provides a unified approach to CLI output formatting across all commands. Rather than using direct printf-style output, commands construct structured content using builder types, then render that content through format-specific formatters. This separation enables consistent output styling, machine-readable alternatives to human-readable text, and a single point of control for output conventions.
 
-The subsystem implements a three-tier architecture: builders define structured content (sections, tables, lists, status messages), formatters render that content to specific formats (text, JSON, YAML, XML, Markdown), and writers handle buffered I/O for efficient output. A thread-safe registry manages formatter discovery, enabling automatic registration via init functions.
+The subsystem implements a three-tier architecture: builders define structured content (sections, tables, lists, status messages), formatters render that content to specific formats (text, JSON, YAML, XML), and writers handle buffered I/O for efficient output. A thread-safe registry manages formatter discovery, enabling automatic registration via init functions.
 
 Key capabilities include:
 
 - **Builder pattern** - Fluent API for constructing structured content with validation
-- **Multiple formats** - Text, JSON, YAML, XML, and Markdown output from the same builders
+- **Multiple formats** - Text, JSON, YAML, and XML output from the same builders
 - **Status messaging** - Severity-based status with symbols and color support
 - **Hierarchical sections** - Nested key-value pairs with subsections up to 5 levels deep
 - **Table formatting** - Columnar data with alignment control and compact mode
@@ -87,7 +87,7 @@ Error represents structured error messages with context. It includes error type 
 
 ### Files and Facts Content
 
-FilesContent and FactsContent wrap domain types (FileIndex and FactsIndex) for formatting. These adapters enable the format system to render file index and facts output through the same formatter pipeline, with format-specific custom rendering in text, XML, and Markdown formatters.
+FilesContent and FactsContent wrap domain types (FileIndex and FactsIndex) for formatting. These adapters enable the format system to render file index and facts output through the same formatter pipeline, with format-specific custom rendering in text and XML formatters.
 
 ### BufferedWriter
 
@@ -105,11 +105,11 @@ All CLI commands use the format system for output. Commands construct appropriat
 
 ### Integration Hooks
 
-Integration hooks (SessionStart, UserPromptSubmit) use FilesContent and FactsContent builders with XML or Markdown formatters to generate structured context payloads. The XML formatter provides custom rendering for files and facts with proper schema structure. Markdown provides human-readable context for integrations supporting that format.
+Integration hooks (SessionStart, UserPromptSubmit) use FilesContent and FactsContent builders with the XML formatter to generate structured context payloads. The XML formatter provides custom rendering for files and facts with proper schema structure.
 
 ### Read Commands
 
-The read files and read facts commands use FilesContent and FactsContent builders with user-selected formatters. This enables machine-readable output (JSON, YAML) for scripting alongside human-readable output (text, Markdown) for interactive use.
+The read files and read facts commands use FilesContent and FactsContent builders with user-selected formatters. This enables machine-readable output (JSON, YAML) for scripting alongside human-readable output (text) for interactive use.
 
 ### Daemon Status
 

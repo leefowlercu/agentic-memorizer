@@ -4,7 +4,7 @@ Cobra-based CLI with hierarchical command structure, input validation via PreRun
 
 **Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 
@@ -16,13 +16,13 @@ Cobra-based CLI with hierarchical command structure, input validation via PreRun
 
 ## Overview
 
-The Command Line Interface subsystem provides the primary user interaction layer for Agentic Memorizer. Built on Cobra, it implements a hierarchical command structure with ten top-level commands that organize functionality into logical groups. The CLI handles application initialization, daemon lifecycle management, knowledge graph operations, integration configuration, memory access, and configuration management.
+The Command Line Interface subsystem provides the primary user interaction layer for Agentic Memorizer. Built on Cobra, it implements a hierarchical command structure with eleven top-level commands that organize functionality into logical groups. The CLI handles application initialization, daemon lifecycle management, knowledge graph operations, integration configuration, memory access, and configuration management.
 
 The command structure follows the pattern of parent commands containing subcommands in dedicated packages. Input validation occurs in PreRunE hooks to distinguish user input errors (which show usage) from runtime errors (which suppress usage). All output flows through the format subsystem for consistent, structured display across text, JSON, YAML, XML, and Markdown formats.
 
 Key capabilities include:
 
-- **Hierarchical command structure** - Ten parent commands with subcommands organized by functional area
+- **Hierarchical command structure** - Eleven parent commands with subcommands organized by functional area
 - **Input validation hooks** - PreRunE functions validate input before SilenceUsage is set
 - **Consistent output formatting** - All commands use format subsystem builders instead of raw printf
 - **Interactive and unattended modes** - Initialize command supports both TUI wizard and scripted setup
@@ -71,7 +71,7 @@ The initialize command in cmd/initialize/ handles first-time setup. It supports 
 
 ### Daemon Command
 
-The daemon command in cmd/daemon/ provides subcommands for lifecycle management: start (foreground mode), stop, status, restart, rebuild, logs. Additional subcommands systemctl and launchctl generate service manager unit files for background operation. The start subcommand creates the daemon instance and blocks until termination.
+The daemon command in cmd/daemon/ provides subcommands for lifecycle management: start (foreground mode), stop, status, restart, rebuild, and logs. The start subcommand creates the daemon instance and blocks until termination.
 
 ### Graph Command
 

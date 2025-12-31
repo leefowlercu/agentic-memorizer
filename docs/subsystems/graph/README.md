@@ -2,9 +2,9 @@
 
 FalkorDB-powered knowledge graph for files, semantic relationships, and intelligent discovery.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 
@@ -67,7 +67,7 @@ The Manager orchestrates all graph operations through a unified API. It composes
 
 ### Schema (`schema.go`)
 
-Schema defines the graph structure and handles initialization. It creates seven node labels (File, Tag, Topic, Category, Entity, Directory, Fact) with appropriate properties, eight relationship types (HAS_TAG, COVERS_TOPIC, IN_CATEGORY, MENTIONS, REFERENCES, SIMILAR_TO, IN_DIRECTORY, PARENT_OF), range indexes for fast property lookups, a full-text index on File.summary for text search, and an HNSW vector index on File.embedding for similarity search.
+Schema defines the graph structure and handles initialization. It creates seven node labels (File, Tag, Topic, Category, Entity, Directory, Fact) with appropriate properties, eight relationship types (HAS_TAG, COVERS_TOPIC, IN_CATEGORY, MENTIONS, REFERENCES, SIMILAR_TO, IN_DIRECTORY, PARENT_OF), range indexes for fast property lookups, a full-text index on File.summary for text search, and provider-specific HNSW vector indexes (embedding_openai, embedding_voyage, embedding_gemini) for similarity search.
 
 ### Nodes (`nodes.go`)
 

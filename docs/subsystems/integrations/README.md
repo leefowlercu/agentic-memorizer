@@ -2,9 +2,9 @@
 
 Framework-agnostic integration system with dual-hook architecture, MCP servers, and adapter pattern for Claude Code, Gemini CLI, and Codex CLI.
 
-**Documented Version:** v0.13.0
+**Documented Version:** v0.14.0
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2025-12-31
 
 ## Table of Contents
 

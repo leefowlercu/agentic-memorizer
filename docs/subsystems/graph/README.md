@@ -133,7 +133,7 @@ Integration hooks (SessionStart, UserPromptSubmit) use the Export handler's ToFi
 
 ### CLI Commands
 
-Graph CLI commands interact directly with the subsystem. The `graph start/stop/status` commands manage the FalkorDB Docker container. The `daemon rebuild` command triggers graph clearing and repopulation. The `read files` command uses Export.ToFileIndex for output generation.
+Graph CLI commands interact directly with the subsystem. The `graph status` command checks FalkorDB connectivity and displays graph statistics. The `daemon rebuild` command triggers graph clearing and repopulation. The `read files` command uses Export.ToFileIndex for output generation.
 
 ## Glossary
 

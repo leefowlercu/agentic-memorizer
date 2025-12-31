@@ -75,7 +75,7 @@ The daemon command in cmd/daemon/ provides subcommands for lifecycle management:
 
 ### Graph Command
 
-The graph command in cmd/graph/ manages the FalkorDB Docker container with subcommands: start, stop, status. These wrap the internal/docker helper functions to provide user-friendly container lifecycle management.
+The graph command in cmd/graph/ provides the status subcommand to check FalkorDB connectivity and display graph statistics. It connects directly to the configured FalkorDB instance without requiring Docker.
 
 ### Cache Command
 
@@ -141,7 +141,7 @@ The read files command creates a graph.Manager to connect to FalkorDB and uses g
 
 ### Docker Subsystem
 
-The graph start/stop/status commands and initialize command use internal/docker helpers for container management: docker.IsAvailable(), docker.IsFalkorDBRunning(), docker.StartFalkorDB(), docker.StopFalkorDB().
+The initialize command uses internal/docker helpers for FalkorDB container setup during first-time configuration: docker.IsAvailable(), docker.IsFalkorDBRunning(), docker.StartFalkorDB().
 
 ### Logging Subsystem
 

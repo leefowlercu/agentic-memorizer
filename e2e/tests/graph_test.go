@@ -435,44 +435,6 @@ func TestGraph_SchemaConstraints(t *testing.T) {
 	_, _ = h.GraphClient.Query(ctx, cleanupQuery)
 }
 
-// TestGraph_StartStop tests graph start and stop commands
-func TestGraph_StartStop(t *testing.T) {
-	t.Skip("Graph start/stop managed by docker-compose in test environment")
-
-	h := harness.New(t)
-	if err := h.Setup(); err != nil {
-		t.Fatalf("Setup failed: %v", err)
-	}
-	cleanup := harness.MustCleanup(t, h)
-	defer cleanup.CleanupAll()
-
-	// Test start command
-	stdout, stderr, exitCode := h.RunCommand("graph", "start")
-	harness.LogOutput(t, stdout, stderr)
-
-	if exitCode != 0 {
-		output := stdout + stderr
-		if strings.Contains(output, "already running") {
-			t.Log("Graph already running (expected in test environment)")
-		} else {
-			t.Logf("Graph start failed (exit=%d): %s", exitCode, output)
-		}
-	}
-
-	// Test status
-	stdout, stderr, _ = h.RunCommand("graph", "status")
-	output := stdout + stderr
-	t.Logf("Graph status: %s", output)
-
-	// Test stop command
-	stdout, stderr, exitCode = h.RunCommand("graph", "stop")
-	harness.LogOutput(t, stdout, stderr)
-
-	if exitCode != 0 {
-		t.Logf("Graph stop may fail in test environment (managed by docker-compose)")
-	}
-}
-
 // TestGraph_EmptyDatabase tests queries on empty database
 func TestGraph_EmptyDatabase(t *testing.T) {
 	h := harness.New(t)

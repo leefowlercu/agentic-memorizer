@@ -95,10 +95,6 @@ The waitForReady function polls FalkorDB for readiness by executing `docker exec
 
 ## Integration Points
 
-### Graph Commands
-
-The `memorizer graph start|stop|status` CLI commands use this subsystem for all Docker operations. The start command calls StartFalkorDB with configuration from the config subsystem. The stop command calls StopFalkorDB with optional container removal. The status command calls IsAvailable, ContainerExists, and IsFalkorDBRunning to provide detailed state information.
-
 ### Initialization TUI
 
 The terminal UI initialization flow uses IsAvailable and IsFalkorDBRunning to determine which FalkorDB configuration options to present. If Docker is available but FalkorDB isn't running, the TUI offers to start it automatically via StartFalkorDB. This provides a guided setup experience for new users.
@@ -113,7 +109,7 @@ The project includes a docker-compose.yml providing an alternative to the subsys
 
 ### Configuration System
 
-The config subsystem provides FalkorDB connection settings (host, port, password) used by graph commands when calling StartFalkorDB. The DataDir for persistent storage is derived from the application directory rather than config, ensuring data locality.
+The config subsystem provides FalkorDB connection settings (host, port, password) used by the initialization TUI when calling StartFalkorDB. The DataDir for persistent storage is derived from the application directory rather than config, ensuring data locality.
 
 ## Glossary
 

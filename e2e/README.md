@@ -69,7 +69,7 @@ Tests all 30 CLI commands with real binary execution.
 **Coverage:**
 - `initialize` - Interactive and non-interactive modes
 - `daemon` - start, stop, status, restart, rebuild, logs, systemctl, launchctl
-- `graph` - start, stop, status
+- `graph` - status
 - `integrations` - list, detect, setup, remove, validate, health
 - `config` - validate, reload
 - `mcp` - start

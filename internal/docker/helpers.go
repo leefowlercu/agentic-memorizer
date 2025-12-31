@@ -41,8 +41,8 @@ func IsFalkorDBRunning(port int) bool {
 	return strings.TrimSpace(string(output)) == "true"
 }
 
-// ContainerExists checks if the FalkorDB container exists (running or stopped)
-func ContainerExists() bool {
+// containerExists checks if the FalkorDB container exists (running or stopped)
+func containerExists() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -63,7 +63,7 @@ func StartFalkorDB(opts StartOptions) error {
 	}
 
 	// Check if container already exists
-	if ContainerExists() {
+	if containerExists() {
 		// Check if already running
 		if IsFalkorDBRunning(opts.Port) {
 			return nil // Already running
@@ -111,30 +111,6 @@ func StartFalkorDB(opts StartOptions) error {
 
 	// Wait for FalkorDB to be ready
 	return waitForReady(ctx)
-}
-
-// StopFalkorDB stops the FalkorDB container
-func StopFalkorDB() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", "stop", ContainerName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to stop container; %w", err)
-	}
-	return nil
-}
-
-// RemoveFalkorDB removes the FalkorDB container
-func RemoveFalkorDB() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", ContainerName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to remove container; %w", err)
-	}
-	return nil
 }
 
 // waitForReady waits for FalkorDB to respond to ping

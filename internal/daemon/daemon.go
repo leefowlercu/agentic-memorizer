@@ -68,10 +68,12 @@ type Daemon struct {
 	rebuilding atomic.Bool
 
 	// Lifecycle
-	ctx     context.Context
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
-	pidFile string
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
+	pidFile       string
+	configPath    string   // Path to config file for reloading
+	signalCleanup func()   // Cleanup function for signal handlers
 }
 
 // GetConfig returns the current configuration (thread-safe)
@@ -277,7 +279,7 @@ func (d *Daemon) Start() error {
 	logger.Info("daemon starting", "version", version.GetVersion())
 
 	// Setup signal handling
-	setupSignalHandler(d)
+	d.signalCleanup = setupSignalHandler(d)
 
 	// Graph initialization with graceful degradation:
 	// - If existing data found: log count, attempt rebuild
@@ -356,6 +358,11 @@ func (d *Daemon) Start() error {
 		if err := d.httpServer.Stop(); err != nil {
 			logger.Warn("error stopping HTTP server", "error", err)
 		}
+	}
+
+	// Stop signal handler to prevent interference with other daemons (e.g., in tests)
+	if d.signalCleanup != nil {
+		d.signalCleanup()
 	}
 
 	// Stop file watcher
@@ -887,13 +894,26 @@ func (d *Daemon) handleFileDelete(path string, relPath string) {
 	logger.Debug("graph updated after deletion", "path", relPath)
 }
 
+// SetConfigPath sets the path to the config file for reloading.
+// This ensures the daemon uses a specific config file rather than
+// relying on MEMORIZER_APP_DIR environment variable.
+func (d *Daemon) SetConfigPath(path string) {
+	d.configPath = path
+}
+
 // ReloadConfig reloads configuration and applies changes
 func (d *Daemon) ReloadConfig() error {
 	logger := d.GetLogger()
 	logger.Info("starting configuration reload")
 
-	// Load new configuration
-	if err := config.InitConfig(); err != nil {
+	// Load new configuration from explicit path if set, otherwise use default
+	var err error
+	if d.configPath != "" {
+		err = config.InitConfigFromPath(d.configPath)
+	} else {
+		err = config.InitConfig()
+	}
+	if err != nil {
 		return fmt.Errorf("failed to reload config; %w", err)
 	}
 

@@ -17,24 +17,9 @@ var (
 	configMu sync.Mutex
 )
 
-func InitConfig() error {
-	configMu.Lock()
-	defer configMu.Unlock()
-
-	// Reset viper state to support hot-reload functionality.
-	// Clears cached config values, allowing InitConfig() to re-read
-	// updated config files without requiring process restart.
-	viper.Reset()
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-
-	// Add app directory to config search path (respects MEMORIZER_APP_DIR)
-	if appDir, err := GetAppDir(); err == nil {
-		viper.AddConfigPath(appDir)
-	}
-	viper.AddConfigPath(".") // Current directory fallback
-
+// applyDefaults sets all viper defaults and environment bindings.
+// Called by both InitConfig and InitConfigFromPath.
+func applyDefaults() {
 	// User-facing settings (see MinimalConfig for initialized config surface area)
 	viper.SetDefault("memory.root", DefaultConfig.Memory.Root)
 	viper.SetDefault("semantic.provider", DefaultConfig.Semantic.Provider)
@@ -78,11 +63,53 @@ func InitConfig() error {
 	viper.SetEnvPrefix("MEMORIZER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
+}
+
+func InitConfig() error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	// Reset viper state to support hot-reload functionality.
+	// Clears cached config values, allowing InitConfig() to re-read
+	// updated config files without requiring process restart.
+	viper.Reset()
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+
+	// Add app directory to config search path (respects MEMORIZER_APP_DIR)
+	if appDir, err := GetAppDir(); err == nil {
+		viper.AddConfigPath(appDir)
+	}
+	viper.AddConfigPath(".") // Current directory fallback
+
+	applyDefaults()
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return fmt.Errorf("failed to read config; %w", err)
 		}
+	}
+
+	return nil
+}
+
+// InitConfigFromPath loads configuration from a specific file path.
+// This is useful for daemon reload to avoid relying on MEMORIZER_APP_DIR.
+func InitConfigFromPath(configPath string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	// Reset viper state for reload
+	viper.Reset()
+
+	// Set config file directly
+	viper.SetConfigFile(configPath)
+
+	applyDefaults()
+
+	if err := viper.ReadInConfig(); err != nil {
+		return fmt.Errorf("failed to read config from %s; %w", configPath, err)
 	}
 
 	return nil

@@ -128,9 +128,20 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	}
 }
 
-// UpdateConfig modifies the config and writes it back to disk
+// UpdateConfig modifies a copy of the config and writes it back to disk.
+// Uses a copy to avoid race conditions with daemon reading the config.
 func (e *TestEnv) UpdateConfig(modifyFn func(*config.Config)) error {
-	modifyFn(e.Config)
+	// Create a deep copy to avoid race conditions with daemon
+	cfgCopy := *e.Config
+	cfgCopy.Daemon = e.Config.Daemon        // Copy nested structs
+	cfgCopy.Semantic = e.Config.Semantic
+	cfgCopy.Memory = e.Config.Memory
+	cfgCopy.Graph = e.Config.Graph
+	cfgCopy.MCP = e.Config.MCP
+	cfgCopy.Embeddings = e.Config.Embeddings
+
+	modifyFn(&cfgCopy)
+	e.Config = &cfgCopy  // Update reference after modification
 	return config.WriteConfig(e.ConfigPath, e.Config)
 }
 
@@ -200,6 +211,7 @@ func (e *TestEnv) CreateDaemon() (*Daemon, error) {
 		ctx:               ctx,
 		cancel:            cancel,
 		pidFile:           e.PIDPath,
+		configPath:        e.ConfigPath, // Explicit config path for test isolation
 		rebuildIntervalCh: make(chan time.Duration, 1),
 		healthMetrics:     healthMetrics,
 		sseHub:            sseHub,

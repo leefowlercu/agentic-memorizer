@@ -72,8 +72,8 @@ type Daemon struct {
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
 	pidFile       string
-	configPath    string   // Path to config file for reloading
-	signalCleanup func()   // Cleanup function for signal handlers
+	configPath    string // Path to config file for reloading
+	signalCleanup func() // Cleanup function for signal handlers
 }
 
 // GetConfig returns the current configuration (thread-safe)

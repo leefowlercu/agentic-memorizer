@@ -133,7 +133,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 func (e *TestEnv) UpdateConfig(modifyFn func(*config.Config)) error {
 	// Create a deep copy to avoid race conditions with daemon
 	cfgCopy := *e.Config
-	cfgCopy.Daemon = e.Config.Daemon        // Copy nested structs
+	cfgCopy.Daemon = e.Config.Daemon // Copy nested structs
 	cfgCopy.Semantic = e.Config.Semantic
 	cfgCopy.Memory = e.Config.Memory
 	cfgCopy.Graph = e.Config.Graph
@@ -141,7 +141,7 @@ func (e *TestEnv) UpdateConfig(modifyFn func(*config.Config)) error {
 	cfgCopy.Embeddings = e.Config.Embeddings
 
 	modifyFn(&cfgCopy)
-	e.Config = &cfgCopy  // Update reference after modification
+	e.Config = &cfgCopy // Update reference after modification
 	return config.WriteConfig(e.ConfigPath, e.Config)
 }
 

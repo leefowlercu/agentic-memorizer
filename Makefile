@@ -46,14 +46,18 @@ install: build ## Install the binary with version information
 
 test: ## Run unit tests only
 	@echo "$(COLOR_BLUE)$(COLOR_BOLD)Running unit tests...$(COLOR_RESET)"
-	@go test -v ./...
+	@go test -race -v ./...
 
 test-integration: build ## Run integration tests only
 	@echo "$(COLOR_BLUE)$(COLOR_BOLD)Running integration tests...$(COLOR_RESET)"
-	@go test -tags=integration -v ./...
+	@go test -race -tags=integration -v ./...
 
-test-all: test test-integration ## Run all non-e2e tests (unit + integration)
+test-all: test test-integration ## Run all non-e2e tests (unit + integration, with race detector)
 	@echo "$(COLOR_GREEN)All tests passed ✓$(COLOR_RESET)"
+
+test-quick: ## Run unit tests without race detector (faster)
+	@echo "$(COLOR_BLUE)$(COLOR_BOLD)Running quick unit tests...$(COLOR_RESET)"
+	@go test -v ./...
 
 test-e2e: build ## Run E2E tests
 	@echo "$(COLOR_BLUE)$(COLOR_BOLD)Running E2E tests...$(COLOR_RESET)"
@@ -63,9 +67,7 @@ test-e2e-quick: build ## Run quick E2E smoke tests
 	@echo "$(COLOR_BLUE)$(COLOR_BOLD)Running E2E smoke tests...$(COLOR_RESET)"
 	@cd e2e && $(MAKE) test-quick
 
-test-race: ## Run tests with race detector
-	@echo "$(COLOR_BLUE)$(COLOR_BOLD)Running tests with race detector...$(COLOR_RESET)"
-	@go test -race -v ./...
+test-race: test test-integration ## Alias for test-all (race detector now enabled by default)
 	@echo "$(COLOR_GREEN)Race detection complete ✓$(COLOR_RESET)"
 
 clean: ## Remove build artifacts

@@ -109,27 +109,13 @@ func TestCache_FileProcessing(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Verify file appears in index
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	found := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok && name == "process-test.md" {
 			found = true
 			// Verify hash field exists (content-addressable)

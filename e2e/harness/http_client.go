@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -99,27 +98,11 @@ func (c *HTTPClient) TriggerRebuild(force bool) error {
 	return nil
 }
 
-// SearchFiles performs a semantic search
+// SearchFiles performs a semantic search using the unified files endpoint
 func (c *HTTPClient) SearchFiles(query string, maxResults int) (any, error) {
-	url := fmt.Sprintf("%s/api/v1/search", c.baseURL())
+	url := fmt.Sprintf("%s/api/v1/files?q=%s&limit=%d", c.baseURL(), query, maxResults)
 
-	// Create request body
-	reqBody := map[string]any{
-		"query": query,
-		"limit": maxResults,
-	}
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request; %w", err)
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request; %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("search request failed; %w", err)
 	}
@@ -161,9 +144,9 @@ func (c *HTTPClient) GetFileMetadata(path string) (any, error) {
 	return metadata, nil
 }
 
-// ListRecentFiles lists recently modified files
+// ListRecentFiles lists recently modified files using the unified files endpoint
 func (c *HTTPClient) ListRecentFiles(days, limit int) (any, error) {
-	url := fmt.Sprintf("%s/api/v1/files/recent?days=%d&limit=%d", c.baseURL(), days, limit)
+	url := fmt.Sprintf("%s/api/v1/files?days=%d&limit=%d", c.baseURL(), days, limit)
 
 	resp, err := c.client.Get(url)
 	if err != nil {
@@ -184,9 +167,9 @@ func (c *HTTPClient) ListRecentFiles(days, limit int) (any, error) {
 	return files, nil
 }
 
-// GetRelatedFiles finds files related to a given file
+// GetRelatedFiles finds files related to a given file using the file metadata endpoint
 func (c *HTTPClient) GetRelatedFiles(path string, limit int) (any, error) {
-	url := fmt.Sprintf("%s/api/v1/files/related?path=%s&limit=%d", c.baseURL(), path, limit)
+	url := fmt.Sprintf("%s/api/v1/files/%s?related_limit=%d", c.baseURL(), path, limit)
 
 	resp, err := c.client.Get(url)
 	if err != nil {
@@ -207,9 +190,9 @@ func (c *HTTPClient) GetRelatedFiles(path string, limit int) (any, error) {
 	return files, nil
 }
 
-// SearchEntities searches for files mentioning a specific entity
+// SearchEntities searches for files mentioning a specific entity using the unified files endpoint
 func (c *HTTPClient) SearchEntities(entity string, maxResults int) (any, error) {
-	url := fmt.Sprintf("%s/api/v1/entities/search?entity=%s&limit=%d", c.baseURL(), entity, maxResults)
+	url := fmt.Sprintf("%s/api/v1/files?entity=%s&limit=%d", c.baseURL(), entity, maxResults)
 
 	resp, err := c.client.Get(url)
 	if err != nil {
@@ -251,6 +234,39 @@ func (c *HTTPClient) GetIndex() (any, error) {
 	}
 
 	return index, nil
+}
+
+// GetIndexFiles retrieves the files array from the index response
+// The API returns {index: {files: [...]}} so this helper unwraps it
+func (c *HTTPClient) GetIndexFiles() ([]map[string]any, error) {
+	index, err := c.GetIndex()
+	if err != nil {
+		return nil, err
+	}
+
+	indexMap, ok := index.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unexpected index format; got %T", index)
+	}
+
+	innerIndex, ok := indexMap["index"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("index missing 'index' object")
+	}
+
+	filesAny, ok := innerIndex["files"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("index missing 'files' array")
+	}
+
+	files := make([]map[string]any, 0, len(filesAny))
+	for _, f := range filesAny {
+		if fileMap, ok := f.(map[string]any); ok {
+			files = append(files, fileMap)
+		}
+	}
+
+	return files, nil
 }
 
 // GetFactsIndex retrieves all facts from the graph

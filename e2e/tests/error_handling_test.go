@@ -309,21 +309,12 @@ func TestErrorHandling_DaemonRestart(t *testing.T) {
 	t.Log("Daemon successfully restarted")
 
 	// Verify data persisted across restart
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	if files, ok := indexMap["files"].([]any); ok {
-		t.Logf("Index contains %d files after restart", len(files))
-	} else {
-		t.Error("Failed to get files from index")
-	}
+	t.Logf("Index contains %d files after restart", len(files))
 }
 
 // TestErrorHandling_MultipleDaemonStarts tests prevention of multiple daemon instances

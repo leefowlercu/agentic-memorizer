@@ -62,27 +62,13 @@ func TestEdgeCase_BinaryFile(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Verify file appears in index (binary files should be indexed)
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	found := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok && name == "test.bin" {
 			found = true
 			t.Logf("Binary file indexed: %+v", fileMap)
@@ -145,28 +131,14 @@ func TestEdgeCase_HiddenFiles(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Check if files appear in index
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	foundHidden := false
 	foundVisible := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok {
 			if name == ".hidden.md" {
 				foundHidden = true
@@ -244,27 +216,13 @@ func TestEdgeCase_SpecialCharacters(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Verify at least some files were indexed
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	found := 0
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok {
 			for _, tc := range testCases {
 				if name == tc.filename {
@@ -324,27 +282,13 @@ func TestEdgeCase_LongFilename(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Verify file was indexed
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	found := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok && name == longName {
 			found = true
 			t.Logf("Long filename successfully indexed (length: %d)", len(longName))
@@ -410,28 +354,14 @@ func TestEdgeCase_Symlinks(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Check how symlinks are handled
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	foundReal := false
 	foundSymlink := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok {
 			if name == realFile {
 				foundReal = true
@@ -496,27 +426,13 @@ func TestEdgeCase_EmptyFile(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Verify empty file handling
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	found := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok && name == "empty.md" {
 			found = true
 			if size, ok := fileMap["size"].(float64); ok && size == 0 {
@@ -580,28 +496,14 @@ func TestEdgeCase_VeryLargeFile(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Check file handling
-	index, err := h.HTTPClient.GetIndex()
+	files, err := h.HTTPClient.GetIndexFiles()
 	if err != nil {
-		t.Fatalf("Failed to get index: %v", err)
-	}
-
-	indexMap, ok := index.(map[string]any)
-	if !ok {
-		t.Fatalf("Unexpected index format: %T", index)
-	}
-
-	files, ok := indexMap["files"].([]any)
-	if !ok {
-		t.Fatalf("Index missing 'files' array")
+		t.Fatalf("Failed to get index files: %v", err)
 	}
 
 	foundLarge := false
 	foundNormal := false
-	for _, f := range files {
-		fileMap, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, fileMap := range files {
 		if name, ok := fileMap["name"].(string); ok {
 			if name == "very-large.txt" {
 				foundLarge = true

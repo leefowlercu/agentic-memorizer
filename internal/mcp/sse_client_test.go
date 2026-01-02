@@ -236,12 +236,23 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 	clientCount := 0
 	var countMu sync.Mutex
 	maxClients := make(chan int, 1)
+	allConnected := make(chan struct{})
+	expectedClients := 3
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
 		countMu.Lock()
 		clientCount++
 		current := clientCount
+		// Signal when all clients have connected
+		if current == expectedClients {
+			select {
+			case <-allConnected:
+				// Already closed
+			default:
+				close(allConnected)
+			}
+		}
 		countMu.Unlock()
 
 		// Track maximum concurrent clients
@@ -283,9 +294,9 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 
 	// Create 3 SSE clients
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
-	clients := make([]*SSEClient, 3)
+	clients := make([]*SSEClient, expectedClients)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < expectedClients; i++ {
 		idx := &types.FileIndex{
 			Stats: types.IndexStats{TotalFiles: 0},
 			Files: []types.FileEntry{},
@@ -295,8 +306,13 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 		clients[i].Start()
 	}
 
-	// Give clients time to connect
-	time.Sleep(1 * time.Second)
+	// Wait for all clients to connect with timeout
+	select {
+	case <-allConnected:
+		// All clients connected
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Timeout waiting for all clients to connect")
+	}
 
 	// Stop all clients
 	for _, client := range clients {
@@ -305,8 +321,8 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 
 	// Check maximum concurrent clients
 	max := <-maxClients
-	if max != 3 {
-		t.Errorf("Expected 3 concurrent clients, got %d", max)
+	if max != expectedClients {
+		t.Errorf("Expected %d concurrent clients, got %d", expectedClients, max)
 	} else {
 		t.Logf("Successfully handled %d concurrent SSE clients", max)
 	}

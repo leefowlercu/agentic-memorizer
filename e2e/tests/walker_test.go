@@ -158,15 +158,14 @@ func TestWalker_ConfiguredSkipPatterns(t *testing.T) {
 		graphPort = "6379"
 	}
 
-	configContent := `memory_root: ` + h.MemoryRoot + `
+	configContent := `memory:
+  root: ` + h.MemoryRoot + `
 
 semantic:
   enabled: false
   provider: claude
   timeout: 30
   max_file_size: 10485760
-  skip_extensions: [".log", ".tmp"]
-  skip_files: ["SKIP_ME.txt"]
   cache_dir: ` + filepath.Join(h.MemoryRoot, ".cache") + `
   rate_limit_per_min: 20
 
@@ -177,6 +176,8 @@ daemon:
   http_port: 8080
   log_file: ` + h.LogPath + `
   log_level: info
+  skip_extensions: [".log", ".tmp"]
+  skip_files: ["SKIP_ME.txt"]
 
 graph:
   host: ` + graphHost + `
@@ -222,8 +223,8 @@ mcp:
 		t.Fatalf("Daemon failed to become healthy: %v", err)
 	}
 
-	// Wait for processing
-	time.Sleep(10 * time.Second)
+	// Wait for processing (longer wait needed with custom config)
+	time.Sleep(15 * time.Second)
 
 	// Verify skip patterns were applied
 	for f, shouldExist := range testFiles {

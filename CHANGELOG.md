@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-01-01
+
+### Added
+- Feat(cache): add directory sharding to semantic analysis cache
+- Feat(cli): improve initialize command flags for unattended mode
+- Feat(container): add podman support alongside docker for falkordb management
+- Feat(embeddings): add multi-provider support for openai, voyage, and gemini
+- Feat(facts): add facts management system for persistent user context
+- Feat(format): add consistent usage guide to file index output formats
+- Feat(mcp): add support for protocol version 2025-11-25
+- Feat(semantic): add multi-provider support for semantic analysis
+- Feat: add file remember/forget commands and graph sync functionality
+- Feat: add logging for semantic analysis status
+- Feat: add logging subsystem with structured logging and factory pattern
+- Feat: write API keys to config file during initialization
+
+### Fixed
+- Fix(cli): align connection and database values in graph status output
+- Fix(e2e): update output_formats tests to use read files subcommand
+- Fix(e2e): update tests for unified api endpoint and correct config format
+- Fix(integrations): prevent duplicate hooks during initialization
+- Fix(test): update reload integration test for current config api
+- Fix(test): update xml formatter test to not expect xml declaration
+- Fix: remove broken env var option when not detected in TUI
+- Fix: sse stream timeout causing disconnections every 60 seconds
+
+### Changed
+- Refactor(cli): add example fields and helpers.go files to cobra commands
+- Refactor(cli): remove daemon systemctl and launchctl subcommands
+- Refactor(cli): remove docker-gating from graph status command
+- Refactor(cli): remove graph start and stop commands
+- Refactor(cli): standardize cobra flag storage to variable-based pattern
+- Refactor(config): move embeddings.provider to minimal config tier
+- Refactor(format): remove markdown formatter from output options
+- Refactor(integrations): consolidate adapter code and improve organization
+- Refactor(mcp): require daemon for search_files and remove internal/search package
+- Refactor: consolidate shared code and optimize metadata handler lookup
+- Refactor: remove integrations config section
+- Refactor: rename graphindex to fileindex for terminology consistency
+- Refactor: standardize all log messages to lowercase
+
+### Documentation
+- Docs: add logging standards section to claude.md
+- Docs: reconcile project documentation ahead of v0.14.0 release
+- Docs: restructure and update project documentation
+- Docs: update latest version ref in readme
+- Docs: update quick start section in readme
+- Docs: update readme.md
+- Docs: update releases badge to include prereleases
+
+### Build
+- Chore: update makefile test-integration target
+
+### Tests
+- Style: go fmt updates
+- Style: gofmt updates/fixes
+- Style: replace emoji with ansi color codes in makefile
+- Style: update wording in api key step in initialization wizard
+- Test: add required client headers to sse tests
+
 ## [0.13.0] - 2025-12-10
 
 ### Added
@@ -778,6 +838,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic hook configuration for Claude Code (startup, resume, clear, compact matchers)
 
 [unreleased]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...HEAD
+[0.14.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/leefowlercu/agentic-memorizer/compare/v0.11.0...v0.12.0

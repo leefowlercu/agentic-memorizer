@@ -234,8 +234,8 @@ func TestSSEClient_AutoReconnect(t *testing.T) {
 // TestSSEClient_MultipleClients tests multiple MCP servers connecting simultaneously
 func TestSSEClient_MultipleClients(t *testing.T) {
 	clientCount := 0
+	maxClients := 0
 	var countMu sync.Mutex
-	maxClients := make(chan int, 1)
 	allConnected := make(chan struct{})
 	expectedClients := 3
 
@@ -244,6 +244,10 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 		countMu.Lock()
 		clientCount++
 		current := clientCount
+		// Track maximum concurrent clients
+		if current > maxClients {
+			maxClients = current
+		}
 		// Signal when all clients have connected
 		if current == expectedClients {
 			select {
@@ -254,18 +258,6 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 			}
 		}
 		countMu.Unlock()
-
-		// Track maximum concurrent clients
-		select {
-		case old := <-maxClients:
-			if current > old {
-				maxClients <- current
-			} else {
-				maxClients <- old
-			}
-		default:
-			maxClients <- current
-		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -320,7 +312,9 @@ func TestSSEClient_MultipleClients(t *testing.T) {
 	}
 
 	// Check maximum concurrent clients
-	max := <-maxClients
+	countMu.Lock()
+	max := maxClients
+	countMu.Unlock()
 	if max != expectedClients {
 		t.Errorf("Expected %d concurrent clients, got %d", expectedClients, max)
 	} else {

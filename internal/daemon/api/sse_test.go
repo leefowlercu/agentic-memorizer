@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -443,8 +444,8 @@ func TestSSEHub_NoTimeout(t *testing.T) {
 	defer resp.Body.Close()
 
 	// Track keepalive messages and connection status
-	keepaliveCount := 0
-	connectionClosed := false
+	var keepaliveCount atomic.Int32
+	var connectionClosed atomic.Bool
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -452,12 +453,12 @@ func TestSSEHub_NoTimeout(t *testing.T) {
 		for scanner.Scan() {
 			line := scanner.Text()
 			if strings.HasPrefix(line, ": keepalive") {
-				keepaliveCount++
-				t.Logf("Received keepalive #%d at %v", keepaliveCount, time.Now())
+				count := keepaliveCount.Add(1)
+				t.Logf("Received keepalive #%d at %v", count, time.Now())
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			connectionClosed = true
+			connectionClosed.Store(true)
 			errChan <- fmt.Errorf("connection closed; %w", err)
 		}
 	}()
@@ -467,14 +468,15 @@ func TestSSEHub_NoTimeout(t *testing.T) {
 	case err := <-errChan:
 		t.Fatalf("Connection closed prematurely after %v: %v", time.Now(), err)
 	case <-time.After(70 * time.Second):
-		if connectionClosed {
+		if connectionClosed.Load() {
 			t.Fatal("Connection closed before timeout")
 		}
-		t.Logf("SUCCESS: Connection stayed alive for 70+ seconds (received %d keepalives)", keepaliveCount)
+		count := keepaliveCount.Load()
+		t.Logf("SUCCESS: Connection stayed alive for 70+ seconds (received %d keepalives)", count)
 
 		// Should have received at least 2 keepalives (30s, 60s)
-		if keepaliveCount < 2 {
-			t.Errorf("Expected at least 2 keepalives, got %d", keepaliveCount)
+		if count < 2 {
+			t.Errorf("Expected at least 2 keepalives, got %d", count)
 		}
 	}
 }

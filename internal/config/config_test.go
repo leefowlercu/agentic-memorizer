@@ -583,3 +583,114 @@ func TestReload_UnreadableConfig_RetainsPreviousValues(t *testing.T) {
 		t.Errorf("GetInt(daemon.port) = %d after failed reload, want 8080 (retained)", got)
 	}
 }
+
+// =============================================================================
+// Path Expansion Tests
+// =============================================================================
+
+func TestExpandHome(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("HOME environment variable not set")
+	}
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty string", "", ""},
+		{"no tilde", "/absolute/path", "/absolute/path"},
+		{"relative path", "relative/path", "relative/path"},
+		{"tilde only", "~", home},
+		{"tilde with slash", "~/config", filepath.Join(home, "config")},
+		{"tilde with nested path", "~/.config/memorizer", filepath.Join(home, ".config/memorizer")},
+		{"tilde not at start", "/path/to/~", "/path/to/~"},
+		{"tilde without slash", "~invalid", "~invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := expandHome(tt.input)
+			if got != tt.want {
+				t.Errorf("expandHome(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExpandHome_NoHome(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	_ = os.Unsetenv("HOME")
+
+	// With HOME unset, tilde paths should remain unchanged
+	input := "~/.config/memorizer"
+	got := expandHome(input)
+	if got != input {
+		t.Errorf("expandHome(%q) with no HOME = %q, want %q (unchanged)", input, got, input)
+	}
+}
+
+func TestGetPath_ExpandsTilde(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("HOME environment variable not set")
+	}
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("log_file: ~/.config/memorizer/app.log\n"), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
+	Reset()
+
+	if err := Init(); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	got := GetPath("log_file")
+	want := filepath.Join(home, ".config/memorizer/app.log")
+	if got != want {
+		t.Errorf("GetPath(log_file) = %q, want %q", got, want)
+	}
+}
+
+func TestGetPath_AbsolutePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("log_file: /var/log/memorizer.log\n"), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
+	Reset()
+
+	if err := Init(); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	got := GetPath("log_file")
+	want := "/var/log/memorizer.log"
+	if got != want {
+		t.Errorf("GetPath(log_file) = %q, want %q", got, want)
+	}
+}
+
+func TestGetPath_EmptyValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
+	Reset()
+
+	if err := Init(); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	got := GetPath("nonexistent_key")
+	if got != "" {
+		t.Errorf("GetPath(nonexistent_key) = %q, want empty string", got)
+	}
+}

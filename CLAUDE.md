@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2026-01-09
 
 ## Active Technologies
+- Go 1.25.5 + log/slog (stdlib), github.com/spf13/viper (via config subsystem) (002-logging-subsystem)
+- File-based logging to `~/.config/memorizer/memorizer.log` (default) (002-logging-subsystem)
 
 - Go 1.25.5 + github.com/spf13/viper (configuration), github.com/spf13/cobra (CLI - existing) (001-app-config-subsystem)
 
@@ -22,6 +24,7 @@ tests/
 Go 1.25.5: Follow standard conventions
 
 ## Recent Changes
+- 002-logging-subsystem: Added Go 1.25.5 + log/slog (stdlib), github.com/spf13/viper (via config subsystem)
 
 - 001-app-config-subsystem: Added Go 1.25.5 + github.com/spf13/viper (configuration), github.com/spf13/cobra (CLI - existing)
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
 	"github.com/spf13/cobra"
@@ -24,6 +25,9 @@ var memorizerCmd = &cobra.Command{
 func init() {
 	// T024: Create logging Manager in bootstrap mode (stderr text only)
 	logManager = logging.NewManager()
+
+	// Register subcommands
+	memorizerCmd.AddCommand(version.VersionCmd)
 }
 
 func runInitialize(cmd *cobra.Command, args []string) error {

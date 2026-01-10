@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
 	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
@@ -28,6 +29,7 @@ func init() {
 
 	// Register subcommands
 	memorizerCmd.AddCommand(version.VersionCmd)
+	memorizerCmd.AddCommand(daemon.DaemonCmd)
 }
 
 func runInitialize(cmd *cobra.Command, args []string) error {

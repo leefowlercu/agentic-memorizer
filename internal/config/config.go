@@ -35,6 +35,9 @@ func Init() error {
 	// T029: Enable automatic environment variable binding
 	viper.AutomaticEnv()
 
+	// Register default values
+	setDefaults()
+
 	// T015: Check MEMORIZER_CONFIG_DIR environment variable first
 	if envPath := os.Getenv("MEMORIZER_CONFIG_DIR"); envPath != "" {
 		viper.AddConfigPath(envPath)
@@ -107,6 +110,37 @@ func GetBool(key string) bool {
 // SetDefault sets a default value for the given key.
 func SetDefault(key string, value any) {
 	viper.SetDefault(key, value)
+}
+
+// GetPath returns the string value for the given key with ~ expanded to $HOME.
+// Returns empty string if key is not found.
+func GetPath(key string) string {
+	return expandHome(viper.GetString(key))
+}
+
+// expandHome expands a leading ~ in path to the user's home directory.
+// Only expands "~" alone or "~/..." patterns. Patterns like "~user" are not expanded.
+// Returns the path unchanged if it doesn't start with ~/ or if home dir cannot be determined.
+func expandHome(path string) string {
+	if path == "" || path[0] != '~' {
+		return path
+	}
+
+	// Only expand "~" or "~/..."
+	if len(path) > 1 && path[1] != '/' {
+		return path
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+
+	if len(path) == 1 {
+		return home
+	}
+
+	return filepath.Join(home, path[2:])
 }
 
 // Reload re-reads the configuration from disk.

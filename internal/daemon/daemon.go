@@ -1,0 +1,242 @@
+// Package daemon provides the core daemon process management functionality.
+// It implements lifecycle management, component coordination, and health monitoring
+// for the memorizer daemon.
+package daemon
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+)
+
+// DaemonState represents the lifecycle state of the daemon.
+type DaemonState string
+
+const (
+	// DaemonStateStarting indicates the daemon is initializing.
+	DaemonStateStarting DaemonState = "starting"
+
+	// DaemonStateRunning indicates all components are healthy and serving.
+	DaemonStateRunning DaemonState = "running"
+
+	// DaemonStateDegraded indicates some non-critical components have failed.
+	DaemonStateDegraded DaemonState = "degraded"
+
+	// DaemonStateStopping indicates graceful shutdown is in progress.
+	DaemonStateStopping DaemonState = "stopping"
+
+	// DaemonStateStopped indicates the daemon has terminated.
+	DaemonStateStopped DaemonState = "stopped"
+)
+
+// IsTerminal returns true if this state is a terminal state (no further transitions).
+func (s DaemonState) IsTerminal() bool {
+	return s == DaemonStateStopped
+}
+
+// CanTransitionTo returns true if transitioning to the target state is valid.
+func (s DaemonState) CanTransitionTo(target DaemonState) bool {
+	switch s {
+	case DaemonStateStarting:
+		return target == DaemonStateRunning || target == DaemonStateStopped
+	case DaemonStateRunning:
+		return target == DaemonStateDegraded || target == DaemonStateStopping
+	case DaemonStateDegraded:
+		return target == DaemonStateRunning || target == DaemonStateStopping
+	case DaemonStateStopping:
+		return target == DaemonStateStopped
+	case DaemonStateStopped:
+		return false
+	default:
+		return false
+	}
+}
+
+// DaemonConfig holds the configuration values for the daemon.
+type DaemonConfig struct {
+	// HTTPPort is the port for the HTTP health check server.
+	HTTPPort int
+
+	// HTTPBind is the address to bind the HTTP server.
+	HTTPBind string
+
+	// ShutdownTimeout is the maximum time to wait for graceful shutdown.
+	ShutdownTimeout time.Duration
+
+	// PIDFile is the path to the PID file.
+	PIDFile string
+}
+
+// DefaultDaemonConfig returns the default daemon configuration.
+func DefaultDaemonConfig() DaemonConfig {
+	return DaemonConfig{
+		HTTPPort:        7600,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 30 * time.Second,
+		PIDFile:         "~/.config/memorizer/daemon.pid",
+	}
+}
+
+// ConfigReloadFunc is a callback function invoked when config is reloaded.
+type ConfigReloadFunc func() error
+
+// Daemon is the main daemon process manager.
+type Daemon struct {
+	config          DaemonConfig
+	state           DaemonState
+	components      []Component
+	server          *Server
+	health          *HealthManager
+	pidFile         *PIDFile
+	reloadCallbacks []ConfigReloadFunc
+}
+
+// NewDaemon creates a new Daemon instance with the given configuration.
+func NewDaemon(cfg DaemonConfig) *Daemon {
+	health := NewHealthManager()
+	server := NewServer(health, ServerConfig{
+		Port: cfg.HTTPPort,
+		Bind: cfg.HTTPBind,
+	})
+	pidFile := NewPIDFile(cfg.PIDFile)
+
+	return &Daemon{
+		config:     cfg,
+		state:      DaemonStateStopped,
+		components: make([]Component, 0),
+		server:     server,
+		health:     health,
+		pidFile:    pidFile,
+	}
+}
+
+// State returns the current daemon state.
+func (d *Daemon) State() DaemonState {
+	return d.state
+}
+
+// Health returns the current aggregate health status.
+func (d *Daemon) Health() HealthStatus {
+	return d.health.Status()
+}
+
+// RegisterComponent adds a component to be managed by the daemon.
+func (d *Daemon) RegisterComponent(c Component) {
+	d.components = append(d.components, c)
+}
+
+// OnConfigReload registers a callback to be invoked when config is reloaded.
+func (d *Daemon) OnConfigReload(fn ConfigReloadFunc) {
+	d.reloadCallbacks = append(d.reloadCallbacks, fn)
+}
+
+// TriggerConfigReload invokes all registered config reload callbacks.
+// Errors are logged but do not stop processing of other callbacks.
+func (d *Daemon) TriggerConfigReload() {
+	slog.Info("config reload triggered")
+	for _, fn := range d.reloadCallbacks {
+		if err := fn(); err != nil {
+			slog.Error("config reload callback failed", "error", err)
+		}
+	}
+}
+
+// Start starts the daemon and blocks until the context is cancelled.
+// It claims the PID file, starts all components, starts the HTTP server,
+// and then blocks until shutdown is requested.
+func (d *Daemon) Start(ctx context.Context) error {
+	d.state = DaemonStateStarting
+
+	// Claim PID file
+	if err := d.pidFile.CheckAndClaim(); err != nil {
+		d.state = DaemonStateStopped
+		return fmt.Errorf("failed to claim PID file; %w", err)
+	}
+
+	// Ensure PID file is cleaned up on exit
+	defer d.pidFile.Remove()
+
+	// Start all registered components
+	for _, c := range d.components {
+		if err := c.Start(ctx); err != nil {
+			slog.Error("failed to start component",
+				"component", c.Name(),
+				"error", err,
+			)
+			d.health.UpdateComponent(c.Name(), ComponentHealth{
+				Status:      ComponentStatusFailed,
+				Error:       err.Error(),
+				LastChecked: time.Now(),
+			})
+		} else {
+			d.health.UpdateComponent(c.Name(), ComponentHealth{
+				Status:      ComponentStatusRunning,
+				LastChecked: time.Now(),
+			})
+		}
+	}
+
+	d.state = DaemonStateRunning
+	slog.Info("daemon started",
+		"state", d.state,
+		"components", len(d.components),
+	)
+
+	// Start HTTP server in background
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := d.server.Start(ctx); err != nil {
+			serverErr <- err
+		}
+		close(serverErr)
+	}()
+
+	// Wait for context cancellation or server error
+	select {
+	case <-ctx.Done():
+		slog.Info("shutdown signal received")
+	case err := <-serverErr:
+		if err != nil {
+			slog.Error("http server error", "error", err)
+		}
+	}
+
+	// Graceful shutdown
+	return d.Stop()
+}
+
+// Stop performs graceful shutdown of the daemon.
+func (d *Daemon) Stop() error {
+	d.state = DaemonStateStopping
+	slog.Info("stopping daemon")
+
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), d.config.ShutdownTimeout)
+	defer cancel()
+
+	// Shutdown HTTP server first
+	if err := d.server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("failed to shutdown http server", "error", err)
+	}
+
+	// Stop components in reverse order
+	for i := len(d.components) - 1; i >= 0; i-- {
+		c := d.components[i]
+		if err := c.Stop(shutdownCtx); err != nil {
+			slog.Error("failed to stop component",
+				"component", c.Name(),
+				"error", err,
+			)
+		}
+		d.health.UpdateComponent(c.Name(), ComponentHealth{
+			Status:      ComponentStatusStopped,
+			LastChecked: time.Now(),
+		})
+	}
+
+	d.state = DaemonStateStopped
+	slog.Info("daemon stopped")
+
+	return nil
+}

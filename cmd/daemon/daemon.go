@@ -21,4 +21,5 @@ func init() {
 	DaemonCmd.AddCommand(subcommands.StartCmd)
 	DaemonCmd.AddCommand(subcommands.StopCmd)
 	DaemonCmd.AddCommand(subcommands.StatusCmd)
+	DaemonCmd.AddCommand(subcommands.RebuildCmd)
 }

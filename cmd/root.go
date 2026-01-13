@@ -4,7 +4,15 @@ import (
 	"fmt"
 	"os"
 
+	configcmd "github.com/leefowlercu/agentic-memorizer/cmd/config"
 	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
+	"github.com/leefowlercu/agentic-memorizer/cmd/forget"
+	initcmd "github.com/leefowlercu/agentic-memorizer/cmd/initialize"
+	"github.com/leefowlercu/agentic-memorizer/cmd/integrations"
+	"github.com/leefowlercu/agentic-memorizer/cmd/list"
+	"github.com/leefowlercu/agentic-memorizer/cmd/providers"
+	"github.com/leefowlercu/agentic-memorizer/cmd/read"
+	"github.com/leefowlercu/agentic-memorizer/cmd/remember"
 	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
@@ -14,11 +22,14 @@ import (
 // logManager is the global logging manager, created in init() and upgraded after config loads
 var logManager *logging.Manager
 
+// Quiet suppresses non-error output when true
+var Quiet bool
+
 var memorizerCmd = &cobra.Command{
 	Use:   "memorizer",
 	Short: "A Knowledge Graph Based Memorization Tool for AI Agents",
 	Long: "Agentic Memorizer provides automatic awareness and analysis capabilities for files contained in registered directories.\n\n" +
-		"A background daemon monitors registered directories and, optionally, their subdirectories for file additions, updates, moves, and deletions. " +
+		"A background daemon monitors registered directories and all their subdirectories for file additions, updates, moves, and deletions. " +
 		"When changes are detected, the tool performs metadata extraction, semantic analysis, and embeddings generation for the affected files, updating its knowledge graph accordingly.\n\n",
 	PersistentPreRunE: runInitialize,
 }
@@ -27,9 +38,20 @@ func init() {
 	// T024: Create logging Manager in bootstrap mode (stderr text only)
 	logManager = logging.NewManager()
 
+	// Register global flags
+	memorizerCmd.PersistentFlags().BoolVarP(&Quiet, "quiet", "q", false, "Suppress non-error output")
+
 	// Register subcommands
 	memorizerCmd.AddCommand(version.VersionCmd)
+	memorizerCmd.AddCommand(initcmd.InitializeCmd)
 	memorizerCmd.AddCommand(daemon.DaemonCmd)
+	memorizerCmd.AddCommand(remember.RememberCmd)
+	memorizerCmd.AddCommand(forget.ForgetCmd)
+	memorizerCmd.AddCommand(list.ListCmd)
+	memorizerCmd.AddCommand(read.ReadCmd)
+	memorizerCmd.AddCommand(integrations.IntegrationsCmd)
+	memorizerCmd.AddCommand(providers.ProvidersCmd)
+	memorizerCmd.AddCommand(configcmd.ConfigCmd)
 }
 
 func runInitialize(cmd *cobra.Command, args []string) error {

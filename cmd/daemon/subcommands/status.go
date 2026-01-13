@@ -41,7 +41,7 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	pidPath := config.GetPath("daemon.pid_file")
+	pidPath := config.ExpandPath(config.Get().Daemon.PIDFile)
 
 	status, err := getDaemonStatus(pidPath)
 	if err != nil {
@@ -87,10 +87,8 @@ func getDaemonStatus(pidPath string) (*DaemonStatus, error) {
 
 // fetchHealth attempts to fetch health status from the daemon's HTTP endpoint.
 func fetchHealth() (*daemon.HealthStatus, error) {
-	port := config.GetInt("daemon.http_port")
-	bind := config.GetString("daemon.http_bind")
-
-	url := fmt.Sprintf("http://%s:%d/readyz", bind, port)
+	cfg := config.Get()
+	url := fmt.Sprintf("http://%s:%d/readyz", cfg.Daemon.HTTPBind, cfg.Daemon.HTTPPort)
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,

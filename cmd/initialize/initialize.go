@@ -4,11 +4,8 @@ package initialize
 import (
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize"
@@ -53,11 +50,9 @@ func validateInitialize(cmd *cobra.Command, args []string) error {
 	slog.Debug("validating initialize command", "config_path", configPath, "force", initializeForce)
 
 	// Check if config already exists
-	if !initializeForce {
-		if _, err := os.Stat(configPath); err == nil {
-			slog.Info("configuration already exists", "path", configPath)
-			return fmt.Errorf("configuration already exists at %s; use --force to reinitialize", configPath)
-		}
+	if !initializeForce && config.ConfigExists() {
+		slog.Info("configuration already exists", "path", configPath)
+		return fmt.Errorf("configuration already exists at %s; use --force to reinitialize", configPath)
 	}
 
 	cmd.SilenceUsage = true
@@ -68,15 +63,14 @@ func runInitialize(cmd *cobra.Command, args []string) error {
 	slog.Info("starting initialization wizard", "unattended", initializeUnattended)
 
 	// Create config directory if needed
-	configDir := filepath.Dir(config.GetConfigPath())
-	slog.Debug("ensuring config directory exists", "path", configDir)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		slog.Error("failed to create config directory", "path", configDir, "error", err)
+	if err := config.EnsureConfigDir(); err != nil {
+		slog.Error("failed to create config directory", "error", err)
 		return fmt.Errorf("failed to create config directory; %w", err)
 	}
 
-	// Create new viper instance for wizard configuration
-	cfg := viper.New()
+	// Start with default configuration
+	defaultCfg := config.NewDefaultConfig()
+	cfg := &defaultCfg
 
 	// Define wizard steps
 	stepList := []initialize.Step{
@@ -95,7 +89,7 @@ func runInitialize(cmd *cobra.Command, args []string) error {
 	return runInteractive(cfg, stepList)
 }
 
-func runInteractive(cfg *viper.Viper, stepList []initialize.Step) error {
+func runInteractive(cfg *config.Config, stepList []initialize.Step) error {
 	slog.Debug("starting interactive wizard")
 	result, err := initialize.RunWizard(cfg, stepList)
 	if err != nil {
@@ -132,7 +126,7 @@ func runInteractive(cfg *viper.Viper, stepList []initialize.Step) error {
 	return nil
 }
 
-func runUnattended(cfg *viper.Viper, stepList []initialize.Step) error {
+func runUnattended(cfg *config.Config, stepList []initialize.Step) error {
 	slog.Debug("starting unattended initialization")
 
 	// Initialize each step with defaults and apply
@@ -163,26 +157,13 @@ func runUnattended(cfg *viper.Viper, stepList []initialize.Step) error {
 	return nil
 }
 
-func writeConfig(cfg *viper.Viper) error {
+func writeConfig(cfg *config.Config) error {
 	configPath := config.GetConfigPath()
 	slog.Debug("writing configuration file", "path", configPath)
 
-	// Set the config file
-	cfg.SetConfigFile(configPath)
-	cfg.SetConfigType("yaml")
-
-	if err := cfg.WriteConfig(); err != nil {
-		// If file doesn't exist, use SafeWriteConfig
-		if os.IsNotExist(err) {
-			slog.Debug("config file does not exist, using SafeWriteConfig")
-			if err := cfg.SafeWriteConfig(); err != nil {
-				slog.Error("failed to write config", "path", configPath, "error", err)
-				return fmt.Errorf("failed to write config; %w", err)
-			}
-		} else {
-			slog.Error("failed to write config", "path", configPath, "error", err)
-			return fmt.Errorf("failed to write config; %w", err)
-		}
+	if err := config.Write(cfg, configPath); err != nil {
+		slog.Error("failed to write config", "path", configPath, "error", err)
+		return fmt.Errorf("failed to write config; %w", err)
 	}
 
 	slog.Info("configuration written successfully", "path", configPath)

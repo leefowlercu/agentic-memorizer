@@ -3,7 +3,8 @@ package steps
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 // StepResult indicates the result of a step update.
@@ -22,7 +23,7 @@ const (
 type Step interface {
 	// Init initializes the step with the current configuration.
 	// It is called when the step becomes active.
-	Init(cfg *viper.Viper) tea.Cmd
+	Init(cfg *config.Config) tea.Cmd
 
 	// Update handles input messages and returns the result.
 	Update(msg tea.Msg) (tea.Cmd, StepResult)
@@ -39,7 +40,7 @@ type Step interface {
 
 	// Apply writes the step's configuration values to the config.
 	// This is called when advancing from this step.
-	Apply(cfg *viper.Viper) error
+	Apply(cfg *config.Config) error
 }
 
 // BaseStep provides common functionality for steps.

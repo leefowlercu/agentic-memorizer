@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
 
@@ -15,7 +15,7 @@ import (
 type ConfirmStep struct {
 	BaseStep
 
-	cfg *viper.Viper
+	cfg *config.Config
 }
 
 // NewConfirmStep creates a new confirmation step.
@@ -26,7 +26,7 @@ func NewConfirmStep() *ConfirmStep {
 }
 
 // Init initializes the step with the current configuration.
-func (s *ConfirmStep) Init(cfg *viper.Viper) tea.Cmd {
+func (s *ConfirmStep) Init(cfg *config.Config) tea.Cmd {
 	s.cfg = cfg
 	return nil
 }
@@ -76,25 +76,25 @@ func (s *ConfirmStep) View() string {
 
 	// FalkorDB
 	b.WriteString(s.formatSection("FalkorDB"))
-	b.WriteString(s.formatRow(labelStyle, valueStyle, "Host", s.cfg.GetString("graph.host")))
-	b.WriteString(s.formatRow(labelStyle, valueStyle, "Port", fmt.Sprintf("%d", s.cfg.GetInt("graph.port"))))
+	b.WriteString(s.formatRow(labelStyle, valueStyle, "Host", s.cfg.Graph.Host))
+	b.WriteString(s.formatRow(labelStyle, valueStyle, "Port", fmt.Sprintf("%d", s.cfg.Graph.Port)))
 	b.WriteString("\n")
 
 	// Semantic Provider
 	b.WriteString(s.formatSection("Semantic Analysis"))
-	b.WriteString(s.formatRow(labelStyle, valueStyle, "Provider", s.cfg.GetString("semantic.provider")))
-	b.WriteString(s.formatRow(labelStyle, valueStyle, "Model", s.cfg.GetString("semantic.model")))
-	if s.cfg.GetString("semantic.api_key") != "" {
+	b.WriteString(s.formatRow(labelStyle, valueStyle, "Provider", s.cfg.Semantic.Provider))
+	b.WriteString(s.formatRow(labelStyle, valueStyle, "Model", s.cfg.Semantic.Model))
+	if s.cfg.Semantic.APIKey != nil && *s.cfg.Semantic.APIKey != "" {
 		b.WriteString(s.formatRow(labelStyle, valueStyle, "API Key", "********"))
 	}
 	b.WriteString("\n")
 
 	// Embeddings
 	b.WriteString(s.formatSection("Vector Embeddings"))
-	if s.cfg.GetBool("embeddings.enabled") {
+	if s.cfg.Embeddings.Enabled {
 		b.WriteString(s.formatRow(labelStyle, valueStyle, "Enabled", "Yes"))
-		b.WriteString(s.formatRow(labelStyle, valueStyle, "Provider", s.cfg.GetString("embeddings.provider")))
-		b.WriteString(s.formatRow(labelStyle, valueStyle, "Model", s.cfg.GetString("embeddings.model")))
+		b.WriteString(s.formatRow(labelStyle, valueStyle, "Provider", s.cfg.Embeddings.Provider))
+		b.WriteString(s.formatRow(labelStyle, valueStyle, "Model", s.cfg.Embeddings.Model))
 	} else {
 		b.WriteString(s.formatRow(labelStyle, valueStyle, "Enabled", "No"))
 	}
@@ -102,7 +102,7 @@ func (s *ConfirmStep) View() string {
 
 	// HTTP Port
 	b.WriteString(s.formatSection("Daemon"))
-	b.WriteString(s.formatRow(labelStyle, valueStyle, "HTTP Port", fmt.Sprintf("%d", s.cfg.GetInt("http.port"))))
+	b.WriteString(s.formatRow(labelStyle, valueStyle, "HTTP Port", fmt.Sprintf("%d", s.cfg.Daemon.HTTPPort)))
 	b.WriteString("\n")
 
 	// Confirmation prompt
@@ -137,6 +137,6 @@ func (s *ConfirmStep) Validate() error {
 }
 
 // Apply is a no-op for the confirm step.
-func (s *ConfirmStep) Apply(cfg *viper.Viper) error {
+func (s *ConfirmStep) Apply(cfg *config.Config) error {
 	return nil
 }

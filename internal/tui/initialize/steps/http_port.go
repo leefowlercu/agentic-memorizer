@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
@@ -32,10 +32,10 @@ func NewHTTPPortStep() *HTTPPortStep {
 }
 
 // Init initializes the step.
-func (s *HTTPPortStep) Init(cfg *viper.Viper) tea.Cmd {
+func (s *HTTPPortStep) Init(cfg *config.Config) tea.Cmd {
 	// Pre-fill from existing config
-	if port := cfg.GetInt("http.port"); port != 0 {
-		s.portInput.SetValue(strconv.Itoa(port))
+	if cfg.Daemon.HTTPPort != 0 {
+		s.portInput.SetValue(strconv.Itoa(cfg.Daemon.HTTPPort))
 	}
 
 	s.portInput.Focus()
@@ -124,14 +124,14 @@ func (s *HTTPPortStep) Validate() error {
 }
 
 // Apply writes the port configuration.
-func (s *HTTPPortStep) Apply(cfg *viper.Viper) error {
+func (s *HTTPPortStep) Apply(cfg *config.Config) error {
 	portStr := strings.TrimSpace(s.portInput.Value())
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		port = defaultHTTPPort
 	}
 
-	cfg.Set("http.port", port)
+	cfg.Daemon.HTTPPort = port
 
 	return nil
 }

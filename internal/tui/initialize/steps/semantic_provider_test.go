@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 func TestSemanticProviderStep_Title(t *testing.T) {
@@ -16,10 +17,10 @@ func TestSemanticProviderStep_Title(t *testing.T) {
 }
 
 func TestSemanticProviderStep_Init(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	step := NewSemanticProviderStep()
 
-	cmd := step.Init(cfg)
+	cmd := step.Init(&cfg)
 	if cmd != nil {
 		t.Error("expected nil command from Init")
 	}
@@ -27,8 +28,8 @@ func TestSemanticProviderStep_Init(t *testing.T) {
 
 func TestSemanticProviderStep_View(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	view := step.View()
 	if view == "" {
@@ -38,8 +39,8 @@ func TestSemanticProviderStep_View(t *testing.T) {
 
 func TestSemanticProviderStep_Validate_NoAPIKey(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Clear any API keys
 	os.Unsetenv("ANTHROPIC_API_KEY")
@@ -60,8 +61,8 @@ func TestSemanticProviderStep_Validate_NoAPIKey(t *testing.T) {
 
 func TestSemanticProviderStep_Validate_WithAPIKey(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Set API key
 	step.phase = phaseAPIKey
@@ -75,32 +76,32 @@ func TestSemanticProviderStep_Validate_WithAPIKey(t *testing.T) {
 
 func TestSemanticProviderStep_Apply(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Set provider to Claude
 	step.providerRadio.SetCursor(0)
 	step.phase = phaseAPIKey
 	step.keyInput.SetValue("sk-test-key-12345")
 
-	err := step.Apply(cfg)
+	err := step.Apply(&cfg)
 	if err != nil {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
 
-	if cfg.GetString("semantic.provider") != "claude" {
-		t.Errorf("expected semantic.provider 'claude', got '%s'", cfg.GetString("semantic.provider"))
+	if cfg.Semantic.Provider != "claude" {
+		t.Errorf("expected Semantic.Provider 'claude', got '%s'", cfg.Semantic.Provider)
 	}
 
-	if cfg.GetString("semantic.api_key") != "sk-test-key-12345" {
-		t.Errorf("expected semantic.api_key to be set")
+	if cfg.Semantic.APIKey == nil || *cfg.Semantic.APIKey != "sk-test-key-12345" {
+		t.Errorf("expected Semantic.APIKey to be set")
 	}
 }
 
 func TestSemanticProviderStep_Update_Navigation(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Navigate down
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -111,8 +112,8 @@ func TestSemanticProviderStep_Update_Navigation(t *testing.T) {
 
 func TestSemanticProviderStep_ProviderSelection(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Select Claude provider with Enter
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -131,8 +132,8 @@ func TestSemanticProviderStep_APIKeyDetection(t *testing.T) {
 	defer os.Unsetenv("ANTHROPIC_API_KEY")
 
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Verify API key was detected
 	if !step.providers[0].KeyDetected {
@@ -146,8 +147,8 @@ func TestSemanticProviderStep_OpenAIAPIKeyDetection(t *testing.T) {
 	defer os.Unsetenv("OPENAI_API_KEY")
 
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Find OpenAI provider (should be second)
 	var openaiProvider *ProviderInfo
@@ -169,8 +170,8 @@ func TestSemanticProviderStep_OpenAIAPIKeyDetection(t *testing.T) {
 
 func TestSemanticProviderStep_EscFromProviderPhase(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Press Esc from provider phase - should go to previous wizard step
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -181,8 +182,8 @@ func TestSemanticProviderStep_EscFromProviderPhase(t *testing.T) {
 
 func TestSemanticProviderStep_EscFromModelPhase(t *testing.T) {
 	step := NewSemanticProviderStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Move to model phase
 	step.phase = phaseModel

@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
@@ -101,7 +101,7 @@ func buildProviders() []ProviderInfo {
 }
 
 // Init initializes the step with provider detection.
-func (s *SemanticProviderStep) Init(cfg *viper.Viper) tea.Cmd {
+func (s *SemanticProviderStep) Init(cfg *config.Config) tea.Cmd {
 	s.providers = buildProviders()
 
 	// Detect API keys from environment
@@ -127,9 +127,9 @@ func (s *SemanticProviderStep) Init(cfg *viper.Viper) tea.Cmd {
 	s.phase = phaseProvider
 
 	// Pre-fill from existing config
-	if provider := cfg.GetString("semantic.provider"); provider != "" {
+	if cfg.Semantic.Provider != "" {
 		for i, p := range s.providers {
-			if p.Name == provider {
+			if p.Name == cfg.Semantic.Provider {
 				s.providerRadio.SetCursor(i)
 				s.selectedIdx = i
 				break
@@ -328,23 +328,24 @@ func (s *SemanticProviderStep) Validate() error {
 }
 
 // Apply writes the semantic provider configuration.
-func (s *SemanticProviderStep) Apply(cfg *viper.Viper) error {
+func (s *SemanticProviderStep) Apply(cfg *config.Config) error {
 	provider := s.providers[s.selectedIdx]
 	model := provider.Models[s.modelRadio.Cursor()]
 
-	cfg.Set("semantic.provider", provider.Name)
-	cfg.Set("semantic.model", model.ID)
-	cfg.Set("semantic.rate_limit", provider.DefaultRate)
+	cfg.Semantic.Provider = provider.Name
+	cfg.Semantic.Model = model.ID
+	cfg.Semantic.RateLimit = provider.DefaultRate
 
 	// Store API key if provided
 	if s.phase == phaseAPIKey {
 		key := strings.TrimSpace(s.keyInput.Value())
 		if key != "" {
-			cfg.Set("semantic.api_key", key)
+			cfg.Semantic.APIKey = &key
 		}
 	} else if provider.KeyDetected {
 		// Store key from environment
-		cfg.Set("semantic.api_key", os.Getenv(provider.EnvVar))
+		key := os.Getenv(provider.EnvVar)
+		cfg.Semantic.APIKey = &key
 	}
 
 	return nil

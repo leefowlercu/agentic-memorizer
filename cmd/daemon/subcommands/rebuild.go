@@ -64,14 +64,14 @@ type RebuildResponse struct {
 
 func runRebuild(cmd *cobra.Command, args []string) error {
 	// Get daemon address from config
-	port := config.GetInt("daemon.http_port")
-	bind := config.GetString("daemon.http_bind")
+	cfg := config.Get()
+	bind := cfg.Daemon.HTTPBind
 	if bind == "" || bind == "0.0.0.0" {
 		bind = "127.0.0.1"
 	}
 
 	// Build request URL
-	url := fmt.Sprintf("http://%s:%d/rebuild", bind, port)
+	url := fmt.Sprintf("http://%s:%d/rebuild", bind, cfg.Daemon.HTTPPort)
 
 	// Create request
 	method := "POST"

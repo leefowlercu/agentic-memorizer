@@ -23,7 +23,8 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	t.Helper()
 
 	// Create temp directory for this test's config
-	configDir := filepath.Join(t.TempDir(), "config")
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "config")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("failed to create test config dir: %v", err)
 	}
@@ -31,10 +32,13 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	// Use t.Setenv for automatic cleanup - this is test-scoped
 	// These env vars override viper settings via AutomaticEnv()
 	t.Setenv("MEMORIZER_CONFIG_DIR", configDir)
-	t.Setenv("MEMORIZER_DATABASE_REGISTRY_PATH", filepath.Join(configDir, "registry.db"))
+	t.Setenv("MEMORIZER_DAEMON_REGISTRY_PATH", filepath.Join(configDir, "registry.db"))
 	t.Setenv("MEMORIZER_LOG_FILE", filepath.Join(configDir, "memorizer.log"))
 	t.Setenv("MEMORIZER_DAEMON_PID_FILE", filepath.Join(configDir, "daemon.pid"))
 	t.Setenv("MEMORIZER_CACHE_BASE_DIR", filepath.Join(configDir, "cache"))
+
+	// Override HOME to prevent finding user's real config file
+	t.Setenv("HOME", tmpDir)
 
 	// Reset and reinitialize config with new env vars
 	config.Reset()

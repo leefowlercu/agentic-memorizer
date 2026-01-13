@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 // mockStep is a simple step for testing.
@@ -15,7 +16,7 @@ type mockStep struct {
 	applied   bool
 }
 
-func (m *mockStep) Init(cfg *viper.Viper) tea.Cmd { return nil }
+func (m *mockStep) Init(cfg *config.Config) tea.Cmd { return nil }
 
 func (m *mockStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
@@ -29,19 +30,22 @@ func (m *mockStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	return nil, StepContinue
 }
 
-func (m *mockStep) View() string      { return m.viewText }
-func (m *mockStep) Title() string     { return m.title }
-func (m *mockStep) Validate() error   { m.validated = true; return nil }
-func (m *mockStep) Apply(*viper.Viper) error { m.applied = true; return nil }
+func (m *mockStep) View() string    { return m.viewText }
+func (m *mockStep) Title() string   { return m.title }
+func (m *mockStep) Validate() error { m.validated = true; return nil }
+func (m *mockStep) Apply(*config.Config) error {
+	m.applied = true
+	return nil
+}
 
 func TestWizardModel_Init(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	steps := []Step{
 		&mockStep{title: "Step 1", viewText: "First step"},
 		&mockStep{title: "Step 2", viewText: "Second step"},
 	}
 
-	wizard := NewWizard(cfg, steps)
+	wizard := NewWizard(&cfg, steps)
 
 	if wizard.currentStep != 0 {
 		t.Errorf("expected currentStep 0, got %d", wizard.currentStep)
@@ -53,12 +57,12 @@ func TestWizardModel_Init(t *testing.T) {
 }
 
 func TestWizardModel_View(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	steps := []Step{
 		&mockStep{title: "Step 1", viewText: "First step content"},
 	}
 
-	wizard := NewWizard(cfg, steps)
+	wizard := NewWizard(&cfg, steps)
 	view := wizard.View()
 
 	if view == "" {
@@ -67,12 +71,12 @@ func TestWizardModel_View(t *testing.T) {
 }
 
 func TestWizardModel_Navigation_Next(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	step1 := &mockStep{title: "Step 1", viewText: "First"}
 	step2 := &mockStep{title: "Step 2", viewText: "Second"}
 	steps := []Step{step1, step2}
 
-	wizard := NewWizard(cfg, steps)
+	wizard := NewWizard(&cfg, steps)
 
 	// Press Enter to go to next step
 	model, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -92,13 +96,13 @@ func TestWizardModel_Navigation_Next(t *testing.T) {
 }
 
 func TestWizardModel_Navigation_Prev(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	steps := []Step{
 		&mockStep{title: "Step 1", viewText: "First"},
 		&mockStep{title: "Step 2", viewText: "Second"},
 	}
 
-	wizard := NewWizard(cfg, steps)
+	wizard := NewWizard(&cfg, steps)
 
 	// Go to step 2
 	model, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -118,12 +122,12 @@ func TestWizardModel_Navigation_Prev(t *testing.T) {
 }
 
 func TestWizardModel_Cancel(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	steps := []Step{
 		&mockStep{title: "Step 1", viewText: "First"},
 	}
 
-	wizard := NewWizard(cfg, steps)
+	wizard := NewWizard(&cfg, steps)
 
 	// Press Ctrl+C to cancel
 	model, cmd := wizard.Update(tea.KeyMsg{Type: tea.KeyCtrlC})

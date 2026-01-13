@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 func TestEmbeddingsStep_Title(t *testing.T) {
@@ -16,10 +17,10 @@ func TestEmbeddingsStep_Title(t *testing.T) {
 }
 
 func TestEmbeddingsStep_Init(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	step := NewEmbeddingsStep()
 
-	cmd := step.Init(cfg)
+	cmd := step.Init(&cfg)
 	if cmd != nil {
 		t.Error("expected nil command from Init")
 	}
@@ -27,8 +28,8 @@ func TestEmbeddingsStep_Init(t *testing.T) {
 
 func TestEmbeddingsStep_View(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	view := step.View()
 	if view == "" {
@@ -38,8 +39,8 @@ func TestEmbeddingsStep_View(t *testing.T) {
 
 func TestEmbeddingsStep_DisableEmbeddings(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Select "Disable" option (second option)
 	step.enableRadio.SetCursor(1)
@@ -55,8 +56,8 @@ func TestEmbeddingsStep_DisableEmbeddings(t *testing.T) {
 
 func TestEmbeddingsStep_EnableEmbeddings(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Select "Enable" option (first option)
 	step.enableRadio.SetCursor(0)
@@ -76,8 +77,8 @@ func TestEmbeddingsStep_EnableEmbeddings(t *testing.T) {
 
 func TestEmbeddingsStep_Validate_Disabled(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Disable embeddings
 	step.enabled = false
@@ -90,8 +91,8 @@ func TestEmbeddingsStep_Validate_Disabled(t *testing.T) {
 
 func TestEmbeddingsStep_Validate_NoAPIKey(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Enable embeddings
 	step.enabled = true
@@ -106,49 +107,49 @@ func TestEmbeddingsStep_Validate_NoAPIKey(t *testing.T) {
 
 func TestEmbeddingsStep_Apply_Disabled(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.enabled = false
 
-	err := step.Apply(cfg)
+	err := step.Apply(&cfg)
 	if err != nil {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
 
-	if cfg.GetBool("embeddings.enabled") != false {
-		t.Error("expected embeddings.enabled to be false")
+	if cfg.Embeddings.Enabled != false {
+		t.Error("expected Embeddings.Enabled to be false")
 	}
 }
 
 func TestEmbeddingsStep_Apply_Enabled(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.enabled = true
 	step.providerRadio.SetCursor(0) // OpenAI
 	step.phase = embPhaseAPIKey
 	step.keyInput.SetValue("test-key-12345")
 
-	err := step.Apply(cfg)
+	err := step.Apply(&cfg)
 	if err != nil {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
 
-	if cfg.GetBool("embeddings.enabled") != true {
-		t.Error("expected embeddings.enabled to be true")
+	if cfg.Embeddings.Enabled != true {
+		t.Error("expected Embeddings.Enabled to be true")
 	}
 
-	if cfg.GetString("embeddings.provider") != "openai" {
-		t.Errorf("expected embeddings.provider 'openai', got '%s'", cfg.GetString("embeddings.provider"))
+	if cfg.Embeddings.Provider != "openai" {
+		t.Errorf("expected Embeddings.Provider 'openai', got '%s'", cfg.Embeddings.Provider)
 	}
 }
 
 func TestEmbeddingsStep_Update_Navigation(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Navigate down
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -163,8 +164,8 @@ func TestEmbeddingsStep_APIKeyDetection(t *testing.T) {
 	defer os.Unsetenv("OPENAI_API_KEY")
 
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Verify API key was detected for OpenAI
 	if !step.providers[0].KeyDetected {
@@ -174,8 +175,8 @@ func TestEmbeddingsStep_APIKeyDetection(t *testing.T) {
 
 func TestEmbeddingsStep_EscFromEnablePhase(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Press Esc from enable phase - should go to previous wizard step
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -186,8 +187,8 @@ func TestEmbeddingsStep_EscFromEnablePhase(t *testing.T) {
 
 func TestEmbeddingsStep_EscFromProviderPhase(t *testing.T) {
 	step := NewEmbeddingsStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Move to provider phase
 	step.phase = embPhaseProvider

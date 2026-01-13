@@ -162,7 +162,7 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	absPath = filepath.Clean(absPath)
 
 	// Open registry
-	registryPath := config.GetPath("database.registry_path")
+	registryPath := config.ExpandPath(config.Get().Daemon.RegistryPath)
 	reg, err := registry.Open(ctx, registryPath)
 	if err != nil {
 		return fmt.Errorf("failed to open registry; %w", err)

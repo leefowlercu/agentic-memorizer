@@ -42,12 +42,13 @@ func validateStart(cmd *cobra.Command, args []string) error {
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
-	// Build daemon configuration from viper config
+	// Build daemon configuration from typed config
+	appCfg := config.Get()
 	cfg := daemon.DaemonConfig{
-		HTTPPort:        config.GetInt("daemon.http_port"),
-		HTTPBind:        config.GetString("daemon.http_bind"),
-		ShutdownTimeout: time.Duration(config.GetInt("daemon.shutdown_timeout")) * time.Second,
-		PIDFile:         config.GetPath("daemon.pid_file"),
+		HTTPPort:        appCfg.Daemon.HTTPPort,
+		HTTPBind:        appCfg.Daemon.HTTPBind,
+		ShutdownTimeout: time.Duration(appCfg.Daemon.ShutdownTimeout) * time.Second,
+		PIDFile:         config.ExpandPath(appCfg.Daemon.PIDFile),
 	}
 
 	// Create daemon

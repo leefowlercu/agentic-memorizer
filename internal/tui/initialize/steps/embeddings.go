@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
@@ -97,7 +97,7 @@ func buildEmbeddingsProviders() []EmbeddingsProviderInfo {
 }
 
 // Init initializes the step.
-func (s *EmbeddingsStep) Init(cfg *viper.Viper) tea.Cmd {
+func (s *EmbeddingsStep) Init(cfg *config.Config) tea.Cmd {
 	s.providers = buildEmbeddingsProviders()
 
 	// Detect API keys from environment
@@ -130,12 +130,12 @@ func (s *EmbeddingsStep) Init(cfg *viper.Viper) tea.Cmd {
 	s.enabled = false
 
 	// Pre-fill from existing config
-	if cfg.GetBool("embeddings.enabled") {
+	if cfg.Embeddings.Enabled {
 		s.enabled = true
 		s.enableRadio.SetCursor(0)
-		if provider := cfg.GetString("embeddings.provider"); provider != "" {
+		if cfg.Embeddings.Provider != "" {
 			for i, p := range s.providers {
-				if p.Name == provider {
+				if p.Name == cfg.Embeddings.Provider {
 					s.providerRadio.SetCursor(i)
 					s.selectedIdx = i
 					break
@@ -376,8 +376,8 @@ func (s *EmbeddingsStep) Validate() error {
 }
 
 // Apply writes the embeddings configuration.
-func (s *EmbeddingsStep) Apply(cfg *viper.Viper) error {
-	cfg.Set("embeddings.enabled", s.enabled)
+func (s *EmbeddingsStep) Apply(cfg *config.Config) error {
+	cfg.Embeddings.Enabled = s.enabled
 
 	if !s.enabled {
 		return nil
@@ -386,18 +386,19 @@ func (s *EmbeddingsStep) Apply(cfg *viper.Viper) error {
 	provider := s.providers[s.selectedIdx]
 	model := provider.Models[s.modelRadio.Cursor()]
 
-	cfg.Set("embeddings.provider", provider.Name)
-	cfg.Set("embeddings.model", model.ID)
-	cfg.Set("embeddings.dimensions", model.Dimensions)
+	cfg.Embeddings.Provider = provider.Name
+	cfg.Embeddings.Model = model.ID
+	cfg.Embeddings.Dimensions = model.Dimensions
 
 	// Store API key if provided
 	if s.phase == embPhaseAPIKey {
 		key := strings.TrimSpace(s.keyInput.Value())
 		if key != "" {
-			cfg.Set("embeddings.api_key", key)
+			cfg.Embeddings.APIKey = &key
 		}
 	} else if provider.KeyDetected {
-		cfg.Set("embeddings.api_key", os.Getenv(provider.EnvVar))
+		key := os.Getenv(provider.EnvVar)
+		cfg.Embeddings.APIKey = &key
 	}
 
 	return nil

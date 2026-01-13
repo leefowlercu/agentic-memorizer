@@ -15,7 +15,7 @@ func TestSignalHandler_SIGHUP_TriggersReload(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	// Initial config
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 8080\n"), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
@@ -30,12 +30,13 @@ func TestSignalHandler_SIGHUP_TriggersReload(t *testing.T) {
 	SetupSignalHandler()
 
 	// Verify initial value
-	if got := GetInt("daemon.port"); got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d, want 8080", got)
+	cfg := Get()
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d, want 8080", cfg.Daemon.HTTPPort)
 	}
 
 	// Update config file
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 9999\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 9999\n"), 0644); err != nil {
 		t.Fatalf("failed to update config file: %v", err)
 	}
 
@@ -48,8 +49,9 @@ func TestSignalHandler_SIGHUP_TriggersReload(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify config was reloaded
-	if got := GetInt("daemon.port"); got != 9999 {
-		t.Errorf("GetInt(daemon.port) = %d after SIGHUP, want 9999", got)
+	cfg = Get()
+	if cfg.Daemon.HTTPPort != 9999 {
+		t.Errorf("Get().Daemon.HTTPPort = %d after SIGHUP, want 9999", cfg.Daemon.HTTPPort)
 	}
 
 	// Clean up signal handler

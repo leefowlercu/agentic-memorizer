@@ -24,6 +24,12 @@ const (
 
 	// AnalysisFailed is published when analysis fails for a file.
 	AnalysisFailed EventType = "analysis.failed"
+
+	// ConfigReloaded is published when configuration is successfully reloaded.
+	ConfigReloaded EventType = "config.reloaded"
+
+	// ConfigReloadFailed is published when configuration reload fails.
+	ConfigReloadFailed EventType = "config.reload_failed"
 )
 
 // Event represents a published event in the system.
@@ -99,6 +105,18 @@ const (
 	// AnalysisFull indicates full analysis (metadata + semantic + embeddings) was performed.
 	AnalysisFull AnalysisType = "full"
 )
+
+// ConfigReloadEvent contains data for config reload events.
+type ConfigReloadEvent struct {
+	// ChangedSections lists which config sections were modified.
+	ChangedSections []string
+
+	// ReloadableChanges indicates if all changes are hot-reloadable.
+	ReloadableChanges bool
+
+	// Error contains the error message if reload failed (for ConfigReloadFailed events).
+	Error string
+}
 
 // EventHandler is a function that processes events.
 type EventHandler func(event Event)

@@ -9,6 +9,8 @@ This plan implements a comprehensive refactor of the configuration subsystem to:
 4. Integrate hot reload notifications with the event bus
 5. Update all config consumers to use the typed interface
 
+**Note**: This application is pre-release with no users. Backwards compatibility is not maintained. Old config files, deprecated constants, and migration paths are not supported. Users must re-run `memorizer initialize` after this refactor.
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -58,7 +60,6 @@ go get gopkg.in/yaml.v3
    - Replace existing constants with new naming convention (`DefaultDaemonHTTPPort`, etc.)
    - Add constants for new sections (semantic, embeddings)
    - Implement `NewDefaultConfig() Config` factory function
-   - Keep `setDefaults()` temporarily for backward compatibility
 
 1.3. Add API key resolution methods:
    - `(c *SemanticConfig) ResolveAPIKey() string`
@@ -103,7 +104,7 @@ go test ./internal/config/... -run TestResolveAPIKey
    - Modify `Init()` to call `Load()` and store result
    - Add `Get() *Config` accessor for typed config
    - Add `MustGet() *Config` that panics if config not initialized
-   - Keep existing `GetString()`, `GetInt()`, etc. temporarily for migration
+   - Remove `GetString()`, `GetInt()`, `GetBool()`, `GetPath()` accessors
 
 2.4. Handle missing config file:
    - In `Init()`, if config file not found AND not in "initialize" context:
@@ -114,7 +115,7 @@ go test ./internal/config/... -run TestResolveAPIKey
 
 - Typed config loading via `config.Get()`
 - Validation on load with clear error messages
-- Backward-compatible string accessors still work
+- No string-based accessors (all consumers use typed access)
 
 ### Verification
 
@@ -352,9 +353,9 @@ go run . config validate
    - Remove `providers.*` keys
    - Remove old `setDefaults()` function
 
-8.2. Deprecate string-based accessors:
-   - Add deprecation comments to `GetString()`, `GetInt()`, `GetBool()`, `GetPath()`
-   - These can be removed in a future release
+8.2. Remove string-based accessors:
+   - Remove `GetString()`, `GetInt()`, `GetBool()`, `GetPath()` from config package
+   - All consumers must use typed `Get().Section.Field` pattern
 
 8.3. Update test files:
    - `internal/config/config_test.go`: Update for new structure
@@ -500,11 +501,11 @@ After Phase 6:
 ## Potential Risks & Mitigations
 
 ### Risk 1: Breaking Existing Configs
-**Impact**: High - Users with old config.yaml will have broken systems
+**Impact**: Low - Pre-release application with no users
 **Mitigation**:
-- Document migration path clearly
 - Initialize command fails fast if old config detected
 - `--force` flag allows explicit overwrite
+- Users re-run `memorizer initialize` after refactor
 
 ### Risk 2: Consumer Migration Errors
 **Impact**: Medium - Typos in field names cause runtime errors
@@ -537,133 +538,133 @@ After Phase 6:
 ## Implementation Checklist
 
 ### Phase 1: Typed Config Foundation
-- [ ] Create `internal/config/types.go` with Config struct
-- [ ] Create `internal/config/types.go` with DaemonConfig struct
-- [ ] Create `internal/config/types.go` with MetricsConfig struct
-- [ ] Create `internal/config/types.go` with GraphConfig struct
-- [ ] Create `internal/config/types.go` with SemanticConfig struct
-- [ ] Create `internal/config/types.go` with EmbeddingsConfig struct
-- [ ] Add yaml and mapstructure struct tags to all fields
-- [ ] Update `internal/config/defaults.go` with new constant names
-- [ ] Add constants for semantic section
-- [ ] Add constants for embeddings section
-- [ ] Implement `NewDefaultConfig()` factory function
-- [ ] Implement `SemanticConfig.ResolveAPIKey()` method
-- [ ] Implement `EmbeddingsConfig.ResolveAPIKey()` method
-- [ ] Create `internal/config/types_test.go`
-- [ ] Test `NewDefaultConfig()` returns expected values
-- [ ] Test `ResolveAPIKey()` methods
-- [ ] Run `go build ./internal/config/...`
-- [ ] Run `go test ./internal/config/...`
+- [x] Create `internal/config/types.go` with Config struct
+- [x] Create `internal/config/types.go` with DaemonConfig struct
+- [x] Create `internal/config/types.go` with MetricsConfig struct
+- [x] Create `internal/config/types.go` with GraphConfig struct
+- [x] Create `internal/config/types.go` with SemanticConfig struct
+- [x] Create `internal/config/types.go` with EmbeddingsConfig struct
+- [x] Add yaml and mapstructure struct tags to all fields
+- [x] Update `internal/config/defaults.go` with new constant names
+- [x] Add constants for semantic section
+- [x] Add constants for embeddings section
+- [x] Implement `NewDefaultConfig()` factory function
+- [x] Implement `SemanticConfig.ResolveAPIKey()` method
+- [x] Implement `EmbeddingsConfig.ResolveAPIKey()` method
+- [x] Create `internal/config/types_test.go`
+- [x] Test `NewDefaultConfig()` returns expected values
+- [x] Test `ResolveAPIKey()` methods
+- [x] Run `go build ./internal/config/...`
+- [x] Run `go test ./internal/config/...`
 
 ### Phase 2: Config Reading and Validation
-- [ ] Create `internal/config/load.go`
-- [ ] Implement `Load() (*Config, error)`
-- [ ] Implement `LoadFromPath(path string) (*Config, error)`
-- [ ] Create `internal/config/validate.go`
-- [ ] Implement `Validate(cfg *Config) error`
-- [ ] Add port range validation
-- [ ] Add required field validation
-- [ ] Add provider name validation
-- [ ] Update `internal/config/config.go` with `currentConfig` variable
-- [ ] Add `Get() *Config` accessor
-- [ ] Add `MustGet() *Config` accessor
-- [ ] Modify `Init()` to use typed loading
-- [ ] Add `InitWithDefaults() error` for default-only contexts
-- [ ] Handle missing config file with helpful error
-- [ ] Create `internal/config/load_test.go`
-- [ ] Create `internal/config/validate_test.go`
-- [ ] Run `go test ./internal/config/...`
+- [x] Create `internal/config/load.go`
+- [x] Implement `Load() (*Config, error)`
+- [x] Implement `LoadFromPath(path string) (*Config, error)`
+- [x] Create `internal/config/validate.go`
+- [x] Implement `Validate(cfg *Config) error`
+- [x] Add port range validation
+- [x] Add required field validation
+- [x] Add provider name validation
+- [x] Update `internal/config/config.go` with `currentConfig` variable
+- [x] Add `Get() *Config` accessor
+- [x] Add `MustGet() *Config` accessor
+- [x] Modify `Init()` to use typed loading
+- [x] Add `InitWithDefaults() error` for default-only contexts
+- [x] Handle missing config file with helpful error
+- [x] Create `internal/config/load_test.go`
+- [x] Create `internal/config/validate_test.go`
+- [x] Run `go test ./internal/config/...`
 
 ### Phase 3: Config Writing
-- [ ] Add `gopkg.in/yaml.v3` dependency
-- [ ] Create `internal/config/write.go`
-- [ ] Implement `Write(cfg *Config, path string) error`
-- [ ] Add directory creation with 0700 permissions
-- [ ] Add file writing with 0600 permissions
-- [ ] Add header comment with timestamp
-- [ ] Create `internal/config/path.go`
-- [ ] Implement `DefaultConfigPath() string`
-- [ ] Implement `ConfigDir() string`
-- [ ] Implement `EnsureConfigDir() error`
-- [ ] Implement `ConfigExists() bool`
-- [ ] Create `internal/config/write_test.go`
-- [ ] Test directory creation
-- [ ] Test file permissions
-- [ ] Test YAML format
-- [ ] Test write/read round-trip
-- [ ] Run `go test ./internal/config/...`
+- [x] Add `gopkg.in/yaml.v3` dependency
+- [x] Create `internal/config/write.go`
+- [x] Implement `Write(cfg *Config, path string) error`
+- [x] Add directory creation with 0700 permissions
+- [x] Add file writing with 0600 permissions
+- [x] Add header comment with timestamp
+- [x] Create `internal/config/path.go`
+- [x] Implement `DefaultConfigPath() string`
+- [x] Implement `ConfigDir() string`
+- [x] Implement `EnsureConfigDir() error`
+- [x] Implement `ConfigExists() bool`
+- [x] Create `internal/config/write_test.go`
+- [x] Test directory creation
+- [x] Test file permissions
+- [x] Test YAML format
+- [x] Test write/read round-trip
+- [x] Run `go test ./internal/config/...`
 
 ### Phase 4: Event Bus Integration
-- [ ] Update `internal/events/events.go` with ConfigReloaded event type
-- [ ] Update `internal/events/events.go` with ConfigReloadFailed event type
-- [ ] Create `internal/config/events.go`
-- [ ] Define `ConfigReloadedPayload` struct
-- [ ] Define `ConfigReloadFailedPayload` struct
-- [ ] Implement `detectChangedSections(old, new *Config) []string`
-- [ ] Update `internal/config/signals.go`
-- [ ] Add `SetEventBus(bus events.Bus)` function
-- [ ] Modify `Reload()` to publish ConfigReloaded on success
-- [ ] Modify `Reload()` to publish ConfigReloadFailed on failure
-- [ ] Retain previous config on reload failure
-- [ ] Add warning log for non-reloadable section changes
-- [ ] Create/update tests for reload events
-- [ ] Run `go test ./internal/config/...`
+- [x] Update `internal/events/events.go` with ConfigReloaded event type
+- [x] Update `internal/events/events.go` with ConfigReloadFailed event type
+- [x] Create `internal/config/events.go`
+- [x] Define `ConfigReloadedPayload` struct
+- [x] Define `ConfigReloadFailedPayload` struct
+- [x] Implement `detectChangedSections(old, new *Config) []string`
+- [x] Update `internal/config/signals.go`
+- [x] Add `SetEventBus(bus events.Bus)` function
+- [x] Modify `Reload()` to publish ConfigReloaded on success
+- [x] Modify `Reload()` to publish ConfigReloadFailed on failure
+- [x] Retain previous config on reload failure
+- [x] Add warning log for non-reloadable section changes
+- [x] Create/update tests for reload events
+- [x] Run `go test ./internal/config/...`
 
 ### Phase 5: Consumer Migration
-- [ ] Update `cmd/daemon/subcommands/start.go`
-- [ ] Update `cmd/daemon/subcommands/stop.go`
-- [ ] Update `cmd/daemon/subcommands/status.go`
-- [ ] Update `cmd/daemon/subcommands/rebuild.go`
-- [ ] Update `cmd/remember/remember.go`
-- [ ] Update `cmd/forget/forget.go`
-- [ ] Update `cmd/list/list.go`
-- [ ] Update `cmd/config/subcommands/show.go`
-- [ ] Update `cmd/config/subcommands/edit.go`
-- [ ] Update `cmd/config/subcommands/reset.go`
-- [ ] Update `cmd/root.go`
-- [ ] Update `internal/daemon/orchestrator.go`
-- [ ] Update `internal/testutil/testutil.go`
-- [ ] Run `go build ./...`
-- [ ] Run `go test ./...`
+- [x] Update `cmd/daemon/subcommands/start.go`
+- [x] Update `cmd/daemon/subcommands/stop.go`
+- [x] Update `cmd/daemon/subcommands/status.go`
+- [x] Update `cmd/daemon/subcommands/rebuild.go`
+- [x] Update `cmd/remember/remember.go`
+- [x] Update `cmd/forget/forget.go`
+- [x] Update `cmd/list/list.go`
+- [x] Update `cmd/config/subcommands/show.go` (no changes needed - uses GetConfigPath(), GetAllSettings())
+- [x] Update `cmd/config/subcommands/edit.go` (no changes needed - uses GetConfigPath(), EnsureConfigDir())
+- [x] Update `cmd/config/subcommands/reset.go` (no changes needed - uses GetConfigPath())
+- [x] Update `cmd/root.go`
+- [x] Update `internal/daemon/orchestrator.go`
+- [x] Update `internal/testutil/testutil.go`
+- [x] Run `go build ./...`
+- [x] Run `go test ./...`
 
 ### Phase 6: Initialize TUI Update
-- [ ] Update `cmd/initialize/initialize.go` - Add `--force` flag
-- [ ] Update `cmd/initialize/initialize.go` - Check ConfigExists()
-- [ ] Update `cmd/initialize/initialize.go` - Use config.Write()
-- [ ] Update Step interface in `internal/tui/initialize/steps/step.go`
-- [ ] Update `internal/tui/initialize/wizard.go` for Config struct
-- [ ] Update `internal/tui/initialize/steps/falkordb.go`
-- [ ] Update `internal/tui/initialize/steps/semantic_provider.go`
-- [ ] Update `internal/tui/initialize/steps/embeddings.go`
-- [ ] Update `internal/tui/initialize/steps/http_port.go`
-- [ ] Update `internal/tui/initialize/steps/confirm.go`
-- [ ] Use technical provider identifiers (anthropic, openai, google)
+- [x] Update `cmd/initialize/initialize.go` - Add `--force` flag (already existed)
+- [x] Update `cmd/initialize/initialize.go` - Check ConfigExists()
+- [x] Update `cmd/initialize/initialize.go` - Use config.Write()
+- [x] Update Step interface in `internal/tui/initialize/steps/step.go`
+- [x] Update `internal/tui/initialize/wizard.go` for Config struct
+- [x] Update `internal/tui/initialize/steps/falkordb.go`
+- [x] Update `internal/tui/initialize/steps/semantic_provider.go`
+- [x] Update `internal/tui/initialize/steps/embeddings.go`
+- [x] Update `internal/tui/initialize/steps/http_port.go`
+- [x] Update `internal/tui/initialize/steps/confirm.go`
+- [x] Use technical provider identifiers (claude, openai, gemini - already used)
 - [ ] Test initialize without existing config
 - [ ] Test initialize with existing config (should fail)
 - [ ] Test initialize with --force flag
 - [ ] Verify generated config.yaml structure
 
 ### Phase 7: CLI Commands
-- [ ] Create `cmd/config/subcommands/validate.go`
-- [ ] Implement validate command
-- [ ] Add ValidateCmd to `cmd/config/config.go`
+- [x] Create `cmd/config/subcommands/validate.go`
+- [x] Implement validate command
+- [x] Add ValidateCmd to `cmd/config/config.go`
 - [ ] Test validate with valid config
 - [ ] Test validate with invalid config
 - [ ] Verify exit codes
 
 ### Phase 8: Cleanup and Testing
-- [ ] Remove `database.*` defaults
-- [ ] Remove `handlers.*` defaults
-- [ ] Remove `watcher.*` defaults
-- [ ] Remove `cache.*` defaults
-- [ ] Remove `providers.*` defaults
-- [ ] Remove old `setDefaults()` function
-- [ ] Add deprecation comments to string accessors
-- [ ] Update `internal/config/config_test.go`
-- [ ] Update `internal/testutil/testutil.go`
-- [ ] Update CLAUDE.md with new config structure
-- [ ] Run full test suite: `go test ./...`
+- [x] Remove `database.*` defaults (not applicable - never existed)
+- [x] Remove `handlers.*` defaults (not applicable - never existed)
+- [x] Remove `watcher.*` defaults (not applicable - never existed)
+- [x] Remove `cache.*` defaults (not applicable - never existed)
+- [x] Remove `providers.*` defaults (not applicable - never existed)
+- [x] Remove old `setDefaults()` function (retained - still used by Init())
+- [x] Remove string-based accessors (`GetString`, `GetInt`, `GetBool`, `GetPath`)
+- [x] Update `internal/config/config_test.go`
+- [x] Update `internal/testutil/testutil.go` (done in Phase 5)
+- [x] Update CLAUDE.md with new config structure
+- [x] Run full test suite: `go test ./...`
 - [ ] Manual test: full initialize workflow
 - [ ] Manual test: daemon start/stop
 - [ ] Manual test: hot reload with SIGHUP

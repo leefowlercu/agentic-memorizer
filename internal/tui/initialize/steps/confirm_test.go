@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 func TestConfirmStep_Title(t *testing.T) {
@@ -15,15 +16,15 @@ func TestConfirmStep_Title(t *testing.T) {
 }
 
 func TestConfirmStep_Init(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("graph.host", "localhost")
-	cfg.Set("graph.port", 6379)
-	cfg.Set("semantic.provider", "claude")
-	cfg.Set("semantic.model", "claude-sonnet-4")
-	cfg.Set("http.port", 7600)
+	cfg := config.NewDefaultConfig()
+	cfg.Graph.Host = "localhost"
+	cfg.Graph.Port = 6379
+	cfg.Semantic.Provider = "claude"
+	cfg.Semantic.Model = "claude-sonnet-4"
+	cfg.Daemon.HTTPPort = 7600
 
 	step := NewConfirmStep()
-	cmd := step.Init(cfg)
+	cmd := step.Init(&cfg)
 
 	if cmd != nil {
 		t.Error("expected nil command from Init")
@@ -31,17 +32,17 @@ func TestConfirmStep_Init(t *testing.T) {
 }
 
 func TestConfirmStep_View(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("graph.host", "localhost")
-	cfg.Set("graph.port", 6379)
-	cfg.Set("semantic.provider", "claude")
-	cfg.Set("semantic.model", "claude-sonnet-4")
-	cfg.Set("embeddings.enabled", true)
-	cfg.Set("embeddings.provider", "openai")
-	cfg.Set("http.port", 7600)
+	cfg := config.NewDefaultConfig()
+	cfg.Graph.Host = "localhost"
+	cfg.Graph.Port = 6379
+	cfg.Semantic.Provider = "claude"
+	cfg.Semantic.Model = "claude-sonnet-4"
+	cfg.Embeddings.Enabled = true
+	cfg.Embeddings.Provider = "openai"
+	cfg.Daemon.HTTPPort = 7600
 
 	step := NewConfirmStep()
-	step.Init(cfg)
+	step.Init(&cfg)
 
 	view := step.View()
 	if view == "" {
@@ -55,16 +56,16 @@ func TestConfirmStep_View(t *testing.T) {
 }
 
 func TestConfirmStep_View_EmbeddingsDisabled(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("graph.host", "localhost")
-	cfg.Set("graph.port", 6379)
-	cfg.Set("semantic.provider", "openai")
-	cfg.Set("semantic.model", "gpt-4o")
-	cfg.Set("embeddings.enabled", false)
-	cfg.Set("http.port", 8080)
+	cfg := config.NewDefaultConfig()
+	cfg.Graph.Host = "localhost"
+	cfg.Graph.Port = 6379
+	cfg.Semantic.Provider = "openai"
+	cfg.Semantic.Model = "gpt-4o"
+	cfg.Embeddings.Enabled = false
+	cfg.Daemon.HTTPPort = 8080
 
 	step := NewConfirmStep()
-	step.Init(cfg)
+	step.Init(&cfg)
 
 	view := step.View()
 	if view == "" {
@@ -74,8 +75,8 @@ func TestConfirmStep_View_EmbeddingsDisabled(t *testing.T) {
 
 func TestConfirmStep_Validate(t *testing.T) {
 	step := NewConfirmStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Validate should always pass for confirm step
 	err := step.Validate()
@@ -86,11 +87,11 @@ func TestConfirmStep_Validate(t *testing.T) {
 
 func TestConfirmStep_Apply(t *testing.T) {
 	step := NewConfirmStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Apply should be no-op for confirm step
-	err := step.Apply(cfg)
+	err := step.Apply(&cfg)
 	if err != nil {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
@@ -98,8 +99,8 @@ func TestConfirmStep_Apply(t *testing.T) {
 
 func TestConfirmStep_Update_Enter(t *testing.T) {
 	step := NewConfirmStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if result != StepNext {
@@ -109,8 +110,8 @@ func TestConfirmStep_Update_Enter(t *testing.T) {
 
 func TestConfirmStep_Update_Esc(t *testing.T) {
 	step := NewConfirmStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if result != StepPrev {
@@ -120,8 +121,8 @@ func TestConfirmStep_Update_Esc(t *testing.T) {
 
 func TestConfirmStep_Update_Navigation(t *testing.T) {
 	step := NewConfirmStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Other keys should continue
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyDown})

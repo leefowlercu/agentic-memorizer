@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/container"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
@@ -70,7 +70,7 @@ func NewFalkorDBStep() *FalkorDBStep {
 }
 
 // Init initializes the step with runtime detection.
-func (s *FalkorDBStep) Init(cfg *viper.Viper) tea.Cmd {
+func (s *FalkorDBStep) Init(cfg *config.Config) tea.Cmd {
 	slog.Debug("initializing FalkorDB step")
 
 	// Detect available container runtimes
@@ -99,13 +99,13 @@ func (s *FalkorDBStep) Init(cfg *viper.Viper) tea.Cmd {
 	s.phase = phaseRuntimeSelect
 
 	// Pre-fill with existing config values if available
-	if host := cfg.GetString("graph.host"); host != "" {
-		s.hostInput.SetValue(host)
-		slog.Debug("pre-filled host from config", "host", host)
+	if cfg.Graph.Host != "" {
+		s.hostInput.SetValue(cfg.Graph.Host)
+		slog.Debug("pre-filled host from config", "host", cfg.Graph.Host)
 	}
-	if port := cfg.GetInt("graph.port"); port != 0 {
-		s.portInput.SetValue(strconv.Itoa(port))
-		slog.Debug("pre-filled port from config", "port", port)
+	if cfg.Graph.Port != 0 {
+		s.portInput.SetValue(strconv.Itoa(cfg.Graph.Port))
+		slog.Debug("pre-filled port from config", "port", cfg.Graph.Port)
 	}
 
 	return nil
@@ -374,7 +374,7 @@ func (s *FalkorDBStep) Validate() error {
 }
 
 // Apply writes the FalkorDB configuration.
-func (s *FalkorDBStep) Apply(cfg *viper.Viper) error {
+func (s *FalkorDBStep) Apply(cfg *config.Config) error {
 	host := strings.TrimSpace(s.hostInput.Value())
 	if host == "" {
 		host = "localhost"
@@ -387,8 +387,8 @@ func (s *FalkorDBStep) Apply(cfg *viper.Viper) error {
 	}
 
 	slog.Debug("applying FalkorDB configuration", "host", host, "port", port)
-	cfg.Set("graph.host", host)
-	cfg.Set("graph.port", port)
+	cfg.Graph.Host = host
+	cfg.Graph.Port = port
 
 	return nil
 }

@@ -63,13 +63,13 @@ func runInitialize(cmd *cobra.Command, args []string) error {
 	}
 
 	// T025: Upgrade logging after config is available
-	logFile := config.GetPath("log_file")
-	levelStr := config.GetString("log_level")
-	level, ok := logging.ParseLevel(levelStr)
+	cfg := config.Get()
+	logFile := config.ExpandPath(cfg.LogFile)
+	level, ok := logging.ParseLevel(cfg.LogLevel)
 	if !ok {
 		level = logging.DefaultLevel
-		if levelStr != "" {
-			logger.Warn("invalid log level configured, using default", "configured", levelStr, "default", "info")
+		if cfg.LogLevel != "" {
+			logger.Warn("invalid log level configured, using default", "configured", cfg.LogLevel, "default", "info")
 		}
 	}
 

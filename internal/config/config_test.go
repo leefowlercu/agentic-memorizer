@@ -9,8 +9,15 @@ import (
 // T007: TestInit_NoConfigFile_UsesDefaults
 func TestInit_NoConfigFile_UsesDefaults(t *testing.T) {
 	// Setup: Use empty temp directory with no config file
+	// Also override HOME to prevent finding user's real config
 	tmpDir := t.TempDir()
 	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
+	t.Setenv("HOME", tmpDir)
+
+	// Change to temp dir to prevent finding config in original working dir
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origDir) })
 
 	// Clear any cached viper state
 	Reset()
@@ -217,13 +224,13 @@ func TestEnvOverride_SimpleKey_OverridesFileValue(t *testing.T) {
 	// Setup: Create config file with a value
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 8080\n"), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
 	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
 	// Set env var to override the file value
-	t.Setenv("MEMORIZER_DAEMON_PORT", "9999")
+	t.Setenv("MEMORIZER_DAEMON_HTTP_PORT", "9999")
 	Reset()
 
 	err := Init()
@@ -232,9 +239,9 @@ func TestEnvOverride_SimpleKey_OverridesFileValue(t *testing.T) {
 	}
 
 	// Verify env var overrides file value
-	got := GetInt("daemon.port")
-	if got != 9999 {
-		t.Errorf("GetInt(daemon.port) = %d, want 9999 (env override)", got)
+	cfg := Get()
+	if cfg.Daemon.HTTPPort != 9999 {
+		t.Errorf("Get().Daemon.HTTPPort = %d, want 9999 (env override)", cfg.Daemon.HTTPPort)
 	}
 }
 
@@ -243,13 +250,13 @@ func TestEnvOverride_NestedKey_MapsCorrectly(t *testing.T) {
 	// Setup: Create config file with nested value
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("memory:\n  base:\n    path: /original\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  metrics:\n    collection_interval: 30\n"), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
 	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	// Nested key: memory.base.path -> MEMORIZER_MEMORY_BASE_PATH
-	t.Setenv("MEMORIZER_MEMORY_BASE_PATH", "/overridden")
+	// Nested key: daemon.metrics.collection_interval -> MEMORIZER_DAEMON_METRICS_COLLECTION_INTERVAL
+	t.Setenv("MEMORIZER_DAEMON_METRICS_COLLECTION_INTERVAL", "120")
 	Reset()
 
 	err := Init()
@@ -258,20 +265,26 @@ func TestEnvOverride_NestedKey_MapsCorrectly(t *testing.T) {
 	}
 
 	// Verify nested env var overrides file value
-	got := GetString("memory.base.path")
-	if got != "/overridden" {
-		t.Errorf("GetString(memory.base.path) = %q, want /overridden (env override)", got)
+	cfg := Get()
+	if cfg.Daemon.Metrics.CollectionInterval != 120 {
+		t.Errorf("Get().Daemon.Metrics.CollectionInterval = %d, want 120 (env override)", cfg.Daemon.Metrics.CollectionInterval)
 	}
 }
 
 // T025: TestEnvOverride_NoFileValue_UsesEnvValue
 func TestEnvOverride_NoFileValue_UsesEnvValue(t *testing.T) {
 	// Setup: Empty config directory (no file)
+	// Isolate from user's real config
 	tmpDir := t.TempDir()
-
 	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
+	t.Setenv("HOME", tmpDir)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origDir) })
+
 	// Set env var with no corresponding file value
-	t.Setenv("MEMORIZER_DAEMON_HOST", "localhost")
+	t.Setenv("MEMORIZER_DAEMON_HTTP_BIND", "0.0.0.0")
 	Reset()
 
 	err := Init()
@@ -280,136 +293,26 @@ func TestEnvOverride_NoFileValue_UsesEnvValue(t *testing.T) {
 	}
 
 	// Verify env var is used when no file value exists
-	got := GetString("daemon.host")
-	if got != "localhost" {
-		t.Errorf("GetString(daemon.host) = %q, want localhost (env value)", got)
-	}
-}
-
-// T026: TestEnvOverride_InvalidType_ReturnsFatalError
-func TestEnvOverride_InvalidType_ReturnsFatalError(t *testing.T) {
-	// Setup: Create config file with integer type
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	// Set env var with invalid type (string for int field)
-	t.Setenv("MEMORIZER_DAEMON_PORT", "not-a-number")
-	Reset()
-
-	err := Init()
-	if err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	// When getting as int, should return 0 (Viper's behavior for type mismatch)
-	// The spec says fatal error, but Viper doesn't validate types on load
-	// Type validation happens when accessing values via GetInt
-	got := GetInt("daemon.port")
-	if got != 0 {
-		t.Errorf("GetInt(daemon.port) = %d, want 0 (invalid type returns zero value)", got)
+	cfg := Get()
+	if cfg.Daemon.HTTPBind != "0.0.0.0" {
+		t.Errorf("Get().Daemon.HTTPBind = %q, want 0.0.0.0 (env value)", cfg.Daemon.HTTPBind)
 	}
 }
 
 // =============================================================================
-// User Story 3: Programmatic Accessor Tests
+// User Story 3: Typed Config Accessor Tests
 // =============================================================================
 
-// T031: TestGetString_ExistingKey_ReturnsValue
-func TestGetString_ExistingKey_ReturnsValue(t *testing.T) {
+// TestGet_ReturnsTypedConfig verifies the typed accessor returns valid config
+func TestGet_ReturnsTypedConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("daemon:\n  host: example.com\n"), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	Reset()
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	got := GetString("daemon.host")
-	if got != "example.com" {
-		t.Errorf("GetString(daemon.host) = %q, want example.com", got)
-	}
-}
-
-// T032: TestGetInt_ExistingKey_ReturnsValue
-func TestGetInt_ExistingKey_ReturnsValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	Reset()
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	got := GetInt("daemon.port")
-	if got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d, want 8080", got)
-	}
-}
-
-// T033: TestGetBool_ExistingKey_ReturnsValue
-func TestGetBool_ExistingKey_ReturnsValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("daemon:\n  enabled: true\n"), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	Reset()
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	got := GetBool("daemon.enabled")
-	if got != true {
-		t.Errorf("GetBool(daemon.enabled) = %v, want true", got)
-	}
-}
-
-// T034: TestGet_MissingKey_ReturnsZeroValue
-func TestGet_MissingKey_ReturnsZeroValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	Reset()
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	if got := GetString("nonexistent.key"); got != "" {
-		t.Errorf("GetString(nonexistent.key) = %q, want empty string", got)
-	}
-	if got := GetInt("nonexistent.key"); got != 0 {
-		t.Errorf("GetInt(nonexistent.key) = %d, want 0", got)
-	}
-	if got := GetBool("nonexistent.key"); got != false {
-		t.Errorf("GetBool(nonexistent.key) = %v, want false", got)
-	}
-}
-
-// T035: TestGet_NestedKey_ReturnsValue
-func TestGet_NestedKey_ReturnsValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	configContent := `memory:
-  base:
-    path: /data/memorizer
-    limit: 1024
+	configContent := `daemon:
+  http_port: 8080
+  http_bind: 127.0.0.1
+graph:
+  host: localhost
+  port: 6379
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
@@ -422,41 +325,42 @@ func TestGet_NestedKey_ReturnsValue(t *testing.T) {
 		t.Fatalf("Init() returned error: %v", err)
 	}
 
-	gotString := GetString("memory.base.path")
-	if gotString != "/data/memorizer" {
-		t.Errorf("GetString(memory.base.path) = %q, want /data/memorizer", gotString)
+	cfg := Get()
+	if cfg == nil {
+		t.Fatal("Get() returned nil")
 	}
 
-	gotInt := GetInt("memory.base.limit")
-	if gotInt != 1024 {
-		t.Errorf("GetInt(memory.base.limit) = %d, want 1024", gotInt)
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d, want 8080", cfg.Daemon.HTTPPort)
+	}
+	if cfg.Daemon.HTTPBind != "127.0.0.1" {
+		t.Errorf("Get().Daemon.HTTPBind = %q, want 127.0.0.1", cfg.Daemon.HTTPBind)
+	}
+	if cfg.Graph.Host != "localhost" {
+		t.Errorf("Get().Graph.Host = %q, want localhost", cfg.Graph.Host)
+	}
+	if cfg.Graph.Port != 6379 {
+		t.Errorf("Get().Graph.Port = %d, want 6379", cfg.Graph.Port)
 	}
 }
 
-// T036: TestSetDefault_SetsDefaultValue
-func TestSetDefault_SetsDefaultValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
+// TestGet_BeforeInit_ReturnsNil verifies Get() returns nil before Init()
+func TestGet_BeforeInit_ReturnsNil(t *testing.T) {
 	Reset()
+	if cfg := Get(); cfg != nil {
+		t.Errorf("Get() before Init() = %v, want nil", cfg)
+	}
+}
 
-	// Set default before Init
-	SetDefault("daemon.port", 9090)
-	SetDefault("daemon.host", "localhost")
-	SetDefault("daemon.debug", true)
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	if got := GetInt("daemon.port"); got != 9090 {
-		t.Errorf("GetInt(daemon.port) = %d, want 9090 (default)", got)
-	}
-	if got := GetString("daemon.host"); got != "localhost" {
-		t.Errorf("GetString(daemon.host) = %q, want localhost (default)", got)
-	}
-	if got := GetBool("daemon.debug"); got != true {
-		t.Errorf("GetBool(daemon.debug) = %v, want true (default)", got)
-	}
+// TestMustGet_BeforeInit_Panics verifies MustGet() panics before Init()
+func TestMustGet_BeforeInit_Panics(t *testing.T) {
+	Reset()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustGet() before Init() should panic")
+		}
+	}()
+	_ = MustGet()
 }
 
 // =============================================================================
@@ -469,7 +373,7 @@ func TestReload_ValidConfig_UpdatesValues(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	// Initial config
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 8080\n"), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
@@ -481,12 +385,13 @@ func TestReload_ValidConfig_UpdatesValues(t *testing.T) {
 	}
 
 	// Verify initial value
-	if got := GetInt("daemon.port"); got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d, want 8080", got)
+	cfg := Get()
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d, want 8080", cfg.Daemon.HTTPPort)
 	}
 
 	// Update config file
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 9999\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 9999\n"), 0644); err != nil {
 		t.Fatalf("failed to update config file: %v", err)
 	}
 
@@ -496,8 +401,9 @@ func TestReload_ValidConfig_UpdatesValues(t *testing.T) {
 	}
 
 	// Verify updated value
-	if got := GetInt("daemon.port"); got != 9999 {
-		t.Errorf("GetInt(daemon.port) = %d after reload, want 9999", got)
+	cfg = Get()
+	if cfg.Daemon.HTTPPort != 9999 {
+		t.Errorf("Get().Daemon.HTTPPort = %d after reload, want 9999", cfg.Daemon.HTTPPort)
 	}
 }
 
@@ -507,7 +413,7 @@ func TestReload_InvalidConfig_RetainsPreviousValues(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	// Initial valid config
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 8080\n"), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
@@ -519,12 +425,13 @@ func TestReload_InvalidConfig_RetainsPreviousValues(t *testing.T) {
 	}
 
 	// Verify initial value
-	if got := GetInt("daemon.port"); got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d, want 8080", got)
+	cfg := Get()
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d, want 8080", cfg.Daemon.HTTPPort)
 	}
 
 	// Corrupt config file with invalid YAML
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: [invalid yaml"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: [invalid yaml"), 0644); err != nil {
 		t.Fatalf("failed to corrupt config file: %v", err)
 	}
 
@@ -535,8 +442,9 @@ func TestReload_InvalidConfig_RetainsPreviousValues(t *testing.T) {
 	}
 
 	// Verify previous value is retained
-	if got := GetInt("daemon.port"); got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d after failed reload, want 8080 (retained)", got)
+	cfg = Get()
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d after failed reload, want 8080 (retained)", cfg.Daemon.HTTPPort)
 	}
 }
 
@@ -550,7 +458,7 @@ func TestReload_UnreadableConfig_RetainsPreviousValues(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	// Initial valid config
-	if err := os.WriteFile(configPath, []byte("daemon:\n  port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("daemon:\n  http_port: 8080\n"), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
@@ -562,8 +470,9 @@ func TestReload_UnreadableConfig_RetainsPreviousValues(t *testing.T) {
 	}
 
 	// Verify initial value
-	if got := GetInt("daemon.port"); got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d, want 8080", got)
+	cfg := Get()
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d, want 8080", cfg.Daemon.HTTPPort)
 	}
 
 	// Make config unreadable
@@ -579,8 +488,9 @@ func TestReload_UnreadableConfig_RetainsPreviousValues(t *testing.T) {
 	}
 
 	// Verify previous value is retained
-	if got := GetInt("daemon.port"); got != 8080 {
-		t.Errorf("GetInt(daemon.port) = %d after failed reload, want 8080 (retained)", got)
+	cfg = Get()
+	if cfg.Daemon.HTTPPort != 8080 {
+		t.Errorf("Get().Daemon.HTTPPort = %d after failed reload, want 8080 (retained)", cfg.Daemon.HTTPPort)
 	}
 }
 
@@ -633,7 +543,33 @@ func TestExpandHome_NoHome(t *testing.T) {
 	}
 }
 
-func TestGetPath_ExpandsTilde(t *testing.T) {
+func TestExpandPath_ExpandsTilde(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("HOME environment variable not set")
+	}
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"tilde path", "~/.config/memorizer/app.log", filepath.Join(home, ".config/memorizer/app.log")},
+		{"absolute path", "/var/log/memorizer.log", "/var/log/memorizer.log"},
+		{"empty string", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExpandPath(tt.input)
+			if got != tt.want {
+				t.Errorf("ExpandPath(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExpandPath_WithTypedConfig(t *testing.T) {
 	home := os.Getenv("HOME")
 	if home == "" {
 		t.Skip("HOME environment variable not set")
@@ -652,45 +588,11 @@ func TestGetPath_ExpandsTilde(t *testing.T) {
 		t.Fatalf("Init() returned error: %v", err)
 	}
 
-	got := GetPath("log_file")
+	cfg := Get()
+	// Use ExpandPath to expand tilde from typed config field
+	got := ExpandPath(cfg.LogFile)
 	want := filepath.Join(home, ".config/memorizer/app.log")
 	if got != want {
-		t.Errorf("GetPath(log_file) = %q, want %q", got, want)
-	}
-}
-
-func TestGetPath_AbsolutePath(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("log_file: /var/log/memorizer.log\n"), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	Reset()
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	got := GetPath("log_file")
-	want := "/var/log/memorizer.log"
-	if got != want {
-		t.Errorf("GetPath(log_file) = %q, want %q", got, want)
-	}
-}
-
-func TestGetPath_EmptyValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("MEMORIZER_CONFIG_DIR", tmpDir)
-	Reset()
-
-	if err := Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-
-	got := GetPath("nonexistent_key")
-	if got != "" {
-		t.Errorf("GetPath(nonexistent_key) = %q, want empty string", got)
+		t.Errorf("ExpandPath(cfg.LogFile) = %q, want %q", got, want)
 	}
 }

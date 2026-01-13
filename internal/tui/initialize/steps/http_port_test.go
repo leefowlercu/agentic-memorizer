@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 func TestHTTPPortStep_Title(t *testing.T) {
@@ -15,10 +16,10 @@ func TestHTTPPortStep_Title(t *testing.T) {
 }
 
 func TestHTTPPortStep_Init(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	step := NewHTTPPortStep()
 
-	cmd := step.Init(cfg)
+	cmd := step.Init(&cfg)
 	if cmd != nil {
 		t.Error("expected nil command from Init")
 	}
@@ -30,11 +31,11 @@ func TestHTTPPortStep_Init(t *testing.T) {
 }
 
 func TestHTTPPortStep_Init_WithExistingConfig(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("http.port", 8080)
+	cfg := config.NewDefaultConfig()
+	cfg.Daemon.HTTPPort = 8080
 
 	step := NewHTTPPortStep()
-	step.Init(cfg)
+	step.Init(&cfg)
 
 	if step.portInput.Value() != "8080" {
 		t.Errorf("expected port '8080' from config, got '%s'", step.portInput.Value())
@@ -43,8 +44,8 @@ func TestHTTPPortStep_Init_WithExistingConfig(t *testing.T) {
 
 func TestHTTPPortStep_View(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	view := step.View()
 	if view == "" {
@@ -54,8 +55,8 @@ func TestHTTPPortStep_View(t *testing.T) {
 
 func TestHTTPPortStep_Validate_ValidPort(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("8080")
 
@@ -67,8 +68,8 @@ func TestHTTPPortStep_Validate_ValidPort(t *testing.T) {
 
 func TestHTTPPortStep_Validate_InvalidPort_Zero(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("0")
 
@@ -80,8 +81,8 @@ func TestHTTPPortStep_Validate_InvalidPort_Zero(t *testing.T) {
 
 func TestHTTPPortStep_Validate_InvalidPort_TooHigh(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("70000")
 
@@ -93,8 +94,8 @@ func TestHTTPPortStep_Validate_InvalidPort_TooHigh(t *testing.T) {
 
 func TestHTTPPortStep_Validate_InvalidPort_NonNumeric(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("abc")
 
@@ -106,8 +107,8 @@ func TestHTTPPortStep_Validate_InvalidPort_NonNumeric(t *testing.T) {
 
 func TestHTTPPortStep_Validate_EmptyPort(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("")
 
@@ -119,25 +120,25 @@ func TestHTTPPortStep_Validate_EmptyPort(t *testing.T) {
 
 func TestHTTPPortStep_Apply(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("9000")
 
-	err := step.Apply(cfg)
+	err := step.Apply(&cfg)
 	if err != nil {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
 
-	if cfg.GetInt("http.port") != 9000 {
-		t.Errorf("expected http.port 9000, got %d", cfg.GetInt("http.port"))
+	if cfg.Daemon.HTTPPort != 9000 {
+		t.Errorf("expected Daemon.HTTPPort 9000, got %d", cfg.Daemon.HTTPPort)
 	}
 }
 
 func TestHTTPPortStep_Update_Enter(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Default port is valid, so Enter should advance
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -148,8 +149,8 @@ func TestHTTPPortStep_Update_Enter(t *testing.T) {
 
 func TestHTTPPortStep_Update_Esc(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if result != StepPrev {
@@ -159,8 +160,8 @@ func TestHTTPPortStep_Update_Esc(t *testing.T) {
 
 func TestHTTPPortStep_Update_EnterWithInvalidPort(t *testing.T) {
 	step := NewHTTPPortStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.portInput.SetValue("invalid")
 

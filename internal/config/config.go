@@ -13,6 +13,9 @@ import (
 // configFilePath stores the path to the loaded config file
 var configFilePath string
 
+// currentConfig stores the loaded typed configuration
+var currentConfig *Config
+
 // Init initializes the configuration subsystem.
 // It searches for configuration files in priority order:
 //  1. Directory specified by MEMORIZER_CONFIG_DIR environment variable
@@ -56,8 +59,14 @@ func Init() error {
 	if err != nil {
 		// Check if it's a "file not found" error - that's acceptable
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// No config file found - use defaults (FR-012)
+			// No config file found - use defaults + env var overrides (FR-012)
 			configFilePath = ""
+			// Unmarshal from viper to get defaults + env var overrides
+			cfg := &Config{}
+			if err := viper.Unmarshal(cfg); err != nil {
+				return fmt.Errorf("failed to unmarshal config; %w", err)
+			}
+			currentConfig = cfg
 			return nil
 		}
 
@@ -68,11 +77,42 @@ func Init() error {
 	// T021: Store the loaded config file path
 	configFilePath = viper.ConfigFileUsed()
 
+	// Unmarshal to typed config
+	cfg := &Config{}
+	if err := viper.Unmarshal(cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal config; %w", err)
+	}
+
+	// Validate typed config
+	if err := Validate(cfg); err != nil {
+		return fmt.Errorf("config validation failed; %w", err)
+	}
+
+	currentConfig = cfg
+
 	// T052: Log config initialization
 	slog.Info("config initialized", "file", configFilePath)
 
 	// T050: Setup SIGHUP signal handler for hot reload
 	SetupSignalHandler()
+
+	return nil
+}
+
+// InitWithDefaults initializes the configuration subsystem with defaults only.
+// Use this in contexts where a config file is not required (e.g., initialize command).
+func InitWithDefaults() error {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+
+	viper.SetEnvPrefix("MEMORIZER")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	setDefaults()
+
+	configFilePath = ""
+	currentConfig = LoadWithDefaults()
 
 	return nil
 }
@@ -87,41 +127,30 @@ func ConfigFilePath() string {
 func Reset() {
 	viper.Reset()
 	configFilePath = ""
+	currentConfig = nil
 }
 
-// GetString returns the string value for the given key.
-// Returns empty string if key is not found.
-func GetString(key string) string {
-	return viper.GetString(key)
+// Get returns the typed configuration.
+// Returns nil if config has not been initialized.
+func Get() *Config {
+	return currentConfig
 }
 
-// GetInt returns the integer value for the given key.
-// Returns 0 if key is not found or value cannot be converted to int.
-func GetInt(key string) int {
-	return viper.GetInt(key)
+// MustGet returns the typed configuration.
+// Panics if config has not been initialized.
+func MustGet() *Config {
+	if currentConfig == nil {
+		panic("config: not initialized; call Init() first")
+	}
+	return currentConfig
 }
 
-// GetBool returns the boolean value for the given key.
-// Returns false if key is not found or value cannot be converted to bool.
-func GetBool(key string) bool {
-	return viper.GetBool(key)
-}
-
-// SetDefault sets a default value for the given key.
-func SetDefault(key string, value any) {
-	viper.SetDefault(key, value)
-}
-
-// Set sets a value for the given key, overriding defaults and config file values.
-// Primarily used for testing.
-func Set(key string, value any) {
-	viper.Set(key, value)
-}
-
-// GetPath returns the string value for the given key with ~ expanded to $HOME.
-// Returns empty string if key is not found.
-func GetPath(key string) string {
-	return expandHome(viper.GetString(key))
+// ExpandPath expands a leading ~ in path to the user's home directory.
+// Only expands "~" alone or "~/..." patterns. Patterns like "~user" are not expanded.
+// Returns the path unchanged if it doesn't start with ~/ or if home dir cannot be determined.
+// Use this when accessing path fields from config.Get() that may contain tildes.
+func ExpandPath(path string) string {
+	return expandHome(path)
 }
 
 // expandHome expands a leading ~ in path to the user's home directory.
@@ -161,13 +190,9 @@ func GetConfigPath() string {
 }
 
 // EnsureConfigDir creates the config directory if it doesn't exist.
+// Uses 0700 permissions for security.
 func EnsureConfigDir() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory; %w", err)
-	}
-	configDir := filepath.Join(home, ".config", "memorizer")
-	return os.MkdirAll(configDir, 0755)
+	return EnsureConfigDirWithPerms(0700)
 }
 
 // GetAllSettings returns all configuration settings as a map.
@@ -176,10 +201,12 @@ func GetAllSettings() map[string]any {
 }
 
 // Reload re-reads the configuration from disk.
-// On failure, the previous configuration is retained.
+// On failure, the previous configuration is retained and a config.reload_failed event is published.
+// On success, a config.reloaded event is published with the list of changed sections.
 func Reload() error {
-	// Store current settings in case reload fails
+	// Store current state in case reload fails
 	currentSettings := viper.AllSettings()
+	previousConfig := currentConfig
 
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -188,8 +215,42 @@ func Reload() error {
 			viper.Set(key, value)
 		}
 		slog.Error("config reload failed; retaining previous values", "error", err)
-		return fmt.Errorf("failed to reload config; %w", err)
+		reloadErr := fmt.Errorf("failed to reload config; %w", err)
+		publishConfigReloadFailed(reloadErr)
+		return reloadErr
 	}
+
+	// Unmarshal to typed config
+	cfg := &Config{}
+	if err := viper.Unmarshal(cfg); err != nil {
+		// Restore previous state
+		for key, value := range currentSettings {
+			viper.Set(key, value)
+		}
+		currentConfig = previousConfig
+		slog.Error("config reload unmarshal failed; retaining previous values", "error", err)
+		reloadErr := fmt.Errorf("failed to unmarshal config; %w", err)
+		publishConfigReloadFailed(reloadErr)
+		return reloadErr
+	}
+
+	// Validate typed config
+	if err := Validate(cfg); err != nil {
+		// Restore previous state
+		for key, value := range currentSettings {
+			viper.Set(key, value)
+		}
+		currentConfig = previousConfig
+		slog.Error("config reload validation failed; retaining previous values", "error", err)
+		reloadErr := fmt.Errorf("config validation failed; %w", err)
+		publishConfigReloadFailed(reloadErr)
+		return reloadErr
+	}
+
+	// Publish success event before updating currentConfig so we can compare
+	publishConfigReloaded(previousConfig, cfg)
+
+	currentConfig = cfg
 
 	slog.Info("config reloaded", "file", viper.ConfigFileUsed())
 	return nil

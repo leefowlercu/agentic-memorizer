@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 func TestFalkorDBStep_Title(t *testing.T) {
@@ -15,10 +16,10 @@ func TestFalkorDBStep_Title(t *testing.T) {
 }
 
 func TestFalkorDBStep_Init(t *testing.T) {
-	cfg := viper.New()
+	cfg := config.NewDefaultConfig()
 	step := NewFalkorDBStep()
 
-	cmd := step.Init(cfg)
+	cmd := step.Init(&cfg)
 	// Init should return nil (no async command needed initially)
 	if cmd != nil {
 		t.Error("expected nil command from Init")
@@ -27,8 +28,8 @@ func TestFalkorDBStep_Init(t *testing.T) {
 
 func TestFalkorDBStep_View(t *testing.T) {
 	step := NewFalkorDBStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	view := step.View()
 	if view == "" {
@@ -38,8 +39,8 @@ func TestFalkorDBStep_View(t *testing.T) {
 
 func TestFalkorDBStep_Validate_CustomHost(t *testing.T) {
 	step := NewFalkorDBStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Select "Use existing instance" option
 	step.radio.SetCursor(0) // Assuming first option after container options
@@ -56,8 +57,8 @@ func TestFalkorDBStep_Validate_CustomHost(t *testing.T) {
 
 func TestFalkorDBStep_Validate_EmptyHost(t *testing.T) {
 	step := NewFalkorDBStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Set phase to custom entry
 	step.phase = phaseCustomEntry
@@ -74,31 +75,31 @@ func TestFalkorDBStep_Validate_EmptyHost(t *testing.T) {
 
 func TestFalkorDBStep_Apply(t *testing.T) {
 	step := NewFalkorDBStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	step.hostInput.SetValue("myhost.example.com")
 	step.portInput.SetValue("6380")
 	step.phase = phaseCustomEntry
 
-	err := step.Apply(cfg)
+	err := step.Apply(&cfg)
 	if err != nil {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
 
-	if cfg.GetString("graph.host") != "myhost.example.com" {
-		t.Errorf("expected graph.host 'myhost.example.com', got '%s'", cfg.GetString("graph.host"))
+	if cfg.Graph.Host != "myhost.example.com" {
+		t.Errorf("expected Graph.Host 'myhost.example.com', got '%s'", cfg.Graph.Host)
 	}
 
-	if cfg.GetInt("graph.port") != 6380 {
-		t.Errorf("expected graph.port 6380, got %d", cfg.GetInt("graph.port"))
+	if cfg.Graph.Port != 6380 {
+		t.Errorf("expected Graph.Port 6380, got %d", cfg.Graph.Port)
 	}
 }
 
 func TestFalkorDBStep_Update_Navigation(t *testing.T) {
 	step := NewFalkorDBStep()
-	cfg := viper.New()
-	step.Init(cfg)
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
 
 	// Navigate down
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyDown})

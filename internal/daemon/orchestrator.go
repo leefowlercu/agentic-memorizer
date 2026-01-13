@@ -28,8 +28,10 @@ func NewOrchestrator(d *Daemon) *Orchestrator {
 // Initialize sets up all components in the correct order.
 // Startup sequence: Registry -> Graph -> Cache -> Providers -> Walker -> Watcher -> Queue -> MCP
 func (o *Orchestrator) Initialize(ctx context.Context) error {
+	cfg := config.Get()
+
 	// 1. Initialize SQLite Registry
-	registryPath := config.GetPath("database.registry_path")
+	registryPath := config.ExpandPath(cfg.Daemon.RegistryPath)
 	reg, err := registry.Open(ctx, registryPath)
 	if err != nil {
 		return err
@@ -48,7 +50,7 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 	_ = mcpCfg
 
 	// Initialize Metrics Collector
-	metricsInterval := time.Duration(config.GetInt("metrics.collection_interval")) * time.Second
+	metricsInterval := time.Duration(cfg.Daemon.Metrics.CollectionInterval) * time.Second
 	if metricsInterval == 0 {
 		metricsInterval = 15 * time.Second
 	}

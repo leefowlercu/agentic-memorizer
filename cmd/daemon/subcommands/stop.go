@@ -48,7 +48,7 @@ func validateStop(cmd *cobra.Command, args []string) error {
 }
 
 func runStop(cmd *cobra.Command, args []string) error {
-	pidPath := config.GetPath("daemon.pid_file")
+	pidPath := config.ExpandPath(config.Get().Daemon.PIDFile)
 
 	if err := stopDaemon(pidPath); err != nil {
 		if errors.Is(err, ErrNoDaemonRunning) {

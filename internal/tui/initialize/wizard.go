@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/steps"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
@@ -27,7 +27,7 @@ const (
 // WizardResult holds the outcome of the initialization wizard.
 type WizardResult struct {
 	// Config contains the final configuration if confirmed.
-	Config *viper.Viper
+	Config *config.Config
 	// Confirmed indicates whether the user confirmed the configuration.
 	Confirmed bool
 	// Cancelled indicates whether the user cancelled the wizard.
@@ -40,7 +40,7 @@ type WizardResult struct {
 type WizardModel struct {
 	steps       []Step
 	currentStep int
-	config      *viper.Viper
+	config      *config.Config
 	progress    components.Progress
 	err         error
 	cancelled   bool
@@ -51,7 +51,7 @@ type WizardModel struct {
 }
 
 // NewWizard creates a new wizard with the given configuration and steps.
-func NewWizard(cfg *viper.Viper, stepList []Step) WizardModel {
+func NewWizard(cfg *config.Config, stepList []Step) WizardModel {
 	// Build step titles for progress indicator
 	titles := make([]string, len(stepList))
 	for i, s := range stepList {
@@ -224,7 +224,7 @@ func (m WizardModel) Result() WizardResult {
 }
 
 // RunWizard runs the wizard and returns the result.
-func RunWizard(cfg *viper.Viper, stepList []Step) (WizardResult, error) {
+func RunWizard(cfg *config.Config, stepList []Step) (WizardResult, error) {
 	wizard := NewWizard(cfg, stepList)
 
 	p := tea.NewProgram(wizard, tea.WithAltScreen())

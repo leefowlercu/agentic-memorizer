@@ -21,4 +21,5 @@ func init() {
 	ConfigCmd.AddCommand(subcommands.ShowCmd)
 	ConfigCmd.AddCommand(subcommands.EditCmd)
 	ConfigCmd.AddCommand(subcommands.ResetCmd)
+	ConfigCmd.AddCommand(subcommands.ValidateCmd)
 }

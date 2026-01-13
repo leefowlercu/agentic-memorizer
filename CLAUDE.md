@@ -34,4 +34,46 @@ Go 1.25.5: Follow standard conventions
 
 
 <!-- MANUAL ADDITIONS START -->
+## Configuration Subsystem
+
+### Typed Configuration Access
+
+All configuration values are accessed via typed structs rather than string keys:
+
+```go
+// Initialize config once at startup
+if err := config.Init(); err != nil {
+    return err
+}
+
+// Access typed config
+cfg := config.Get()
+port := cfg.Daemon.HTTPPort           // int
+host := cfg.Graph.Host                // string
+provider := cfg.Semantic.Provider     // string
+
+// Expand tilde paths
+pidFile := config.ExpandPath(cfg.Daemon.PIDFile)  // ~/path -> /home/user/path
+```
+
+### Config Struct Hierarchy
+
+```go
+type Config struct {
+    LogLevel   string
+    LogFile    string
+    Daemon     DaemonConfig
+    Graph      GraphConfig
+    Semantic   SemanticConfig
+    Embeddings EmbeddingsConfig
+}
+```
+
+### Environment Variable Overrides
+
+Config values can be overridden via environment variables with `MEMORIZER_` prefix:
+
+- `MEMORIZER_DAEMON_HTTP_PORT=9000` overrides `daemon.http_port`
+- `MEMORIZER_GRAPH_HOST=redis.local` overrides `graph.host`
+- `MEMORIZER_SEMANTIC_PROVIDER=openai` overrides `semantic.provider`
 <!-- MANUAL ADDITIONS END -->

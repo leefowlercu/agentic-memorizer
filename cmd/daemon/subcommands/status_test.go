@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/testutil"
 )
 
 // T068: Tests for status command output formats
@@ -49,6 +51,9 @@ func TestFormatStatus_NotRunning(t *testing.T) {
 // T069: Tests for status command with running daemon
 
 func TestGetDaemonStatus_Running(t *testing.T) {
+	// Initialize config for fetchHealth() to work
+	_ = testutil.NewTestEnv(t)
+
 	tmpDir := t.TempDir()
 	pidPath := filepath.Join(tmpDir, "daemon.pid")
 

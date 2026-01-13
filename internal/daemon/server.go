@@ -16,12 +16,27 @@ type ServerConfig struct {
 	Bind string
 }
 
+// RebuildResult contains the result of a rebuild operation.
+type RebuildResult struct {
+	Status        string `json:"status"`
+	FilesQueued   int    `json:"files_queued"`
+	DirsProcessed int    `json:"dirs_processed"`
+	Duration      string `json:"duration"`
+	Error         string `json:"error,omitempty"`
+}
+
+// RebuildFunc is a function that triggers a rebuild operation.
+type RebuildFunc func(ctx context.Context, full bool) (*RebuildResult, error)
+
 // Server is the HTTP server for daemon health endpoints.
 type Server struct {
-	health *HealthManager
-	config ServerConfig
-	server *http.Server
-	router *chi.Mux
+	health         *HealthManager
+	config         ServerConfig
+	server         *http.Server
+	router         *chi.Mux
+	mcpHandler     http.Handler
+	metricsHandler http.Handler
+	rebuildFunc    RebuildFunc
 }
 
 // NewServer creates a new HTTP server with the given health manager and config.
@@ -40,6 +55,38 @@ func NewServer(health *HealthManager, config ServerConfig) *Server {
 func (s *Server) setupRoutes() {
 	s.router.Get("/healthz", s.handleHealthz)
 	s.router.Get("/readyz", s.handleReadyz)
+	s.router.Post("/rebuild", s.handleRebuild)
+
+	// Mount MCP endpoints if handler is set
+	if s.mcpHandler != nil {
+		s.router.Mount("/mcp", s.mcpHandler)
+	}
+
+	// Mount metrics endpoint if handler is set
+	if s.metricsHandler != nil {
+		s.router.Handle("/metrics", s.metricsHandler)
+	}
+}
+
+// SetMCPHandler sets the MCP server handler.
+func (s *Server) SetMCPHandler(handler http.Handler) {
+	s.mcpHandler = handler
+	// Re-setup routes to include MCP
+	s.router = chi.NewRouter()
+	s.setupRoutes()
+}
+
+// SetMetricsHandler sets the Prometheus metrics handler.
+func (s *Server) SetMetricsHandler(handler http.Handler) {
+	s.metricsHandler = handler
+	// Re-setup routes to include metrics
+	s.router = chi.NewRouter()
+	s.setupRoutes()
+}
+
+// SetRebuildFunc sets the function to call when rebuild is requested.
+func (s *Server) SetRebuildFunc(fn RebuildFunc) {
+	s.rebuildFunc = fn
 }
 
 // Handler returns the HTTP handler for testing purposes.
@@ -72,6 +119,38 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(status)
+}
+
+// handleRebuild handles the /rebuild endpoint.
+// Triggers a rebuild of the knowledge graph.
+func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.rebuildFunc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(RebuildResult{
+			Status: "error",
+			Error:  "rebuild not available",
+		})
+		return
+	}
+
+	// Check for full rebuild flag
+	full := r.URL.Query().Get("full") == "true"
+
+	// Execute rebuild
+	result, err := s.rebuildFunc(r.Context(), full)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(RebuildResult{
+			Status: "error",
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
 }
 
 // Start starts the HTTP server and blocks until it's stopped.

@@ -57,6 +57,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Initialize orchestrator and wire components
+	orchestrator := daemon.NewOrchestrator(d)
+	if err := orchestrator.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize components; %w", err)
+	}
+
+	// Start orchestrated components
+	if err := orchestrator.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start components; %w", err)
+	}
+
+	// Ensure orchestrator cleanup on exit
+	defer orchestrator.Stop(ctx)
+
 	// Start daemon (blocking)
 	slog.Info("starting daemon",
 		"http_bind", cfg.HTTPBind,

@@ -112,6 +112,12 @@ func SetDefault(key string, value any) {
 	viper.SetDefault(key, value)
 }
 
+// Set sets a value for the given key, overriding defaults and config file values.
+// Primarily used for testing.
+func Set(key string, value any) {
+	viper.Set(key, value)
+}
+
 // GetPath returns the string value for the given key with ~ expanded to $HOME.
 // Returns empty string if key is not found.
 func GetPath(key string) string {
@@ -141,6 +147,32 @@ func expandHome(path string) string {
 	}
 
 	return filepath.Join(home, path[2:])
+}
+
+// GetConfigPath returns the path where the config file should be located.
+// If a config file is loaded, returns its path. Otherwise returns the default path.
+func GetConfigPath() string {
+	if configFilePath != "" {
+		return configFilePath
+	}
+	// Return default path
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "memorizer", "config.yaml")
+}
+
+// EnsureConfigDir creates the config directory if it doesn't exist.
+func EnsureConfigDir() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory; %w", err)
+	}
+	configDir := filepath.Join(home, ".config", "memorizer")
+	return os.MkdirAll(configDir, 0755)
+}
+
+// GetAllSettings returns all configuration settings as a map.
+func GetAllSettings() map[string]any {
+	return viper.AllSettings()
 }
 
 // Reload re-reads the configuration from disk.

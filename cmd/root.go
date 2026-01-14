@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	configcmd "github.com/leefowlercu/agentic-memorizer/cmd/config"
@@ -37,6 +38,7 @@ var memorizerCmd = &cobra.Command{
 func init() {
 	// T024: Create logging Manager in bootstrap mode (stderr text only)
 	logManager = logging.NewManager()
+	slog.SetDefault(logManager.Logger())
 
 	// Register global flags
 	memorizerCmd.PersistentFlags().BoolVarP(&Quiet, "quiet", "q", false, "Suppress non-error output")

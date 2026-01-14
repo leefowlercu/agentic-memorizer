@@ -185,6 +185,14 @@ func (r *mockRegistry) Close() error {
 	return nil
 }
 
+func (r *mockRegistry) CheckPathHealth(ctx context.Context) ([]registry.PathStatus, error) {
+	return nil, nil
+}
+
+func (r *mockRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 // mockBus implements events.Bus for testing.
 type mockBus struct {
 	events []events.Event

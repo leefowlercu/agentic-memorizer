@@ -136,3 +136,24 @@ func (f *FileState) IsStale(size int64, modTime time.Time) bool {
 func (f *FileState) NeedsAnalysis(currentVersion string) bool {
 	return f.LastAnalyzedAt == nil || f.AnalysisVersion != currentVersion
 }
+
+// PathStatus represents the health status of a remembered path.
+type PathStatus struct {
+	// Path is the remembered path being checked.
+	Path string
+
+	// Status indicates the accessibility of the path.
+	// Values: "ok", "missing", "denied", "error"
+	Status string
+
+	// Error is the underlying error, if any.
+	Error error
+}
+
+// Path status constants.
+const (
+	PathStatusOK      = "ok"
+	PathStatusMissing = "missing"
+	PathStatusDenied  = "denied"
+	PathStatusError   = "error"
+)

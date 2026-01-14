@@ -39,6 +39,10 @@ const (
 
 	// ConfigReloadFailed is published when configuration reload fails.
 	ConfigReloadFailed EventType = "config.reload_failed"
+
+	// RememberedPathRemoved is published when a remembered path is auto-removed
+	// due to the directory no longer existing on the filesystem.
+	RememberedPathRemoved EventType = "remembered_path.removed"
 )
 
 // Event represents a published event in the system.
@@ -140,6 +144,15 @@ type ConfigReloadEvent struct {
 
 	// Error contains the error message if reload failed (for ConfigReloadFailed events).
 	Error string
+}
+
+// RememberedPathRemovedEvent contains data for remembered path removal events.
+type RememberedPathRemovedEvent struct {
+	// Path is the remembered path that was removed.
+	Path string
+
+	// Reason describes why the path was removed (e.g., "not_found").
+	Reason string
 }
 
 // EventHandler is a function that processes events.

@@ -52,6 +52,10 @@ type Registry interface {
 	ListFilesNeedingSemantic(ctx context.Context, parentPath string, maxRetries int) ([]FileState, error)
 	ListFilesNeedingEmbeddings(ctx context.Context, parentPath string, maxRetries int) ([]FileState, error)
 
+	// Path health checking
+	CheckPathHealth(ctx context.Context) ([]PathStatus, error)
+	ValidateAndCleanPaths(ctx context.Context) ([]string, error)
+
 	// Lifecycle
 	Close() error
 }
@@ -642,6 +646,74 @@ func (r *SQLiteRegistry) ListFilesNeedingEmbeddings(ctx context.Context, parentP
 	defer rows.Close()
 
 	return scanAllFileStates(rows)
+}
+
+// CheckPathHealth validates all remembered paths and returns their status.
+// This method does not modify the registry - it only reports current status.
+func (r *SQLiteRegistry) CheckPathHealth(ctx context.Context) ([]PathStatus, error) {
+	paths, err := r.ListPaths(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list paths; %w", err)
+	}
+
+	statuses := make([]PathStatus, 0, len(paths))
+	for _, p := range paths {
+		status := PathStatus{Path: p.Path}
+
+		_, err := os.Stat(p.Path)
+		if err == nil {
+			status.Status = PathStatusOK
+		} else if os.IsNotExist(err) {
+			status.Status = PathStatusMissing
+			status.Error = err
+		} else if os.IsPermission(err) {
+			status.Status = PathStatusDenied
+			status.Error = err
+		} else {
+			status.Status = PathStatusError
+			status.Error = err
+		}
+
+		statuses = append(statuses, status)
+	}
+
+	return statuses, nil
+}
+
+// ValidateAndCleanPaths checks all remembered paths and removes those that
+// no longer exist. Returns the list of removed paths.
+// Only paths with "missing" status are removed; paths with permission or other
+// errors are preserved.
+func (r *SQLiteRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, error) {
+	statuses, err := r.CheckPathHealth(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var removed []string
+	for _, status := range statuses {
+		if status.Status != PathStatusMissing {
+			continue
+		}
+
+		// Delete all file_state entries under this path
+		if err := r.DeleteFileStatesForPath(ctx, status.Path); err != nil {
+			// Log but continue - best effort cleanup
+			// The caller can handle logging appropriately
+		}
+
+		// Remove the remembered path itself
+		if err := r.RemovePath(ctx, status.Path); err != nil {
+			if !errors.Is(err, ErrPathNotFound) {
+				return removed, fmt.Errorf("failed to remove path %s; %w", status.Path, err)
+			}
+			// Path already removed - continue
+		}
+
+		removed = append(removed, status.Path)
+	}
+
+	return removed, nil
 }
 
 // scanAllFileStates is a helper that scans all rows into FileState slice.

@@ -147,6 +147,14 @@ func (r *mockRegistry) ListFilesNeedingEmbeddings(ctx context.Context, parentPat
 	return nil, nil
 }
 
+func (r *mockRegistry) CheckPathHealth(ctx context.Context) ([]registry.PathStatus, error) {
+	return nil, nil
+}
+
+func (r *mockRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (r *mockRegistry) Close() error {
 	return nil
 }

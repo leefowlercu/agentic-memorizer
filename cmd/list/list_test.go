@@ -68,6 +68,175 @@ func TestListCmd_WithPaths(t *testing.T) {
 	}
 }
 
+func TestListCmd_TableHeader(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	// Add a path so we get table output
+	ctx := context.Background()
+	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg.AddPath(ctx, "/test/path", nil)
+	reg.Close()
+
+	cmd := createTestCommand()
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("list command failed: %v", err)
+	}
+
+	output := stdout.String()
+
+	// Check table header includes all columns
+	if !strings.Contains(output, "PATH") {
+		t.Error("expected PATH column header")
+	}
+	if !strings.Contains(output, "STATUS") {
+		t.Error("expected STATUS column header")
+	}
+	if !strings.Contains(output, "FILES") {
+		t.Error("expected FILES column header")
+	}
+	if !strings.Contains(output, "LAST WALK") {
+		t.Error("expected LAST WALK column header")
+	}
+}
+
+func TestListCmd_MissingPathStatus(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	// Add paths that don't exist on filesystem
+	ctx := context.Background()
+	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg.AddPath(ctx, "/nonexistent/path1", nil)
+	reg.AddPath(ctx, "/nonexistent/path2", nil)
+	reg.Close()
+
+	cmd := createTestCommand()
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("list command failed: %v", err)
+	}
+
+	output := stdout.String()
+
+	// Both paths should show as "missing"
+	if !strings.Contains(output, "missing") {
+		t.Error("expected 'missing' status for non-existent paths")
+	}
+}
+
+func TestListCmd_ExistingPathStatus(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	// Create a real temp directory
+	existingDir := t.TempDir()
+
+	ctx := context.Background()
+	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg.AddPath(ctx, existingDir, nil)
+	reg.Close()
+
+	cmd := createTestCommand()
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("list command failed: %v", err)
+	}
+
+	output := stdout.String()
+
+	// The real directory should show as "ok"
+	if !strings.Contains(output, "ok") {
+		t.Errorf("expected 'ok' status for existing path, got: %s", output)
+	}
+}
+
+func TestListCmd_MixedPathStatus(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	// Create one real directory and one fake path
+	existingDir := t.TempDir()
+
+	ctx := context.Background()
+	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg.AddPath(ctx, existingDir, nil)
+	reg.AddPath(ctx, "/nonexistent/path", nil)
+	reg.Close()
+
+	cmd := createTestCommand()
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("list command failed: %v", err)
+	}
+
+	output := stdout.String()
+
+	// Should have both "ok" and "missing" statuses
+	if !strings.Contains(output, "ok") {
+		t.Error("expected 'ok' status for existing path")
+	}
+	if !strings.Contains(output, "missing") {
+		t.Error("expected 'missing' status for non-existent path")
+	}
+}
+
+func TestListCmd_InaccessiblePathShowsDash(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	// Add a path that doesn't exist
+	ctx := context.Background()
+	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg.AddPath(ctx, "/nonexistent/inaccessible", nil)
+	reg.Close()
+
+	cmd := createTestCommand()
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("list command failed: %v", err)
+	}
+
+	output := stdout.String()
+	lines := strings.Split(output, "\n")
+
+	// Find the line with our path
+	var pathLine string
+	for _, line := range lines {
+		if strings.Contains(line, "inaccessible") {
+			pathLine = line
+			break
+		}
+	}
+
+	if pathLine == "" {
+		t.Fatal("expected to find path line in output")
+	}
+
+	// For inaccessible paths, FILES should show "-"
+	// The output format is: PATH (40) STATUS (10) FILES (8) LAST WALK
+	// Split by whitespace to verify the dash is present
+	if !strings.Contains(pathLine, "-") {
+		t.Error("expected '-' for FILES/LAST WALK of inaccessible path")
+	}
+}
+
 func TestListCmd_Verbose(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 
@@ -119,6 +288,44 @@ func TestListCmd_Verbose(t *testing.T) {
 	}
 	if !strings.Contains(output, ".log") {
 		t.Error("expected .log extension in verbose output")
+	}
+}
+
+func TestListCmd_VerboseWithStatus(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	// Create a real directory and a fake path
+	existingDir := t.TempDir()
+
+	ctx := context.Background()
+	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg.AddPath(ctx, existingDir, nil)
+	reg.AddPath(ctx, "/nonexistent/path", nil)
+	reg.Close()
+
+	cmd := createTestCommand()
+	cmd.SetArgs([]string{"--verbose"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("list command failed: %v", err)
+	}
+
+	output := stdout.String()
+
+	// Verbose output should include Status: field
+	if !strings.Contains(output, "Status:") {
+		t.Error("expected 'Status:' in verbose output")
+	}
+	// Should have both status values
+	if !strings.Contains(output, "Status: ok") {
+		t.Error("expected 'Status: ok' in verbose output for existing path")
+	}
+	if !strings.Contains(output, "Status: missing") {
+		t.Error("expected 'Status: missing' in verbose output for non-existent path")
 	}
 }
 

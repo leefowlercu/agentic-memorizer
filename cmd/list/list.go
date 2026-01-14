@@ -70,25 +70,67 @@ func runList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Get health status for all paths
+	statuses, err := reg.CheckPathHealth(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check path health; %w", err)
+	}
+
+	// Build status lookup map
+	statusMap := make(map[string]string)
+	for _, s := range statuses {
+		statusMap[s.Path] = s.Status
+	}
+
 	fmt.Fprintf(out, "Remembered directories (%d):\n\n", len(paths))
 
-	for _, p := range paths {
-		if listVerbose {
-			printVerbosePath(ctx, out, reg, &p)
-		} else {
-			printSimplePath(out, &p)
+	if listVerbose {
+		for _, p := range paths {
+			status := statusMap[p.Path]
+			printVerbosePath(ctx, out, reg, &p, status)
+		}
+	} else {
+		// Print table header
+		fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", "PATH", "STATUS", "FILES", "LAST WALK")
+		fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", strings.Repeat("-", 40), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 19))
+
+		for _, p := range paths {
+			status := statusMap[p.Path]
+			printTableRow(ctx, out, reg, &p, status)
 		}
 	}
 
 	return nil
 }
 
-func printSimplePath(out io.Writer, p *registry.RememberedPath) {
-	fmt.Fprintf(out, "  %s\n", p.Path)
+func printTableRow(ctx context.Context, out io.Writer, reg *registry.SQLiteRegistry, p *registry.RememberedPath, status string) {
+	// Truncate path if too long
+	path := p.Path
+	if len(path) > 40 {
+		path = "..." + path[len(path)-37:]
+	}
+
+	// Get file count (show "-" if path is inaccessible)
+	filesStr := "-"
+	if status == registry.PathStatusOK {
+		fileStates, err := reg.ListFileStates(ctx, p.Path)
+		if err == nil {
+			filesStr = fmt.Sprintf("%d", len(fileStates))
+		}
+	}
+
+	// Format last walk time (show "-" if never walked or inaccessible)
+	lastWalkStr := "-"
+	if status == registry.PathStatusOK && p.LastWalkAt != nil {
+		lastWalkStr = p.LastWalkAt.Format("2006-01-02 15:04:05")
+	}
+
+	fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", path, status, filesStr, lastWalkStr)
 }
 
-func printVerbosePath(ctx context.Context, out io.Writer, reg *registry.SQLiteRegistry, p *registry.RememberedPath) {
+func printVerbosePath(ctx context.Context, out io.Writer, reg *registry.SQLiteRegistry, p *registry.RememberedPath, status string) {
 	fmt.Fprintf(out, "  Path: %s\n", p.Path)
+	fmt.Fprintf(out, "    Status: %s\n", status)
 
 	// Print timestamps
 	fmt.Fprintf(out, "    Added: %s\n", p.CreatedAt.Format("2006-01-02 15:04:05"))
@@ -98,10 +140,14 @@ func printVerbosePath(ctx context.Context, out io.Writer, reg *registry.SQLiteRe
 		fmt.Fprintf(out, "    Last Walk: never\n")
 	}
 
-	// Count files
-	fileStates, err := reg.ListFileStates(ctx, p.Path)
-	if err == nil {
-		fmt.Fprintf(out, "    Files Tracked: %d\n", len(fileStates))
+	// Count files (only if path is accessible)
+	if status == registry.PathStatusOK {
+		fileStates, err := reg.ListFileStates(ctx, p.Path)
+		if err == nil {
+			fmt.Fprintf(out, "    Files Tracked: %d\n", len(fileStates))
+		}
+	} else {
+		fmt.Fprintf(out, "    Files Tracked: -\n")
 	}
 
 	// Print configuration if present

@@ -388,6 +388,9 @@ func TestEventTypes(t *testing.T) {
 		{SemanticAnalysisFailed, "analysis.semantic_failed"},
 		{EmbeddingsGenerationFailed, "analysis.embeddings_failed"},
 		{GraphPersistenceFailed, "graph.persistence_failed"},
+		{ConfigReloaded, "config.reloaded"},
+		{ConfigReloadFailed, "config.reload_failed"},
+		{RememberedPathRemoved, "remembered_path.removed"},
 	}
 
 	for _, tt := range tests {
@@ -396,6 +399,49 @@ func TestEventTypes(t *testing.T) {
 				t.Errorf("expected %s, got %s", tt.expected, tt.eventType)
 			}
 		})
+	}
+}
+
+func TestRememberedPathRemovedEvent(t *testing.T) {
+	bus := NewBus()
+	defer bus.Close()
+
+	receivedChan := make(chan Event, 1)
+
+	unsubscribe := bus.Subscribe(RememberedPathRemoved, func(event Event) {
+		receivedChan <- event
+	})
+	defer unsubscribe()
+
+	// Publish a RememberedPathRemoved event
+	event := NewEvent(RememberedPathRemoved, RememberedPathRemovedEvent{
+		Path:   "/old/deleted/path",
+		Reason: "not_found",
+	})
+
+	err := bus.Publish(context.Background(), event)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Wait for event to be processed
+	select {
+	case receivedEvent := <-receivedChan:
+		if receivedEvent.Type != RememberedPathRemoved {
+			t.Errorf("expected event type %s, got %s", RememberedPathRemoved, receivedEvent.Type)
+		}
+		payload, ok := receivedEvent.Payload.(RememberedPathRemovedEvent)
+		if !ok {
+			t.Fatal("expected RememberedPathRemovedEvent payload")
+		}
+		if payload.Path != "/old/deleted/path" {
+			t.Errorf("expected path '/old/deleted/path', got %s", payload.Path)
+		}
+		if payload.Reason != "not_found" {
+			t.Errorf("expected reason 'not_found', got %s", payload.Reason)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("expected event to be received")
 	}
 }
 

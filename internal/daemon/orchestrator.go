@@ -251,6 +251,16 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 func (o *Orchestrator) Start(ctx context.Context) error {
 	// Registry is already initialized and doesn't need a Start call
 
+	// Validate and clean missing remembered paths before starting components
+	removedPaths := o.validateRememberedPaths(ctx)
+	if len(removedPaths) > 0 {
+		// Print summary to stdout for visibility
+		fmt.Printf("Removed %d missing remembered paths:\n", len(removedPaths))
+		for _, p := range removedPaths {
+			fmt.Printf("  %s (not found)\n", p)
+		}
+	}
+
 	// Start graph client (graceful degradation if connection fails)
 	if o.graph != nil {
 		if err := o.graph.Start(ctx); err != nil {
@@ -411,6 +421,9 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 
 	start := time.Now()
 
+	// Validate and clean missing remembered paths before rebuild
+	removedPaths := o.validateRememberedPaths(ctx)
+
 	if o.walker == nil {
 		return nil, fmt.Errorf("walker not initialized")
 	}
@@ -456,6 +469,7 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 		FilesQueued:   int(stats.FilesDiscovered),
 		DirsProcessed: int(stats.DirsTraversed),
 		Duration:      duration.Round(time.Millisecond).String(),
+		RemovedPaths:  removedPaths,
 	}, nil
 }
 
@@ -554,6 +568,48 @@ func (o *Orchestrator) Watcher() watcher.Watcher {
 // Cleaner returns the initialized cleaner.
 func (o *Orchestrator) Cleaner() *cleaner.Cleaner {
 	return o.cleaner
+}
+
+// validateRememberedPaths checks all remembered paths and removes those that
+// no longer exist. Returns the list of removed paths. Also cleans up associated
+// data (file_state entries and graph nodes) for removed paths.
+func (o *Orchestrator) validateRememberedPaths(ctx context.Context) []string {
+	if o.registry == nil {
+		return nil
+	}
+
+	removed, err := o.registry.ValidateAndCleanPaths(ctx)
+	if err != nil {
+		slog.Warn("failed to validate remembered paths", "error", err)
+		return nil
+	}
+
+	// For each removed path, clean up graph nodes and emit events
+	for _, path := range removed {
+		slog.Warn("removed missing remembered path", "path", path)
+
+		// Clean up graph nodes (best effort)
+		if o.cleaner != nil {
+			if err := o.cleaner.DeletePath(ctx, path); err != nil {
+				slog.Warn("failed to clean up graph for removed path",
+					"path", path,
+					"error", err,
+				)
+			}
+		}
+
+		// Emit event for observability
+		if o.bus != nil {
+			o.bus.Publish(ctx, events.NewEvent(events.RememberedPathRemoved,
+				events.RememberedPathRemovedEvent{
+					Path:   path,
+					Reason: "not_found",
+				},
+			))
+		}
+	}
+
+	return removed
 }
 
 // watchRememberedPaths starts watching all remembered paths.

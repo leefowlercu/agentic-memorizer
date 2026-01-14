@@ -992,6 +992,317 @@ func TestListFilesNeedingSemantic_RespectsMaxRetries(t *testing.T) {
 	}
 }
 
+// Tests for path health checking
+
+func TestPathStatusConstants(t *testing.T) {
+	// Verify the path status constants have expected values
+	tests := []struct {
+		constant string
+		expected string
+	}{
+		{PathStatusOK, "ok"},
+		{PathStatusMissing, "missing"},
+		{PathStatusDenied, "denied"},
+		{PathStatusError, "error"},
+	}
+
+	for _, tt := range tests {
+		if tt.constant != tt.expected {
+			t.Errorf("expected %q, got %q", tt.expected, tt.constant)
+		}
+	}
+}
+
+func TestCheckPathHealth_EmptyRegistry(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Check health on empty registry
+	statuses, err := reg.CheckPathHealth(ctx)
+	if err != nil {
+		t.Fatalf("CheckPathHealth failed: %v", err)
+	}
+
+	if len(statuses) != 0 {
+		t.Errorf("expected 0 statuses for empty registry, got %d", len(statuses))
+	}
+}
+
+func TestCheckPathHealth_ExistingPath(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Create a real directory to test against
+	testDir := t.TempDir()
+
+	// Add the existing path
+	err := reg.AddPath(ctx, testDir, nil)
+	if err != nil {
+		t.Fatalf("failed to add path: %v", err)
+	}
+
+	// Check health
+	statuses, err := reg.CheckPathHealth(ctx)
+	if err != nil {
+		t.Fatalf("CheckPathHealth failed: %v", err)
+	}
+
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+
+	if statuses[0].Status != PathStatusOK {
+		t.Errorf("expected status %q, got %q", PathStatusOK, statuses[0].Status)
+	}
+	if statuses[0].Error != nil {
+		t.Errorf("expected no error, got %v", statuses[0].Error)
+	}
+}
+
+func TestCheckPathHealth_MissingPath(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Add a path that doesn't exist on the filesystem
+	missingPath := "/nonexistent/path/that/does/not/exist"
+	err := reg.AddPath(ctx, missingPath, nil)
+	if err != nil {
+		t.Fatalf("failed to add path: %v", err)
+	}
+
+	// Check health
+	statuses, err := reg.CheckPathHealth(ctx)
+	if err != nil {
+		t.Fatalf("CheckPathHealth failed: %v", err)
+	}
+
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+
+	if statuses[0].Status != PathStatusMissing {
+		t.Errorf("expected status %q, got %q", PathStatusMissing, statuses[0].Status)
+	}
+	if statuses[0].Error == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestCheckPathHealth_MultiplePaths(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Create a real directory
+	existingDir := t.TempDir()
+
+	// Add multiple paths with different statuses
+	reg.AddPath(ctx, existingDir, nil)
+	reg.AddPath(ctx, "/nonexistent/path1", nil)
+	reg.AddPath(ctx, "/nonexistent/path2", nil)
+
+	// Check health
+	statuses, err := reg.CheckPathHealth(ctx)
+	if err != nil {
+		t.Fatalf("CheckPathHealth failed: %v", err)
+	}
+
+	if len(statuses) != 3 {
+		t.Fatalf("expected 3 statuses, got %d", len(statuses))
+	}
+
+	// Count statuses by type
+	statusCounts := make(map[string]int)
+	for _, s := range statuses {
+		statusCounts[s.Status]++
+	}
+
+	if statusCounts[PathStatusOK] != 1 {
+		t.Errorf("expected 1 OK status, got %d", statusCounts[PathStatusOK])
+	}
+	if statusCounts[PathStatusMissing] != 2 {
+		t.Errorf("expected 2 missing statuses, got %d", statusCounts[PathStatusMissing])
+	}
+}
+
+func TestValidateAndCleanPaths_RemovesMissing(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Create a real directory
+	existingDir := t.TempDir()
+
+	// Add paths
+	reg.AddPath(ctx, existingDir, nil)
+	reg.AddPath(ctx, "/nonexistent/path", nil)
+
+	// Validate and clean
+	removed, err := reg.ValidateAndCleanPaths(ctx)
+	if err != nil {
+		t.Fatalf("ValidateAndCleanPaths failed: %v", err)
+	}
+
+	if len(removed) != 1 {
+		t.Fatalf("expected 1 removed path, got %d", len(removed))
+	}
+	if removed[0] != "/nonexistent/path" {
+		t.Errorf("expected removed path '/nonexistent/path', got %q", removed[0])
+	}
+
+	// Verify only existing path remains
+	paths, _ := reg.ListPaths(ctx)
+	if len(paths) != 1 {
+		t.Errorf("expected 1 remaining path, got %d", len(paths))
+	}
+	if paths[0].Path != existingDir {
+		t.Errorf("expected remaining path %q, got %q", existingDir, paths[0].Path)
+	}
+}
+
+func TestValidateAndCleanPaths_CleansFileState(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	modTime := time.Now().Truncate(time.Second)
+
+	// Add a path that doesn't exist
+	missingPath := "/nonexistent/project"
+	reg.AddPath(ctx, missingPath, nil)
+
+	// Add file states under that path
+	for _, f := range []string{
+		"/nonexistent/project/file1.go",
+		"/nonexistent/project/file2.go",
+		"/nonexistent/project/subdir/file3.go",
+	} {
+		reg.UpdateFileState(ctx, &FileState{
+			Path:         f,
+			ContentHash:  "hash",
+			MetadataHash: "meta",
+			Size:         100,
+			ModTime:      modTime,
+		})
+	}
+
+	// Verify file states exist
+	states, _ := reg.ListFileStates(ctx, missingPath)
+	if len(states) != 3 {
+		t.Fatalf("expected 3 file states before cleanup, got %d", len(states))
+	}
+
+	// Validate and clean
+	_, err := reg.ValidateAndCleanPaths(ctx)
+	if err != nil {
+		t.Fatalf("ValidateAndCleanPaths failed: %v", err)
+	}
+
+	// Verify file states are cleaned up
+	states, _ = reg.ListFileStates(ctx, missingPath)
+	if len(states) != 0 {
+		t.Errorf("expected 0 file states after cleanup, got %d", len(states))
+	}
+}
+
+func TestValidateAndCleanPaths_PreservesNonMissing(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	modTime := time.Now().Truncate(time.Second)
+
+	// Create a real directory
+	existingDir := t.TempDir()
+
+	// Add paths
+	reg.AddPath(ctx, existingDir, nil)
+
+	// Add file states under existing path
+	existingFile := filepath.Join(existingDir, "file.go")
+	reg.UpdateFileState(ctx, &FileState{
+		Path:         existingFile,
+		ContentHash:  "hash",
+		MetadataHash: "meta",
+		Size:         100,
+		ModTime:      modTime,
+	})
+
+	// Validate and clean
+	removed, err := reg.ValidateAndCleanPaths(ctx)
+	if err != nil {
+		t.Fatalf("ValidateAndCleanPaths failed: %v", err)
+	}
+
+	// No paths should be removed
+	if len(removed) != 0 {
+		t.Errorf("expected 0 removed paths, got %d", len(removed))
+	}
+
+	// Verify path and file state still exist
+	paths, _ := reg.ListPaths(ctx)
+	if len(paths) != 1 {
+		t.Errorf("expected 1 path, got %d", len(paths))
+	}
+
+	states, _ := reg.ListFileStates(ctx, existingDir)
+	if len(states) != 1 {
+		t.Errorf("expected 1 file state, got %d", len(states))
+	}
+}
+
+func TestValidateAndCleanPaths_EmptyRegistry(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Validate and clean empty registry
+	removed, err := reg.ValidateAndCleanPaths(ctx)
+	if err != nil {
+		t.Fatalf("ValidateAndCleanPaths failed: %v", err)
+	}
+
+	if len(removed) != 0 {
+		t.Errorf("expected 0 removed paths, got %d", len(removed))
+	}
+}
+
+func TestValidateAndCleanPaths_AllMissing(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+
+	// Add only missing paths
+	reg.AddPath(ctx, "/nonexistent/path1", nil)
+	reg.AddPath(ctx, "/nonexistent/path2", nil)
+
+	// Validate and clean
+	removed, err := reg.ValidateAndCleanPaths(ctx)
+	if err != nil {
+		t.Fatalf("ValidateAndCleanPaths failed: %v", err)
+	}
+
+	if len(removed) != 2 {
+		t.Errorf("expected 2 removed paths, got %d", len(removed))
+	}
+
+	// Verify registry is empty
+	paths, _ := reg.ListPaths(ctx)
+	if len(paths) != 0 {
+		t.Errorf("expected 0 remaining paths, got %d", len(paths))
+	}
+}
+
 // Helper functions
 
 func newTestRegistry(t *testing.T) *SQLiteRegistry {

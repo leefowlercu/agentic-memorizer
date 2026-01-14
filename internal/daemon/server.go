@@ -19,11 +19,12 @@ type ServerConfig struct {
 
 // RebuildResult contains the result of a rebuild operation.
 type RebuildResult struct {
-	Status        string `json:"status"`
-	FilesQueued   int    `json:"files_queued"`
-	DirsProcessed int    `json:"dirs_processed"`
-	Duration      string `json:"duration"`
-	Error         string `json:"error,omitempty"`
+	Status        string   `json:"status"`
+	FilesQueued   int      `json:"files_queued"`
+	DirsProcessed int      `json:"dirs_processed"`
+	Duration      string   `json:"duration"`
+	RemovedPaths  []string `json:"removed_paths,omitempty"`
+	Error         string   `json:"error,omitempty"`
 }
 
 // RebuildFunc is a function that triggers a rebuild operation.

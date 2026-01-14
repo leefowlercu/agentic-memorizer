@@ -144,6 +144,14 @@ func (m *mockRegistry) Close() error {
 	return nil
 }
 
+func (m *mockRegistry) CheckPathHealth(ctx context.Context) ([]registry.PathStatus, error) {
+	return nil, nil
+}
+
+func (m *mockRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 // mockGraph implements graph.Graph for testing.
 type mockGraph struct {
 	mu                        sync.Mutex

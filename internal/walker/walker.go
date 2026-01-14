@@ -33,6 +33,10 @@ type Walker interface {
 
 	// Stats returns current walker statistics.
 	Stats() WalkerStats
+
+	// DrainDiscoveredPaths returns paths discovered during the last walk and clears the set.
+	// Returns nil if no walk has occurred. Used for reconciliation against file_state.
+	DrainDiscoveredPaths() map[string]struct{}
 }
 
 // WalkerStats contains statistics about walker activity.
@@ -72,8 +76,9 @@ type walker struct {
 	paceInterval time.Duration
 	batchSize    int
 
-	mu    sync.RWMutex
-	stats WalkerStats
+	mu              sync.RWMutex
+	stats           WalkerStats
+	discoveredPaths map[string]struct{}
 }
 
 // New creates a new Walker with the given dependencies.
@@ -105,6 +110,11 @@ func (w *walker) WalkAll(ctx context.Context) error {
 		return fmt.Errorf("failed to list remembered paths; %w", err)
 	}
 
+	// Initialize discovered paths map for reconciliation
+	w.mu.Lock()
+	w.discoveredPaths = make(map[string]struct{})
+	w.mu.Unlock()
+
 	for _, rp := range paths {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -124,6 +134,11 @@ func (w *walker) WalkAllIncremental(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to list remembered paths; %w", err)
 	}
+
+	// Initialize discovered paths map for reconciliation
+	w.mu.Lock()
+	w.discoveredPaths = make(map[string]struct{})
+	w.mu.Unlock()
 
 	for _, rp := range paths {
 		if err := ctx.Err(); err != nil {
@@ -148,6 +163,16 @@ func (w *walker) Stats() WalkerStats {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.stats
+}
+
+// DrainDiscoveredPaths returns paths discovered during the last walk and clears the set.
+// Returns nil if no walk has occurred. Used for reconciliation against file_state.
+func (w *walker) DrainDiscoveredPaths() map[string]struct{} {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	paths := w.discoveredPaths
+	w.discoveredPaths = nil
+	return paths
 }
 
 // walkPath performs the actual directory walk.
@@ -246,6 +271,23 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 			return nil // Skip files we can't stat
 		}
 
+		// Check if a handler can process this file
+		handler := w.handlerRegistry.GetHandler(filePath)
+		if handler == nil {
+			w.mu.Lock()
+			w.stats.FilesSkipped++
+			w.mu.Unlock()
+			return nil
+		}
+
+		// Track discovered path for reconciliation
+		// This happens before incremental check so unchanged files are still tracked
+		w.mu.Lock()
+		if w.discoveredPaths != nil {
+			w.discoveredPaths[filePath] = struct{}{}
+		}
+		w.mu.Unlock()
+
 		// For incremental walks, check if file has changed
 		if incremental {
 			changed, err := w.hasFileChanged(ctx, filePath, info)
@@ -264,15 +306,6 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		contentHash, err := computeFileHash(filePath)
 		if err != nil {
 			return nil // Skip files we can't hash
-		}
-
-		// Check if a handler can process this file
-		handler := w.handlerRegistry.GetHandler(filePath)
-		if handler == nil {
-			w.mu.Lock()
-			w.stats.FilesSkipped++
-			w.mu.Unlock()
-			return nil
 		}
 
 		// Publish file discovered event

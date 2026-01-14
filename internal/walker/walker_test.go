@@ -679,3 +679,156 @@ func TestWalker_Pacing(t *testing.T) {
 		t.Logf("Walk completed in %v (pacing may not have triggered)", elapsed)
 	}
 }
+
+func TestWalker_DiscoveredPaths_Accumulation(t *testing.T) {
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+
+	createTestFiles(t, tmpDir1, map[string]string{
+		"a.go": "package a",
+		"b.go": "package a",
+	})
+	createTestFiles(t, tmpDir2, map[string]string{
+		"c.go": "package c",
+	})
+
+	reg := newMockRegistry()
+	bus := newMockBus()
+	hr := handlers.DefaultRegistry()
+
+	// Remember both paths
+	_ = reg.AddPath(context.Background(), tmpDir1, &registry.PathConfig{})
+	_ = reg.AddPath(context.Background(), tmpDir2, &registry.PathConfig{})
+
+	w := New(reg, bus, hr)
+
+	// Before walk, drain should return nil
+	paths := w.DrainDiscoveredPaths()
+	if paths != nil {
+		t.Error("expected nil paths before walk")
+	}
+
+	// Walk all paths
+	err := w.WalkAll(context.Background())
+	if err != nil {
+		t.Fatalf("WalkAll failed: %v", err)
+	}
+
+	// Drain should return all discovered paths
+	paths = w.DrainDiscoveredPaths()
+	if paths == nil {
+		t.Fatal("expected non-nil paths after walk")
+	}
+
+	// Should have discovered 3 files
+	if len(paths) != 3 {
+		t.Errorf("expected 3 discovered paths, got %d", len(paths))
+	}
+
+	// Verify specific paths are present
+	expectedPaths := []string{
+		filepath.Join(tmpDir1, "a.go"),
+		filepath.Join(tmpDir1, "b.go"),
+		filepath.Join(tmpDir2, "c.go"),
+	}
+	for _, p := range expectedPaths {
+		if _, ok := paths[p]; !ok {
+			t.Errorf("expected path %s to be discovered", p)
+		}
+	}
+}
+
+func TestWalker_DiscoveredPaths_Drain(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	createTestFiles(t, tmpDir, map[string]string{
+		"main.go": "package main",
+	})
+
+	reg := newMockRegistry()
+	bus := newMockBus()
+	hr := handlers.DefaultRegistry()
+
+	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
+
+	w := New(reg, bus, hr)
+
+	err := w.WalkAll(context.Background())
+	if err != nil {
+		t.Fatalf("WalkAll failed: %v", err)
+	}
+
+	// First drain returns paths
+	paths1 := w.DrainDiscoveredPaths()
+	if paths1 == nil {
+		t.Fatal("expected non-nil paths on first drain")
+	}
+	if len(paths1) != 1 {
+		t.Errorf("expected 1 path, got %d", len(paths1))
+	}
+
+	// Second drain returns nil (already drained)
+	paths2 := w.DrainDiscoveredPaths()
+	if paths2 != nil {
+		t.Error("expected nil paths on second drain")
+	}
+}
+
+func TestWalker_DiscoveredPaths_IncrementalTracksUnchanged(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	createTestFiles(t, tmpDir, map[string]string{
+		"changed.go":   "package main",
+		"unchanged.go": "package main",
+	})
+
+	reg := newMockRegistry()
+	bus := newMockBus()
+	hr := handlers.DefaultRegistry()
+
+	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
+
+	// Set file state for unchanged.go (simulate already processed)
+	unchangedPath := filepath.Join(tmpDir, "unchanged.go")
+	unchangedInfo, _ := os.Stat(unchangedPath)
+	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
+		Path:    unchangedPath,
+		Size:    unchangedInfo.Size(),
+		ModTime: unchangedInfo.ModTime(),
+	})
+
+	w := New(reg, bus, hr)
+
+	// Incremental walk
+	err := w.WalkAllIncremental(context.Background())
+	if err != nil {
+		t.Fatalf("WalkAllIncremental failed: %v", err)
+	}
+
+	// Both files should be discovered (even unchanged one)
+	paths := w.DrainDiscoveredPaths()
+	if paths == nil {
+		t.Fatal("expected non-nil paths after walk")
+	}
+
+	if len(paths) != 2 {
+		t.Errorf("expected 2 discovered paths, got %d", len(paths))
+	}
+
+	// Verify unchanged file is in discovered paths
+	if _, ok := paths[unchangedPath]; !ok {
+		t.Error("expected unchanged file to be in discovered paths")
+	}
+
+	// Verify only changed file was published (1 event)
+	events := bus.Events()
+	if len(events) != 1 {
+		t.Errorf("expected 1 event (changed.go only), got %d", len(events))
+	}
+
+	// Stats should show 1 unchanged
+	stats := w.Stats()
+	if stats.FilesUnchanged != 1 {
+		t.Errorf("expected 1 file unchanged, got %d", stats.FilesUnchanged)
+	}
+}

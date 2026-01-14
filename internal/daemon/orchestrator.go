@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/analysis"
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
+	"github.com/leefowlercu/agentic-memorizer/internal/cleaner"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
@@ -33,6 +35,7 @@ type Orchestrator struct {
 	queue            *analysis.Queue
 	walker           walker.Walker
 	watcher          watcher.Watcher
+	cleaner          *cleaner.Cleaner
 	mcpServer        *mcp.Server
 	metricsCollector *metrics.Collector
 
@@ -45,6 +48,9 @@ type Orchestrator struct {
 
 	// rebuildStopChan signals the periodic rebuild goroutine to stop
 	rebuildStopChan chan struct{}
+
+	// rebuildMu serializes rebuild operations to prevent concurrent map corruption
+	rebuildMu sync.Mutex
 }
 
 // NewOrchestrator creates a new orchestrator for the daemon.
@@ -90,6 +96,15 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		"port", graphCfg.Port,
 		"graph", graphCfg.GraphName,
 	)
+
+	// 3b. Initialize Cleaner (after graph, before other components)
+	o.cleaner = cleaner.New(
+		o.registry,
+		o.graph,
+		o.bus,
+		cleaner.WithLogger(slog.Default().With("component", "cleaner")),
+	)
+	slog.Info("cleaner initialized")
 
 	// 4. Initialize Caches
 	cacheBaseDir := cache.GetCacheBaseDir()
@@ -275,6 +290,13 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		o.watchRememberedPaths(ctx)
 	}
 
+	// Start cleaner (subscribes to FileDeleted events)
+	if o.cleaner != nil {
+		if err := o.cleaner.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start cleaner; %w", err)
+		}
+	}
+
 	// Trigger initial walk (async)
 	if o.walker != nil {
 		go o.walkRememberedPaths(ctx)
@@ -310,6 +332,7 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 	// Stop periodic rebuild
 	if o.rebuildStopChan != nil {
 		close(o.rebuildStopChan)
+		o.rebuildStopChan = nil
 		slog.Debug("periodic rebuild stopped")
 	}
 
@@ -325,12 +348,21 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 		slog.Debug("MCP server stopped")
 	}
 
-	// Stop watcher
+	// Stop watcher first (stops generating events)
 	if o.watcher != nil {
 		if err := o.watcher.Stop(); err != nil {
 			slog.Warn("watcher stop error", "error", err)
 		} else {
 			slog.Debug("watcher stopped")
+		}
+	}
+
+	// Stop cleaner after watcher (processes remaining events)
+	if o.cleaner != nil {
+		if err := o.cleaner.Stop(); err != nil {
+			slog.Warn("cleaner stop error", "error", err)
+		} else {
+			slog.Debug("cleaner stopped")
 		}
 	}
 
@@ -372,7 +404,11 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 }
 
 // handleRebuild handles all rebuild operations (daemon start, periodic, manual).
+// Uses mutex to prevent concurrent rebuilds from corrupting discoveredPaths map.
 func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildResult, error) {
+	o.rebuildMu.Lock()
+	defer o.rebuildMu.Unlock()
+
 	start := time.Now()
 
 	if o.walker == nil {
@@ -388,6 +424,28 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 
 	if err != nil {
 		return nil, fmt.Errorf("rebuild walk failed; %w", err)
+	}
+
+	// Run reconciliation after walk completes to clean up stale entries
+	discoveredPaths := o.walker.DrainDiscoveredPaths()
+	if discoveredPaths != nil && o.cleaner != nil {
+		// Get remembered paths to reconcile against
+		rememberedPaths, listErr := o.registry.ListPaths(ctx)
+		if listErr != nil {
+			slog.Warn("failed to list paths for reconciliation", "error", listErr)
+		} else {
+			for _, rp := range rememberedPaths {
+				result, reconcileErr := o.cleaner.Reconcile(ctx, rp.Path, discoveredPaths)
+				if reconcileErr != nil {
+					slog.Warn("reconciliation failed", "path", rp.Path, "error", reconcileErr)
+				} else if result.StaleRemoved > 0 {
+					slog.Info("reconciliation complete",
+						"path", rp.Path,
+						"stale_removed", result.StaleRemoved,
+						"duration", result.Duration)
+				}
+			}
+		}
 	}
 
 	stats := o.walker.Stats()
@@ -491,6 +549,11 @@ func (o *Orchestrator) Walker() walker.Walker {
 // Watcher returns the initialized watcher.
 func (o *Orchestrator) Watcher() watcher.Watcher {
 	return o.watcher
+}
+
+// Cleaner returns the initialized cleaner.
+func (o *Orchestrator) Cleaner() *cleaner.Cleaner {
+	return o.cleaner
 }
 
 // watchRememberedPaths starts watching all remembered paths.

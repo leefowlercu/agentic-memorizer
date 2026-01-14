@@ -27,7 +27,7 @@ RED    := \033[0;31m
 NC     := \033[0m
 CHECK  := \xE2\x9C\x93
 
-.PHONY: build build-nocolor install install-nocolor clean clean-nocolor test test-nocolor
+.PHONY: build build-nocolor install install-nocolor clean clean-nocolor test test-nocolor test-race test-race-nocolor
 
 # Build with colored output
 build:
@@ -75,4 +75,15 @@ test:
 test-nocolor:
 	@printf "Running tests..."
 	@go test ./... -v
+	@printf " $(CHECK)\n"
+
+# Run tests with race detector
+test-race:
+	@printf "Running tests with race detector..."
+	@go test -race ./... -v
+	@printf " $(GREEN)$(CHECK)$(NC)\n"
+
+test-race-nocolor:
+	@printf "Running tests with race detector..."
+	@go test -race ./... -v
 	@printf " $(CHECK)\n"

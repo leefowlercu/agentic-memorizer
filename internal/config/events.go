@@ -4,9 +4,13 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
+	"sync"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 )
+
+// eventBusMu protects eventBus
+var eventBusMu sync.RWMutex
 
 // eventBus is the event bus instance for publishing config events.
 // Set via SetEventBus().
@@ -15,6 +19,8 @@ var eventBus events.Bus
 // SetEventBus sets the event bus instance for publishing config reload events.
 // Must be called before config reload events will be published.
 func SetEventBus(bus events.Bus) {
+	eventBusMu.Lock()
+	defer eventBusMu.Unlock()
 	eventBus = bus
 }
 
@@ -66,7 +72,11 @@ func isReloadable(changedSections []string) bool {
 
 // publishConfigReloaded publishes a config.reloaded event.
 func publishConfigReloaded(old, new *Config) {
-	if eventBus == nil {
+	eventBusMu.RLock()
+	bus := eventBus
+	eventBusMu.RUnlock()
+
+	if bus == nil {
 		return
 	}
 
@@ -84,14 +94,18 @@ func publishConfigReloaded(old, new *Config) {
 	}
 
 	event := events.NewEvent(events.ConfigReloaded, payload)
-	if err := eventBus.Publish(context.Background(), event); err != nil {
+	if err := bus.Publish(context.Background(), event); err != nil {
 		slog.Error("failed to publish config reload event", "error", err)
 	}
 }
 
 // publishConfigReloadFailed publishes a config.reload_failed event.
 func publishConfigReloadFailed(err error) {
-	if eventBus == nil {
+	eventBusMu.RLock()
+	bus := eventBus
+	eventBusMu.RUnlock()
+
+	if bus == nil {
 		return
 	}
 
@@ -100,7 +114,7 @@ func publishConfigReloadFailed(err error) {
 	}
 
 	event := events.NewEvent(events.ConfigReloadFailed, payload)
-	if pubErr := eventBus.Publish(context.Background(), event); pubErr != nil {
+	if pubErr := bus.Publish(context.Background(), event); pubErr != nil {
 		slog.Error("failed to publish config reload failed event", "error", pubErr)
 	}
 }

@@ -6,9 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 )
+
+// configMu protects configFilePath and currentConfig
+var configMu sync.RWMutex
 
 // configFilePath stores the path to the loaded config file
 var configFilePath string
@@ -60,22 +64,21 @@ func Init() error {
 		// Check if it's a "file not found" error - that's acceptable
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// No config file found - use defaults + env var overrides (FR-012)
-			configFilePath = ""
 			// Unmarshal from viper to get defaults + env var overrides
 			cfg := &Config{}
 			if err := viper.Unmarshal(cfg); err != nil {
 				return fmt.Errorf("failed to unmarshal config; %w", err)
 			}
+			configMu.Lock()
+			configFilePath = ""
 			currentConfig = cfg
+			configMu.Unlock()
 			return nil
 		}
 
 		// T019 & T020: Any other error (invalid YAML, permission denied) is fatal
 		return fmt.Errorf("failed to read config; %w", err)
 	}
-
-	// T021: Store the loaded config file path
-	configFilePath = viper.ConfigFileUsed()
 
 	// Unmarshal to typed config
 	cfg := &Config{}
@@ -88,7 +91,11 @@ func Init() error {
 		return fmt.Errorf("config validation failed; %w", err)
 	}
 
+	// T021: Store the loaded config file path
+	configMu.Lock()
+	configFilePath = viper.ConfigFileUsed()
 	currentConfig = cfg
+	configMu.Unlock()
 
 	// T052: Log config initialization
 	slog.Info("config initialized", "file", configFilePath)
@@ -111,8 +118,11 @@ func InitWithDefaults() error {
 
 	setDefaults()
 
+	cfg := LoadWithDefaults()
+	configMu.Lock()
 	configFilePath = ""
-	currentConfig = LoadWithDefaults()
+	currentConfig = cfg
+	configMu.Unlock()
 
 	return nil
 }
@@ -120,25 +130,33 @@ func InitWithDefaults() error {
 // ConfigFilePath returns the path to the loaded config file,
 // or empty string if using defaults only.
 func ConfigFilePath() string {
+	configMu.RLock()
+	defer configMu.RUnlock()
 	return configFilePath
 }
 
 // Reset clears the configuration state for testing purposes.
 func Reset() {
 	viper.Reset()
+	configMu.Lock()
 	configFilePath = ""
 	currentConfig = nil
+	configMu.Unlock()
 }
 
 // Get returns the typed configuration.
 // Returns nil if config has not been initialized.
 func Get() *Config {
+	configMu.RLock()
+	defer configMu.RUnlock()
 	return currentConfig
 }
 
 // MustGet returns the typed configuration.
 // Panics if config has not been initialized.
 func MustGet() *Config {
+	configMu.RLock()
+	defer configMu.RUnlock()
 	if currentConfig == nil {
 		panic("config: not initialized; call Init() first")
 	}
@@ -181,8 +199,12 @@ func expandHome(path string) string {
 // GetConfigPath returns the path where the config file should be located.
 // If a config file is loaded, returns its path. Otherwise returns the default path.
 func GetConfigPath() string {
-	if configFilePath != "" {
-		return configFilePath
+	configMu.RLock()
+	path := configFilePath
+	configMu.RUnlock()
+
+	if path != "" {
+		return path
 	}
 	// Return default path
 	home, _ := os.UserHomeDir()
@@ -206,7 +228,9 @@ func GetAllSettings() map[string]any {
 func Reload() error {
 	// Store current state in case reload fails
 	currentSettings := viper.AllSettings()
+	configMu.RLock()
 	previousConfig := currentConfig
+	configMu.RUnlock()
 
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -227,7 +251,9 @@ func Reload() error {
 		for key, value := range currentSettings {
 			viper.Set(key, value)
 		}
+		configMu.Lock()
 		currentConfig = previousConfig
+		configMu.Unlock()
 		slog.Error("config reload unmarshal failed; retaining previous values", "error", err)
 		reloadErr := fmt.Errorf("failed to unmarshal config; %w", err)
 		publishConfigReloadFailed(reloadErr)
@@ -240,7 +266,9 @@ func Reload() error {
 		for key, value := range currentSettings {
 			viper.Set(key, value)
 		}
+		configMu.Lock()
 		currentConfig = previousConfig
+		configMu.Unlock()
 		slog.Error("config reload validation failed; retaining previous values", "error", err)
 		reloadErr := fmt.Errorf("config validation failed; %w", err)
 		publishConfigReloadFailed(reloadErr)
@@ -250,7 +278,9 @@ func Reload() error {
 	// Publish success event before updating currentConfig so we can compare
 	publishConfigReloaded(previousConfig, cfg)
 
+	configMu.Lock()
 	currentConfig = cfg
+	configMu.Unlock()
 
 	slog.Info("config reloaded", "file", viper.ConfigFileUsed())
 	return nil

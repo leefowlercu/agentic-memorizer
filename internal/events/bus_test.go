@@ -27,12 +27,10 @@ func TestBus_PublishSubscribe(t *testing.T) {
 	bus := NewBus()
 	defer bus.Close()
 
-	var received atomic.Bool
-	var receivedEvent Event
+	receivedChan := make(chan Event, 1)
 
 	unsubscribe := bus.Subscribe(FileDiscovered, func(event Event) {
-		received.Store(true)
-		receivedEvent = event
+		receivedChan <- event
 	})
 	defer unsubscribe()
 
@@ -49,13 +47,13 @@ func TestBus_PublishSubscribe(t *testing.T) {
 	}
 
 	// Wait for event to be processed
-	time.Sleep(50 * time.Millisecond)
-
-	if !received.Load() {
+	select {
+	case receivedEvent := <-receivedChan:
+		if receivedEvent.Type != FileDiscovered {
+			t.Errorf("expected event type %s, got %s", FileDiscovered, receivedEvent.Type)
+		}
+	case <-time.After(100 * time.Millisecond):
 		t.Error("expected event to be received")
-	}
-	if receivedEvent.Type != FileDiscovered {
-		t.Errorf("expected event type %s, got %s", FileDiscovered, receivedEvent.Type)
 	}
 }
 

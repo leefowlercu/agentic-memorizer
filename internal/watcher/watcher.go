@@ -420,7 +420,7 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 		}
 	case EventDelete:
 		event = events.Event{
-			Type:      events.FileDeleted,
+			Type:      events.PathDeleted,
 			Timestamp: time.Now(),
 			Payload: events.FileEvent{
 				Path: ce.Path,

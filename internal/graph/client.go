@@ -40,6 +40,12 @@ type Graph interface {
 	// DeleteDirectory removes a directory node and its relationships.
 	DeleteDirectory(ctx context.Context, path string) error
 
+	// DeleteFilesUnderPath removes all file nodes under a parent path.
+	DeleteFilesUnderPath(ctx context.Context, parentPath string) error
+
+	// DeleteDirectoriesUnderPath removes all directory nodes under a parent path.
+	DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error
+
 	// UpsertChunk creates or updates a chunk node.
 	UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 
@@ -545,6 +551,47 @@ func (g *FalkorDBGraph) DeleteDirectory(ctx context.Context, path string) error 
 		MATCH (d:Directory {path: '%s'})
 		DETACH DELETE d
 	`, escapeString(path))
+	return g.queueWriteSync(query)
+}
+
+// DeleteFilesUnderPath removes all file nodes under a parent path.
+// Uses prefix matching with trailing slash to avoid false positives.
+func (g *FalkorDBGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error {
+	if !g.IsConnected() {
+		return fmt.Errorf("not connected to graph database")
+	}
+
+	// Delete chunks for all files under path first
+	chunkQuery := fmt.Sprintf(`
+		MATCH (c:Chunk)
+		WHERE c.file_path STARTS WITH '%s/'
+		DETACH DELETE c
+	`, escapeString(parentPath))
+	if err := g.queueWriteSync(chunkQuery); err != nil {
+		return err
+	}
+
+	// Delete file nodes
+	query := fmt.Sprintf(`
+		MATCH (f:File)
+		WHERE f.path STARTS WITH '%s/'
+		DETACH DELETE f
+	`, escapeString(parentPath))
+	return g.queueWriteSync(query)
+}
+
+// DeleteDirectoriesUnderPath removes all directory nodes under a parent path.
+// Uses prefix matching with trailing slash to avoid false positives.
+func (g *FalkorDBGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error {
+	if !g.IsConnected() {
+		return fmt.Errorf("not connected to graph database")
+	}
+
+	query := fmt.Sprintf(`
+		MATCH (d:Directory)
+		WHERE d.path STARTS WITH '%s/'
+		DETACH DELETE d
+	`, escapeString(parentPath))
 	return g.queueWriteSync(query)
 }
 

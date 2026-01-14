@@ -52,8 +52,10 @@ func (m *mockGraph) UpsertFile(ctx context.Context, file *graph.FileNode) error 
 func (m *mockGraph) DeleteFile(ctx context.Context, path string) error                   { return nil }
 func (m *mockGraph) GetFile(ctx context.Context, path string) (*graph.FileNode, error)   { return nil, nil }
 func (m *mockGraph) UpsertDirectory(ctx context.Context, dir *graph.DirectoryNode) error { return nil }
-func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error              { return nil }
-func (m *mockGraph) UpsertChunk(ctx context.Context, chunk *graph.ChunkNode) error       { return nil }
+func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error                  { return nil }
+func (m *mockGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error       { return nil }
+func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error { return nil }
+func (m *mockGraph) UpsertChunk(ctx context.Context, chunk *graph.ChunkNode) error           { return nil }
 func (m *mockGraph) DeleteChunks(ctx context.Context, filePath string) error             { return nil }
 func (m *mockGraph) SetFileTags(ctx context.Context, path string, tags []string) error   { return nil }
 func (m *mockGraph) SetFileTopics(ctx context.Context, path string, topics []graph.Topic) error {

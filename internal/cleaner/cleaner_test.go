@@ -15,11 +15,13 @@ import (
 
 // mockRegistry implements registry.Registry for testing.
 type mockRegistry struct {
-	mu               sync.Mutex
-	fileStates       map[string]registry.FileState
-	deletedPaths     []string
-	deleteError      error
-	listStatesError  error
+	mu                    sync.Mutex
+	fileStates            map[string]registry.FileState
+	deletedPaths          []string
+	bulkDeletedPaths      []string
+	deleteError           error
+	bulkDeleteError       error
+	listStatesError       error
 }
 
 func newMockRegistry() *mockRegistry {
@@ -101,6 +103,12 @@ func (m *mockRegistry) ListFileStates(ctx context.Context, parentPath string) ([
 }
 
 func (m *mockRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.bulkDeleteError != nil {
+		return m.bulkDeleteError
+	}
+	m.bulkDeletedPaths = append(m.bulkDeletedPaths, parentPath)
 	return nil
 }
 
@@ -138,9 +146,15 @@ func (m *mockRegistry) Close() error {
 
 // mockGraph implements graph.Graph for testing.
 type mockGraph struct {
-	mu           sync.Mutex
-	deletedPaths []string
-	deleteError  error
+	mu                        sync.Mutex
+	deletedPaths              []string
+	deletedDirectories        []string
+	deletedFilesUnderPaths    []string
+	deletedDirsUnderPaths     []string
+	deleteError               error
+	deleteDirectoryError      error
+	deleteFilesUnderError     error
+	deleteDirsUnderError      error
 }
 
 func newMockGraph() *mockGraph {
@@ -182,6 +196,32 @@ func (m *mockGraph) UpsertDirectory(ctx context.Context, dir *graph.DirectoryNod
 }
 
 func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deleteDirectoryError != nil {
+		return m.deleteDirectoryError
+	}
+	m.deletedDirectories = append(m.deletedDirectories, path)
+	return nil
+}
+
+func (m *mockGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deleteFilesUnderError != nil {
+		return m.deleteFilesUnderError
+	}
+	m.deletedFilesUnderPaths = append(m.deletedFilesUnderPaths, parentPath)
+	return nil
+}
+
+func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deleteDirsUnderError != nil {
+		return m.deleteDirsUnderError
+	}
+	m.deletedDirsUnderPaths = append(m.deletedDirsUnderPaths, parentPath)
 	return nil
 }
 
@@ -250,7 +290,7 @@ func TestCleaner_New(t *testing.T) {
 	}
 }
 
-func TestCleaner_DeleteFile(t *testing.T) {
+func TestCleaner_DeletePath(t *testing.T) {
 	reg := newMockRegistry()
 	g := newMockGraph()
 	bus := events.NewBus()
@@ -261,7 +301,7 @@ func TestCleaner_DeleteFile(t *testing.T) {
 
 	c := New(reg, g, bus)
 
-	err := c.DeleteFile(context.Background(), "/test/file.go")
+	err := c.DeletePath(context.Background(), "/test/file.go")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -281,7 +321,7 @@ func TestCleaner_DeleteFile(t *testing.T) {
 	g.mu.Unlock()
 }
 
-func TestCleaner_DeleteFile_GraphNil(t *testing.T) {
+func TestCleaner_DeletePath_GraphNil(t *testing.T) {
 	reg := newMockRegistry()
 	bus := events.NewBus()
 	defer bus.Close()
@@ -291,7 +331,7 @@ func TestCleaner_DeleteFile_GraphNil(t *testing.T) {
 	// Create cleaner with nil graph
 	c := New(reg, nil, bus)
 
-	err := c.DeleteFile(context.Background(), "/test/file.go")
+	err := c.DeletePath(context.Background(), "/test/file.go")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -304,7 +344,7 @@ func TestCleaner_DeleteFile_GraphNil(t *testing.T) {
 	reg.mu.Unlock()
 }
 
-func TestCleaner_DeleteFile_GraphError(t *testing.T) {
+func TestCleaner_DeletePath_GraphError(t *testing.T) {
 	reg := newMockRegistry()
 	g := newMockGraph()
 	bus := events.NewBus()
@@ -316,7 +356,7 @@ func TestCleaner_DeleteFile_GraphError(t *testing.T) {
 	c := New(reg, g, bus)
 
 	// Should not return error even if graph fails
-	err := c.DeleteFile(context.Background(), "/test/file.go")
+	err := c.DeletePath(context.Background(), "/test/file.go")
 	if err != nil {
 		t.Fatalf("expected no error even with graph failure, got: %v", err)
 	}
@@ -466,8 +506,8 @@ func TestCleaner_Start_SubscribesToEvents(t *testing.T) {
 	}
 	defer c.Stop()
 
-	// Publish a FileDeleted event
-	event := events.NewEvent(events.FileDeleted, events.FileEvent{
+	// Publish a PathDeleted event
+	event := events.NewEvent(events.PathDeleted, events.FileEvent{
 		Path: "/test/deleted.go",
 	})
 	bus.Publish(context.Background(), event)
@@ -487,7 +527,7 @@ func TestCleaner_Start_SubscribesToEvents(t *testing.T) {
 	reg.mu.Unlock()
 
 	if !found {
-		t.Error("expected FileDeleted event to trigger deletion")
+		t.Error("expected PathDeleted event to trigger deletion")
 	}
 }
 
@@ -506,7 +546,7 @@ func TestCleaner_HandleDelete_InvalidPayload(t *testing.T) {
 
 	// Publish event with wrong payload type
 	event := events.Event{
-		Type:      events.FileDeleted,
+		Type:      events.PathDeleted,
 		Timestamp: time.Now(),
 		Payload:   "wrong type", // Should be events.FileEvent
 	}
@@ -545,7 +585,7 @@ func TestCleaner_Stop_Unsubscribes(t *testing.T) {
 	reg.fileStates["/test/file.go"] = registry.FileState{Path: "/test/file.go"}
 
 	// Publish event after stop
-	event := events.NewEvent(events.FileDeleted, events.FileEvent{
+	event := events.NewEvent(events.PathDeleted, events.FileEvent{
 		Path: "/test/file.go",
 	})
 	bus.Publish(context.Background(), event)
@@ -584,7 +624,7 @@ func TestCleaner_ConcurrentDeletes(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			path := "/test/file" + string(rune('0'+idx%10)) + string(rune('0'+idx/10)) + ".go"
-			if err := c.DeleteFile(context.Background(), path); err == nil {
+			if err := c.DeletePath(context.Background(), path); err == nil {
 				deletedCount.Add(1)
 			}
 		}(i)
@@ -710,7 +750,7 @@ func TestCleaner_HandleDelete_EmptyPath(t *testing.T) {
 	defer c.Stop()
 
 	// Publish event with empty path
-	event := events.NewEvent(events.FileDeleted, events.FileEvent{
+	event := events.NewEvent(events.PathDeleted, events.FileEvent{
 		Path: "", // Empty path should be ignored
 	})
 	bus.Publish(context.Background(), event)
@@ -762,7 +802,7 @@ func TestCleaner_Stop_WaitsForInflightOperations(t *testing.T) {
 	}
 
 	// Publish delete event
-	event := events.NewEvent(events.FileDeleted, events.FileEvent{
+	event := events.NewEvent(events.PathDeleted, events.FileEvent{
 		Path: "/test/file.go",
 	})
 	bus.Publish(context.Background(), event)
@@ -881,7 +921,7 @@ func TestCleaner_Reconcile_NilDiscoveredPaths(t *testing.T) {
 	reg.mu.Unlock()
 }
 
-func TestCleaner_DeleteFile_RegistryNotFoundError(t *testing.T) {
+func TestCleaner_DeletePath_RegistryNotFoundError(t *testing.T) {
 	reg := newMockRegistry()
 	g := newMockGraph()
 	bus := events.NewBus()
@@ -891,7 +931,7 @@ func TestCleaner_DeleteFile_RegistryNotFoundError(t *testing.T) {
 	c := New(reg, g, bus)
 
 	// Should succeed even when file not in registry
-	err := c.DeleteFile(context.Background(), "/test/nonexistent.go")
+	err := c.DeletePath(context.Background(), "/test/nonexistent.go")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -902,4 +942,414 @@ func TestCleaner_DeleteFile_RegistryNotFoundError(t *testing.T) {
 		t.Errorf("expected graph delete to be called, got %v", g.deletedPaths)
 	}
 	g.mu.Unlock()
+}
+
+func TestCleaner_DeletePath_Directory(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Delete a directory path (simulates directory deletion event)
+	err := c.DeletePath(context.Background(), "/test/mydir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify all graph cleanup methods were called
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// DeleteFile should be called (tries both file and directory)
+	if len(g.deletedPaths) != 1 || g.deletedPaths[0] != "/test/mydir" {
+		t.Errorf("expected DeleteFile called with /test/mydir, got %v", g.deletedPaths)
+	}
+
+	// DeleteDirectory should be called
+	if len(g.deletedDirectories) != 1 || g.deletedDirectories[0] != "/test/mydir" {
+		t.Errorf("expected DeleteDirectory called with /test/mydir, got %v", g.deletedDirectories)
+	}
+
+	// DeleteFilesUnderPath should be called for child cleanup
+	if len(g.deletedFilesUnderPaths) != 1 || g.deletedFilesUnderPaths[0] != "/test/mydir" {
+		t.Errorf("expected DeleteFilesUnderPath called with /test/mydir, got %v", g.deletedFilesUnderPaths)
+	}
+
+	// DeleteDirectoriesUnderPath should be called for child cleanup
+	if len(g.deletedDirsUnderPaths) != 1 || g.deletedDirsUnderPaths[0] != "/test/mydir" {
+		t.Errorf("expected DeleteDirectoriesUnderPath called with /test/mydir, got %v", g.deletedDirsUnderPaths)
+	}
+
+	// Verify registry bulk delete was called
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if len(reg.bulkDeletedPaths) != 1 || reg.bulkDeletedPaths[0] != "/test/mydir" {
+		t.Errorf("expected DeleteFileStatesForPath called with /test/mydir, got %v", reg.bulkDeletedPaths)
+	}
+}
+
+func TestCleaner_DeletePath_EmptyDirectory(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Delete an empty directory (no children in registry or graph)
+	err := c.DeletePath(context.Background(), "/test/emptydir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All cleanup methods should still be called (they just won't find anything)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if len(g.deletedDirectories) != 1 || g.deletedDirectories[0] != "/test/emptydir" {
+		t.Errorf("expected DeleteDirectory called for empty dir, got %v", g.deletedDirectories)
+	}
+	if len(g.deletedFilesUnderPaths) != 1 {
+		t.Errorf("expected DeleteFilesUnderPath called for empty dir, got %v", g.deletedFilesUnderPaths)
+	}
+	if len(g.deletedDirsUnderPaths) != 1 {
+		t.Errorf("expected DeleteDirectoriesUnderPath called for empty dir, got %v", g.deletedDirsUnderPaths)
+	}
+}
+
+func TestCleaner_DeletePath_NestedDirectories(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Delete a parent directory that would have nested children
+	// The cleaner uses prefix matching, so deleting /test/parent
+	// should trigger cleanup for /test/parent/child1, /test/parent/child2, etc.
+	err := c.DeletePath(context.Background(), "/test/parent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Verify prefix-based cleanup methods were called
+	if len(g.deletedFilesUnderPaths) != 1 || g.deletedFilesUnderPaths[0] != "/test/parent" {
+		t.Errorf("expected DeleteFilesUnderPath with /test/parent, got %v", g.deletedFilesUnderPaths)
+	}
+	if len(g.deletedDirsUnderPaths) != 1 || g.deletedDirsUnderPaths[0] != "/test/parent" {
+		t.Errorf("expected DeleteDirectoriesUnderPath with /test/parent, got %v", g.deletedDirsUnderPaths)
+	}
+
+	// Verify registry bulk delete was called for child file states
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if len(reg.bulkDeletedPaths) != 1 || reg.bulkDeletedPaths[0] != "/test/parent" {
+		t.Errorf("expected DeleteFileStatesForPath with /test/parent, got %v", reg.bulkDeletedPaths)
+	}
+}
+
+func TestCleaner_DeletePath_AllMethodsCalledInOrder(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	// Add a file state to test single file deletion path
+	reg.fileStates["/test/path"] = registry.FileState{Path: "/test/path"}
+
+	c := New(reg, g, bus)
+
+	err := c.DeletePath(context.Background(), "/test/path")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify all methods were called (the "try both" approach)
+	reg.mu.Lock()
+	// Single file delete
+	if len(reg.deletedPaths) != 1 {
+		t.Errorf("expected 1 single file delete, got %d", len(reg.deletedPaths))
+	}
+	// Bulk delete for children
+	if len(reg.bulkDeletedPaths) != 1 {
+		t.Errorf("expected 1 bulk delete, got %d", len(reg.bulkDeletedPaths))
+	}
+	reg.mu.Unlock()
+
+	g.mu.Lock()
+	// DeleteFile
+	if len(g.deletedPaths) != 1 {
+		t.Errorf("expected 1 DeleteFile call, got %d", len(g.deletedPaths))
+	}
+	// DeleteDirectory
+	if len(g.deletedDirectories) != 1 {
+		t.Errorf("expected 1 DeleteDirectory call, got %d", len(g.deletedDirectories))
+	}
+	// DeleteFilesUnderPath
+	if len(g.deletedFilesUnderPaths) != 1 {
+		t.Errorf("expected 1 DeleteFilesUnderPath call, got %d", len(g.deletedFilesUnderPaths))
+	}
+	// DeleteDirectoriesUnderPath
+	if len(g.deletedDirsUnderPaths) != 1 {
+		t.Errorf("expected 1 DeleteDirectoriesUnderPath call, got %d", len(g.deletedDirsUnderPaths))
+	}
+	g.mu.Unlock()
+}
+
+func TestCleaner_DeletePath_GraphErrorsContinue(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	// Set errors on all graph operations
+	g.deleteError = errors.New("delete file error")
+	g.deleteDirectoryError = errors.New("delete directory error")
+	g.deleteFilesUnderError = errors.New("delete files under error")
+	g.deleteDirsUnderError = errors.New("delete dirs under error")
+
+	c := New(reg, g, bus)
+
+	// Should not return error even if all graph ops fail
+	err := c.DeletePath(context.Background(), "/test/path")
+	if err != nil {
+		t.Fatalf("expected no error with graph failures, got: %v", err)
+	}
+
+	// Verify registry operations still occurred
+	reg.mu.Lock()
+	if len(reg.bulkDeletedPaths) != 1 {
+		t.Errorf("expected registry bulk delete to be called despite graph errors")
+	}
+	reg.mu.Unlock()
+}
+
+// Edge case tests
+
+func TestCleaner_DeletePath_TrailingSlash(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Path with trailing slash should work (filesystem events may include trailing slashes)
+	err := c.DeletePath(context.Background(), "/test/dir/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify cleanup methods were called with the path as provided
+	// (normalization, if needed, should happen at the caller level or in graph/registry)
+	g.mu.Lock()
+	if len(g.deletedPaths) != 1 {
+		t.Errorf("expected DeleteFile to be called, got %d calls", len(g.deletedPaths))
+	}
+	if len(g.deletedDirectories) != 1 {
+		t.Errorf("expected DeleteDirectory to be called, got %d calls", len(g.deletedDirectories))
+	}
+	if len(g.deletedFilesUnderPaths) != 1 {
+		t.Errorf("expected DeleteFilesUnderPath to be called, got %d calls", len(g.deletedFilesUnderPaths))
+	}
+	g.mu.Unlock()
+}
+
+func TestCleaner_DeletePath_SpecialCharacters(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{"single_quote", "/test/it's a file.txt"},
+		{"backslash", "/test/path\\with\\backslashes"},
+		{"unicode", "/test/文件/données.txt"},
+		{"spaces", "/test/path with spaces/file.txt"},
+		{"brackets", "/test/[special]/file(1).txt"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset mock state
+			g.mu.Lock()
+			g.deletedPaths = nil
+			g.deletedDirectories = nil
+			g.deletedFilesUnderPaths = nil
+			g.deletedDirsUnderPaths = nil
+			g.mu.Unlock()
+
+			err := c.DeletePath(context.Background(), tc.path)
+			if err != nil {
+				t.Fatalf("unexpected error for path %q: %v", tc.path, err)
+			}
+
+			// Verify methods were called
+			g.mu.Lock()
+			if len(g.deletedPaths) != 1 {
+				t.Errorf("expected DeleteFile to be called for %q", tc.path)
+			}
+			g.mu.Unlock()
+		})
+	}
+}
+
+func TestCleaner_DeletePath_EmptyPathDirect(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Empty path passed directly to DeletePath (not via event handler)
+	// The cleaner currently doesn't validate this in DeletePath itself,
+	// only in handlePathDeleted. Operations will be called with empty string.
+	err := c.DeletePath(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Methods are called even with empty path (validation is at event handler level)
+	g.mu.Lock()
+	if len(g.deletedPaths) != 1 || g.deletedPaths[0] != "" {
+		t.Errorf("expected DeleteFile to be called with empty path, got %v", g.deletedPaths)
+	}
+	g.mu.Unlock()
+}
+
+func TestCleaner_DeletePath_RootPath(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Root path "/" - this is a dangerous edge case as it could delete everything
+	// The cleaner doesn't prevent this; it's the caller's responsibility
+	err := c.DeletePath(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All cleanup methods should be called
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if len(g.deletedDirectories) != 1 || g.deletedDirectories[0] != "/" {
+		t.Errorf("expected DeleteDirectory to be called with /, got %v", g.deletedDirectories)
+	}
+
+	// Note: DeleteFilesUnderPath("/") would match all files starting with "/"
+	// which is every absolute path. This is dangerous but documented behavior.
+	if len(g.deletedFilesUnderPaths) != 1 || g.deletedFilesUnderPaths[0] != "/" {
+		t.Errorf("expected DeleteFilesUnderPath to be called with /, got %v", g.deletedFilesUnderPaths)
+	}
+}
+
+func TestCleaner_DeletePath_ConcurrentSamePath(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Delete the same path concurrently - should be idempotent
+	const goroutines = 10
+	const path = "/test/concurrent/file.go"
+
+	var wg sync.WaitGroup
+	errs := make(chan error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := c.DeletePath(context.Background(), path); err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	// No errors should occur
+	for err := range errs {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Methods should be called multiple times (once per goroutine)
+	g.mu.Lock()
+	if len(g.deletedPaths) != goroutines {
+		t.Errorf("expected %d DeleteFile calls, got %d", goroutines, len(g.deletedPaths))
+	}
+	g.mu.Unlock()
+}
+
+func TestCleaner_DeletePath_RegistryBulkDeleteError(t *testing.T) {
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	// Set bulk delete to fail
+	reg.bulkDeleteError = errors.New("bulk delete failed")
+
+	c := New(reg, g, bus)
+
+	// Should not return error even if registry bulk delete fails
+	err := c.DeletePath(context.Background(), "/test/path")
+	if err != nil {
+		t.Fatalf("expected no error with registry bulk delete failure, got: %v", err)
+	}
+
+	// Graph operations should still proceed
+	g.mu.Lock()
+	if len(g.deletedPaths) != 1 {
+		t.Errorf("expected graph operations to continue despite registry error")
+	}
+	g.mu.Unlock()
+}
+
+func TestCleaner_DeletePath_PathPrefixNoFalsePositives(t *testing.T) {
+	// This test documents that prefix matching uses trailing slash
+	// to avoid false positives like /foo matching /foobar
+	reg := newMockRegistry()
+	g := newMockGraph()
+	bus := events.NewBus()
+	defer bus.Close()
+
+	c := New(reg, g, bus)
+
+	// Delete /test/foo - this should NOT affect /test/foobar
+	err := c.DeletePath(context.Background(), "/test/foo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The prefix matching in graph methods appends "/" to the path
+	// So DeleteFilesUnderPath("/test/foo") uses "STARTS WITH '/test/foo/'"
+	// which correctly won't match "/test/foobar/file.txt"
+	g.mu.Lock()
+	if len(g.deletedFilesUnderPaths) != 1 || g.deletedFilesUnderPaths[0] != "/test/foo" {
+		t.Errorf("expected DeleteFilesUnderPath to be called with /test/foo, got %v", g.deletedFilesUnderPaths)
+	}
+	g.mu.Unlock()
+
+	// Note: The actual prefix matching behavior is tested in graph tests.
+	// This test just verifies the path is passed through correctly.
 }

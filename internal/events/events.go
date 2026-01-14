@@ -16,8 +16,8 @@ const (
 	// FileChanged is published when an existing file is modified.
 	FileChanged EventType = "file.changed"
 
-	// FileDeleted is published when a file is removed.
-	FileDeleted EventType = "file.deleted"
+	// PathDeleted is published when a file or directory is removed.
+	PathDeleted EventType = "path.deleted"
 
 	// AnalysisComplete is published when analysis finishes for a file.
 	AnalysisComplete EventType = "analysis.complete"

@@ -290,7 +290,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		o.watchRememberedPaths(ctx)
 	}
 
-	// Start cleaner (subscribes to FileDeleted events)
+	// Start cleaner (subscribes to PathDeleted events)
 	if o.cleaner != nil {
 		if err := o.cleaner.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start cleaner; %w", err)

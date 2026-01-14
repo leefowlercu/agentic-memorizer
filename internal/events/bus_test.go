@@ -100,7 +100,7 @@ func TestBus_SubscribeFiltersEventType(t *testing.T) {
 	// Publish different event types
 	bus.Publish(context.Background(), NewEvent(FileDiscovered, nil))
 	bus.Publish(context.Background(), NewEvent(FileChanged, nil))
-	bus.Publish(context.Background(), NewEvent(FileDeleted, nil))
+	bus.Publish(context.Background(), NewEvent(PathDeleted, nil))
 
 	// Wait for events to be processed
 	time.Sleep(50 * time.Millisecond)
@@ -124,7 +124,7 @@ func TestBus_SubscribeAll(t *testing.T) {
 	// Publish different event types
 	bus.Publish(context.Background(), NewEvent(FileDiscovered, nil))
 	bus.Publish(context.Background(), NewEvent(FileChanged, nil))
-	bus.Publish(context.Background(), NewEvent(FileDeleted, nil))
+	bus.Publish(context.Background(), NewEvent(PathDeleted, nil))
 	bus.Publish(context.Background(), NewEvent(AnalysisComplete, nil))
 
 	// Wait for events to be processed
@@ -382,7 +382,7 @@ func TestEventTypes(t *testing.T) {
 	}{
 		{FileDiscovered, "file.discovered"},
 		{FileChanged, "file.changed"},
-		{FileDeleted, "file.deleted"},
+		{PathDeleted, "path.deleted"},
 		{AnalysisComplete, "analysis.complete"},
 		{AnalysisFailed, "analysis.failed"},
 		{SemanticAnalysisFailed, "analysis.semantic_failed"},

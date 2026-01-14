@@ -67,7 +67,7 @@ func New(reg registry.Registry, g graph.Graph, bus events.Bus, opts ...CleanerOp
 	return c
 }
 
-// Start subscribes to FileDeleted events.
+// Start subscribes to PathDeleted events.
 // Returns ErrAlreadyStarted if called more than once without Stop().
 func (c *Cleaner) Start(ctx context.Context) error {
 	c.mu.Lock()
@@ -77,7 +77,7 @@ func (c *Cleaner) Start(ctx context.Context) error {
 		return ErrAlreadyStarted
 	}
 
-	c.unsubscribe = c.bus.Subscribe(events.FileDeleted, c.handleDelete)
+	c.unsubscribe = c.bus.Subscribe(events.PathDeleted, c.handlePathDeleted)
 	c.started = true
 	c.logger.Info("cleaner started")
 	return nil
@@ -104,7 +104,7 @@ func (c *Cleaner) Stop() error {
 	case <-done:
 		// All operations completed
 	case <-time.After(35 * time.Second):
-		// Timeout slightly longer than handleDelete's 30s timeout
+		// Timeout slightly longer than handlePathDeleted's 30s timeout
 		c.logger.Warn("cleaner stop timed out waiting for in-flight operations")
 	}
 
@@ -112,25 +112,47 @@ func (c *Cleaner) Stop() error {
 	return nil
 }
 
-// DeleteFile removes a file from registry and graph.
-// Called by event handler and reconciliation.
-func (c *Cleaner) DeleteFile(ctx context.Context, path string) error {
-	// Always try registry deletion
+// DeletePath removes a file or directory from registry and graph.
+// Handles both file and directory deletions by attempting cleanup for both types.
+// All operations are best-effort; errors are logged but don't fail the operation.
+func (c *Cleaner) DeletePath(ctx context.Context, path string) error {
+	// 1. Delete file state from registry (if path was a file)
 	if err := c.registry.DeleteFileState(ctx, path); err != nil {
-		// Distinguish between "not found" (expected) and other errors (unexpected)
 		if errors.Is(err, registry.ErrPathNotFound) {
-			c.logger.Debug("registry delete: file not in registry", "path", path)
+			c.logger.Debug("registry delete: path not in file_state", "path", path)
 		} else {
 			c.logger.Warn("registry delete failed", "path", path, "error", err)
 		}
 	}
 
-	// Try graph deletion (may fail if degraded or unavailable)
-	if c.graph != nil {
-		if err := c.graph.DeleteFile(ctx, path); err != nil {
-			c.logger.Warn("graph delete failed", "path", path, "error", err)
-			// Don't return error - registry was cleaned
-		}
+	// 2. Bulk delete child file states (if path was a directory)
+	if err := c.registry.DeleteFileStatesForPath(ctx, path); err != nil {
+		c.logger.Warn("registry bulk delete failed", "path", path, "error", err)
+	}
+
+	// Skip graph operations if graph is unavailable
+	if c.graph == nil {
+		return nil
+	}
+
+	// 3. Delete File node from graph (succeeds if path was a file)
+	if err := c.graph.DeleteFile(ctx, path); err != nil {
+		c.logger.Debug("graph delete file failed", "path", path, "error", err)
+	}
+
+	// 4. Delete Directory node from graph (succeeds if path was a directory)
+	if err := c.graph.DeleteDirectory(ctx, path); err != nil {
+		c.logger.Debug("graph delete directory failed", "path", path, "error", err)
+	}
+
+	// 5. Delete all child File nodes from graph
+	if err := c.graph.DeleteFilesUnderPath(ctx, path); err != nil {
+		c.logger.Warn("graph delete files under path failed", "path", path, "error", err)
+	}
+
+	// 6. Delete all child Directory nodes from graph
+	if err := c.graph.DeleteDirectoriesUnderPath(ctx, path); err != nil {
+		c.logger.Warn("graph delete directories under path failed", "path", path, "error", err)
 	}
 
 	return nil
@@ -179,7 +201,7 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 			result.StaleFound++
 
 			// Clean up stale entry
-			if err := c.DeleteFile(ctx, state.Path); err != nil {
+			if err := c.DeletePath(ctx, state.Path); err != nil {
 				c.logger.Warn("failed to clean up stale file",
 					"path", state.Path,
 					"error", err)
@@ -195,22 +217,29 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 	return result, nil
 }
 
-// handleDelete is the event handler for FileDeleted events.
-func (c *Cleaner) handleDelete(e events.Event) {
+// handlePathDeleted is the event handler for PathDeleted events.
+func (c *Cleaner) handlePathDeleted(e events.Event) {
 	fe, ok := e.Payload.(events.FileEvent)
 	if !ok {
-		c.logger.Warn("invalid FileDeleted payload type")
+		c.logger.Warn("invalid PathDeleted payload type")
 		return
 	}
 
 	// Validate path is non-empty
 	if fe.Path == "" {
-		c.logger.Warn("ignoring FileDeleted event with empty path")
+		c.logger.Warn("ignoring PathDeleted event with empty path")
 		return
 	}
 
-	// Track in-flight operation for graceful shutdown
+	// Check if still running and track in-flight operation atomically
+	// This prevents a race between wg.Add() and wg.Wait() in Stop()
+	c.mu.Lock()
+	if !c.started {
+		c.mu.Unlock()
+		return
+	}
 	c.wg.Add(1)
+	c.mu.Unlock()
 	defer c.wg.Done()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -218,7 +247,7 @@ func (c *Cleaner) handleDelete(e events.Event) {
 
 	c.logger.Debug("cleaning up deleted file", "path", fe.Path)
 
-	if err := c.DeleteFile(ctx, fe.Path); err != nil {
+	if err := c.DeletePath(ctx, fe.Path); err != nil {
 		c.logger.Error("delete handler failed", "path", fe.Path, "error", err)
 	}
 }

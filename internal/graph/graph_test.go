@@ -455,4 +455,18 @@ func TestOperationsWithoutConnection(t *testing.T) {
 			t.Error("Expected error when not connected")
 		}
 	})
+
+	t.Run("DeleteFilesUnderPath", func(t *testing.T) {
+		err := g.DeleteFilesUnderPath(nil, "/test")
+		if err == nil {
+			t.Error("Expected error when not connected")
+		}
+	})
+
+	t.Run("DeleteDirectoriesUnderPath", func(t *testing.T) {
+		err := g.DeleteDirectoriesUnderPath(nil, "/test")
+		if err == nil {
+			t.Error("Expected error when not connected")
+		}
+	})
 }

@@ -166,6 +166,17 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 	}
 	o.metricsCollector = metrics.NewCollector(metricsInterval)
 
+	// Register metrics providers
+	if o.queue != nil {
+		o.metricsCollector.Register("queue", o.queue)
+	}
+	if o.watcher != nil {
+		o.metricsCollector.Register("watcher", o.watcher)
+	}
+	if g, ok := o.graph.(*graph.FalkorDBGraph); ok && g != nil {
+		o.metricsCollector.Register("graph", g)
+	}
+
 	// Set metrics handler on daemon server
 	o.daemon.server.SetMetricsHandler(metrics.Handler())
 

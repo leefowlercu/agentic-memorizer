@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
@@ -399,4 +400,12 @@ func (q *Queue) publishAnalysisFailed(path string, err error) {
 		Path:  path,
 		Error: err.Error(),
 	}))
+}
+
+// CollectMetrics implements metrics.MetricsProvider.
+func (q *Queue) CollectMetrics(ctx context.Context) error {
+	stats := q.Stats()
+	metrics.QueuePending.Set(float64(stats.PendingItems))
+	metrics.QueueInProgress.Set(float64(stats.ActiveWorkers))
+	return nil
 }

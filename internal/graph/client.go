@@ -11,6 +11,7 @@ import (
 
 	"github.com/RedisGraph/redisgraph-go"
 	"github.com/gomodule/redigo/redis"
+	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 )
 
 // Graph is the interface for graph operations.
@@ -242,6 +243,23 @@ func (g *FalkorDBGraph) IsConnected() bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.connected
+}
+
+// CollectMetrics implements metrics.MetricsProvider.
+func (g *FalkorDBGraph) CollectMetrics(ctx context.Context) error {
+	if !g.IsConnected() {
+		return fmt.Errorf("not connected")
+	}
+
+	files, _ := g.countNodes(ctx, LabelFile)
+	dirs, _ := g.countNodes(ctx, LabelDirectory)
+	chunks, _ := g.countNodes(ctx, LabelChunk)
+
+	metrics.FilesTotal.Set(float64(files))
+	metrics.DirectoriesTotal.Set(float64(dirs))
+	metrics.ChunksTotal.Set(float64(chunks))
+
+	return nil
 }
 
 // createSchema creates indexes and constraints.

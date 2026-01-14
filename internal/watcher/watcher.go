@@ -16,6 +16,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
@@ -38,6 +39,9 @@ type Watcher interface {
 
 	// Stats returns current watcher statistics.
 	Stats() WatcherStats
+
+	// CollectMetrics implements metrics.MetricsProvider.
+	CollectMetrics(ctx context.Context) error
 }
 
 // WatcherStats contains statistics about watcher activity.
@@ -265,6 +269,13 @@ func (w *watcher) Stats() WatcherStats {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.stats
+}
+
+// CollectMetrics implements metrics.MetricsProvider.
+func (w *watcher) CollectMetrics(ctx context.Context) error {
+	stats := w.Stats()
+	metrics.WatcherPathsTotal.Set(float64(stats.WatchedPaths))
+	return nil
 }
 
 // processEvents reads from fsnotify and feeds to coalescer.

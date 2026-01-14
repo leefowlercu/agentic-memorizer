@@ -74,6 +74,28 @@ var (
 		Help:      "Duration of file analysis in seconds",
 		Buckets:   prometheus.ExponentialBuckets(0.1, 2, 10), // 0.1s to ~102s
 	}, []string{"type"})
+
+	// AnalysisPersistenceFailures is the total number of files that completed analysis
+	// but failed to persist to the graph after all retries.
+	AnalysisPersistenceFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "analysis_persistence_failures_total",
+		Help:      "Total number of files that failed to persist to graph after analysis",
+	})
+
+	// SemanticAnalysisFailures is the total number of files where semantic analysis failed.
+	SemanticAnalysisFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "semantic_analysis_failures_total",
+		Help:      "Total number of files where semantic analysis failed",
+	})
+
+	// EmbeddingsGenerationFailures is the total number of files where embeddings generation failed.
+	EmbeddingsGenerationFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "embeddings_generation_failures_total",
+		Help:      "Total number of files where embeddings generation failed",
+	})
 )
 
 // Cache metrics track cache operations.

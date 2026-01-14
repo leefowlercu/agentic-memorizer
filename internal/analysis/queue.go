@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
@@ -25,15 +26,16 @@ const (
 
 // QueueStats contains statistics about queue operation.
 type QueueStats struct {
-	State           QueueState
-	WorkerCount     int
-	ActiveWorkers   int
-	PendingItems    int
-	ProcessedItems  int64
-	FailedItems     int64
-	AvgProcessTime  time.Duration
-	Capacity        float64 // 0.0 - 1.0
-	DegradationMode DegradationMode
+	State               QueueState
+	WorkerCount         int
+	ActiveWorkers       int
+	PendingItems        int
+	ProcessedItems      int64
+	AnalysisFailures    int64
+	PersistenceFailures int64
+	AvgProcessTime      time.Duration
+	Capacity            float64 // 0.0 - 1.0
+	DegradationMode     DegradationMode
 }
 
 // DegradationMode indicates the current analysis mode.
@@ -65,10 +67,11 @@ type Queue struct {
 	cancelFn     context.CancelFunc
 
 	// Stats
-	processedCount atomic.Int64
-	failedCount    atomic.Int64
-	activeWorkers  atomic.Int32
-	totalProcTime  atomic.Int64
+	processedCount          atomic.Int64
+	analysisFailedCount     atomic.Int64
+	persistenceFailedCount  atomic.Int64
+	activeWorkers           atomic.Int32
+	totalProcTime           atomic.Int64
 }
 
 // QueueOption configures the analysis queue.
@@ -267,7 +270,8 @@ func (q *Queue) Stats() QueueStats {
 
 	pending := len(q.workChan)
 	processed := q.processedCount.Load()
-	failed := q.failedCount.Load()
+	analysisFailed := q.analysisFailedCount.Load()
+	persistenceFailed := q.persistenceFailedCount.Load()
 	active := int(q.activeWorkers.Load())
 
 	var avgTime time.Duration
@@ -279,15 +283,16 @@ func (q *Queue) Stats() QueueStats {
 	mode := q.getDegradationMode(capacity)
 
 	return QueueStats{
-		State:           state,
-		WorkerCount:     workerCount,
-		ActiveWorkers:   active,
-		PendingItems:    pending,
-		ProcessedItems:  processed,
-		FailedItems:     failed,
-		AvgProcessTime:  avgTime,
-		Capacity:        capacity,
-		DegradationMode: mode,
+		State:               state,
+		WorkerCount:         workerCount,
+		ActiveWorkers:       active,
+		PendingItems:        pending,
+		ProcessedItems:      processed,
+		AnalysisFailures:    analysisFailed,
+		PersistenceFailures: persistenceFailed,
+		AvgProcessTime:      avgTime,
+		Capacity:            capacity,
+		DegradationMode:     mode,
 	}
 }
 
@@ -373,15 +378,37 @@ func (q *Queue) SetProviders(semantic providers.SemanticProvider, embeddings pro
 		"embeddings", embeddings != nil)
 }
 
+// SetGraph injects the graph client into all workers for result persistence.
+func (q *Queue) SetGraph(g graph.Graph) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	for _, w := range q.workers {
+		if w != nil {
+			w.SetGraph(g)
+		}
+	}
+
+	q.logger.Debug("graph injected into workers",
+		"workers", len(q.workers),
+		"graph", g != nil)
+}
+
 // recordSuccess records a successful processing.
 func (q *Queue) recordSuccess(duration time.Duration) {
 	q.processedCount.Add(1)
 	q.totalProcTime.Add(int64(duration))
 }
 
-// recordFailure records a failed processing.
-func (q *Queue) recordFailure() {
-	q.failedCount.Add(1)
+// recordAnalysisFailure records a failed analysis (file read or chunking error).
+func (q *Queue) recordAnalysisFailure() {
+	q.analysisFailedCount.Add(1)
+}
+
+// recordPersistenceFailure records a failed graph persistence.
+func (q *Queue) recordPersistenceFailure() {
+	q.persistenceFailedCount.Add(1)
+	metrics.AnalysisPersistenceFailures.Inc()
 }
 
 // publishAnalysisComplete publishes a success event.
@@ -399,6 +426,35 @@ func (q *Queue) publishAnalysisFailed(path string, err error) {
 	q.bus.Publish(q.ctx, events.NewEvent(events.AnalysisFailed, &events.AnalysisEvent{
 		Path:  path,
 		Error: err.Error(),
+	}))
+}
+
+// publishGraphPersistenceFailed publishes a graph persistence failure event.
+func (q *Queue) publishGraphPersistenceFailed(path string, err error, retries int) {
+	q.bus.Publish(q.ctx, events.NewEvent(events.GraphPersistenceFailed, &events.GraphEvent{
+		Path:    path,
+		Error:   err.Error(),
+		Retries: retries,
+	}))
+}
+
+// publishSemanticAnalysisFailed publishes a semantic analysis failure event.
+func (q *Queue) publishSemanticAnalysisFailed(path string, err error) {
+	metrics.SemanticAnalysisFailures.Inc()
+	q.bus.Publish(q.ctx, events.NewEvent(events.SemanticAnalysisFailed, &events.AnalysisEvent{
+		Path:         path,
+		AnalysisType: events.AnalysisSemantic,
+		Error:        err.Error(),
+	}))
+}
+
+// publishEmbeddingsGenerationFailed publishes an embeddings generation failure event.
+func (q *Queue) publishEmbeddingsGenerationFailed(path string, err error) {
+	metrics.EmbeddingsGenerationFailures.Inc()
+	q.bus.Publish(q.ctx, events.NewEvent(events.EmbeddingsGenerationFailed, &events.AnalysisEvent{
+		Path:         path,
+		AnalysisType: events.AnalysisEmbeddings,
+		Error:        err.Error(),
 	}))
 }
 

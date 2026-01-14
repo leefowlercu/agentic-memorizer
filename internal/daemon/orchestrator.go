@@ -37,6 +37,9 @@ type Orchestrator struct {
 
 	// graphDegraded tracks if graph connection failed during startup
 	graphDegraded bool
+
+	// rebuildStopChan signals the periodic rebuild goroutine to stop
+	rebuildStopChan chan struct{}
 }
 
 // NewOrchestrator creates a new orchestrator for the daemon.
@@ -210,6 +213,11 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		}
 		// Inject providers into workers
 		o.queue.SetProviders(o.semanticProvider, o.embedProvider)
+
+		// Inject graph for result persistence (only if not degraded)
+		if !o.graphDegraded && o.graph != nil {
+			o.queue.SetGraph(o.graph)
+		}
 	}
 
 	// Start watcher
@@ -240,12 +248,24 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		}
 	}
 
+	// Start periodic rebuild (if configured)
+	cfg := config.Get()
+	if cfg.Daemon.RebuildInterval > 0 {
+		o.startPeriodicRebuild(ctx, time.Duration(cfg.Daemon.RebuildInterval)*time.Second)
+	}
+
 	return nil
 }
 
 // Stop stops all orchestrated components in reverse order.
 func (o *Orchestrator) Stop(ctx context.Context) error {
 	slog.Info("stopping orchestrated components")
+
+	// Stop periodic rebuild
+	if o.rebuildStopChan != nil {
+		close(o.rebuildStopChan)
+		slog.Debug("periodic rebuild stopped")
+	}
 
 	// Stop metrics collector
 	if o.metricsCollector != nil {
@@ -345,6 +365,38 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 		DirsProcessed: len(paths),
 		Duration:      duration.Round(time.Millisecond).String(),
 	}, nil
+}
+
+// startPeriodicRebuild starts a goroutine that triggers full rebuilds at the configured interval.
+func (o *Orchestrator) startPeriodicRebuild(ctx context.Context, interval time.Duration) {
+	o.rebuildStopChan = make(chan struct{})
+
+	slog.Info("periodic rebuild enabled", "interval", interval)
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-o.rebuildStopChan:
+				return
+			case <-ticker.C:
+				slog.Info("starting periodic rebuild")
+				result, err := o.handleRebuild(ctx, true)
+				if err != nil {
+					slog.Error("periodic rebuild failed", "error", err)
+					continue
+				}
+				slog.Info("periodic rebuild complete",
+					"files_queued", result.FilesQueued,
+					"dirs_processed", result.DirsProcessed,
+					"duration", result.Duration)
+			}
+		}
+	}()
 }
 
 // Bus returns the initialized event bus.

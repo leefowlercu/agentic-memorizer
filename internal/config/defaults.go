@@ -11,10 +11,11 @@ const (
 	// Daemon configuration defaults.
 	DefaultDaemonHTTPPort        = 7600
 	DefaultDaemonHTTPBind        = "127.0.0.1"
-	DefaultDaemonShutdownTimeout = 30 // seconds
+	DefaultDaemonShutdownTimeout = 30    // seconds
 	DefaultDaemonPIDFile         = "~/.config/memorizer/daemon.pid"
 	DefaultDaemonRegistryPath    = "~/.config/memorizer/registry.db"
-	DefaultDaemonMetricsInterval = 15 // seconds
+	DefaultDaemonRebuildInterval = 86400 // 24 hours in seconds, 0 = disabled
+	DefaultDaemonMetricsInterval = 15    // seconds
 
 	// Graph configuration defaults.
 	DefaultGraphHost           = "localhost"
@@ -50,6 +51,7 @@ func NewDefaultConfig() Config {
 			ShutdownTimeout: DefaultDaemonShutdownTimeout,
 			PIDFile:         DefaultDaemonPIDFile,
 			RegistryPath:    DefaultDaemonRegistryPath,
+			RebuildInterval: DefaultDaemonRebuildInterval,
 			Metrics: MetricsConfig{
 				CollectionInterval: DefaultDaemonMetricsInterval,
 			},
@@ -93,6 +95,7 @@ func setDefaults() {
 	viper.SetDefault("daemon.shutdown_timeout", DefaultDaemonShutdownTimeout)
 	viper.SetDefault("daemon.pid_file", DefaultDaemonPIDFile)
 	viper.SetDefault("daemon.registry_path", DefaultDaemonRegistryPath)
+	viper.SetDefault("daemon.rebuild_interval", DefaultDaemonRebuildInterval)
 	viper.SetDefault("daemon.metrics.collection_interval", DefaultDaemonMetricsInterval)
 
 	// Graph defaults

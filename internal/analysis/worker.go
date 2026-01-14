@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
@@ -86,6 +87,9 @@ type Worker struct {
 	semanticProvider   providers.SemanticProvider
 	embeddingsProvider providers.EmbeddingsProvider
 	chunkerRegistry    *chunkers.Registry
+
+	// Graph client for persisting results
+	graph graph.Graph
 }
 
 // NewWorker creates a new analysis worker.
@@ -162,13 +166,45 @@ func (w *Worker) processItem(ctx context.Context, item WorkItem) {
 			"error", err,
 			"retries", item.Retries)
 
-		w.queue.recordFailure()
+		w.queue.recordAnalysisFailure()
 		w.queue.publishAnalysisFailed(item.FilePath, err)
 		return
 	}
 
 	duration := time.Since(start)
 	result.ProcessingTime = duration
+
+	// Persist to graph (if configured)
+	if err := w.persistToGraph(ctx, result); err != nil {
+		// Treat graph write failure like analysis failure - retry
+		if item.Retries < w.queue.maxRetries {
+			item.Retries++
+			delay := w.calculateBackoff(item.Retries)
+
+			w.logger.Warn("graph persistence failed; scheduling retry",
+				"path", item.FilePath,
+				"error", err,
+				"retry", item.Retries,
+				"delay", delay)
+
+			time.AfterFunc(delay, func() {
+				if err := w.queue.Enqueue(item); err != nil {
+					w.logger.Error("failed to re-queue item", "path", item.FilePath, "error", err)
+				}
+			})
+			return
+		}
+
+		// Max retries exceeded for graph persistence
+		w.logger.Error("graph persistence failed permanently",
+			"path", item.FilePath,
+			"error", err,
+			"retries", item.Retries)
+
+		w.queue.recordPersistenceFailure()
+		w.queue.publishGraphPersistenceFailed(item.FilePath, err, item.Retries)
+		return
+	}
 
 	w.queue.recordSuccess(duration)
 	w.queue.publishAnalysisComplete(item.FilePath, result)
@@ -233,8 +269,11 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	if w.semanticProvider != nil && w.semanticProvider.Available() {
 		semanticResult, err := w.analyzeSemantics(ctx, chunkResult.Chunks)
 		if err != nil {
-			w.logger.Warn("semantic analysis failed", "error", err)
-			// Continue without semantic analysis
+			w.logger.Warn("semantic analysis failed",
+				"path", item.FilePath,
+				"error", err)
+			w.queue.publishSemanticAnalysisFailed(item.FilePath, err)
+			// Continue without semantic analysis (soft failure)
 		} else {
 			result.Summary = semanticResult.Summary
 			result.Tags = semanticResult.Tags
@@ -255,8 +294,11 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	if w.embeddingsProvider != nil && w.embeddingsProvider.Available() {
 		embeddings, err := w.generateEmbeddings(ctx, content)
 		if err != nil {
-			w.logger.Warn("embeddings generation failed", "error", err)
-			// Continue without embeddings
+			w.logger.Warn("embeddings generation failed",
+				"path", item.FilePath,
+				"error", err)
+			w.queue.publishEmbeddingsGenerationFailed(item.FilePath, err)
+			// Continue without embeddings (soft failure)
 		} else {
 			result.Embeddings = embeddings
 		}
@@ -378,6 +420,81 @@ func (w *Worker) SetSemanticProvider(p providers.SemanticProvider) {
 // SetEmbeddingsProvider sets the embeddings provider.
 func (w *Worker) SetEmbeddingsProvider(p providers.EmbeddingsProvider) {
 	w.embeddingsProvider = p
+}
+
+// SetGraph sets the graph client for persisting analysis results.
+func (w *Worker) SetGraph(g graph.Graph) {
+	w.graph = g
+}
+
+// persistToGraph writes analysis results to the graph database.
+func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) error {
+	if w.graph == nil {
+		return nil // Graph not configured, skip persistence
+	}
+
+	// Build FileNode from analysis result
+	fileNode := &graph.FileNode{
+		Path:         result.FilePath,
+		Name:         filepath.Base(result.FilePath),
+		Extension:    filepath.Ext(result.FilePath),
+		MIMEType:     result.MIMEType,
+		Language:     result.Language,
+		Size:         result.FileSize,
+		ModTime:      result.ModTime,
+		ContentHash:  result.ContentHash,
+		MetadataHash: result.MetadataHash,
+		Summary:      result.Summary,
+		Complexity:   result.Complexity,
+		AnalyzedAt:   result.AnalyzedAt,
+	}
+
+	// Upsert file node
+	if err := w.graph.UpsertFile(ctx, fileNode); err != nil {
+		return fmt.Errorf("failed to upsert file; %w", err)
+	}
+
+	// Set tags
+	if len(result.Tags) > 0 {
+		if err := w.graph.SetFileTags(ctx, result.FilePath, result.Tags); err != nil {
+			return fmt.Errorf("failed to set tags; %w", err)
+		}
+	}
+
+	// Set topics (convert to graph.Topic)
+	if len(result.Topics) > 0 {
+		topics := make([]graph.Topic, len(result.Topics))
+		for i, t := range result.Topics {
+			topics[i] = graph.Topic{Name: t, Confidence: 1.0}
+		}
+		if err := w.graph.SetFileTopics(ctx, result.FilePath, topics); err != nil {
+			return fmt.Errorf("failed to set topics; %w", err)
+		}
+	}
+
+	// Set entities (convert to graph.Entity)
+	if len(result.Entities) > 0 {
+		entities := make([]graph.Entity, len(result.Entities))
+		for i, e := range result.Entities {
+			entities[i] = graph.Entity{Name: e.Name, Type: e.Type}
+		}
+		if err := w.graph.SetFileEntities(ctx, result.FilePath, entities); err != nil {
+			return fmt.Errorf("failed to set entities; %w", err)
+		}
+	}
+
+	// Set references (convert to graph.Reference)
+	if len(result.References) > 0 {
+		refs := make([]graph.Reference, len(result.References))
+		for i, r := range result.References {
+			refs[i] = graph.Reference{Type: r.Type, Target: r.Target}
+		}
+		if err := w.graph.SetFileReferences(ctx, result.FilePath, refs); err != nil {
+			return fmt.Errorf("failed to set references; %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Helper functions

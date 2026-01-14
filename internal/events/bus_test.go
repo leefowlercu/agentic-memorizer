@@ -385,6 +385,9 @@ func TestEventTypes(t *testing.T) {
 		{FileDeleted, "file.deleted"},
 		{AnalysisComplete, "analysis.complete"},
 		{AnalysisFailed, "analysis.failed"},
+		{SemanticAnalysisFailed, "analysis.semantic_failed"},
+		{EmbeddingsGenerationFailed, "analysis.embeddings_failed"},
+		{GraphPersistenceFailed, "graph.persistence_failed"},
 	}
 
 	for _, tt := range tests {

@@ -25,6 +25,15 @@ const (
 	// AnalysisFailed is published when analysis fails for a file.
 	AnalysisFailed EventType = "analysis.failed"
 
+	// SemanticAnalysisFailed is published when semantic analysis fails for a file.
+	SemanticAnalysisFailed EventType = "analysis.semantic_failed"
+
+	// EmbeddingsGenerationFailed is published when embeddings generation fails for a file.
+	EmbeddingsGenerationFailed EventType = "analysis.embeddings_failed"
+
+	// GraphPersistenceFailed is published when writing analysis results to the graph fails.
+	GraphPersistenceFailed EventType = "graph.persistence_failed"
+
 	// ConfigReloaded is published when configuration is successfully reloaded.
 	ConfigReloaded EventType = "config.reloaded"
 
@@ -87,6 +96,21 @@ type AnalysisEvent struct {
 
 	// Error contains the error message if analysis failed (for AnalysisFailed events).
 	Error string
+}
+
+// GraphEvent contains data for graph-related events.
+type GraphEvent struct {
+	// Path is the absolute path to the file that couldn't be persisted.
+	Path string
+
+	// Operation describes what graph operation failed (e.g., "upsert_file", "set_tags").
+	Operation string
+
+	// Error contains the error message.
+	Error string
+
+	// Retries is the number of retry attempts made before giving up.
+	Retries int
 }
 
 // AnalysisType identifies the type of analysis performed.

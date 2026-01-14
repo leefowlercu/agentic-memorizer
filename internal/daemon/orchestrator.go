@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/analysis"
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
@@ -34,6 +35,10 @@ type Orchestrator struct {
 	watcher          watcher.Watcher
 	mcpServer        *mcp.Server
 	metricsCollector *metrics.Collector
+
+	// Caches for avoiding redundant API calls
+	semanticCache   *cache.SemanticCache
+	embeddingsCache *cache.EmbeddingsCache
 
 	// graphDegraded tracks if graph connection failed during startup
 	graphDegraded bool
@@ -86,7 +91,45 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		"graph", graphCfg.GraphName,
 	)
 
-	// 4. Initialize Semantic Provider
+	// 4. Initialize Caches
+	cacheBaseDir := cache.GetCacheBaseDir()
+
+	semanticCache, err := cache.NewSemanticCache(cache.SemanticCacheConfig{
+		BaseDir: cacheBaseDir,
+		Version: cache.SemanticCacheVersion,
+	})
+	if err != nil {
+		slog.Warn("semantic cache initialization failed", "error", err)
+	} else {
+		o.semanticCache = semanticCache
+		slog.Info("semantic cache initialized",
+			"base_dir", cacheBaseDir,
+			"version", cache.SemanticCacheVersion,
+		)
+	}
+
+	// Initialize embeddings cache with provider/model info
+	if cfg.Embeddings.Enabled {
+		embeddingsCache, err := cache.NewEmbeddingsCache(cache.EmbeddingsCacheConfig{
+			BaseDir:  cacheBaseDir,
+			Version:  cache.EmbeddingsCacheVersion,
+			Provider: cfg.Embeddings.Provider,
+			Model:    cfg.Embeddings.Model,
+		})
+		if err != nil {
+			slog.Warn("embeddings cache initialization failed", "error", err)
+		} else {
+			o.embeddingsCache = embeddingsCache
+			slog.Info("embeddings cache initialized",
+				"base_dir", cacheBaseDir,
+				"provider", cfg.Embeddings.Provider,
+				"model", cfg.Embeddings.Model,
+				"version", cache.EmbeddingsCacheVersion,
+			)
+		}
+	}
+
+	// 5. Initialize Semantic Provider
 	semanticProvider, err := createSemanticProvider(&cfg.Semantic)
 	if err != nil {
 		slog.Warn("semantic provider initialization failed; analysis disabled",
@@ -96,7 +139,7 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		o.semanticProvider = semanticProvider
 	}
 
-	// 5. Initialize Embeddings Provider (if enabled)
+	// 6. Initialize Embeddings Provider (if enabled)
 	embedProvider, err := createEmbeddingsProvider(&cfg.Embeddings)
 	if err != nil {
 		slog.Warn("embeddings provider initialization failed; embeddings disabled",
@@ -109,7 +152,7 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 	// Log provider status
 	logProviderStatus(o.semanticProvider, o.embedProvider)
 
-	// 6. Initialize Handler Registry
+	// 7. Initialize Handler Registry
 	o.handlers = handlers.NewRegistry(
 		handlers.NewTextHandler(),
 		handlers.NewImageHandler(),
@@ -123,7 +166,7 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		"handlers", len(o.handlers.ListHandlers()),
 	)
 
-	// 7. Initialize Analysis Queue
+	// 8. Initialize Analysis Queue
 	workerCount := runtime.NumCPU()
 	if workerCount < 2 {
 		workerCount = 2
@@ -140,11 +183,11 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		"workers", workerCount,
 	)
 
-	// 8. Initialize Walker
+	// 9. Initialize Walker
 	o.walker = walker.New(o.registry, o.bus, o.handlers)
 	slog.Info("walker initialized")
 
-	// 9. Initialize Watcher
+	// 10. Initialize Watcher
 	w, err := watcher.New(o.bus, o.registry,
 		watcher.WithLogger(slog.Default().With("component", "watcher")),
 	)
@@ -154,7 +197,7 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 	o.watcher = w
 	slog.Info("watcher initialized")
 
-	// 10. Initialize MCP Server
+	// 11. Initialize MCP Server
 	mcpCfg := mcp.DefaultConfig()
 	o.mcpServer = mcp.NewServer(o.graph, mcpCfg)
 	slog.Info("MCP server initialized",
@@ -213,6 +256,9 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		}
 		// Inject providers into workers
 		o.queue.SetProviders(o.semanticProvider, o.embedProvider)
+
+		// Inject caches into workers
+		o.queue.SetCaches(o.semanticCache, o.embeddingsCache)
 
 		// Inject graph for result persistence (only if not degraded)
 		if !o.graphDegraded && o.graph != nil {

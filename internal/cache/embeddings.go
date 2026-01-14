@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,49 +14,84 @@ import (
 )
 
 const (
-	embCacheMagic   = 0x454D4231 // "EMB1"
-	embCacheVersion = 1
+	embCacheMagic = 0x454D4231 // "EMB1"
 )
 
 // EmbeddingsCache caches embedding vectors in binary format.
 type EmbeddingsCache struct {
-	config      CacheConfig
-	providerDir string
-	modelDir    string
-	mu          sync.RWMutex
+	config EmbeddingsCacheConfig
+	mu     sync.RWMutex
+	logger *slog.Logger
 }
 
 // NewEmbeddingsCache creates a new embeddings cache.
-func NewEmbeddingsCache(config CacheConfig, providerName, modelName string) (*EmbeddingsCache, error) {
-	cacheDir := filepath.Join(config.BaseDir, "embeddings", providerName, modelName)
+func NewEmbeddingsCache(config EmbeddingsCacheConfig) (*EmbeddingsCache, error) {
+	cacheDir := filepath.Join(config.BaseDir, "embeddings", config.Provider, config.Model)
 	if err := ensureDir(cacheDir); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory; %w", err)
 	}
 
+	// Default version if not set
+	if config.Version == 0 {
+		config.Version = EmbeddingsCacheVersion
+	}
+
 	return &EmbeddingsCache{
-		config:      config,
-		providerDir: providerName,
-		modelDir:    modelName,
+		config: config,
+		logger: slog.Default().With("component", "embeddings-cache"),
 	}, nil
 }
 
+// NewEmbeddingsCacheWithDefaults creates an embeddings cache with default settings.
+func NewEmbeddingsCacheWithDefaults(provider, model string) (*EmbeddingsCache, error) {
+	return NewEmbeddingsCache(EmbeddingsCacheConfig{
+		BaseDir:  GetCacheBaseDir(),
+		Version:  EmbeddingsCacheVersion,
+		Provider: provider,
+		Model:    model,
+	})
+}
+
 // Get retrieves a cached embedding by content hash and chunk index.
+// If the cache entry is corrupt, it is deleted (self-healing).
 func (c *EmbeddingsCache) Get(contentHash string, chunkIndex int) (*providers.EmbeddingsResult, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	path := c.getPath(contentHash, chunkIndex)
 
 	file, err := os.Open(path)
 	if err != nil {
+		c.mu.RUnlock()
 		if os.IsNotExist(err) {
 			return nil, ErrCacheMiss
 		}
 		return nil, fmt.Errorf("failed to open cache file; %w", err)
 	}
-	defer file.Close()
 
-	return readEmbeddingFile(file)
+	result, err := readEmbeddingFile(file)
+	file.Close()
+	c.mu.RUnlock()
+
+	if err != nil {
+		// Self-healing: delete corrupt entry
+		c.logger.Warn("deleting corrupt cache entry",
+			"hash", contentHash,
+			"chunk", chunkIndex,
+			"error", err)
+		_ = c.deleteInternal(path)
+		return nil, ErrCacheMiss
+	}
+
+	return result, nil
+}
+
+// deleteInternal removes a cache file without locking (caller must handle locking).
+func (c *EmbeddingsCache) deleteInternal(path string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // Set stores an embedding in the cache.
@@ -108,7 +144,7 @@ func (c *EmbeddingsCache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	cacheDir := filepath.Join(c.config.BaseDir, "embeddings", c.providerDir, c.modelDir)
+	cacheDir := c.getCacheDir()
 	if err := os.RemoveAll(cacheDir); err != nil {
 		return fmt.Errorf("failed to clear cache; %w", err)
 	}
@@ -121,7 +157,7 @@ func (c *EmbeddingsCache) Stats() CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	cacheDir := filepath.Join(c.config.BaseDir, "embeddings", c.providerDir, c.modelDir)
+	cacheDir := c.getCacheDir()
 	stats := CacheStats{}
 
 	_ = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
@@ -138,11 +174,36 @@ func (c *EmbeddingsCache) Stats() CacheStats {
 	return stats
 }
 
+// getCacheDir returns the cache directory for this provider/model.
+func (c *EmbeddingsCache) getCacheDir() string {
+	return filepath.Join(c.config.BaseDir, "embeddings", c.config.Provider, c.config.Model)
+}
+
 // getPath returns the cache file path for a content hash and chunk.
 func (c *EmbeddingsCache) getPath(contentHash string, chunkIndex int) string {
-	cacheDir := filepath.Join(c.config.BaseDir, "embeddings", c.providerDir, c.modelDir)
+	cacheDir := c.getCacheDir()
 	suffix := fmt.Sprintf("-chunk-%d-v%d.emb", chunkIndex, c.config.Version)
 	return hashToPath(cacheDir, contentHash, suffix)
+}
+
+// Version returns the cache version.
+func (c *EmbeddingsCache) Version() int {
+	return c.config.Version
+}
+
+// BaseDir returns the base cache directory.
+func (c *EmbeddingsCache) BaseDir() string {
+	return c.config.BaseDir
+}
+
+// Provider returns the provider name.
+func (c *EmbeddingsCache) Provider() string {
+	return c.config.Provider
+}
+
+// Model returns the model name.
+func (c *EmbeddingsCache) Model() string {
+	return c.config.Model
 }
 
 // embeddingHeader is the binary file header.
@@ -158,7 +219,7 @@ func writeEmbeddingFile(w io.Writer, result *providers.EmbeddingsResult) error {
 	// Write header
 	header := embeddingHeader{
 		Magic:      embCacheMagic,
-		Version:    embCacheVersion,
+		Version:    uint16(EmbeddingsCacheVersion),
 		Dimensions: uint16(result.Dimensions),
 		Timestamp:  result.GeneratedAt.Unix(),
 	}

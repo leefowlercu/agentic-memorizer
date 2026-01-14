@@ -90,11 +90,34 @@ type FileState struct {
 	// ModTime is the file modification time.
 	ModTime time.Time
 
-	// LastAnalyzedAt is when this file was last analyzed.
+	// LastAnalyzedAt is when this file was last analyzed (legacy, kept for compatibility).
 	LastAnalyzedAt *time.Time
 
 	// AnalysisVersion is the schema version when the file was last analyzed.
 	AnalysisVersion string
+
+	// Granular analysis state tracking
+
+	// MetadataAnalyzedAt is when metadata extraction was completed.
+	MetadataAnalyzedAt *time.Time
+
+	// SemanticAnalyzedAt is when semantic analysis was completed.
+	SemanticAnalyzedAt *time.Time
+
+	// SemanticError is the last error from semantic analysis (nil if successful).
+	SemanticError *string
+
+	// SemanticRetryCount is the number of failed semantic analysis attempts.
+	SemanticRetryCount int
+
+	// EmbeddingsAnalyzedAt is when embeddings generation was completed.
+	EmbeddingsAnalyzedAt *time.Time
+
+	// EmbeddingsError is the last error from embeddings generation (nil if successful).
+	EmbeddingsError *string
+
+	// EmbeddingsRetryCount is the number of failed embeddings generation attempts.
+	EmbeddingsRetryCount int
 
 	// CreatedAt is when this file state was first created.
 	CreatedAt time.Time

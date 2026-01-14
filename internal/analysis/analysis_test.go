@@ -366,8 +366,9 @@ func TestComputeHashes(t *testing.T) {
 		if hash1 == hash2 {
 			t.Error("Different content should produce different hashes")
 		}
-		if len(hash1) != 16 {
-			t.Errorf("Hash length = %d, want 16", len(hash1))
+		// SHA256 produces 32 bytes = 64 hex characters
+		if len(hash1) != 64 {
+			t.Errorf("Hash length = %d, want 64 (SHA256)", len(hash1))
 		}
 	})
 

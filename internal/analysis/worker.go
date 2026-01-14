@@ -2,6 +2,9 @@ package analysis
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -10,9 +13,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
+	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
 // WorkItemType indicates the type of work item.
@@ -53,14 +58,28 @@ type AnalysisResult struct {
 	Complexity int
 	Keywords   []string
 
-	// Embeddings
+	// Embeddings (file-level average)
 	Embeddings []float32
+
+	// Per-chunk data for graph persistence
+	Chunks []ChunkResult
 
 	// Processing info
 	ChunkerUsed     string
 	ChunksProcessed int
 	ProcessingTime  time.Duration
 	AnalyzedAt      time.Time
+}
+
+// ChunkResult contains data for a single chunk including embedding.
+type ChunkResult struct {
+	Index       int
+	Content     string
+	ContentHash string
+	StartOffset int
+	EndOffset   int
+	ChunkType   string
+	Embedding   []float32
 }
 
 // Entity represents an extracted entity.
@@ -90,6 +109,16 @@ type Worker struct {
 
 	// Graph client for persisting results
 	graph graph.Graph
+
+	// Registry for tracking file state
+	registry registry.Registry
+
+	// Analysis version for tracking schema changes
+	analysisVersion string
+
+	// Caches for avoiding redundant API calls
+	semanticCache   *cache.SemanticCache
+	embeddingsCache *cache.EmbeddingsCache
 }
 
 // NewWorker creates a new analysis worker.
@@ -251,6 +280,26 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	// Step 1: Metadata analysis (always performed)
 	result.MetadataHash = computeMetadataHash(item.FilePath, item.FileSize, item.ModTime)
 
+	// Check if content has changed (requires clearing previous analysis state)
+	if w.registry != nil {
+		existingState, err := w.registry.GetFileState(ctx, item.FilePath)
+		if err == nil && existingState.ContentHash != result.ContentHash {
+			// Content changed - clear previous analysis state
+			w.logger.Debug("content changed; clearing analysis state",
+				"path", item.FilePath,
+				"old_hash", existingState.ContentHash[:8],
+				"new_hash", result.ContentHash[:8])
+			if clearErr := w.registry.ClearAnalysisState(ctx, item.FilePath); clearErr != nil {
+				w.logger.Warn("failed to clear analysis state", "path", item.FilePath, "error", clearErr)
+			}
+		}
+
+		// Update metadata state
+		if err := w.registry.UpdateMetadataState(ctx, item.FilePath, result.ContentHash, result.MetadataHash, item.FileSize, item.ModTime); err != nil {
+			w.logger.Warn("failed to update metadata state", "path", item.FilePath, "error", err)
+		}
+	}
+
 	if mode == DegradationMetadata {
 		// Metadata only mode
 		return result, nil
@@ -266,15 +315,43 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	result.ChunksProcessed = chunkResult.TotalChunks
 
 	// Step 3: Semantic analysis (if provider available)
+	var semanticErr error
 	if w.semanticProvider != nil && w.semanticProvider.Available() {
-		semanticResult, err := w.analyzeSemantics(ctx, chunkResult.Chunks)
-		if err != nil {
-			w.logger.Warn("semantic analysis failed",
-				"path", item.FilePath,
-				"error", err)
-			w.queue.publishSemanticAnalysisFailed(item.FilePath, err)
-			// Continue without semantic analysis (soft failure)
-		} else {
+		var semanticResult *SemanticResult
+		var cacheHit bool
+
+		// Check semantic cache first
+		if w.semanticCache != nil {
+			cachedResult, err := w.semanticCache.Get(result.ContentHash)
+			if err == nil {
+				// Cache hit - convert providers.SemanticResult to SemanticResult
+				semanticResult = w.convertCachedSemantic(cachedResult)
+				cacheHit = true
+				w.logger.Debug("semantic cache hit", "path", item.FilePath)
+			} else if !errors.Is(err, cache.ErrCacheMiss) {
+				w.logger.Warn("semantic cache read error", "path", item.FilePath, "error", err)
+			}
+		}
+
+		// Cache miss - perform analysis
+		if !cacheHit {
+			semanticResult, semanticErr = w.analyzeSemantics(ctx, chunkResult.Chunks)
+			if semanticErr != nil {
+				w.logger.Warn("semantic analysis failed",
+					"path", item.FilePath,
+					"error", semanticErr)
+				w.queue.publishSemanticAnalysisFailed(item.FilePath, semanticErr)
+				// Continue without semantic analysis (soft failure)
+			} else if w.semanticCache != nil {
+				// Store in cache
+				providerResult := w.convertToProviderSemantic(semanticResult)
+				if cacheErr := w.semanticCache.Set(result.ContentHash, providerResult); cacheErr != nil {
+					w.logger.Warn("semantic cache write error", "path", item.FilePath, "error", cacheErr)
+				}
+			}
+		}
+
+		if semanticResult != nil {
 			result.Summary = semanticResult.Summary
 			result.Tags = semanticResult.Tags
 			result.Topics = semanticResult.Topics
@@ -282,6 +359,17 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 			result.References = semanticResult.References
 			result.Complexity = semanticResult.Complexity
 			result.Keywords = semanticResult.Keywords
+		}
+
+		// Update semantic state in registry
+		if w.registry != nil {
+			version := w.analysisVersion
+			if version == "" {
+				version = "1.0.0"
+			}
+			if err := w.registry.UpdateSemanticState(ctx, item.FilePath, version, semanticErr); err != nil {
+				w.logger.Warn("failed to update semantic state", "path", item.FilePath, "error", err)
+			}
 		}
 	}
 
@@ -291,16 +379,27 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	}
 
 	// Step 4: Generate embeddings (if provider available)
+	var embeddingsErr error
 	if w.embeddingsProvider != nil && w.embeddingsProvider.Available() {
-		embeddings, err := w.generateEmbeddings(ctx, content)
-		if err != nil {
+		var embeddings []float32
+		var chunkData []ChunkResult
+		embeddings, chunkData, embeddingsErr = w.generateEmbeddings(ctx, chunkResult.Chunks)
+		if embeddingsErr != nil {
 			w.logger.Warn("embeddings generation failed",
 				"path", item.FilePath,
-				"error", err)
-			w.queue.publishEmbeddingsGenerationFailed(item.FilePath, err)
+				"error", embeddingsErr)
+			w.queue.publishEmbeddingsGenerationFailed(item.FilePath, embeddingsErr)
 			// Continue without embeddings (soft failure)
 		} else {
 			result.Embeddings = embeddings
+			result.Chunks = chunkData
+		}
+
+		// Update embeddings state in registry
+		if w.registry != nil {
+			if err := w.registry.UpdateEmbeddingsState(ctx, item.FilePath, embeddingsErr); err != nil {
+				w.logger.Warn("failed to update embeddings state", "path", item.FilePath, "error", err)
+			}
 		}
 	}
 
@@ -398,18 +497,130 @@ func (w *Worker) analyzeChunk(ctx context.Context, chunk chunkers.Chunk) (*Seman
 	}, nil
 }
 
-// generateEmbeddings creates embeddings for the content.
-func (w *Worker) generateEmbeddings(ctx context.Context, content []byte) ([]float32, error) {
-	req := providers.EmbeddingsRequest{
-		Content: string(content),
+// generateEmbeddings creates embeddings for chunks using batch API with caching.
+// Returns both the file-level average embedding and per-chunk results.
+func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk) ([]float32, []ChunkResult, error) {
+	if len(chunks) == 0 {
+		return nil, nil, nil
 	}
 
-	result, err := w.embeddingsProvider.Embed(ctx, req)
-	if err != nil {
-		return nil, err
+	// Prepare chunk results and identify cache hits/misses
+	chunkResults := make([]ChunkResult, len(chunks))
+	var needsEmbedding []int // indices of chunks that need embedding
+
+	for i, chunk := range chunks {
+		chunkHash := computeContentHash([]byte(chunk.Content))
+		chunkResults[i] = ChunkResult{
+			Index:       chunk.Index,
+			Content:     chunk.Content,
+			ContentHash: chunkHash,
+			StartOffset: chunk.StartOffset,
+			EndOffset:   chunk.EndOffset,
+			ChunkType:   string(chunk.Metadata.Type),
+		}
+
+		// Check embeddings cache
+		if w.embeddingsCache != nil {
+			cached, err := w.embeddingsCache.Get(chunkHash, chunk.Index)
+			if err == nil {
+				chunkResults[i].Embedding = cached.Embedding
+				w.logger.Debug("embeddings cache hit", "chunk", i)
+				continue
+			}
+		}
+		needsEmbedding = append(needsEmbedding, i)
 	}
 
-	return result.Embedding, nil
+	// Generate embeddings for cache misses
+	if len(needsEmbedding) > 0 {
+		w.logger.Debug("generating embeddings for cache misses",
+			"total_chunks", len(chunks),
+			"cache_misses", len(needsEmbedding))
+
+		// Collect texts for batch embedding
+		texts := make([]string, len(needsEmbedding))
+		for j, idx := range needsEmbedding {
+			texts[j] = chunks[idx].Content
+		}
+
+		var embeddings []providers.EmbeddingsBatchResult
+		var err error
+
+		if len(texts) == 1 {
+			// Single embedding - use simple API
+			req := providers.EmbeddingsRequest{Content: texts[0]}
+			result, e := w.embeddingsProvider.Embed(ctx, req)
+			if e != nil {
+				return nil, nil, fmt.Errorf("embedding failed; %w", e)
+			}
+			embeddings = []providers.EmbeddingsBatchResult{{
+				Index:     0,
+				Embedding: result.Embedding,
+			}}
+		} else {
+			// Batch embedding
+			embeddings, err = w.embeddingsProvider.EmbedBatch(ctx, texts)
+			if err != nil {
+				return nil, nil, fmt.Errorf("batch embeddings failed; %w", err)
+			}
+		}
+
+		// Store embeddings in results and cache
+		for j, emb := range embeddings {
+			idx := needsEmbedding[j]
+			chunkResults[idx].Embedding = emb.Embedding
+
+			// Cache the embedding
+			if w.embeddingsCache != nil {
+				cacheResult := &providers.EmbeddingsResult{
+					Embedding:  emb.Embedding,
+					Dimensions: len(emb.Embedding),
+				}
+				if err := w.embeddingsCache.Set(chunkResults[idx].ContentHash, chunkResults[idx].Index, cacheResult); err != nil {
+					w.logger.Warn("embeddings cache write error",
+						"chunk", idx,
+						"error", err)
+				}
+			}
+		}
+	}
+
+	// Compute file-level average embedding
+	var allEmbeddings []providers.EmbeddingsBatchResult
+	for i, cr := range chunkResults {
+		if cr.Embedding != nil {
+			allEmbeddings = append(allEmbeddings, providers.EmbeddingsBatchResult{
+				Index:     i,
+				Embedding: cr.Embedding,
+			})
+		}
+	}
+
+	fileEmbedding := averageEmbeddings(allEmbeddings)
+	return fileEmbedding, chunkResults, nil
+}
+
+// averageEmbeddings computes the element-wise average of multiple embeddings.
+func averageEmbeddings(results []providers.EmbeddingsBatchResult) []float32 {
+	if len(results) == 0 {
+		return nil
+	}
+
+	dims := len(results[0].Embedding)
+	avg := make([]float32, dims)
+
+	for _, r := range results {
+		for i, v := range r.Embedding {
+			avg[i] += v
+		}
+	}
+
+	n := float32(len(results))
+	for i := range avg {
+		avg[i] /= n
+	}
+
+	return avg
 }
 
 // SetSemanticProvider sets the semantic analysis provider.
@@ -425,6 +636,78 @@ func (w *Worker) SetEmbeddingsProvider(p providers.EmbeddingsProvider) {
 // SetGraph sets the graph client for persisting analysis results.
 func (w *Worker) SetGraph(g graph.Graph) {
 	w.graph = g
+}
+
+// SetRegistry sets the registry for tracking file state.
+func (w *Worker) SetRegistry(r registry.Registry) {
+	w.registry = r
+}
+
+// SetAnalysisVersion sets the version string for tracking schema changes.
+func (w *Worker) SetAnalysisVersion(version string) {
+	w.analysisVersion = version
+}
+
+// SetCaches sets the semantic and embeddings caches.
+func (w *Worker) SetCaches(semantic *cache.SemanticCache, embeddings *cache.EmbeddingsCache) {
+	w.semanticCache = semantic
+	w.embeddingsCache = embeddings
+}
+
+// convertCachedSemantic converts a cached providers.SemanticResult to the local SemanticResult type.
+func (w *Worker) convertCachedSemantic(cached *providers.SemanticResult) *SemanticResult {
+	entities := make([]Entity, 0, len(cached.Entities))
+	for _, e := range cached.Entities {
+		entities = append(entities, Entity{Name: e.Name, Type: e.Type})
+	}
+
+	refs := make([]Reference, 0, len(cached.References))
+	for _, r := range cached.References {
+		refs = append(refs, Reference{Type: r.Type, Target: r.Target})
+	}
+
+	topics := make([]string, 0, len(cached.Topics))
+	for _, t := range cached.Topics {
+		topics = append(topics, t.Name)
+	}
+
+	return &SemanticResult{
+		Summary:    cached.Summary,
+		Tags:       cached.Tags,
+		Topics:     topics,
+		Entities:   entities,
+		References: refs,
+		Complexity: cached.Complexity,
+		Keywords:   cached.Keywords,
+	}
+}
+
+// convertToProviderSemantic converts the local SemanticResult to providers.SemanticResult for caching.
+func (w *Worker) convertToProviderSemantic(result *SemanticResult) *providers.SemanticResult {
+	entities := make([]providers.Entity, 0, len(result.Entities))
+	for _, e := range result.Entities {
+		entities = append(entities, providers.Entity{Name: e.Name, Type: e.Type})
+	}
+
+	refs := make([]providers.Reference, 0, len(result.References))
+	for _, r := range result.References {
+		refs = append(refs, providers.Reference{Type: r.Type, Target: r.Target})
+	}
+
+	topics := make([]providers.Topic, 0, len(result.Topics))
+	for _, t := range result.Topics {
+		topics = append(topics, providers.Topic{Name: t, Confidence: 1.0})
+	}
+
+	return &providers.SemanticResult{
+		Summary:    result.Summary,
+		Tags:       result.Tags,
+		Topics:     topics,
+		Entities:   entities,
+		References: refs,
+		Complexity: result.Complexity,
+		Keywords:   result.Keywords,
+	}
 }
 
 // persistToGraph writes analysis results to the graph database.
@@ -452,6 +735,36 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 	// Upsert file node
 	if err := w.graph.UpsertFile(ctx, fileNode); err != nil {
 		return fmt.Errorf("failed to upsert file; %w", err)
+	}
+
+	// Delete existing chunks before inserting new ones (clean slate on reanalysis)
+	if err := w.graph.DeleteChunks(ctx, result.FilePath); err != nil {
+		w.logger.Warn("failed to delete existing chunks", "path", result.FilePath, "error", err)
+		// Continue - not fatal
+	}
+
+	// Persist chunks with embeddings
+	for _, chunk := range result.Chunks {
+		chunkNode := &graph.ChunkNode{
+			ID:               chunk.ContentHash, // Use content hash as ID for deduplication
+			FilePath:         result.FilePath,
+			Index:            chunk.Index,
+			Content:          chunk.Content,
+			ContentHash:      chunk.ContentHash,
+			StartOffset:      chunk.StartOffset,
+			EndOffset:        chunk.EndOffset,
+			ChunkType:        chunk.ChunkType,
+			Embedding:        chunk.Embedding,
+			EmbeddingVersion: 1, // TODO: get from config
+		}
+
+		if err := w.graph.UpsertChunk(ctx, chunkNode); err != nil {
+			w.logger.Warn("failed to upsert chunk",
+				"path", result.FilePath,
+				"chunk", chunk.Index,
+				"error", err)
+			// Continue with other chunks
+		}
 	}
 
 	// Set tags
@@ -581,12 +894,8 @@ func detectLanguage(path string) string {
 
 // computeContentHash computes a hash of the content.
 func computeContentHash(content []byte) string {
-	// Use xxHash for performance (placeholder using simple checksum)
-	var sum uint64
-	for _, b := range content {
-		sum = sum*31 + uint64(b)
-	}
-	return fmt.Sprintf("%016x", sum)
+	hash := sha256.Sum256(content)
+	return hex.EncodeToString(hash[:])
 }
 
 // computeMetadataHash computes a hash of file metadata.

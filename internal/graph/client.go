@@ -70,29 +70,34 @@ type Graph interface {
 	// GetFileWithRelations retrieves a file with all its related data.
 	GetFileWithRelations(ctx context.Context, path string) (*FileWithRelations, error)
 
+	// SearchSimilarChunks finds chunks similar to the given embedding using k-NN search.
+	SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]ChunkNode, error)
+
 	// IsConnected returns true if connected to the database.
 	IsConnected() bool
 }
 
 // Config contains graph connection configuration.
 type Config struct {
-	Host        string
-	Port        int
-	GraphName   string
-	PasswordEnv string
-	MaxRetries  int
-	RetryDelay  time.Duration
+	Host               string
+	Port               int
+	GraphName          string
+	PasswordEnv        string
+	MaxRetries         int
+	RetryDelay         time.Duration
+	EmbeddingDimension int // Vector embedding dimensions for index creation
 }
 
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		Host:        "localhost",
-		Port:        6379,
-		GraphName:   "memorizer",
-		PasswordEnv: "MEMORIZER_GRAPH_PASSWORD",
-		MaxRetries:  3,
-		RetryDelay:  time.Second,
+		Host:               "localhost",
+		Port:               6379,
+		GraphName:          "memorizer",
+		PasswordEnv:        "MEMORIZER_GRAPH_PASSWORD",
+		MaxRetries:         3,
+		RetryDelay:         time.Second,
+		EmbeddingDimension: 1536, // OpenAI text-embedding-3-small default
 	}
 }
 
@@ -282,6 +287,50 @@ func (g *FalkorDBGraph) createSchema(ctx context.Context) error {
 			g.logger.Debug("schema query", "query", q, "error", err)
 		}
 	}
+
+	// Create vector index for chunk embeddings
+	if err := g.createVectorIndex(ctx); err != nil {
+		g.logger.Warn("failed to create vector index", "error", err)
+	}
+
+	return nil
+}
+
+// createVectorIndex creates an HNSW vector index on Chunk.embedding.
+func (g *FalkorDBGraph) createVectorIndex(ctx context.Context) error {
+	dim := g.config.EmbeddingDimension
+	if dim == 0 {
+		dim = 1536 // Default
+	}
+
+	// FalkorDB uses CREATE VECTOR INDEX syntax
+	// Note: This syntax may need to be adjusted based on FalkorDB version
+	query := fmt.Sprintf(`
+		CREATE VECTOR INDEX FOR (c:Chunk) ON (c.embedding)
+		OPTIONS {
+			indexType: 'HNSW',
+			dimension: %d,
+			similarityFunction: 'cosine'
+		}
+	`, dim)
+
+	if _, err := g.graph.Query(query); err != nil {
+		// Try alternative syntax for older FalkorDB versions
+		altQuery := fmt.Sprintf(`
+			CALL db.idx.vector.createNodeIndex('Chunk', 'embedding', %d, 'cosine')
+		`, dim)
+		if _, altErr := g.graph.Query(altQuery); altErr != nil {
+			g.logger.Debug("vector index creation failed",
+				"primary_error", err,
+				"alt_error", altErr)
+			// Index may already exist, not fatal
+		}
+	}
+
+	g.logger.Info("vector index created/verified",
+		"label", "Chunk",
+		"property", "embedding",
+		"dimension", dim)
 
 	return nil
 }
@@ -505,6 +554,9 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 		return fmt.Errorf("not connected to graph database")
 	}
 
+	// Format embedding as array literal for FalkorDB
+	embeddingStr := formatEmbeddingArray(chunk.Embedding)
+
 	query := fmt.Sprintf(`
 		MERGE (c:Chunk {id: '%s'})
 		SET c.file_path = '%s',
@@ -518,6 +570,7 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 			c.heading = '%s',
 			c.heading_level = %d,
 			c.summary = '%s',
+			c.embedding = %s,
 			c.embedding_version = %d,
 			c.token_count = %d,
 			c.updated_at = %d
@@ -533,6 +586,7 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 		escapeString(chunk.Heading),
 		chunk.HeadingLevel,
 		escapeString(chunk.Summary),
+		embeddingStr,
 		chunk.EmbeddingVersion,
 		chunk.TokenCount,
 		time.Now().Unix())
@@ -549,6 +603,24 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 	`, escapeString(chunk.FilePath), escapeString(chunk.ID))
 
 	return g.queueWrite(relQuery)
+}
+
+// formatEmbeddingArray formats a float32 slice as a Cypher array literal.
+func formatEmbeddingArray(embedding []float32) string {
+	if len(embedding) == 0 {
+		return "[]"
+	}
+
+	// Build array literal: [0.1, 0.2, 0.3, ...]
+	result := "["
+	for i, v := range embedding {
+		if i > 0 {
+			result += ","
+		}
+		result += fmt.Sprintf("%f", v)
+	}
+	result += "]"
+	return result
 }
 
 // DeleteChunks removes all chunks for a file.
@@ -887,6 +959,59 @@ func (g *FalkorDBGraph) GetFileWithRelations(ctx context.Context, path string) (
 	}
 
 	return result, nil
+}
+
+// SearchSimilarChunks finds chunks similar to the given embedding using k-NN search.
+func (g *FalkorDBGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]ChunkNode, error) {
+	if !g.IsConnected() {
+		return nil, fmt.Errorf("not connected to graph database")
+	}
+
+	if len(embedding) == 0 {
+		return nil, fmt.Errorf("embedding vector is empty")
+	}
+
+	if k <= 0 {
+		k = 10 // Default to 10 results
+	}
+
+	// Format embedding as array for query
+	embeddingStr := formatEmbeddingArray(embedding)
+
+	// Use FalkorDB's vector similarity search
+	// Note: Syntax may vary by version
+	query := fmt.Sprintf(`
+		CALL db.idx.vector.queryNodes('Chunk', 'embedding', %d, %s)
+		YIELD node, score
+		RETURN node.id, node.file_path, node.index, node.content_hash,
+		       node.start_offset, node.end_offset, node.chunk_type,
+		       node.summary, score
+		ORDER BY score DESC
+		LIMIT %d
+	`, k, embeddingStr, k)
+
+	result, err := g.graph.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("vector search failed; %w", err)
+	}
+
+	var chunks []ChunkNode
+	for result.Next() {
+		record := result.Record()
+		chunk := ChunkNode{
+			ID:          getStringFromRecord(record, 0),
+			FilePath:    getStringFromRecord(record, 1),
+			Index:       getIntFromRecord(record, 2),
+			ContentHash: getStringFromRecord(record, 3),
+			StartOffset: getIntFromRecord(record, 4),
+			EndOffset:   getIntFromRecord(record, 5),
+			ChunkType:   getStringFromRecord(record, 6),
+			Summary:     getStringFromRecord(record, 7),
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks, nil
 }
 
 // Helper functions for export

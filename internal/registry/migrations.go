@@ -33,7 +33,7 @@ var migrations = []Migration{
 	},
 	{
 		Version:     2,
-		Description: "Create file_state table",
+		Description: "Create file_state table with analysis tracking",
 		Up: `
 			CREATE TABLE IF NOT EXISTS file_state (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,12 +44,23 @@ var migrations = []Migration{
 				mod_time TIMESTAMP NOT NULL,
 				last_analyzed_at TIMESTAMP,
 				analysis_version TEXT,
+				-- Granular analysis state tracking
+				metadata_analyzed_at TIMESTAMP,
+				semantic_analyzed_at TIMESTAMP,
+				semantic_error TEXT,
+				semantic_retry_count INTEGER DEFAULT 0,
+				embeddings_analyzed_at TIMESTAMP,
+				embeddings_error TEXT,
+				embeddings_retry_count INTEGER DEFAULT 0,
+				-- Timestamps
 				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 			);
 
 			CREATE INDEX IF NOT EXISTS idx_file_state_content_hash ON file_state(content_hash);
 			CREATE INDEX IF NOT EXISTS idx_file_state_path ON file_state(path);
+			CREATE INDEX IF NOT EXISTS idx_file_state_semantic_error ON file_state(semantic_error);
+			CREATE INDEX IF NOT EXISTS idx_file_state_embeddings_error ON file_state(embeddings_error);
 		`,
 	},
 	{

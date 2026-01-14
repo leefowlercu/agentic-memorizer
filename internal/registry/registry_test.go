@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -696,6 +697,298 @@ func TestPathCleaning(t *testing.T) {
 
 	if rp.Path != "/test/project" {
 		t.Errorf("expected cleaned path /test/project, got %s", rp.Path)
+	}
+}
+
+func TestUpdateMetadataState(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	testPath := "/test/file.go"
+	modTime := time.Now().Truncate(time.Second)
+
+	// Insert initial metadata state
+	err := reg.UpdateMetadataState(ctx, testPath, "contenthash123", "metahash456", 1024, modTime)
+	if err != nil {
+		t.Fatalf("failed to update metadata state: %v", err)
+	}
+
+	// Verify state
+	state, err := reg.GetFileState(ctx, testPath)
+	if err != nil {
+		t.Fatalf("failed to get file state: %v", err)
+	}
+
+	if state.ContentHash != "contenthash123" {
+		t.Errorf("expected content hash 'contenthash123', got %q", state.ContentHash)
+	}
+	if state.MetadataHash != "metahash456" {
+		t.Errorf("expected metadata hash 'metahash456', got %q", state.MetadataHash)
+	}
+	if state.Size != 1024 {
+		t.Errorf("expected size 1024, got %d", state.Size)
+	}
+	if state.MetadataAnalyzedAt == nil {
+		t.Error("expected MetadataAnalyzedAt to be set")
+	}
+}
+
+func TestUpdateSemanticState_Success(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	testPath := "/test/file.go"
+	modTime := time.Now().Truncate(time.Second)
+
+	// First create the file state
+	err := reg.UpdateMetadataState(ctx, testPath, "hash", "meta", 100, modTime)
+	if err != nil {
+		t.Fatalf("failed to setup file state: %v", err)
+	}
+
+	// Update semantic state as success
+	err = reg.UpdateSemanticState(ctx, testPath, "1.0.0", nil)
+	if err != nil {
+		t.Fatalf("failed to update semantic state: %v", err)
+	}
+
+	// Verify state
+	state, err := reg.GetFileState(ctx, testPath)
+	if err != nil {
+		t.Fatalf("failed to get file state: %v", err)
+	}
+
+	if state.SemanticAnalyzedAt == nil {
+		t.Error("expected SemanticAnalyzedAt to be set")
+	}
+	if state.AnalysisVersion != "1.0.0" {
+		t.Errorf("expected analysis version '1.0.0', got %q", state.AnalysisVersion)
+	}
+	if state.SemanticError != nil {
+		t.Error("expected SemanticError to be nil")
+	}
+	if state.SemanticRetryCount != 0 {
+		t.Errorf("expected retry count 0, got %d", state.SemanticRetryCount)
+	}
+}
+
+func TestUpdateSemanticState_Failure(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	testPath := "/test/file.go"
+	modTime := time.Now().Truncate(time.Second)
+
+	// First create the file state
+	err := reg.UpdateMetadataState(ctx, testPath, "hash", "meta", 100, modTime)
+	if err != nil {
+		t.Fatalf("failed to setup file state: %v", err)
+	}
+
+	// Update semantic state as failure
+	analysisErr := errors.New("API rate limit exceeded")
+	err = reg.UpdateSemanticState(ctx, testPath, "1.0.0", analysisErr)
+	if err != nil {
+		t.Fatalf("failed to update semantic state: %v", err)
+	}
+
+	// Verify state
+	state, err := reg.GetFileState(ctx, testPath)
+	if err != nil {
+		t.Fatalf("failed to get file state: %v", err)
+	}
+
+	if state.SemanticAnalyzedAt != nil {
+		t.Error("expected SemanticAnalyzedAt to be nil on failure")
+	}
+	if state.SemanticError == nil {
+		t.Fatal("expected SemanticError to be set")
+	}
+	if *state.SemanticError != "API rate limit exceeded" {
+		t.Errorf("expected error 'API rate limit exceeded', got %q", *state.SemanticError)
+	}
+	if state.SemanticRetryCount != 1 {
+		t.Errorf("expected retry count 1, got %d", state.SemanticRetryCount)
+	}
+
+	// Update again to verify retry count increments
+	err = reg.UpdateSemanticState(ctx, testPath, "1.0.0", analysisErr)
+	if err != nil {
+		t.Fatalf("failed to update semantic state again: %v", err)
+	}
+
+	state, _ = reg.GetFileState(ctx, testPath)
+	if state.SemanticRetryCount != 2 {
+		t.Errorf("expected retry count 2, got %d", state.SemanticRetryCount)
+	}
+}
+
+func TestUpdateEmbeddingsState(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	testPath := "/test/file.go"
+	modTime := time.Now().Truncate(time.Second)
+
+	// Setup file state
+	err := reg.UpdateMetadataState(ctx, testPath, "hash", "meta", 100, modTime)
+	if err != nil {
+		t.Fatalf("failed to setup file state: %v", err)
+	}
+
+	// Update embeddings state as success
+	err = reg.UpdateEmbeddingsState(ctx, testPath, nil)
+	if err != nil {
+		t.Fatalf("failed to update embeddings state: %v", err)
+	}
+
+	state, _ := reg.GetFileState(ctx, testPath)
+	if state.EmbeddingsAnalyzedAt == nil {
+		t.Error("expected EmbeddingsAnalyzedAt to be set")
+	}
+	if state.EmbeddingsError != nil {
+		t.Error("expected EmbeddingsError to be nil")
+	}
+}
+
+func TestClearAnalysisState(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	testPath := "/test/file.go"
+	modTime := time.Now().Truncate(time.Second)
+
+	// Setup file state with analysis
+	err := reg.UpdateMetadataState(ctx, testPath, "hash", "meta", 100, modTime)
+	if err != nil {
+		t.Fatalf("failed to setup file state: %v", err)
+	}
+
+	err = reg.UpdateSemanticState(ctx, testPath, "1.0.0", nil)
+	if err != nil {
+		t.Fatalf("failed to setup semantic state: %v", err)
+	}
+
+	err = reg.UpdateEmbeddingsState(ctx, testPath, nil)
+	if err != nil {
+		t.Fatalf("failed to setup embeddings state: %v", err)
+	}
+
+	// Clear analysis state
+	err = reg.ClearAnalysisState(ctx, testPath)
+	if err != nil {
+		t.Fatalf("failed to clear analysis state: %v", err)
+	}
+
+	// Verify all analysis timestamps are cleared
+	state, _ := reg.GetFileState(ctx, testPath)
+	if state.LastAnalyzedAt != nil {
+		t.Error("expected LastAnalyzedAt to be nil")
+	}
+	if state.MetadataAnalyzedAt != nil {
+		t.Error("expected MetadataAnalyzedAt to be nil")
+	}
+	if state.SemanticAnalyzedAt != nil {
+		t.Error("expected SemanticAnalyzedAt to be nil")
+	}
+	if state.EmbeddingsAnalyzedAt != nil {
+		t.Error("expected EmbeddingsAnalyzedAt to be nil")
+	}
+	if state.SemanticRetryCount != 0 {
+		t.Errorf("expected semantic retry count 0, got %d", state.SemanticRetryCount)
+	}
+	if state.EmbeddingsRetryCount != 0 {
+		t.Errorf("expected embeddings retry count 0, got %d", state.EmbeddingsRetryCount)
+	}
+}
+
+func TestListFilesNeedingAnalysis(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	modTime := time.Now().Truncate(time.Second)
+
+	// Create files with different states
+	// File needing metadata
+	reg.UpdateFileState(ctx, &FileState{
+		Path:         "/test/needs-metadata.go",
+		ContentHash:  "hash1",
+		MetadataHash: "meta1",
+		Size:         100,
+		ModTime:      modTime,
+	})
+
+	// File with metadata but needing semantic
+	reg.UpdateMetadataState(ctx, "/test/needs-semantic.go", "hash2", "meta2", 200, modTime)
+
+	// File with semantic but needing embeddings
+	reg.UpdateMetadataState(ctx, "/test/needs-embeddings.go", "hash3", "meta3", 300, modTime)
+	reg.UpdateSemanticState(ctx, "/test/needs-embeddings.go", "1.0.0", nil)
+
+	// Fully analyzed file
+	reg.UpdateMetadataState(ctx, "/test/complete.go", "hash4", "meta4", 400, modTime)
+	reg.UpdateSemanticState(ctx, "/test/complete.go", "1.0.0", nil)
+	reg.UpdateEmbeddingsState(ctx, "/test/complete.go", nil)
+
+	// Test ListFilesNeedingMetadata
+	needsMetadata, err := reg.ListFilesNeedingMetadata(ctx, "/test")
+	if err != nil {
+		t.Fatalf("ListFilesNeedingMetadata failed: %v", err)
+	}
+	if len(needsMetadata) != 1 {
+		t.Errorf("expected 1 file needing metadata, got %d", len(needsMetadata))
+	}
+
+	// Test ListFilesNeedingSemantic
+	needsSemantic, err := reg.ListFilesNeedingSemantic(ctx, "/test", 3)
+	if err != nil {
+		t.Fatalf("ListFilesNeedingSemantic failed: %v", err)
+	}
+	if len(needsSemantic) != 1 {
+		t.Errorf("expected 1 file needing semantic, got %d", len(needsSemantic))
+	}
+
+	// Test ListFilesNeedingEmbeddings
+	needsEmbeddings, err := reg.ListFilesNeedingEmbeddings(ctx, "/test", 3)
+	if err != nil {
+		t.Fatalf("ListFilesNeedingEmbeddings failed: %v", err)
+	}
+	if len(needsEmbeddings) != 1 {
+		t.Errorf("expected 1 file needing embeddings, got %d", len(needsEmbeddings))
+	}
+}
+
+func TestListFilesNeedingSemantic_RespectsMaxRetries(t *testing.T) {
+	reg := newTestRegistry(t)
+	defer reg.Close()
+
+	ctx := context.Background()
+	modTime := time.Now().Truncate(time.Second)
+
+	// Create file with metadata
+	reg.UpdateMetadataState(ctx, "/test/file.go", "hash", "meta", 100, modTime)
+
+	// Fail semantic analysis 3 times
+	for i := 0; i < 3; i++ {
+		reg.UpdateSemanticState(ctx, "/test/file.go", "1.0.0", errors.New("error"))
+	}
+
+	// With maxRetries=3, file should be excluded
+	needsSemantic, _ := reg.ListFilesNeedingSemantic(ctx, "/test", 3)
+	if len(needsSemantic) != 0 {
+		t.Errorf("expected 0 files (maxRetries exceeded), got %d", len(needsSemantic))
+	}
+
+	// With maxRetries=5, file should be included
+	needsSemantic, _ = reg.ListFilesNeedingSemantic(ctx, "/test", 5)
+	if len(needsSemantic) != 1 {
+		t.Errorf("expected 1 file, got %d", len(needsSemantic))
 	}
 }
 

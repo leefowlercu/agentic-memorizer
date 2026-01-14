@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
@@ -392,6 +393,23 @@ func (q *Queue) SetGraph(g graph.Graph) {
 	q.logger.Debug("graph injected into workers",
 		"workers", len(q.workers),
 		"graph", g != nil)
+}
+
+// SetCaches injects the semantic and embeddings caches into all workers.
+func (q *Queue) SetCaches(semantic *cache.SemanticCache, embeddings *cache.EmbeddingsCache) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	for _, w := range q.workers {
+		if w != nil {
+			w.SetCaches(semantic, embeddings)
+		}
+	}
+
+	q.logger.Debug("caches injected into workers",
+		"workers", len(q.workers),
+		"semantic", semantic != nil,
+		"embeddings", embeddings != nil)
 }
 
 // recordSuccess records a successful processing.

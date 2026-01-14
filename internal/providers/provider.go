@@ -143,6 +143,10 @@ type EmbeddingsProvider interface {
 	// Embed generates embeddings for the given content.
 	Embed(ctx context.Context, req EmbeddingsRequest) (*EmbeddingsResult, error)
 
+	// EmbedBatch generates embeddings for multiple texts in a single API call.
+	// This is more efficient than calling Embed multiple times for multi-chunk files.
+	EmbedBatch(ctx context.Context, texts []string) ([]EmbeddingsBatchResult, error)
+
 	// ModelName returns the name of the embedding model.
 	ModelName() string
 
@@ -187,4 +191,16 @@ type EmbeddingsResult struct {
 
 	// Version is the embedding version for cache invalidation.
 	Version int `json:"version"`
+}
+
+// EmbeddingsBatchResult contains the result for a single item in a batch.
+type EmbeddingsBatchResult struct {
+	// Index is the position in the original input array.
+	Index int `json:"index"`
+
+	// Embedding is the vector representation.
+	Embedding []float32 `json:"embedding"`
+
+	// TokensUsed is the number of tokens consumed for this item.
+	TokensUsed int `json:"tokens_used"`
 }

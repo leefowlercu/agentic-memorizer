@@ -164,9 +164,105 @@ func (p *GoogleEmbeddingsProvider) Embed(ctx context.Context, req providers.Embe
 	}, nil
 }
 
+// EmbedBatch generates embeddings for multiple texts in a single API call.
+func (p *GoogleEmbeddingsProvider) EmbedBatch(ctx context.Context, texts []string) ([]providers.EmbeddingsBatchResult, error) {
+	if !p.Available() {
+		return nil, fmt.Errorf("google embeddings provider not available; GOOGLE_API_KEY not set")
+	}
+
+	if len(texts) == 0 {
+		return nil, nil
+	}
+
+	// Wait for rate limit
+	if err := p.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit wait failed; %w", err)
+	}
+
+	// Build request with batchEmbedContents API
+	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:batchEmbedContents?key=%s", p.model, p.apiKey)
+
+	// Build requests array
+	requests := make([]map[string]any, len(texts))
+	for i, text := range texts {
+		requests[i] = map[string]any{
+			"model": fmt.Sprintf("models/%s", p.model),
+			"content": map[string]any{
+				"parts": []map[string]string{
+					{"text": text},
+				},
+			},
+		}
+	}
+
+	requestBody := map[string]any{
+		"requests": requests,
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request; %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request; %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("API request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response; %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var apiResp googleBatchEmbeddingsResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response; %w", err)
+	}
+
+	if len(apiResp.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("embeddings count mismatch; got %d, want %d", len(apiResp.Embeddings), len(texts))
+	}
+
+	// Convert response to batch results
+	results := make([]providers.EmbeddingsBatchResult, len(apiResp.Embeddings))
+	for i, emb := range apiResp.Embeddings {
+		embedding := make([]float32, len(emb.Values))
+		for j, v := range emb.Values {
+			embedding[j] = float32(v)
+		}
+		results[i] = providers.EmbeddingsBatchResult{
+			Index:      i,
+			Embedding:  embedding,
+			TokensUsed: 0, // Google doesn't return token count
+		}
+	}
+
+	return results, nil
+}
+
 // googleEmbeddingsResponse represents the Google embeddings API response.
 type googleEmbeddingsResponse struct {
 	Embedding struct {
 		Values []float64 `json:"values"`
 	} `json:"embedding"`
+}
+
+// googleBatchEmbeddingsResponse represents the Google batch embeddings API response.
+type googleBatchEmbeddingsResponse struct {
+	Embeddings []struct {
+		Values []float64 `json:"values"`
+	} `json:"embeddings"`
 }

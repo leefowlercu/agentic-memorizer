@@ -119,6 +119,34 @@ func (r *mockRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath s
 	return nil
 }
 
+func (r *mockRegistry) UpdateMetadataState(ctx context.Context, path string, contentHash string, metadataHash string, size int64, modTime time.Time) error {
+	return nil
+}
+
+func (r *mockRegistry) UpdateSemanticState(ctx context.Context, path string, analysisVersion string, err error) error {
+	return nil
+}
+
+func (r *mockRegistry) UpdateEmbeddingsState(ctx context.Context, path string, err error) error {
+	return nil
+}
+
+func (r *mockRegistry) ClearAnalysisState(ctx context.Context, path string) error {
+	return nil
+}
+
+func (r *mockRegistry) ListFilesNeedingMetadata(ctx context.Context, parentPath string) ([]registry.FileState, error) {
+	return nil, nil
+}
+
+func (r *mockRegistry) ListFilesNeedingSemantic(ctx context.Context, parentPath string, maxRetries int) ([]registry.FileState, error) {
+	return nil, nil
+}
+
+func (r *mockRegistry) ListFilesNeedingEmbeddings(ctx context.Context, parentPath string, maxRetries int) ([]registry.FileState, error) {
+	return nil, nil
+}
+
 func (r *mockRegistry) Close() error {
 	return nil
 }

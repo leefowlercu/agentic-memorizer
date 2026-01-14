@@ -189,6 +189,92 @@ func (p *OpenAIEmbeddingsProvider) Embed(ctx context.Context, req providers.Embe
 	}, nil
 }
 
+// EmbedBatch generates embeddings for multiple texts in a single API call.
+func (p *OpenAIEmbeddingsProvider) EmbedBatch(ctx context.Context, texts []string) ([]providers.EmbeddingsBatchResult, error) {
+	if !p.Available() {
+		return nil, fmt.Errorf("openai embeddings provider not available; OPENAI_API_KEY not set")
+	}
+
+	if len(texts) == 0 {
+		return nil, nil
+	}
+
+	// Wait for rate limit
+	if err := p.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit wait failed; %w", err)
+	}
+
+	// Build request body with array input
+	requestBody := map[string]any{
+		"model": p.model,
+		"input": texts,
+	}
+
+	// Add dimensions if using text-embedding-3 models
+	if p.model == "text-embedding-3-small" || p.model == "text-embedding-3-large" {
+		requestBody["dimensions"] = p.dimensions
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request; %w", err)
+	}
+
+	// Create HTTP request
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", openaiEmbeddingsURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request; %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	// Execute request
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("API request failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response; %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var apiResp openaiEmbeddingsResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response; %w", err)
+	}
+
+	if len(apiResp.Data) != len(texts) {
+		return nil, fmt.Errorf("embeddings count mismatch; got %d, want %d", len(apiResp.Data), len(texts))
+	}
+
+	// Convert response to batch results
+	results := make([]providers.EmbeddingsBatchResult, len(apiResp.Data))
+	tokensPerItem := apiResp.Usage.TotalTokens / len(texts)
+
+	for _, data := range apiResp.Data {
+		embedding := make([]float32, len(data.Embedding))
+		for i, v := range data.Embedding {
+			embedding[i] = float32(v)
+		}
+		results[data.Index] = providers.EmbeddingsBatchResult{
+			Index:      data.Index,
+			Embedding:  embedding,
+			TokensUsed: tokensPerItem,
+		}
+	}
+
+	return results, nil
+}
+
 // openaiEmbeddingsResponse represents the OpenAI embeddings API response.
 type openaiEmbeddingsResponse struct {
 	Data []struct {

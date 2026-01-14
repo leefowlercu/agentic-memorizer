@@ -38,6 +38,9 @@ func (p *mockEmbeddingsProvider) MaxTokens() int             { return 8000 }
 func (p *mockEmbeddingsProvider) Embed(ctx context.Context, req EmbeddingsRequest) (*EmbeddingsResult, error) {
 	return nil, nil
 }
+func (p *mockEmbeddingsProvider) EmbedBatch(ctx context.Context, texts []string) ([]EmbeddingsBatchResult, error) {
+	return nil, nil
+}
 
 func TestRegistry_RegisterSemantic(t *testing.T) {
 	r := NewRegistry()

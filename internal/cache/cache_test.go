@@ -50,11 +50,55 @@ func TestHashToPath(t *testing.T) {
 	}
 }
 
+func TestGetCacheBaseDir(t *testing.T) {
+	// Save original env vars
+	origXDG := os.Getenv("XDG_CACHE_HOME")
+	origConfig := os.Getenv("MEMORIZER_CONFIG_DIR")
+	defer func() {
+		os.Setenv("XDG_CACHE_HOME", origXDG)
+		os.Setenv("MEMORIZER_CONFIG_DIR", origConfig)
+	}()
+
+	t.Run("uses XDG_CACHE_HOME when set", func(t *testing.T) {
+		os.Setenv("XDG_CACHE_HOME", "/custom/cache")
+		os.Setenv("MEMORIZER_CONFIG_DIR", "/custom/config")
+
+		dir := GetCacheBaseDir()
+		expected := filepath.Join("/custom/cache", "memorizer")
+		if dir != expected {
+			t.Errorf("expected %s, got %s", expected, dir)
+		}
+	})
+
+	t.Run("uses MEMORIZER_CONFIG_DIR when XDG not set", func(t *testing.T) {
+		os.Setenv("XDG_CACHE_HOME", "")
+		os.Setenv("MEMORIZER_CONFIG_DIR", "/custom/config")
+
+		dir := GetCacheBaseDir()
+		expected := filepath.Join("/custom/config", "cache")
+		if dir != expected {
+			t.Errorf("expected %s, got %s", expected, dir)
+		}
+	})
+
+	t.Run("uses default when neither set", func(t *testing.T) {
+		os.Setenv("XDG_CACHE_HOME", "")
+		os.Setenv("MEMORIZER_CONFIG_DIR", "")
+
+		dir := GetCacheBaseDir()
+		home, _ := os.UserHomeDir()
+		expected := filepath.Join(home, ".config", "memorizer", "cache")
+		if dir != expected {
+			t.Errorf("expected %s, got %s", expected, dir)
+		}
+	})
+}
+
 func TestSemanticCache_GetSet(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
+	config := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 1,
+		Version: "1.0.0",
 	}
 
 	cache, err := NewSemanticCache(config)
@@ -98,9 +142,9 @@ func TestSemanticCache_GetSet(t *testing.T) {
 
 func TestSemanticCache_Has(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
+	config := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 1,
+		Version: "1.0.0",
 	}
 
 	cache, err := NewSemanticCache(config)
@@ -127,9 +171,9 @@ func TestSemanticCache_Has(t *testing.T) {
 
 func TestSemanticCache_Delete(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
+	config := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 1,
+		Version: "1.0.0",
 	}
 
 	cache, err := NewSemanticCache(config)
@@ -154,9 +198,9 @@ func TestSemanticCache_Delete(t *testing.T) {
 
 func TestSemanticCache_Clear(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
+	config := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 1,
+		Version: "1.0.0",
 	}
 
 	cache, err := NewSemanticCache(config)
@@ -190,10 +234,10 @@ func TestSemanticCache_Clear(t *testing.T) {
 func TestSemanticCache_DifferentVersion(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create cache with version 1
-	config1 := CacheConfig{
+	// Create cache with version 1.0.0
+	config1 := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 1,
+		Version: "1.0.0",
 	}
 	cache1, _ := NewSemanticCache(config1)
 
@@ -201,10 +245,10 @@ func TestSemanticCache_DifferentVersion(t *testing.T) {
 	result := &providers.SemanticResult{Summary: "test", Version: 1}
 	_ = cache1.Set(hash, result)
 
-	// Create cache with version 2
-	config2 := CacheConfig{
+	// Create cache with version 2.0.0
+	config2 := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 2,
+		Version: "2.0.0",
 	}
 	cache2, _ := NewSemanticCache(config2)
 
@@ -215,14 +259,92 @@ func TestSemanticCache_DifferentVersion(t *testing.T) {
 	}
 }
 
-func TestEmbeddingsCache_GetSet(t *testing.T) {
+func TestSemanticCache_SelfHealing(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
+	config := SemanticCacheConfig{
 		BaseDir: tmpDir,
-		Version: 1,
+		Version: "1.0.0",
 	}
 
-	cache, err := NewEmbeddingsCache(config, "openai", "text-embedding-3-small")
+	cache, err := NewSemanticCache(config)
+	if err != nil {
+		t.Fatalf("failed to create cache: %v", err)
+	}
+
+	hash := "abcdef1234567890"
+
+	// Write corrupt data directly to cache file
+	cacheDir := filepath.Join(tmpDir, "semantic")
+	path := hashToPath(cacheDir, hash, "-v1.0.0.json")
+	if err := ensureDir(filepath.Dir(path)); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("not valid json{{{"), 0644); err != nil {
+		t.Fatalf("failed to write corrupt file: %v", err)
+	}
+
+	// Get should return cache miss and delete the corrupt file
+	_, err = cache.Get(hash)
+	if err != ErrCacheMiss {
+		t.Errorf("expected ErrCacheMiss for corrupt entry, got %v", err)
+	}
+
+	// File should be deleted
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("expected corrupt file to be deleted")
+	}
+}
+
+func TestSemanticCache_Version(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := SemanticCacheConfig{
+		BaseDir: tmpDir,
+		Version: "1.2.3",
+	}
+
+	cache, err := NewSemanticCache(config)
+	if err != nil {
+		t.Fatalf("failed to create cache: %v", err)
+	}
+
+	if cache.Version() != "1.2.3" {
+		t.Errorf("expected version 1.2.3, got %s", cache.Version())
+	}
+}
+
+func TestSemanticCache_WithDefaults(t *testing.T) {
+	// Save and restore env
+	origXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", origXDG)
+
+	tmpDir := t.TempDir()
+	os.Setenv("XDG_CACHE_HOME", tmpDir)
+
+	cache, err := NewSemanticCacheWithDefaults()
+	if err != nil {
+		t.Fatalf("failed to create cache with defaults: %v", err)
+	}
+
+	if cache.Version() != SemanticCacheVersion {
+		t.Errorf("expected version %s, got %s", SemanticCacheVersion, cache.Version())
+	}
+
+	expectedDir := filepath.Join(tmpDir, "memorizer")
+	if cache.BaseDir() != expectedDir {
+		t.Errorf("expected base dir %s, got %s", expectedDir, cache.BaseDir())
+	}
+}
+
+func TestEmbeddingsCache_GetSet(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := EmbeddingsCacheConfig{
+		BaseDir:  tmpDir,
+		Version:  1,
+		Provider: "openai",
+		Model:    "text-embedding-3-small",
+	}
+
+	cache, err := NewEmbeddingsCache(config)
 	if err != nil {
 		t.Fatalf("failed to create cache: %v", err)
 	}
@@ -266,12 +388,14 @@ func TestEmbeddingsCache_GetSet(t *testing.T) {
 
 func TestEmbeddingsCache_ChunkIndex(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
-		BaseDir: tmpDir,
-		Version: 1,
+	config := EmbeddingsCacheConfig{
+		BaseDir:  tmpDir,
+		Version:  1,
+		Provider: "openai",
+		Model:    "text-embedding-3-small",
 	}
 
-	cache, err := NewEmbeddingsCache(config, "openai", "text-embedding-3-small")
+	cache, err := NewEmbeddingsCache(config)
 	if err != nil {
 		t.Fatalf("failed to create cache: %v", err)
 	}
@@ -305,12 +429,14 @@ func TestEmbeddingsCache_ChunkIndex(t *testing.T) {
 
 func TestEmbeddingsCache_Has(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
-		BaseDir: tmpDir,
-		Version: 1,
+	config := EmbeddingsCacheConfig{
+		BaseDir:  tmpDir,
+		Version:  1,
+		Provider: "openai",
+		Model:    "text-embedding-3-small",
 	}
 
-	cache, err := NewEmbeddingsCache(config, "openai", "text-embedding-3-small")
+	cache, err := NewEmbeddingsCache(config)
 	if err != nil {
 		t.Fatalf("failed to create cache: %v", err)
 	}
@@ -344,12 +470,14 @@ func TestEmbeddingsCache_Has(t *testing.T) {
 
 func TestEmbeddingsCache_Delete(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
-		BaseDir: tmpDir,
-		Version: 1,
+	config := EmbeddingsCacheConfig{
+		BaseDir:  tmpDir,
+		Version:  1,
+		Provider: "openai",
+		Model:    "text-embedding-3-small",
 	}
 
-	cache, err := NewEmbeddingsCache(config, "openai", "text-embedding-3-small")
+	cache, err := NewEmbeddingsCache(config)
 	if err != nil {
 		t.Fatalf("failed to create cache: %v", err)
 	}
@@ -376,12 +504,14 @@ func TestEmbeddingsCache_Delete(t *testing.T) {
 
 func TestEmbeddingsCache_Stats(t *testing.T) {
 	tmpDir := t.TempDir()
-	config := CacheConfig{
-		BaseDir: tmpDir,
-		Version: 1,
+	config := EmbeddingsCacheConfig{
+		BaseDir:  tmpDir,
+		Version:  1,
+		Provider: "openai",
+		Model:    "text-embedding-3-small",
 	}
 
-	cache, err := NewEmbeddingsCache(config, "openai", "text-embedding-3-small")
+	cache, err := NewEmbeddingsCache(config)
 	if err != nil {
 		t.Fatalf("failed to create cache: %v", err)
 	}
@@ -410,5 +540,69 @@ func TestEmbeddingsCache_Stats(t *testing.T) {
 	}
 	if stats.TotalSize == 0 {
 		t.Error("expected non-zero total size")
+	}
+}
+
+func TestEmbeddingsCache_SelfHealing(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := EmbeddingsCacheConfig{
+		BaseDir:  tmpDir,
+		Version:  1,
+		Provider: "openai",
+		Model:    "text-embedding-3-small",
+	}
+
+	cache, err := NewEmbeddingsCache(config)
+	if err != nil {
+		t.Fatalf("failed to create cache: %v", err)
+	}
+
+	hash := "abcdef1234567890"
+
+	// Write corrupt data directly to cache file
+	cacheDir := filepath.Join(tmpDir, "embeddings", "openai", "text-embedding-3-small")
+	path := hashToPath(cacheDir, hash, "-chunk-0-v1.emb")
+	if err := ensureDir(filepath.Dir(path)); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("corrupt binary data"), 0644); err != nil {
+		t.Fatalf("failed to write corrupt file: %v", err)
+	}
+
+	// Get should return cache miss and delete the corrupt file
+	_, err = cache.Get(hash, 0)
+	if err != ErrCacheMiss {
+		t.Errorf("expected ErrCacheMiss for corrupt entry, got %v", err)
+	}
+
+	// File should be deleted
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("expected corrupt file to be deleted")
+	}
+}
+
+func TestEmbeddingsCache_WithDefaults(t *testing.T) {
+	// Save and restore env
+	origXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", origXDG)
+
+	tmpDir := t.TempDir()
+	os.Setenv("XDG_CACHE_HOME", tmpDir)
+
+	cache, err := NewEmbeddingsCacheWithDefaults("voyage", "voyage-3")
+	if err != nil {
+		t.Fatalf("failed to create cache with defaults: %v", err)
+	}
+
+	if cache.Version() != EmbeddingsCacheVersion {
+		t.Errorf("expected version %d, got %d", EmbeddingsCacheVersion, cache.Version())
+	}
+
+	if cache.Provider() != "voyage" {
+		t.Errorf("expected provider voyage, got %s", cache.Provider())
+	}
+
+	if cache.Model() != "voyage-3" {
+		t.Errorf("expected model voyage-3, got %s", cache.Model())
 	}
 }

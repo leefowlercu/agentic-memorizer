@@ -3,6 +3,7 @@ package cache
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,32 +13,46 @@ import (
 
 // SemanticCache caches semantic analysis results.
 type SemanticCache struct {
-	config CacheConfig
+	config SemanticCacheConfig
 	mu     sync.RWMutex
+	logger *slog.Logger
 }
 
-// NewSemanticCache creates a new semantic cache.
-func NewSemanticCache(config CacheConfig) (*SemanticCache, error) {
+// NewSemanticCache creates a new semantic cache with the given configuration.
+func NewSemanticCache(config SemanticCacheConfig) (*SemanticCache, error) {
 	// Ensure cache directory exists
 	cacheDir := filepath.Join(config.BaseDir, "semantic")
 	if err := ensureDir(cacheDir); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory; %w", err)
 	}
 
+	// Default version if not set
+	if config.Version == "" {
+		config.Version = SemanticCacheVersion
+	}
+
 	return &SemanticCache{
 		config: config,
+		logger: slog.Default().With("component", "semantic-cache"),
 	}, nil
 }
 
+// NewSemanticCacheWithDefaults creates a semantic cache with default settings.
+func NewSemanticCacheWithDefaults() (*SemanticCache, error) {
+	return NewSemanticCache(SemanticCacheConfig{
+		BaseDir: GetCacheBaseDir(),
+		Version: SemanticCacheVersion,
+	})
+}
+
 // Get retrieves a cached semantic result by content hash.
+// If the cache entry is corrupt or has a version mismatch, it is deleted (self-healing).
 func (c *SemanticCache) Get(contentHash string) (*providers.SemanticResult, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	cacheDir := filepath.Join(c.config.BaseDir, "semantic")
-	path := hashToPath(cacheDir, contentHash, fmt.Sprintf("-v%d.json", c.config.Version))
-
+	path := c.getPath(contentHash)
 	data, err := os.ReadFile(path)
+	c.mu.RUnlock()
+
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrCacheMiss
@@ -47,15 +62,33 @@ func (c *SemanticCache) Get(contentHash string) (*providers.SemanticResult, erro
 
 	var result providers.SemanticResult
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal cache data; %w", err)
+		// Self-healing: delete corrupt entry
+		c.logger.Warn("deleting corrupt cache entry",
+			"hash", contentHash,
+			"error", err)
+		_ = c.deleteInternal(path)
+		return nil, ErrCacheMiss
 	}
 
-	// Verify version
-	if result.Version != c.config.Version {
-		return nil, ErrVersionMismatch
-	}
-
+	// Version is stored as int in SemanticResult but we use semver string
+	// We embed version info in filename, so if file exists with correct name, version matches
 	return &result, nil
+}
+
+// deleteInternal removes a cache file without locking (caller must handle locking).
+func (c *SemanticCache) deleteInternal(path string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// getPath returns the cache file path for a content hash.
+func (c *SemanticCache) getPath(contentHash string) string {
+	cacheDir := filepath.Join(c.config.BaseDir, "semantic")
+	return hashToPath(cacheDir, contentHash, fmt.Sprintf("-v%s.json", c.config.Version))
 }
 
 // Set stores a semantic result in the cache.
@@ -63,8 +96,7 @@ func (c *SemanticCache) Set(contentHash string, result *providers.SemanticResult
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	cacheDir := filepath.Join(c.config.BaseDir, "semantic")
-	path := hashToPath(cacheDir, contentHash, fmt.Sprintf("-v%d.json", c.config.Version))
+	path := c.getPath(contentHash)
 
 	// Ensure directory exists
 	if err := ensureDir(pathToDir(path)); err != nil {
@@ -88,8 +120,7 @@ func (c *SemanticCache) Delete(contentHash string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	cacheDir := filepath.Join(c.config.BaseDir, "semantic")
-	path := hashToPath(cacheDir, contentHash, fmt.Sprintf("-v%d.json", c.config.Version))
+	path := c.getPath(contentHash)
 
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete cache file; %w", err)
@@ -103,8 +134,7 @@ func (c *SemanticCache) Has(contentHash string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	cacheDir := filepath.Join(c.config.BaseDir, "semantic")
-	path := hashToPath(cacheDir, contentHash, fmt.Sprintf("-v%d.json", c.config.Version))
+	path := c.getPath(contentHash)
 
 	_, err := os.Stat(path)
 	return err == nil
@@ -149,4 +179,14 @@ func (c *SemanticCache) Stats() CacheStats {
 type CacheStats struct {
 	EntryCount int64
 	TotalSize  int64
+}
+
+// Version returns the cache version string.
+func (c *SemanticCache) Version() string {
+	return c.config.Version
+}
+
+// BaseDir returns the base cache directory.
+func (c *SemanticCache) BaseDir() string {
+	return c.config.BaseDir
 }

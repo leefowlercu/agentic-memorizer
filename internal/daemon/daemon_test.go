@@ -455,3 +455,452 @@ func TestDaemon_DegradedState_ComponentFailure(t *testing.T) {
 
 // T085: Tests for /readyz degraded response
 // (Already covered in server_test.go TestServer_Readyz_Degraded)
+
+// Edge case tests for Daemon
+
+func TestDaemon_Stop_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	// Stop multiple times should not panic or error
+	for i := 0; i < 3; i++ {
+		err := d.Stop()
+		if err != nil {
+			t.Errorf("Daemon.Stop() call %d error = %v, want nil", i+1, err)
+		}
+	}
+
+	if d.State() != DaemonStateStopped {
+		t.Errorf("Daemon.State() = %v, want %v", d.State(), DaemonStateStopped)
+	}
+}
+
+func TestDaemon_UpdateComponentHealth_EmptyMap(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	// Should not panic with empty map
+	d.UpdateComponentHealth(map[string]ComponentHealth{})
+
+	health := d.Health()
+	if health.Status != "healthy" {
+		t.Errorf("Daemon.Health().Status = %q, want %q", health.Status, "healthy")
+	}
+}
+
+func TestDaemon_UpdateComponentHealth_MultipleComponents(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	// Update with multiple components at once
+	statuses := map[string]ComponentHealth{
+		"component-a": {Status: ComponentStatusRunning, LastChecked: time.Now()},
+		"component-b": {Status: ComponentStatusRunning, LastChecked: time.Now()},
+		"component-c": {Status: ComponentStatusFailed, Error: "test error", LastChecked: time.Now()},
+	}
+	d.UpdateComponentHealth(statuses)
+
+	health := d.Health()
+	if health.Status != "degraded" {
+		t.Errorf("Daemon.Health().Status = %q, want %q", health.Status, "degraded")
+	}
+
+	if len(health.Components) != 3 {
+		t.Errorf("Daemon.Health().Components has %d entries, want 3", len(health.Components))
+	}
+}
+
+func TestDaemon_MultipleReloadCallbacks(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	// Track callback invocations
+	var callOrder []int
+	var mu sync.Mutex
+
+	// Register multiple callbacks
+	for i := range 3 {
+		idx := i + 1
+		d.OnConfigReload(func() error {
+			mu.Lock()
+			callOrder = append(callOrder, idx)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	// Trigger reload
+	d.TriggerConfigReload()
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(callOrder) != 3 {
+		t.Errorf("Expected 3 callbacks, got %d", len(callOrder))
+	}
+
+	// Verify order
+	for i, v := range callOrder {
+		if v != i+1 {
+			t.Errorf("Callback order[%d] = %d, want %d", i, v, i+1)
+		}
+	}
+}
+
+func TestDaemon_ReloadCallback_ContinuesOnError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	var callCount int
+	var mu sync.Mutex
+
+	// First callback succeeds
+	d.OnConfigReload(func() error {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		return nil
+	})
+
+	// Second callback fails
+	d.OnConfigReload(func() error {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		return errors.New("callback error")
+	})
+
+	// Third callback should still be called
+	d.OnConfigReload(func() error {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		return nil
+	})
+
+	d.TriggerConfigReload()
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if callCount != 3 {
+		t.Errorf("Expected all 3 callbacks to be called despite error, got %d", callCount)
+	}
+}
+
+// slowComponent is a test component that takes time to stop
+type slowComponent struct {
+	name        string
+	stopDelay   time.Duration
+	stopStarted chan struct{}
+}
+
+func (s *slowComponent) Name() string {
+	return s.name
+}
+
+func (s *slowComponent) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *slowComponent) Stop(ctx context.Context) error {
+	if s.stopStarted != nil {
+		close(s.stopStarted)
+	}
+	select {
+	case <-time.After(s.stopDelay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *slowComponent) Health() ComponentHealth {
+	return ComponentHealth{
+		Status:      ComponentStatusRunning,
+		LastChecked: time.Now(),
+	}
+}
+
+func TestDaemon_ShutdownTimeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 100 * time.Millisecond, // Very short timeout
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	stopStarted := make(chan struct{})
+	d.RegisterComponent(&slowComponent{
+		name:        "slow-component",
+		stopDelay:   5 * time.Second, // Much longer than timeout
+		stopStarted: stopStarted,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- d.Start(ctx)
+	}()
+
+	// Wait for startup
+	time.Sleep(100 * time.Millisecond)
+
+	// Trigger shutdown
+	cancel()
+
+	// Wait for stop to start
+	select {
+	case <-stopStarted:
+	case <-time.After(time.Second):
+		t.Fatal("Component stop not started")
+	}
+
+	// Shutdown should complete despite slow component (timeout)
+	select {
+	case <-errChan:
+		// Expected - shutdown completed
+	case <-time.After(2 * time.Second):
+		t.Error("Daemon did not shutdown within expected time (timeout should have triggered)")
+	}
+}
+
+func TestDaemon_ComponentPartialFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	var startOrder []string
+	var mu sync.Mutex
+
+	// First component succeeds
+	d.RegisterComponent(&mockComponent{
+		name:       "success-first",
+		startOrder: &startOrder,
+		stopOrder:  &[]string{},
+		mu:         &mu,
+	})
+
+	// Second component fails
+	d.RegisterComponent(&failingComponent{name: "failing-middle"})
+
+	// Third component should still start
+	d.RegisterComponent(&mockComponent{
+		name:       "success-last",
+		startOrder: &startOrder,
+		stopOrder:  &[]string{},
+		mu:         &mu,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- d.Start(ctx)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// All components should have been attempted
+	mu.Lock()
+	// success-first and success-last should be in startOrder
+	if len(startOrder) != 2 {
+		t.Errorf("Expected 2 successful component starts, got %d", len(startOrder))
+	}
+	mu.Unlock()
+
+	// Daemon should be in degraded state
+	health := d.Health()
+	if health.Status != "degraded" {
+		t.Errorf("Daemon.Health().Status = %q, want %q", health.Status, "degraded")
+	}
+
+	cancel()
+	<-errChan
+}
+
+// Additional edge case tests
+
+func TestDefaultDaemonConfig(t *testing.T) {
+	cfg := DefaultDaemonConfig()
+
+	if cfg.HTTPPort != 7600 {
+		t.Errorf("DefaultDaemonConfig().HTTPPort = %d, want 7600", cfg.HTTPPort)
+	}
+
+	if cfg.HTTPBind != "127.0.0.1" {
+		t.Errorf("DefaultDaemonConfig().HTTPBind = %q, want %q", cfg.HTTPBind, "127.0.0.1")
+	}
+
+	if cfg.ShutdownTimeout != 30*time.Second {
+		t.Errorf("DefaultDaemonConfig().ShutdownTimeout = %v, want 30s", cfg.ShutdownTimeout)
+	}
+
+	if cfg.PIDFile != "~/.config/memorizer/daemon.pid" {
+		t.Errorf("DefaultDaemonConfig().PIDFile = %q, want %q", cfg.PIDFile, "~/.config/memorizer/daemon.pid")
+	}
+}
+
+func TestDaemon_RegisterComponent(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	var startOrder, stopOrder []string
+	var mu sync.Mutex
+
+	// Register multiple components
+	d.RegisterComponent(&mockComponent{
+		name:       "component-1",
+		startOrder: &startOrder,
+		stopOrder:  &stopOrder,
+		mu:         &mu,
+	})
+	d.RegisterComponent(&mockComponent{
+		name:       "component-2",
+		startOrder: &startOrder,
+		stopOrder:  &stopOrder,
+		mu:         &mu,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- d.Start(ctx)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify both components started
+	mu.Lock()
+	if len(startOrder) != 2 {
+		t.Errorf("Expected 2 components started, got %d", len(startOrder))
+	}
+	mu.Unlock()
+
+	cancel()
+	<-errChan
+}
+
+func TestDaemon_NoComponents(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	// Don't register any components - daemon should still work
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- d.Start(ctx)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Daemon should be running
+	if d.State() != DaemonStateRunning {
+		t.Errorf("Daemon.State() = %v, want %v", d.State(), DaemonStateRunning)
+	}
+
+	// Health should be healthy with no components
+	health := d.Health()
+	if health.Status != "healthy" {
+		t.Errorf("Daemon.Health().Status = %q, want %q", health.Status, "healthy")
+	}
+
+	cancel()
+	<-errChan
+}
+
+func TestDaemon_PIDFileClaimedByOther(t *testing.T) {
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "test-daemon.pid")
+
+	// Write current process PID to simulate another daemon running
+	pf := NewPIDFile(pidPath)
+	if err := pf.Write(); err != nil {
+		t.Fatalf("Failed to write PID file: %v", err)
+	}
+
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         pidPath,
+	}
+
+	d := NewDaemon(cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start should fail because PID file is claimed
+	err := d.Start(ctx)
+	if err == nil {
+		t.Error("Expected error when PID file is already claimed")
+	}
+
+	if d.State() != DaemonStateStopped {
+		t.Errorf("Daemon.State() = %v, want %v after failed start", d.State(), DaemonStateStopped)
+	}
+}

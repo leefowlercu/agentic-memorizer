@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
 // QueueState represents the current state of the analysis queue.
@@ -351,6 +352,24 @@ func (q *Queue) SetBatchSize(n int) {
 	q.mu.Lock()
 	q.batchSize = n
 	q.mu.Unlock()
+}
+
+// SetProviders injects semantic and embeddings providers into all workers.
+func (q *Queue) SetProviders(semantic providers.SemanticProvider, embeddings providers.EmbeddingsProvider) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	for _, w := range q.workers {
+		if w != nil {
+			w.SetSemanticProvider(semantic)
+			w.SetEmbeddingsProvider(embeddings)
+		}
+	}
+
+	q.logger.Debug("providers injected into workers",
+		"workers", len(q.workers),
+		"semantic", semantic != nil,
+		"embeddings", embeddings != nil)
 }
 
 // recordSuccess records a successful processing.

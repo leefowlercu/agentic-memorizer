@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"sync"
 	"time"
 )
 
@@ -41,7 +42,9 @@ type HealthStatus struct {
 }
 
 // HealthManager aggregates health status from multiple components.
+// It is safe for concurrent use.
 type HealthManager struct {
+	mu         sync.RWMutex
 	components map[string]ComponentHealth
 	startTime  time.Time
 }
@@ -56,16 +59,23 @@ func NewHealthManager() *HealthManager {
 
 // UpdateComponent updates the health status for a named component.
 func (m *HealthManager) UpdateComponent(name string, health ComponentHealth) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.components[name] = health
 }
 
 // RemoveComponent removes a component from health tracking.
 func (m *HealthManager) RemoveComponent(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.components, name)
 }
 
 // Status returns the aggregate health status of all components.
 func (m *HealthManager) Status() HealthStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	status := HealthStatus{
 		Status:     "healthy",
 		Ready:      true,

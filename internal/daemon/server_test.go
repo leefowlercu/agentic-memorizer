@@ -1,9 +1,12 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -148,4 +151,415 @@ func TestServer_Readyz_WithComponents(t *testing.T) {
 	if _, exists := response.Components["test-component"]; !exists {
 		t.Error("GET /readyz missing component 'test-component'")
 	}
+}
+
+// Edge case tests for Server
+
+func TestServer_Rebuild_NoHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Don't set rebuild func
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/rebuild", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /rebuild without handler status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+
+	var response RebuildResult
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.Status != "error" {
+		t.Errorf("Response status = %q, want %q", response.Status, "error")
+	}
+
+	if response.Error != "rebuild not available" {
+		t.Errorf("Response error = %q, want %q", response.Error, "rebuild not available")
+	}
+}
+
+func TestServer_Rebuild_Success(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Set rebuild func that succeeds
+	srv.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
+		return &RebuildResult{
+			Status:        "completed",
+			FilesQueued:   42,
+			DirsProcessed: 5,
+			Duration:      "1.5s",
+		}, nil
+	})
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/rebuild", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("POST /rebuild status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var response RebuildResult
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.Status != "completed" {
+		t.Errorf("Response status = %q, want %q", response.Status, "completed")
+	}
+
+	if response.FilesQueued != 42 {
+		t.Errorf("Response files_queued = %d, want %d", response.FilesQueued, 42)
+	}
+
+	if response.DirsProcessed != 5 {
+		t.Errorf("Response dirs_processed = %d, want %d", response.DirsProcessed, 5)
+	}
+}
+
+func TestServer_Rebuild_Failure(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Set rebuild func that fails
+	srv.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
+		return nil, errors.New("rebuild failed: database error")
+	})
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/rebuild", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("POST /rebuild with error status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+
+	var response RebuildResult
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.Status != "error" {
+		t.Errorf("Response status = %q, want %q", response.Status, "error")
+	}
+
+	if response.Error != "rebuild failed: database error" {
+		t.Errorf("Response error = %q, want %q", response.Error, "rebuild failed: database error")
+	}
+}
+
+func TestServer_Rebuild_FullFlag(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	var receivedFull bool
+	srv.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
+		receivedFull = full
+		return &RebuildResult{Status: "completed"}, nil
+	})
+
+	handler := srv.Handler()
+
+	// Test without full flag
+	req := httptest.NewRequest(http.MethodPost, "/rebuild", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if receivedFull {
+		t.Error("Expected full=false without query param")
+	}
+
+	// Test with full=true
+	req = httptest.NewRequest(http.MethodPost, "/rebuild?full=true", nil)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if !receivedFull {
+		t.Error("Expected full=true with ?full=true query param")
+	}
+
+	// Test with full=false (explicit)
+	receivedFull = true // reset
+	req = httptest.NewRequest(http.MethodPost, "/rebuild?full=false", nil)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if receivedFull {
+		t.Error("Expected full=false with ?full=false query param")
+	}
+}
+
+func TestServer_Rebuild_WrongMethod(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
+		return &RebuildResult{Status: "completed"}, nil
+	})
+
+	handler := srv.Handler()
+
+	// GET should not work for /rebuild
+	req := httptest.NewRequest(http.MethodGet, "/rebuild", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET /rebuild status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestServer_MetricsHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Create a simple metrics handler
+	metricsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("# HELP test_metric A test metric\n"))
+	})
+
+	srv.SetMetricsHandler(metricsHandler)
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /metrics status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+	if body != "# HELP test_metric A test metric\n" {
+		t.Errorf("GET /metrics body = %q, unexpected content", body)
+	}
+}
+
+func TestServer_ContentType(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	handler := srv.Handler()
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/healthz"},
+		{http.MethodGet, "/readyz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			contentType := w.Header().Get("Content-Type")
+			if contentType != "application/json" {
+				t.Errorf("%s %s Content-Type = %q, want %q", tt.method, tt.path, contentType, "application/json")
+			}
+		})
+	}
+}
+
+// Additional edge case tests
+
+func TestServer_404_UnknownPath(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/unknown/path", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("GET /unknown/path status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestServer_SetMCPHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Create a simple MCP handler
+	mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"mcp": "response"}`))
+	})
+
+	srv.SetMCPHandler(mcpHandler)
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/test", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /mcp/test status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestServer_SetMCPHandler_Nil(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Setting nil handler should not panic
+	srv.SetMCPHandler(nil)
+
+	handler := srv.Handler()
+
+	// Should still be able to access other endpoints
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /healthz status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestServer_SetMetricsHandler_Nil(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Setting nil handler should not panic
+	srv.SetMetricsHandler(nil)
+
+	handler := srv.Handler()
+
+	// Should still be able to access other endpoints
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /healthz status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestServer_Rebuild_ContentType(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
+		return &RebuildResult{Status: "completed"}, nil
+	})
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/rebuild", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("POST /rebuild Content-Type = %q, want %q", contentType, "application/json")
+	}
+}
+
+func TestServer_ConcurrentRequests(t *testing.T) {
+	hm := NewHealthManager()
+
+	// Add some components
+	for i := range 5 {
+		name := "component-" + string(rune('a'+i))
+		hm.UpdateComponent(name, ComponentHealth{
+			Status:      ComponentStatusRunning,
+			LastChecked: time.Now(),
+		})
+	}
+
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	handler := srv.Handler()
+
+	// Spawn concurrent requests
+	var wg sync.WaitGroup
+	numRequests := 100
+
+	for range numRequests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("GET /readyz status = %d, want %d", w.Code, http.StatusOK)
+			}
+		}()
+	}
+
+	wg.Wait()
 }

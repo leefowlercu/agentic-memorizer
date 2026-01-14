@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -29,7 +30,9 @@ type RebuildResult struct {
 type RebuildFunc func(ctx context.Context, full bool) (*RebuildResult, error)
 
 // Server is the HTTP server for daemon health endpoints.
+// It is safe for concurrent use.
 type Server struct {
+	mu             sync.RWMutex
 	health         *HealthManager
 	config         ServerConfig
 	server         *http.Server
@@ -157,6 +160,7 @@ func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Start(ctx context.Context) error {
 	addr := fmt.Sprintf("%s:%d", s.config.Bind, s.config.Port)
 
+	s.mu.Lock()
 	s.server = &http.Server{
 		Addr:    addr,
 		Handler: s.router,
@@ -164,8 +168,10 @@ func (s *Server) Start(ctx context.Context) error {
 			return ctx
 		},
 	}
+	server := s.server
+	s.mu.Unlock()
 
-	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("http server error; %w", err)
 	}
 
@@ -174,11 +180,15 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Shutdown gracefully shuts down the HTTP server.
 func (s *Server) Shutdown(ctx context.Context) error {
-	if s.server == nil {
+	s.mu.RLock()
+	server := s.server
+	s.mu.RUnlock()
+
+	if server == nil {
 		return nil
 	}
 
-	if err := s.server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("failed to shutdown http server; %w", err)
 	}
 

@@ -69,6 +69,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start components; %w", err)
 	}
 
+	// Update daemon health with component statuses
+	d.UpdateComponentHealth(orchestrator.ComponentStatuses())
+
 	// Ensure orchestrator cleanup on exit
 	defer orchestrator.Stop(ctx)
 

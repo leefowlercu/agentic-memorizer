@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -82,7 +83,9 @@ func DefaultDaemonConfig() DaemonConfig {
 type ConfigReloadFunc func() error
 
 // Daemon is the main daemon process manager.
+// It is safe for concurrent use.
 type Daemon struct {
+	mu              sync.RWMutex
 	config          DaemonConfig
 	state           DaemonState
 	components      []Component
@@ -113,7 +116,16 @@ func NewDaemon(cfg DaemonConfig) *Daemon {
 
 // State returns the current daemon state.
 func (d *Daemon) State() DaemonState {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.state
+}
+
+// setState sets the daemon state with proper locking.
+func (d *Daemon) setState(state DaemonState) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.state = state
 }
 
 // Health returns the current aggregate health status.
@@ -131,6 +143,13 @@ func (d *Daemon) OnConfigReload(fn ConfigReloadFunc) {
 	d.reloadCallbacks = append(d.reloadCallbacks, fn)
 }
 
+// UpdateComponentHealth updates health status for multiple components.
+func (d *Daemon) UpdateComponentHealth(statuses map[string]ComponentHealth) {
+	for name, health := range statuses {
+		d.health.UpdateComponent(name, health)
+	}
+}
+
 // TriggerConfigReload invokes all registered config reload callbacks.
 // Errors are logged but do not stop processing of other callbacks.
 func (d *Daemon) TriggerConfigReload() {
@@ -146,11 +165,11 @@ func (d *Daemon) TriggerConfigReload() {
 // It claims the PID file, starts all components, starts the HTTP server,
 // and then blocks until shutdown is requested.
 func (d *Daemon) Start(ctx context.Context) error {
-	d.state = DaemonStateStarting
+	d.setState(DaemonStateStarting)
 
 	// Claim PID file
 	if err := d.pidFile.CheckAndClaim(); err != nil {
-		d.state = DaemonStateStopped
+		d.setState(DaemonStateStopped)
 		return fmt.Errorf("failed to claim PID file; %w", err)
 	}
 
@@ -177,9 +196,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}
 
-	d.state = DaemonStateRunning
+	d.setState(DaemonStateRunning)
 	slog.Info("daemon started",
-		"state", d.state,
+		"state", d.State(),
 		"components", len(d.components),
 	)
 
@@ -208,7 +227,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 // Stop performs graceful shutdown of the daemon.
 func (d *Daemon) Stop() error {
-	d.state = DaemonStateStopping
+	d.setState(DaemonStateStopping)
 	slog.Info("stopping daemon")
 
 	// Create shutdown context with timeout
@@ -235,7 +254,7 @@ func (d *Daemon) Stop() error {
 		})
 	}
 
-	d.state = DaemonStateStopped
+	d.setState(DaemonStateStopped)
 	slog.Info("daemon stopped")
 
 	return nil

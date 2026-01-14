@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -61,9 +62,19 @@ func (p *PIDFile) Read() (int, error) {
 		return 0, fmt.Errorf("failed to read PID file; %w", err)
 	}
 
-	pid, err := strconv.Atoi(string(content))
+	// Trim whitespace (PID files often have trailing newlines)
+	pidStr := strings.TrimSpace(string(content))
+	if pidStr == "" {
+		return 0, errors.New("empty PID file")
+	}
+
+	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
 		return 0, fmt.Errorf("invalid PID in file; %w", err)
+	}
+
+	if pid <= 0 {
+		return 0, fmt.Errorf("invalid PID %d; must be positive", pid)
 	}
 
 	return pid, nil

@@ -203,3 +203,60 @@ func TestEmbeddingsStep_EscFromProviderPhase(t *testing.T) {
 		t.Errorf("expected phase embPhaseEnable after Esc, got %v", step.phase)
 	}
 }
+
+func TestEmbeddingsStep_Apply_SetsAPIKeyEnv(t *testing.T) {
+	tests := []struct {
+		name           string
+		providerIdx    int
+		expectedName   string
+		expectedKeyEnv string
+	}{
+		{
+			name:           "openai provider sets OPENAI_API_KEY",
+			providerIdx:    0,
+			expectedName:   "openai",
+			expectedKeyEnv: "OPENAI_API_KEY",
+		},
+		{
+			name:           "voyage provider sets VOYAGE_API_KEY",
+			providerIdx:    1,
+			expectedName:   "voyage",
+			expectedKeyEnv: "VOYAGE_API_KEY",
+		},
+		{
+			name:           "google provider sets GOOGLE_API_KEY",
+			providerIdx:    2,
+			expectedName:   "google",
+			expectedKeyEnv: "GOOGLE_API_KEY",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := NewEmbeddingsStep()
+			cfg := config.NewDefaultConfig()
+			step.Init(&cfg)
+
+			// Enable embeddings and select provider
+			step.enabled = true
+			step.providerRadio.SetCursor(tt.providerIdx)
+			step.selectedIdx = tt.providerIdx
+			step.buildModelRadio()
+			step.phase = embPhaseAPIKey
+			step.keyInput.SetValue("test-api-key")
+
+			err := step.Apply(&cfg)
+			if err != nil {
+				t.Fatalf("unexpected error from Apply: %v", err)
+			}
+
+			if cfg.Embeddings.Provider != tt.expectedName {
+				t.Errorf("expected Provider %q, got %q", tt.expectedName, cfg.Embeddings.Provider)
+			}
+
+			if cfg.Embeddings.APIKeyEnv != tt.expectedKeyEnv {
+				t.Errorf("expected APIKeyEnv %q, got %q", tt.expectedKeyEnv, cfg.Embeddings.APIKeyEnv)
+			}
+		})
+	}
+}

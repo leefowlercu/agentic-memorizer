@@ -85,8 +85,8 @@ func buildEmbeddingsProviders() []EmbeddingsProviderInfo {
 			},
 		},
 		{
-			Name:        "gemini",
-			DisplayName: "Gemini (Google)",
+			Name:        "google",
+			DisplayName: "Google (Gemini)",
 			EnvVar:      "GOOGLE_API_KEY",
 			Models: []EmbeddingsModelInfo{
 				{ID: "gemini-embedding-001", DisplayName: "Gemini Embedding", Description: "Latest model, 3072 dimensions", Dimensions: 3072},
@@ -389,6 +389,7 @@ func (s *EmbeddingsStep) Apply(cfg *config.Config) error {
 	cfg.Embeddings.Provider = provider.Name
 	cfg.Embeddings.Model = model.ID
 	cfg.Embeddings.Dimensions = model.Dimensions
+	cfg.Embeddings.APIKeyEnv = provider.EnvVar
 
 	// Store API key if provided
 	if s.phase == embPhaseAPIKey {

@@ -45,8 +45,8 @@ func TestSemanticProviderStep_Validate_NoAPIKey(t *testing.T) {
 	// Clear any API keys
 	os.Unsetenv("ANTHROPIC_API_KEY")
 
-	// Select Claude provider and advance to model phase
-	step.providerRadio.SetCursor(0) // Claude
+	// Select Anthropic provider and advance to model phase
+	step.providerRadio.SetCursor(0) // Anthropic
 	step.phase = phaseModel
 
 	// Select a model and advance to key phase
@@ -79,7 +79,7 @@ func TestSemanticProviderStep_Apply(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	step.Init(&cfg)
 
-	// Set provider to Claude
+	// Set provider to Anthropic (Claude models)
 	step.providerRadio.SetCursor(0)
 	step.phase = phaseAPIKey
 	step.keyInput.SetValue("sk-test-key-12345")
@@ -89,8 +89,8 @@ func TestSemanticProviderStep_Apply(t *testing.T) {
 		t.Errorf("expected no error from Apply, got %v", err)
 	}
 
-	if cfg.Semantic.Provider != "claude" {
-		t.Errorf("expected Semantic.Provider 'claude', got '%s'", cfg.Semantic.Provider)
+	if cfg.Semantic.Provider != "anthropic" {
+		t.Errorf("expected Semantic.Provider 'anthropic', got '%s'", cfg.Semantic.Provider)
 	}
 
 	if cfg.Semantic.APIKey == nil || *cfg.Semantic.APIKey != "sk-test-key-12345" {
@@ -115,7 +115,7 @@ func TestSemanticProviderStep_ProviderSelection(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	step.Init(&cfg)
 
-	// Select Claude provider with Enter
+	// Select Anthropic provider with Enter
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if result != StepContinue {
 		t.Errorf("expected StepContinue after provider selection, got %v", result)
@@ -137,7 +137,7 @@ func TestSemanticProviderStep_APIKeyDetection(t *testing.T) {
 
 	// Verify API key was detected
 	if !step.providers[0].KeyDetected {
-		t.Error("expected Claude API key to be detected from environment")
+		t.Error("expected Anthropic API key to be detected from environment")
 	}
 }
 
@@ -196,5 +196,61 @@ func TestSemanticProviderStep_EscFromModelPhase(t *testing.T) {
 
 	if step.phase != phaseProvider {
 		t.Errorf("expected phase phaseProvider after Esc, got %v", step.phase)
+	}
+}
+
+func TestSemanticProviderStep_Apply_SetsAPIKeyEnv(t *testing.T) {
+	tests := []struct {
+		name           string
+		providerIdx    int
+		expectedName   string
+		expectedKeyEnv string
+	}{
+		{
+			name:           "anthropic provider sets ANTHROPIC_API_KEY",
+			providerIdx:    0,
+			expectedName:   "anthropic",
+			expectedKeyEnv: "ANTHROPIC_API_KEY",
+		},
+		{
+			name:           "openai provider sets OPENAI_API_KEY",
+			providerIdx:    1,
+			expectedName:   "openai",
+			expectedKeyEnv: "OPENAI_API_KEY",
+		},
+		{
+			name:           "google provider sets GOOGLE_API_KEY",
+			providerIdx:    2,
+			expectedName:   "google",
+			expectedKeyEnv: "GOOGLE_API_KEY",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := NewSemanticProviderStep()
+			cfg := config.NewDefaultConfig()
+			step.Init(&cfg)
+
+			// Select provider and set up for Apply
+			step.providerRadio.SetCursor(tt.providerIdx)
+			step.selectedIdx = tt.providerIdx
+			step.buildModelRadio()
+			step.phase = phaseAPIKey
+			step.keyInput.SetValue("test-api-key")
+
+			err := step.Apply(&cfg)
+			if err != nil {
+				t.Fatalf("unexpected error from Apply: %v", err)
+			}
+
+			if cfg.Semantic.Provider != tt.expectedName {
+				t.Errorf("expected Provider %q, got %q", tt.expectedName, cfg.Semantic.Provider)
+			}
+
+			if cfg.Semantic.APIKeyEnv != tt.expectedKeyEnv {
+				t.Errorf("expected APIKeyEnv %q, got %q", tt.expectedKeyEnv, cfg.Semantic.APIKeyEnv)
+			}
+		})
 	}
 }

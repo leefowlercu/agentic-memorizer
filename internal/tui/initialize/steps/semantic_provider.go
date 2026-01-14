@@ -65,8 +65,8 @@ func NewSemanticProviderStep() *SemanticProviderStep {
 func buildProviders() []ProviderInfo {
 	return []ProviderInfo{
 		{
-			Name:        "claude",
-			DisplayName: "Claude (Anthropic)",
+			Name:        "anthropic",
+			DisplayName: "Anthropic (Claude)",
 			EnvVar:      "ANTHROPIC_API_KEY",
 			DefaultRate: 50,
 			Models: []ModelInfo{
@@ -77,7 +77,7 @@ func buildProviders() []ProviderInfo {
 		},
 		{
 			Name:        "openai",
-			DisplayName: "OpenAI",
+			DisplayName: "OpenAI (GPT)",
 			EnvVar:      "OPENAI_API_KEY",
 			DefaultRate: 60,
 			Models: []ModelInfo{
@@ -87,8 +87,8 @@ func buildProviders() []ProviderInfo {
 			},
 		},
 		{
-			Name:        "gemini",
-			DisplayName: "Gemini (Google)",
+			Name:        "google",
+			DisplayName: "Google (Gemini)",
 			EnvVar:      "GOOGLE_API_KEY",
 			DefaultRate: 60,
 			Models: []ModelInfo{
@@ -335,6 +335,7 @@ func (s *SemanticProviderStep) Apply(cfg *config.Config) error {
 	cfg.Semantic.Provider = provider.Name
 	cfg.Semantic.Model = model.ID
 	cfg.Semantic.RateLimit = provider.DefaultRate
+	cfg.Semantic.APIKeyEnv = provider.EnvVar
 
 	// Store API key if provided
 	if s.phase == phaseAPIKey {

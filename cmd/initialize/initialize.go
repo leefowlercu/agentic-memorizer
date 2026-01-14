@@ -16,6 +16,19 @@ import (
 var (
 	initializeUnattended bool
 	initializeForce      bool
+
+	// Unattended mode configuration flags
+	initializeGraphHost          string
+	initializeGraphPort          int
+	initializeSemanticProvider   string
+	initializeSemanticModel      string
+	initializeSemanticAPIKey     string
+	initializeNoEmbeddings       bool
+	initializeEmbeddingsProvider string
+	initializeEmbeddingsModel    string
+	initializeEmbeddingsAPIKey   string
+	initializeHTTPPort           int
+	initializeOutput             string
 )
 
 // InitializeCmd is the initialize command for first-time setup.
@@ -25,11 +38,41 @@ var InitializeCmd = &cobra.Command{
 	Long: "Run the interactive setup wizard to configure memorizer.\n\n" +
 		"This command launches a terminal-based wizard that guides you through the initial " +
 		"configuration, including FalkorDB setup, LLM provider selection, and daemon settings. " +
-		"The configuration is saved to the default config file location.",
+		"The configuration is saved to the default config file location.\n\n" +
+		"In unattended mode (--unattended), configuration values are resolved in priority order:\n" +
+		"1. CLI flags (highest priority)\n" +
+		"2. MEMORIZER_* environment variables\n" +
+		"3. Provider-native environment variables (for API keys)\n" +
+		"4. Default values (lowest priority)",
 	Example: `  # Run the interactive setup wizard
   memorizer initialize
 
-  # Run in unattended mode with environment-based configuration
+  # Run in unattended mode with defaults
+  memorizer initialize --unattended
+
+  # Unattended mode with custom FalkorDB and provider
+  memorizer initialize --unattended \
+      --graph-host=redis.example.com \
+      --graph-port=6380 \
+      --semantic-provider=openai
+
+  # Unattended mode with embeddings disabled
+  memorizer initialize --unattended --no-embeddings
+
+  # Full unattended configuration with JSON output
+  memorizer initialize --unattended --force \
+      --graph-host=falkordb.local \
+      --semantic-provider=google \
+      --semantic-api-key="$GOOGLE_API_KEY" \
+      --embeddings-provider=voyage \
+      --embeddings-api-key="$VOYAGE_API_KEY" \
+      --http-port=8080 \
+      --output=json
+
+  # Using environment variables for unattended mode
+  MEMORIZER_GRAPH_HOST=falkordb.local \
+  MEMORIZER_SEMANTIC_PROVIDER=openai \
+  OPENAI_API_KEY=sk-... \
   memorizer initialize --unattended
 
   # Force re-initialization even if config exists
@@ -39,10 +82,43 @@ var InitializeCmd = &cobra.Command{
 }
 
 func init() {
+	// Mode flags
 	InitializeCmd.Flags().BoolVar(&initializeUnattended, "unattended", false,
 		"Run in non-interactive mode using environment variables and defaults")
 	InitializeCmd.Flags().BoolVar(&initializeForce, "force", false,
 		"Force re-initialization even if configuration already exists")
+
+	// FalkorDB configuration flags (unattended mode)
+	InitializeCmd.Flags().StringVar(&initializeGraphHost, "graph-host", "",
+		"FalkorDB server hostname (default: localhost)")
+	InitializeCmd.Flags().IntVar(&initializeGraphPort, "graph-port", 0,
+		"FalkorDB server port (default: 6379)")
+
+	// Semantic provider configuration flags (unattended mode)
+	InitializeCmd.Flags().StringVar(&initializeSemanticProvider, "semantic-provider", "",
+		"LLM provider: anthropic, openai, google (default: anthropic)")
+	InitializeCmd.Flags().StringVar(&initializeSemanticModel, "semantic-model", "",
+		"Model identifier (default: provider's default model)")
+	InitializeCmd.Flags().StringVar(&initializeSemanticAPIKey, "semantic-api-key", "",
+		"API key for semantic provider")
+
+	// Embeddings configuration flags (unattended mode)
+	InitializeCmd.Flags().BoolVar(&initializeNoEmbeddings, "no-embeddings", false,
+		"Disable vector embeddings")
+	InitializeCmd.Flags().StringVar(&initializeEmbeddingsProvider, "embeddings-provider", "",
+		"Embeddings provider: openai, voyage, google (default: openai)")
+	InitializeCmd.Flags().StringVar(&initializeEmbeddingsModel, "embeddings-model", "",
+		"Embeddings model (default: provider's default model)")
+	InitializeCmd.Flags().StringVar(&initializeEmbeddingsAPIKey, "embeddings-api-key", "",
+		"API key for embeddings provider")
+
+	// Daemon configuration flags (unattended mode)
+	InitializeCmd.Flags().IntVar(&initializeHTTPPort, "http-port", 0,
+		"HTTP API port (default: 7600)")
+
+	// Output control flags (unattended mode)
+	InitializeCmd.Flags().StringVar(&initializeOutput, "output", "text",
+		"Output format: text, json (default: text)")
 }
 
 func validateInitialize(cmd *cobra.Command, args []string) error {
@@ -53,6 +129,13 @@ func validateInitialize(cmd *cobra.Command, args []string) error {
 	if !initializeForce && config.ConfigExists() {
 		slog.Info("configuration already exists", "path", configPath)
 		return fmt.Errorf("configuration already exists at %s; use --force to reinitialize", configPath)
+	}
+
+	// Validate unattended mode flags before silencing usage
+	if initializeUnattended {
+		if err := validateUnattendedFlags(cmd); err != nil {
+			return err
+		}
 	}
 
 	cmd.SilenceUsage = true
@@ -83,7 +166,7 @@ func runInitialize(cmd *cobra.Command, args []string) error {
 	slog.Debug("wizard steps initialized", "step_count", len(stepList))
 
 	if initializeUnattended {
-		return runUnattended(cfg, stepList)
+		return runUnattended(cmd, cfg)
 	}
 
 	return runInteractive(cfg, stepList)
@@ -126,25 +209,20 @@ func runInteractive(cfg *config.Config, stepList []initialize.Step) error {
 	return nil
 }
 
-func runUnattended(cfg *config.Config, stepList []initialize.Step) error {
+func runUnattended(cmd *cobra.Command, cfg *config.Config) error {
 	slog.Debug("starting unattended initialization")
 
-	// Initialize each step with defaults and apply
-	for _, step := range stepList {
-		slog.Debug("processing step", "step", step.Title())
-		step.Init(cfg)
+	// Resolve configuration values from flags, env vars, and defaults
+	resolved := resolveUnattendedConfig(cmd)
 
-		if err := step.Validate(); err != nil {
-			slog.Error("step validation failed", "step", step.Title(), "error", err)
-			return fmt.Errorf("validation failed for %s; %w", step.Title(), err)
-		}
-
-		if err := step.Apply(cfg); err != nil {
-			slog.Error("step apply failed", "step", step.Title(), "error", err)
-			return fmt.Errorf("configuration failed for %s; %w", step.Title(), err)
-		}
-		slog.Debug("step completed", "step", step.Title())
+	// FR-006: Validate required API keys are present
+	if err := validateRequiredAPIKeys(resolved); err != nil {
+		slog.Error("validation failed", "error", err)
+		return err
 	}
+
+	// Apply resolved values to config
+	applyResolvedConfig(cfg, resolved)
 
 	slog.Info("unattended initialization completed, writing configuration")
 
@@ -153,8 +231,46 @@ func runUnattended(cfg *config.Config, stepList []initialize.Step) error {
 		return err
 	}
 
-	fmt.Println("Configuration saved successfully (unattended mode).")
+	// Output result based on format
+	if initializeOutput == "json" {
+		jsonOutput, err := formatJSONOutput(resolved)
+		if err != nil {
+			return err
+		}
+		fmt.Println(jsonOutput)
+		return nil
+	}
+
+	fmt.Print(formatTextOutput(resolved))
 	return nil
+}
+
+// applyResolvedConfig applies the resolved unattended configuration to the config struct.
+func applyResolvedConfig(cfg *config.Config, resolved *UnattendedConfig) {
+	// Graph configuration
+	cfg.Graph.Host = resolved.GraphHost
+	cfg.Graph.Port = resolved.GraphPort
+
+	// Semantic configuration
+	cfg.Semantic.Provider = resolved.SemanticProvider
+	cfg.Semantic.Model = resolved.SemanticModel
+	if resolved.SemanticAPIKey != "" {
+		cfg.Semantic.APIKey = &resolved.SemanticAPIKey
+	}
+
+	// Embeddings configuration
+	cfg.Embeddings.Enabled = resolved.EmbeddingsEnabled
+	if resolved.EmbeddingsEnabled {
+		cfg.Embeddings.Provider = resolved.EmbeddingsProvider
+		cfg.Embeddings.Model = resolved.EmbeddingsModel
+		cfg.Embeddings.Dimensions = resolved.EmbeddingsDimensions
+		if resolved.EmbeddingsAPIKey != "" {
+			cfg.Embeddings.APIKey = &resolved.EmbeddingsAPIKey
+		}
+	}
+
+	// Daemon configuration
+	cfg.Daemon.HTTPPort = resolved.HTTPPort
 }
 
 func writeConfig(cfg *config.Config) error {
@@ -169,3 +285,4 @@ func writeConfig(cfg *config.Config) error {
 	slog.Info("configuration written successfully", "path", configPath)
 	return nil
 }
+

@@ -47,6 +47,7 @@ var validSemanticProviders = map[string]bool{
 // validEmbeddingsProviders lists recognized embeddings providers.
 var validEmbeddingsProviders = map[string]bool{
 	"openai": true,
+	"voyage": true,
 	"google": true,
 }
 
@@ -178,7 +179,7 @@ func Validate(cfg *Config) error {
 		} else if !validEmbeddingsProviders[cfg.Embeddings.Provider] {
 			errs = append(errs, ValidationError{
 				Field:   "embeddings.provider",
-				Message: fmt.Sprintf("must be one of: openai, google; got %q", cfg.Embeddings.Provider),
+				Message: fmt.Sprintf("must be one of: openai, voyage, google; got %q", cfg.Embeddings.Provider),
 			})
 		}
 

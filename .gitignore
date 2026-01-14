@@ -32,5 +32,7 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Spec Kit files
+# Spec Kit files & Spec Interview/Planner Files
 /specs
+SPEC.md
+PLAN.md

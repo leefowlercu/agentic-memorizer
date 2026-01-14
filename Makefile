@@ -17,6 +17,10 @@ LDFLAGS := -X github.com/leefowlercu/agentic-memorizer/internal/version.gitCommi
 # Binary name
 BINARY := memorizer
 
+# Spec. and Plan files
+SPEC_FILE := SPEC.md
+PLAN_FILE := PLAN.md
+
 # Install directory
 INSTALL_DIR := $(HOME)/.local/bin
 
@@ -58,12 +62,12 @@ install-nocolor: build-nocolor
 # Clean build artifacts
 clean:
 	@printf "Cleaning..."
-	@rm -f $(BINARY)
+	@rm -f $(BINARY) $(SPEC_FILE) $(PLAN_FILE)
 	@printf " $(GREEN)$(CHECK)$(NC)\n"
 
 clean-nocolor:
 	@printf "Cleaning..."
-	@rm -f $(BINARY)
+	@rm -f $(BINARY) $(SPEC_FILE) $(PLAN_FILE)
 	@printf " $(CHECK)\n"
 
 # Run tests

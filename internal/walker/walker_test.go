@@ -490,6 +490,61 @@ func TestWalker_WalkAll(t *testing.T) {
 	}
 }
 
+func TestWalker_WalkAllIncremental(t *testing.T) {
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+
+	createTestFiles(t, tmpDir1, map[string]string{
+		"a.go": "package a",
+		"b.go": "package a",
+	})
+	createTestFiles(t, tmpDir2, map[string]string{
+		"c.go": "package c",
+		"d.go": "package c",
+	})
+
+	reg := newMockRegistry()
+	bus := newMockBus()
+	hr := handlers.DefaultRegistry()
+
+	// Remember both paths
+	_ = reg.AddPath(context.Background(), tmpDir1, &registry.PathConfig{})
+	_ = reg.AddPath(context.Background(), tmpDir2, &registry.PathConfig{})
+
+	// Set file state for a.go and c.go (simulate already processed)
+	aInfo, _ := os.Stat(filepath.Join(tmpDir1, "a.go"))
+	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
+		Path:    filepath.Join(tmpDir1, "a.go"),
+		Size:    aInfo.Size(),
+		ModTime: aInfo.ModTime(),
+	})
+
+	cInfo, _ := os.Stat(filepath.Join(tmpDir2, "c.go"))
+	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
+		Path:    filepath.Join(tmpDir2, "c.go"),
+		Size:    cInfo.Size(),
+		ModTime: cInfo.ModTime(),
+	})
+
+	w := New(reg, bus, hr)
+
+	err := w.WalkAllIncremental(context.Background())
+	if err != nil {
+		t.Fatalf("WalkAllIncremental failed: %v", err)
+	}
+
+	// Only b.go and d.go should be discovered (a.go and c.go unchanged)
+	events := bus.Events()
+	if len(events) != 2 {
+		t.Errorf("expected 2 events (b.go, d.go), got %d", len(events))
+	}
+
+	stats := w.Stats()
+	if stats.FilesUnchanged != 2 {
+		t.Errorf("expected 2 files unchanged, got %d", stats.FilesUnchanged)
+	}
+}
+
 func TestWalker_ContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 

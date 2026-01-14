@@ -371,7 +371,7 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 	return nil
 }
 
-// handleRebuild handles rebuild requests from the HTTP API.
+// handleRebuild handles all rebuild operations (daemon start, periodic, manual).
 func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildResult, error) {
 	start := time.Now()
 
@@ -379,45 +379,33 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 		return nil, fmt.Errorf("walker not initialized")
 	}
 
-	// Get all remembered paths from registry
-	paths, err := o.registry.ListPaths(ctx)
+	var err error
+	if full {
+		err = o.walker.WalkAll(ctx)
+	} else {
+		err = o.walker.WalkAllIncremental(ctx)
+	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("rebuild walk failed; %w", err)
 	}
 
-	// Walk each path (full or incremental based on flag)
-	for _, rp := range paths {
-		var walkErr error
-		if full {
-			walkErr = o.walker.Walk(ctx, rp.Path)
-		} else {
-			walkErr = o.walker.WalkIncremental(ctx, rp.Path)
-		}
-		if walkErr != nil {
-			slog.Warn("rebuild walk failed",
-				"path", rp.Path,
-				"error", walkErr,
-			)
-		}
-	}
-
-	// Get actual stats
 	stats := o.walker.Stats()
 	duration := time.Since(start)
 
 	return &RebuildResult{
 		Status:        "completed",
 		FilesQueued:   int(stats.FilesDiscovered),
-		DirsProcessed: len(paths),
+		DirsProcessed: int(stats.DirsTraversed),
 		Duration:      duration.Round(time.Millisecond).String(),
 	}, nil
 }
 
-// startPeriodicRebuild starts a goroutine that triggers full rebuilds at the configured interval.
+// startPeriodicRebuild starts a goroutine that triggers incremental rebuilds at the configured interval.
 func (o *Orchestrator) startPeriodicRebuild(ctx context.Context, interval time.Duration) {
 	o.rebuildStopChan = make(chan struct{})
 
-	slog.Info("periodic rebuild enabled", "interval", interval)
+	slog.Info("periodic rebuild enabled", "interval", interval, "mode", "incremental")
 
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -430,8 +418,8 @@ func (o *Orchestrator) startPeriodicRebuild(ctx context.Context, interval time.D
 			case <-o.rebuildStopChan:
 				return
 			case <-ticker.C:
-				slog.Info("starting periodic rebuild")
-				result, err := o.handleRebuild(ctx, true)
+				slog.Info("starting periodic rebuild", "mode", "incremental")
+				result, err := o.handleRebuild(ctx, false) // Always incremental
 				if err != nil {
 					slog.Error("periodic rebuild failed", "error", err)
 					continue
@@ -527,11 +515,13 @@ func (o *Orchestrator) watchRememberedPaths(ctx context.Context) {
 	slog.Info("watching remembered paths", "count", len(paths))
 }
 
-// walkRememberedPaths performs an initial walk of all remembered paths.
+// walkRememberedPaths performs an initial full walk of all remembered paths.
+// Uses full rebuild on daemon start to ensure schema version changes are applied.
 func (o *Orchestrator) walkRememberedPaths(ctx context.Context) {
-	slog.Info("starting initial walk of remembered paths")
+	slog.Info("starting initial walk of remembered paths", "mode", "full")
 
-	if err := o.walker.WalkAll(ctx); err != nil {
+	result, err := o.handleRebuild(ctx, true) // Full rebuild on daemon start
+	if err != nil {
 		if ctx.Err() != nil {
 			slog.Debug("initial walk cancelled")
 			return
@@ -540,11 +530,10 @@ func (o *Orchestrator) walkRememberedPaths(ctx context.Context) {
 		return
 	}
 
-	stats := o.walker.Stats()
 	slog.Info("initial walk complete",
-		"files_discovered", stats.FilesDiscovered,
-		"dirs_traversed", stats.DirsTraversed,
-		"files_skipped", stats.FilesSkipped,
+		"files_queued", result.FilesQueued,
+		"dirs_processed", result.DirsProcessed,
+		"duration", result.Duration,
 	)
 }
 

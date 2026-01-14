@@ -28,6 +28,9 @@ type Walker interface {
 	// WalkIncremental walks a path but only processes files that have changed.
 	WalkIncremental(ctx context.Context, path string) error
 
+	// WalkAllIncremental walks all remembered paths incrementally.
+	WalkAllIncremental(ctx context.Context) error
+
 	// Stats returns current walker statistics.
 	Stats() WalkerStats
 }
@@ -108,6 +111,26 @@ func (w *walker) WalkAll(ctx context.Context) error {
 		}
 
 		if err := w.Walk(ctx, rp.Path); err != nil {
+			return fmt.Errorf("failed to walk %s; %w", rp.Path, err)
+		}
+	}
+
+	return nil
+}
+
+// WalkAllIncremental walks all remembered paths incrementally.
+func (w *walker) WalkAllIncremental(ctx context.Context) error {
+	paths, err := w.registry.ListPaths(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list remembered paths; %w", err)
+	}
+
+	for _, rp := range paths {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if err := w.WalkIncremental(ctx, rp.Path); err != nil {
 			return fmt.Errorf("failed to walk %s; %w", rp.Path, err)
 		}
 	}

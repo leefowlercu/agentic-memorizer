@@ -14,7 +14,7 @@ const (
 	DefaultDaemonShutdownTimeout = 30    // seconds
 	DefaultDaemonPIDFile         = "~/.config/memorizer/daemon.pid"
 	DefaultDaemonRegistryPath    = "~/.config/memorizer/registry.db"
-	DefaultDaemonRebuildInterval = 86400 // 24 hours in seconds, 0 = disabled
+	DefaultDaemonRebuildInterval = 3600 // 1 hour in seconds, 0 = disabled
 	DefaultDaemonMetricsInterval = 15    // seconds
 
 	// Graph configuration defaults.

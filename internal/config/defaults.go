@@ -11,11 +11,11 @@ const (
 	// Daemon configuration defaults.
 	DefaultDaemonHTTPPort        = 7600
 	DefaultDaemonHTTPBind        = "127.0.0.1"
-	DefaultDaemonShutdownTimeout = 30    // seconds
+	DefaultDaemonShutdownTimeout = 30 // seconds
 	DefaultDaemonPIDFile         = "~/.config/memorizer/daemon.pid"
 	DefaultDaemonRegistryPath    = "~/.config/memorizer/registry.db"
 	DefaultDaemonRebuildInterval = 3600 // 1 hour in seconds, 0 = disabled
-	DefaultDaemonMetricsInterval = 15    // seconds
+	DefaultDaemonMetricsInterval = 15   // seconds
 
 	// Graph configuration defaults.
 	DefaultGraphHost           = "localhost"
@@ -29,7 +29,7 @@ const (
 	// Semantic provider defaults.
 	DefaultSemanticProvider  = "anthropic"
 	DefaultSemanticModel     = "claude-sonnet-4-5-20250929"
-	DefaultSemanticRateLimit = 50
+	DefaultSemanticRateLimit = 10
 	DefaultSemanticAPIKeyEnv = "ANTHROPIC_API_KEY"
 
 	// Embeddings provider defaults.

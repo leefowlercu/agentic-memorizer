@@ -23,10 +23,11 @@ const (
 
 // AnthropicProvider implements SemanticProvider using Anthropic's Claude API.
 type AnthropicProvider struct {
-	apiKey      string
-	model       string
-	httpClient  *http.Client
-	rateLimiter *providers.RateLimiter
+	apiKey          string
+	model           string
+	httpClient      *http.Client
+	rateLimiter     *providers.RateLimiter
+	rateLimitConfig *providers.RateLimitConfig
 }
 
 // AnthropicOption configures the AnthropicProvider.
@@ -43,6 +44,17 @@ func WithModel(model string) AnthropicOption {
 func WithHTTPClient(client *http.Client) AnthropicOption {
 	return func(p *AnthropicProvider) {
 		p.httpClient = client
+	}
+}
+
+// WithRateLimit sets a custom rate limit configuration.
+func WithRateLimit(requestsPerMinute int) AnthropicOption {
+	return func(p *AnthropicProvider) {
+		p.rateLimitConfig = &providers.RateLimitConfig{
+			RequestsPerMinute: requestsPerMinute,
+			TokensPerMinute:   100000,
+			BurstSize:         max(1, requestsPerMinute/5),
+		}
 	}
 }
 
@@ -80,10 +92,17 @@ func (p *AnthropicProvider) Available() bool {
 
 // RateLimit returns the rate limit configuration.
 func (p *AnthropicProvider) RateLimit() providers.RateLimitConfig {
+	if p.rateLimitConfig != nil {
+		return *p.rateLimitConfig
+	}
+	// Default: conservative limit to avoid hitting output token limits
+	// Anthropic limits output tokens per minute (often 8,000 for lower tiers).
+	// With max_tokens=4096 per request, ~2 requests could exceed the limit.
+	// Default to 10 req/min for safety.
 	return providers.RateLimitConfig{
-		RequestsPerMinute: 50,
+		RequestsPerMinute: 10,
 		TokensPerMinute:   100000,
-		BurstSize:         10,
+		BurstSize:         2,
 	}
 }
 

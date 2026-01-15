@@ -15,10 +15,11 @@ import (
 
 // GoogleSemanticProvider implements SemanticProvider using Google's Gemini API.
 type GoogleSemanticProvider struct {
-	apiKey      string
-	model       string
-	httpClient  *http.Client
-	rateLimiter *providers.RateLimiter
+	apiKey          string
+	model           string
+	httpClient      *http.Client
+	rateLimiter     *providers.RateLimiter
+	rateLimitConfig *providers.RateLimitConfig
 }
 
 // GoogleSemanticOption configures the GoogleSemanticProvider.
@@ -28,6 +29,17 @@ type GoogleSemanticOption func(*GoogleSemanticProvider)
 func WithGoogleModel(model string) GoogleSemanticOption {
 	return func(p *GoogleSemanticProvider) {
 		p.model = model
+	}
+}
+
+// WithGoogleRateLimit sets a custom rate limit configuration.
+func WithGoogleRateLimit(requestsPerMinute int) GoogleSemanticOption {
+	return func(p *GoogleSemanticProvider) {
+		p.rateLimitConfig = &providers.RateLimitConfig{
+			RequestsPerMinute: requestsPerMinute,
+			TokensPerMinute:   100000,
+			BurstSize:         max(1, requestsPerMinute/5),
+		}
 	}
 }
 
@@ -65,6 +77,9 @@ func (p *GoogleSemanticProvider) Available() bool {
 
 // RateLimit returns the rate limit configuration.
 func (p *GoogleSemanticProvider) RateLimit() providers.RateLimitConfig {
+	if p.rateLimitConfig != nil {
+		return *p.rateLimitConfig
+	}
 	return providers.RateLimitConfig{
 		RequestsPerMinute: 60,
 		TokensPerMinute:   100000,

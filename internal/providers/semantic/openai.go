@@ -20,10 +20,11 @@ const (
 
 // OpenAISemanticProvider implements SemanticProvider using OpenAI's API.
 type OpenAISemanticProvider struct {
-	apiKey      string
-	model       string
-	httpClient  *http.Client
-	rateLimiter *providers.RateLimiter
+	apiKey          string
+	model           string
+	httpClient      *http.Client
+	rateLimiter     *providers.RateLimiter
+	rateLimitConfig *providers.RateLimitConfig
 }
 
 // OpenAISemanticOption configures the OpenAISemanticProvider.
@@ -40,6 +41,17 @@ func WithOpenAIModel(model string) OpenAISemanticOption {
 func WithOpenAIHTTPClient(client *http.Client) OpenAISemanticOption {
 	return func(p *OpenAISemanticProvider) {
 		p.httpClient = client
+	}
+}
+
+// WithOpenAIRateLimit sets a custom rate limit configuration.
+func WithOpenAIRateLimit(requestsPerMinute int) OpenAISemanticOption {
+	return func(p *OpenAISemanticProvider) {
+		p.rateLimitConfig = &providers.RateLimitConfig{
+			RequestsPerMinute: requestsPerMinute,
+			TokensPerMinute:   150000,
+			BurstSize:         max(1, requestsPerMinute/5),
+		}
 	}
 }
 
@@ -77,6 +89,9 @@ func (p *OpenAISemanticProvider) Available() bool {
 
 // RateLimit returns the rate limit configuration.
 func (p *OpenAISemanticProvider) RateLimit() providers.RateLimitConfig {
+	if p.rateLimitConfig != nil {
+		return *p.rateLimitConfig
+	}
 	return providers.RateLimitConfig{
 		RequestsPerMinute: 60,
 		TokensPerMinute:   150000,

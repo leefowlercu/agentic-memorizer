@@ -31,6 +31,9 @@ func createSemanticProvider(cfg *config.SemanticConfig) (providers.SemanticProvi
 		if cfg.Model != "" {
 			opts = append(opts, semantic.WithModel(cfg.Model))
 		}
+		if cfg.RateLimit > 0 {
+			opts = append(opts, semantic.WithRateLimit(cfg.RateLimit))
+		}
 		return semantic.NewAnthropicProvider(opts...), nil
 
 	case "openai":
@@ -38,12 +41,18 @@ func createSemanticProvider(cfg *config.SemanticConfig) (providers.SemanticProvi
 		if cfg.Model != "" {
 			opts = append(opts, semantic.WithOpenAIModel(cfg.Model))
 		}
+		if cfg.RateLimit > 0 {
+			opts = append(opts, semantic.WithOpenAIRateLimit(cfg.RateLimit))
+		}
 		return semantic.NewOpenAISemanticProvider(opts...), nil
 
 	case "google":
 		var opts []semantic.GoogleSemanticOption
 		if cfg.Model != "" {
 			opts = append(opts, semantic.WithGoogleModel(cfg.Model))
+		}
+		if cfg.RateLimit > 0 {
+			opts = append(opts, semantic.WithGoogleRateLimit(cfg.RateLimit))
 		}
 		return semantic.NewGoogleSemanticProvider(opts...), nil
 

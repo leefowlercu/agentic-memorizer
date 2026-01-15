@@ -75,17 +75,17 @@ type DefaultsConfig struct {
 
 // SkipDefaults holds default patterns to skip.
 type SkipDefaults struct {
-	Extensions  []string `yaml:"extensions" mapstructure:"extensions"`
-	Directories []string `yaml:"directories" mapstructure:"directories"`
-	Files       []string `yaml:"files" mapstructure:"files"`
+	Extensions  []string `yaml:"extensions,flow" mapstructure:"extensions"`
+	Directories []string `yaml:"directories,flow" mapstructure:"directories"`
+	Files       []string `yaml:"files,flow" mapstructure:"files"`
 	Hidden      bool     `yaml:"hidden" mapstructure:"hidden"`
 }
 
 // IncludeDefaults holds default patterns to include (override skip).
 type IncludeDefaults struct {
-	Extensions  []string `yaml:"extensions" mapstructure:"extensions"`
-	Directories []string `yaml:"directories" mapstructure:"directories"`
-	Files       []string `yaml:"files" mapstructure:"files"`
+	Extensions  []string `yaml:"extensions,flow" mapstructure:"extensions"`
+	Directories []string `yaml:"directories,flow" mapstructure:"directories"`
+	Files       []string `yaml:"files,flow" mapstructure:"files"`
 }
 
 // ResolveAPIKey returns the API key from config or falls back to environment variable.

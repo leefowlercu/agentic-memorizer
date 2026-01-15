@@ -98,7 +98,7 @@ func Init() error {
 	configMu.Unlock()
 
 	// T052: Log config initialization
-	slog.Info("config initialized", "file", configFilePath)
+	slog.Debug("config initialized", "file", configFilePath)
 
 	// T050: Setup SIGHUP signal handler for hot reload
 	SetupSignalHandler()

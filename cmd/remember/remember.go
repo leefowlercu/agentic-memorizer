@@ -192,6 +192,13 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Remembered: %s\n", absPath)
+
+	// Notify daemon to start watching and walking the new path
+	if err := requestReWalk(); err != nil {
+		fmt.Printf("Warning: could not notify daemon: %v\n", err)
+		fmt.Println("You may need to restart the daemon or run 'memorizer daemon rebuild'.")
+	}
+
 	return nil
 }
 

@@ -110,7 +110,7 @@ func (s *ConfirmStep) View() string {
 		Bold(true).
 		Foreground(styles.Success)
 
-	b.WriteString(successStyle.Render("Press Enter to save and start the daemon."))
+	b.WriteString(successStyle.Render("Press Enter to save configuration."))
 	b.WriteString("\n\n")
 
 	b.WriteString(NavigationHelp())

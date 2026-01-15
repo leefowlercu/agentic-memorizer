@@ -162,6 +162,7 @@ func runInitialize(cmd *cobra.Command, args []string) error {
 		steps.NewEmbeddingsStep(),
 		steps.NewHTTPPortStep(),
 		steps.NewConfirmStep(),
+		steps.NewServiceInstallStep(),
 	}
 	slog.Debug("wizard steps initialized", "step_count", len(stepList))
 
@@ -195,16 +196,10 @@ func runInteractive(cfg *config.Config, stepList []initialize.Step) error {
 		return nil
 	}
 
-	slog.Info("wizard completed successfully, writing configuration")
+	slog.Info("wizard completed successfully")
 
-	// Write configuration
-	if err := writeConfig(result.Config); err != nil {
-		return err
-	}
-
-	fmt.Println("Configuration saved successfully.")
-	fmt.Println("\nTo start the daemon, run:")
-	fmt.Println("  memorizer daemon start")
+	// Configuration is written by ServiceInstallStep.Apply()
+	// Daemon start is handled by ServiceInstallStep if user opted in
 
 	return nil
 }

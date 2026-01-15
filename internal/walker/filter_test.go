@@ -74,6 +74,14 @@ func TestFilter_ShouldProcessFile(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "allow hidden file when skip hidden false",
+			config: &registry.PathConfig{
+				SkipHidden: false,
+			},
+			path: "/test/.hidden",
+			want: true,
+		},
+		{
 			name: "skip file by name",
 			config: &registry.PathConfig{
 				SkipFiles: []string{"Makefile"},
@@ -96,15 +104,6 @@ func TestFilter_ShouldProcessFile(t *testing.T) {
 				IncludeExtensions: []string{".go"},
 			},
 			path: "/test/main.go",
-			want: true,
-		},
-		{
-			name: "include hidden override",
-			config: &registry.PathConfig{
-				SkipHidden:    true,
-				IncludeHidden: true,
-			},
-			path: "/test/.env",
 			want: true,
 		},
 		{
@@ -205,6 +204,14 @@ func TestFilter_ShouldProcessDir(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "allow hidden directory when skip hidden false",
+			config: &registry.PathConfig{
+				SkipHidden: false,
+			},
+			path: "/test/.git",
+			want: true,
+		},
+		{
 			name: "include directory override",
 			config: &registry.PathConfig{
 				SkipDirectories:    []string{"vendor"},
@@ -214,13 +221,22 @@ func TestFilter_ShouldProcessDir(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "include hidden directory override",
+			name: "hidden directory in include overrides skip hidden",
 			config: &registry.PathConfig{
-				SkipHidden:    true,
-				IncludeHidden: true,
+				SkipHidden:         true,
+				IncludeDirectories: []string{".github"},
 			},
-			path: "/test/.config",
+			path: "/test/.github",
 			want: true,
+		},
+		{
+			name: "hidden directory not in include is skipped",
+			config: &registry.PathConfig{
+				SkipHidden:         true,
+				IncludeDirectories: []string{".github"},
+			},
+			path: "/test/.git",
+			want: false,
 		},
 	}
 
@@ -278,6 +294,132 @@ func TestMatchPattern(t *testing.T) {
 			got := matchPattern(tt.pattern, tt.name)
 			if got != tt.want {
 				t.Errorf("matchPattern(%q, %q) = %v, want %v", tt.pattern, tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_ShouldProcessFile_HiddenFileInIncludeOverridesSkipHidden(t *testing.T) {
+	// This is an important edge case: .env is hidden, but if it's in IncludeFiles,
+	// it should still be processed even when SkipHidden is true.
+	tests := []struct {
+		name   string
+		config *registry.PathConfig
+		path   string
+		want   bool
+	}{
+		{
+			name: "hidden file in include files overrides skip hidden",
+			config: &registry.PathConfig{
+				SkipHidden:   true,
+				IncludeFiles: []string{".env"},
+			},
+			path: "/test/.env",
+			want: true,
+		},
+		{
+			name: "hidden file not in include files is skipped",
+			config: &registry.PathConfig{
+				SkipHidden:   true,
+				IncludeFiles: []string{".env"},
+			},
+			path: "/test/.secret",
+			want: false,
+		},
+		{
+			name: "hidden file with include extension overrides skip hidden",
+			config: &registry.PathConfig{
+				SkipHidden:        true,
+				IncludeExtensions: []string{".envrc"},
+			},
+			path: "/test/.local.envrc",
+			want: true,
+		},
+		{
+			name: "dotenv pattern matches hidden env files",
+			config: &registry.PathConfig{
+				SkipHidden:   true,
+				IncludeFiles: []string{".env*"},
+			},
+			path: "/test/.env.local",
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := NewFilter(tt.config)
+			got := f.ShouldProcessFile(tt.path)
+			if got != tt.want {
+				t.Errorf("ShouldProcessFile(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_ShouldProcessFile_NoExtension(t *testing.T) {
+	// Test files without extensions like Makefile, Dockerfile
+	tests := []struct {
+		name   string
+		config *registry.PathConfig
+		path   string
+		want   bool
+	}{
+		{
+			name:   "makefile with no config",
+			config: &registry.PathConfig{},
+			path:   "/test/Makefile",
+			want:   true,
+		},
+		{
+			name: "makefile in skip files",
+			config: &registry.PathConfig{
+				SkipFiles: []string{"Makefile"},
+			},
+			path: "/test/Makefile",
+			want: false,
+		},
+		{
+			name: "dockerfile in include files",
+			config: &registry.PathConfig{
+				IncludeFiles: []string{"Dockerfile", "Makefile"},
+			},
+			path: "/test/Dockerfile",
+			want: true,
+		},
+		{
+			name: "no extension file not matched by extension skip",
+			config: &registry.PathConfig{
+				SkipExtensions: []string{".go", ".py"},
+			},
+			path: "/test/Makefile",
+			want: true,
+		},
+		{
+			name: "include only mode - no extension file not in list",
+			config: &registry.PathConfig{
+				IncludeExtensions: []string{".go", ".py"},
+			},
+			path: "/test/Makefile",
+			want: false, // Has no extension, doesn't match .go or .py
+		},
+		{
+			name: "include only mode - no extension file in include files",
+			config: &registry.PathConfig{
+				IncludeExtensions: []string{".go"},
+				IncludeFiles:      []string{"Makefile"},
+			},
+			path: "/test/Makefile",
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := NewFilter(tt.config)
+			got := f.ShouldProcessFile(tt.path)
+			if got != tt.want {
+				t.Errorf("ShouldProcessFile(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

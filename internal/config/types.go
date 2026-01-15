@@ -10,6 +10,7 @@ type Config struct {
 	Graph      GraphConfig      `yaml:"graph" mapstructure:"graph"`
 	Semantic   SemanticConfig   `yaml:"semantic" mapstructure:"semantic"`
 	Embeddings EmbeddingsConfig `yaml:"embeddings" mapstructure:"embeddings"`
+	Defaults   DefaultsConfig   `yaml:"defaults" mapstructure:"defaults"`
 }
 
 // DaemonConfig holds daemon-related configuration.
@@ -64,6 +65,27 @@ type EmbeddingsConfig struct {
 	Dimensions int     `yaml:"dimensions" mapstructure:"dimensions"`
 	APIKey     *string `yaml:"api_key,omitempty" mapstructure:"api_key"`
 	APIKeyEnv  string  `yaml:"api_key_env" mapstructure:"api_key_env"`
+}
+
+// DefaultsConfig holds default skip/include patterns for new remembered paths.
+type DefaultsConfig struct {
+	Skip    SkipDefaults    `yaml:"skip" mapstructure:"skip"`
+	Include IncludeDefaults `yaml:"include" mapstructure:"include"`
+}
+
+// SkipDefaults holds default patterns to skip.
+type SkipDefaults struct {
+	Extensions  []string `yaml:"extensions" mapstructure:"extensions"`
+	Directories []string `yaml:"directories" mapstructure:"directories"`
+	Files       []string `yaml:"files" mapstructure:"files"`
+	Hidden      bool     `yaml:"hidden" mapstructure:"hidden"`
+}
+
+// IncludeDefaults holds default patterns to include (override skip).
+type IncludeDefaults struct {
+	Extensions  []string `yaml:"extensions" mapstructure:"extensions"`
+	Directories []string `yaml:"directories" mapstructure:"directories"`
+	Files       []string `yaml:"files" mapstructure:"files"`
 }
 
 // ResolveAPIKey returns the API key from config or falls back to environment variable.

@@ -629,7 +629,6 @@ func TestPathConfig_JSON(t *testing.T) {
 		IncludeExtensions:  []string{".env"},
 		IncludeDirectories: []string{".github"},
 		IncludeFiles:       []string{".gitignore"},
-		IncludeHidden:      true,
 		UseVision:          boolPtr(false),
 	}
 
@@ -1300,6 +1299,129 @@ func TestValidateAndCleanPaths_AllMissing(t *testing.T) {
 	paths, _ := reg.ListPaths(ctx)
 	if len(paths) != 0 {
 		t.Errorf("expected 0 remaining paths, got %d", len(paths))
+	}
+}
+
+func TestPathConfig_Clone_ReturnsDeepCopy(t *testing.T) {
+	original := &PathConfig{
+		SkipExtensions:     []string{".exe", ".dll"},
+		SkipDirectories:    []string{"node_modules"},
+		SkipFiles:          []string{".DS_Store"},
+		SkipHidden:         true,
+		IncludeExtensions:  []string{".env"},
+		IncludeDirectories: []string{".github"},
+		IncludeFiles:       []string{".gitignore"},
+		UseVision:          boolPtr(true),
+	}
+
+	clone := original.Clone()
+
+	// Verify clone is not the same pointer
+	if clone == original {
+		t.Error("Clone() returned same pointer")
+	}
+
+	// Verify values are equal
+	if clone.SkipHidden != original.SkipHidden {
+		t.Errorf("SkipHidden = %v, want %v", clone.SkipHidden, original.SkipHidden)
+	}
+	if len(clone.SkipExtensions) != len(original.SkipExtensions) {
+		t.Errorf("SkipExtensions length = %d, want %d", len(clone.SkipExtensions), len(original.SkipExtensions))
+	}
+	if *clone.UseVision != *original.UseVision {
+		t.Errorf("UseVision = %v, want %v", *clone.UseVision, *original.UseVision)
+	}
+}
+
+func TestPathConfig_Clone_IndependentSlices(t *testing.T) {
+	original := &PathConfig{
+		SkipExtensions: []string{".exe", ".dll"},
+	}
+
+	clone := original.Clone()
+
+	// Modify clone
+	clone.SkipExtensions[0] = ".changed"
+
+	// Original should be unchanged
+	if original.SkipExtensions[0] != ".exe" {
+		t.Errorf("original was modified, SkipExtensions[0] = %s, want .exe", original.SkipExtensions[0])
+	}
+}
+
+func TestPathConfig_Clone_IndependentPointer(t *testing.T) {
+	original := &PathConfig{
+		UseVision: boolPtr(true),
+	}
+
+	clone := original.Clone()
+
+	// Verify pointers are different
+	if clone.UseVision == original.UseVision {
+		t.Error("UseVision pointers should be different")
+	}
+
+	// Modify clone
+	*clone.UseVision = false
+
+	// Original should be unchanged
+	if *original.UseVision != true {
+		t.Error("original UseVision was modified")
+	}
+}
+
+func TestPathConfig_Clone_NilConfig(t *testing.T) {
+	var original *PathConfig = nil
+	clone := original.Clone()
+
+	if clone != nil {
+		t.Error("Clone() of nil should return nil")
+	}
+}
+
+func TestPathConfig_Clone_NilSlices(t *testing.T) {
+	original := &PathConfig{
+		SkipHidden: true,
+		// All slices are nil
+	}
+
+	clone := original.Clone()
+
+	if clone.SkipExtensions != nil {
+		t.Error("SkipExtensions should be nil")
+	}
+	if clone.SkipDirectories != nil {
+		t.Error("SkipDirectories should be nil")
+	}
+	if clone.SkipFiles != nil {
+		t.Error("SkipFiles should be nil")
+	}
+	if clone.IncludeExtensions != nil {
+		t.Error("IncludeExtensions should be nil")
+	}
+	if clone.IncludeDirectories != nil {
+		t.Error("IncludeDirectories should be nil")
+	}
+	if clone.IncludeFiles != nil {
+		t.Error("IncludeFiles should be nil")
+	}
+	if clone.UseVision != nil {
+		t.Error("UseVision should be nil")
+	}
+}
+
+func TestPathConfig_Clone_EmptySlices(t *testing.T) {
+	original := &PathConfig{
+		SkipExtensions: []string{},
+	}
+
+	clone := original.Clone()
+
+	if clone.SkipExtensions == nil {
+		t.Error("SkipExtensions should not be nil (should be empty slice)")
+	}
+	if len(clone.SkipExtensions) != 0 {
+		t.Errorf("SkipExtensions length = %d, want 0", len(clone.SkipExtensions))
 	}
 }
 

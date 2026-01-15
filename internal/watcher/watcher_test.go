@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -65,7 +66,21 @@ func (b *mockBus) EventCount() int {
 }
 
 // mockRegistry implements a minimal registry for testing.
-type mockRegistry struct{}
+type mockRegistry struct {
+	// pathConfigs maps root paths to their PathConfig
+	pathConfigs map[string]*registry.PathConfig
+}
+
+func newMockRegistry() *mockRegistry {
+	return &mockRegistry{
+		pathConfigs: make(map[string]*registry.PathConfig),
+	}
+}
+
+// SetPathConfig sets the PathConfig for a given root path.
+func (r *mockRegistry) SetPathConfig(rootPath string, config *registry.PathConfig) {
+	r.pathConfigs[rootPath] = config
+}
 
 func (r *mockRegistry) AddPath(ctx context.Context, path string, config *registry.PathConfig) error {
 	return nil
@@ -96,7 +111,21 @@ func (r *mockRegistry) FindContainingPath(ctx context.Context, path string) (*re
 }
 
 func (r *mockRegistry) GetEffectiveConfig(ctx context.Context, filePath string) (*registry.PathConfig, error) {
-	return nil, nil
+	// Find the longest matching root path
+	var matchedRoot string
+	var matchedConfig *registry.PathConfig
+	for root, config := range r.pathConfigs {
+		if filePath == root || strings.HasPrefix(filePath, root+string(filepath.Separator)) {
+			if len(root) > len(matchedRoot) {
+				matchedRoot = root
+				matchedConfig = config
+			}
+		}
+	}
+	if matchedConfig != nil {
+		return matchedConfig, nil
+	}
+	return nil, registry.ErrPathNotFound
 }
 
 func (r *mockRegistry) GetFileState(ctx context.Context, path string) (*registry.FileState, error) {
@@ -163,7 +192,7 @@ func TestWatcher_Watch(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	w, err := New(bus, reg, WithDebounceWindow(50*time.Millisecond))
 	if err != nil {
@@ -188,7 +217,7 @@ func TestWatcher_WatchNotDirectory(t *testing.T) {
 	os.WriteFile(filePath, []byte("content"), 0644)
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	w, err := New(bus, reg)
 	if err != nil {
@@ -206,7 +235,7 @@ func TestWatcher_Unwatch(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	w, err := New(bus, reg)
 	if err != nil {
@@ -234,7 +263,7 @@ func TestWatcher_Stats(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	w, err := New(bus, reg)
 	if err != nil {
@@ -268,7 +297,7 @@ func TestWatcher_FileChange(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	// Use short debounce for testing
 	w, err := New(bus, reg, WithDebounceWindow(50*time.Millisecond), WithDeleteGracePeriod(100*time.Millisecond))
@@ -314,7 +343,7 @@ func TestWatcher_DoubleStart(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	w, err := New(bus, reg)
 	if err != nil {
@@ -341,34 +370,51 @@ func TestWatcher_DoubleStart(t *testing.T) {
 	}
 }
 
-func TestShouldIgnoreFile(t *testing.T) {
+func TestIsEditorNoise(t *testing.T) {
 	tests := []struct {
 		path   string
 		ignore bool
 	}{
-		{"/test/.hidden", true},
-		{"/test/~temp", true},
-		{"/test/#autosave#", true},
+		// Editor noise (transient artifacts) - should be filtered
 		{"/test/file.swp", true},
 		{"/test/file.swo", true},
-		{"/test/file.tmp", true},
-		{"/test/file.bak", true},
-		{"/test/file~", true},
+		{"/test/file.swn", true},
 		{"/test/4913", true},
-		{"/test/.DS_Store", true},
-		{"/test/Thumbs.db", true},
+		{"/test/#autosave#", true},
+		{"/test/file~", true},
+		{"/test/backup.txt~", true},
+
+		// NOT editor noise - handled by PathConfig
+		{"/test/.hidden", false},
+		{"/test/.DS_Store", false},
+		{"/test/Thumbs.db", false},
+		{"/test/file.tmp", false},
+		{"/test/file.bak", false},
 		{"/test/normal.go", false},
 		{"/test/main.py", false},
 		{"/test/README.md", false},
+		{"/test/~temp", false}, // Starts with ~ but not backup file
+		{"/test/#partial", false}, // Starts with # but no trailing #
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := shouldIgnoreFile(tt.path)
+			got := isEditorNoise(tt.path)
 			if got != tt.ignore {
-				t.Errorf("shouldIgnoreFile(%q) = %v, want %v", tt.path, got, tt.ignore)
+				t.Errorf("isEditorNoise(%q) = %v, want %v", tt.path, got, tt.ignore)
 			}
 		})
+	}
+}
+
+// TestShouldIgnoreFile tests backward compatibility
+func TestShouldIgnoreFile(t *testing.T) {
+	// shouldIgnoreFile now just delegates to isEditorNoise
+	if !shouldIgnoreFile("/test/file.swp") {
+		t.Error("shouldIgnoreFile should filter .swp files")
+	}
+	if shouldIgnoreFile("/test/normal.go") {
+		t.Error("shouldIgnoreFile should not filter normal files")
 	}
 }
 
@@ -414,7 +460,7 @@ func TestWatcher_RecursiveWatch(t *testing.T) {
 	os.Mkdir(nestedDir, 0755)
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
 
 	w, err := New(bus, reg)
 	if err != nil {
@@ -446,7 +492,9 @@ func TestWatcher_SkipsHiddenDirs(t *testing.T) {
 	os.Mkdir(normalDir, 0755)
 
 	bus := newMockBus()
-	reg := &mockRegistry{}
+	reg := newMockRegistry()
+	// Configure PathConfig to skip hidden
+	reg.SetPathConfig(tmpDir, &registry.PathConfig{SkipHidden: true})
 
 	w, err := New(bus, reg)
 	if err != nil {
@@ -460,5 +508,161 @@ func TestWatcher_SkipsHiddenDirs(t *testing.T) {
 	}
 
 	// Watch should complete without error
-	// (hidden directories are skipped)
+	// (hidden directories are skipped based on PathConfig)
+}
+
+func TestWatcher_PathConfigSkipExtensions(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bus := newMockBus()
+	reg := newMockRegistry()
+	// Configure PathConfig to skip .log files
+	reg.SetPathConfig(tmpDir, &registry.PathConfig{
+		SkipExtensions: []string{".log", ".tmp"},
+	})
+
+	w, err := New(bus, reg, WithDebounceWindow(50*time.Millisecond))
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+	defer w.Stop()
+
+	err = w.Watch(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to watch: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = w.Start(ctx)
+	if err != nil {
+		t.Fatalf("failed to start: %v", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Create a .log file (should be skipped)
+	logFile := filepath.Join(tmpDir, "debug.log")
+	os.WriteFile(logFile, []byte("log content"), 0644)
+
+	// Create a .go file (should not be skipped)
+	goFile := filepath.Join(tmpDir, "main.go")
+	os.WriteFile(goFile, []byte("package main"), 0644)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Check events - we should only see the .go file
+	receivedEvents := bus.Events()
+	for _, ev := range receivedEvents {
+		if fe, ok := ev.Payload.(events.FileEvent); ok {
+			if strings.HasSuffix(fe.Path, ".log") {
+				t.Errorf("unexpected event for .log file: %s", fe.Path)
+			}
+		}
+	}
+}
+
+func TestWatcher_PathConfigSkipHiddenFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bus := newMockBus()
+	reg := newMockRegistry()
+	// Configure PathConfig to NOT skip hidden
+	reg.SetPathConfig(tmpDir, &registry.PathConfig{
+		SkipHidden: false,
+	})
+
+	w, err := New(bus, reg)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+	defer w.Stop()
+
+	// Create a hidden directory before watching
+	hiddenDir := filepath.Join(tmpDir, ".hidden")
+	os.Mkdir(hiddenDir, 0755)
+
+	err = w.Watch(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to watch: %v", err)
+	}
+
+	// When SkipHidden is false, the watch should include hidden directories
+	// The watcher should complete without error
+}
+
+func TestWatcher_PathConfigSkipDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create directories before setting up watcher
+	nodeModules := filepath.Join(tmpDir, "node_modules")
+	os.Mkdir(nodeModules, 0755)
+
+	srcDir := filepath.Join(tmpDir, "src")
+	os.Mkdir(srcDir, 0755)
+
+	bus := newMockBus()
+	reg := newMockRegistry()
+	// Configure PathConfig to skip node_modules
+	reg.SetPathConfig(tmpDir, &registry.PathConfig{
+		SkipDirectories: []string{"node_modules"},
+	})
+
+	w, err := New(bus, reg)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+	defer w.Stop()
+
+	err = w.Watch(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to watch: %v", err)
+	}
+
+	// Watch should complete without error
+	// node_modules directory should be skipped based on PathConfig
+}
+
+func TestMockRegistry_GetEffectiveConfig(t *testing.T) {
+	reg := newMockRegistry()
+
+	// Set config for root path
+	rootConfig := &registry.PathConfig{
+		SkipHidden:     true,
+		SkipExtensions: []string{".log"},
+	}
+	reg.SetPathConfig("/project", rootConfig)
+
+	ctx := context.Background()
+
+	// Test file under root path
+	config, err := reg.GetEffectiveConfig(ctx, "/project/src/main.go")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if config != rootConfig {
+		t.Error("expected root config to be returned")
+	}
+
+	// Test file not under any path
+	_, err = reg.GetEffectiveConfig(ctx, "/other/file.go")
+	if err == nil {
+		t.Error("expected error for file not under any registered path")
+	}
+
+	// Test nested path takes precedence
+	nestedConfig := &registry.PathConfig{
+		SkipHidden:     false,
+		SkipExtensions: []string{".tmp"},
+	}
+	reg.SetPathConfig("/project/special", nestedConfig)
+
+	config, err = reg.GetEffectiveConfig(ctx, "/project/special/file.go")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if config != nestedConfig {
+		t.Error("expected nested config to take precedence")
+	}
 }

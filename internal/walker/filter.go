@@ -86,11 +86,6 @@ func (f *Filter) isFileSkipped(name, ext string) bool {
 
 // isFileIncluded checks if a file matches include overrides.
 func (f *Filter) isFileIncluded(name, ext string) bool {
-	// Check include hidden
-	if f.config.IncludeHidden && strings.HasPrefix(name, ".") {
-		return true
-	}
-
 	// Check include extensions
 	for _, includeExt := range f.config.IncludeExtensions {
 		if normalizeExt(includeExt) == ext {
@@ -127,11 +122,6 @@ func (f *Filter) isDirSkipped(name string) bool {
 
 // isDirIncluded checks if a directory matches include overrides.
 func (f *Filter) isDirIncluded(name string) bool {
-	// Check include hidden
-	if f.config.IncludeHidden && strings.HasPrefix(name, ".") {
-		return true
-	}
-
 	// Check include directories
 	for _, includeDir := range f.config.IncludeDirectories {
 		if matchPattern(includeDir, name) {

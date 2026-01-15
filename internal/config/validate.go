@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -198,6 +199,9 @@ func Validate(cfg *Config) error {
 		}
 	}
 
+	// Validate defaults config
+	errs = append(errs, validateDefaults(&cfg.Defaults)...)
+
 	if len(errs) > 0 {
 		return errs
 	}
@@ -210,4 +214,75 @@ func IsValidationError(err error) bool {
 	var ve ValidationError
 	var ves ValidationErrors
 	return errors.As(err, &ve) || errors.As(err, &ves)
+}
+
+// validateExtensions validates that all extensions start with a dot.
+func validateExtensions(exts []string, fieldPath string) []ValidationError {
+	var errs []ValidationError
+	for i, ext := range exts {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			errs = append(errs, ValidationError{
+				Field:   fieldPath,
+				Message: fmt.Sprintf("empty extension at index %d", i),
+			})
+			continue
+		}
+		if !strings.HasPrefix(ext, ".") {
+			errs = append(errs, ValidationError{
+				Field:   fieldPath,
+				Message: fmt.Sprintf("invalid extension %q: must start with '.'", ext),
+			})
+		}
+	}
+	return errs
+}
+
+// validateGlobPatterns validates that all patterns are valid filepath.Match patterns.
+func validateGlobPatterns(patterns []string, fieldPath string) []ValidationError {
+	var errs []ValidationError
+	for i, pattern := range patterns {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			errs = append(errs, ValidationError{
+				Field:   fieldPath,
+				Message: fmt.Sprintf("empty pattern at index %d", i),
+			})
+			continue
+		}
+		// filepath.Match returns an error only for malformed patterns
+		_, err := filepath.Match(pattern, "test")
+		if err != nil {
+			errs = append(errs, ValidationError{
+				Field:   fieldPath,
+				Message: fmt.Sprintf("invalid pattern %q: %v", pattern, err),
+			})
+		}
+	}
+	return errs
+}
+
+// validateDefaults validates the defaults configuration section.
+func validateDefaults(defaults *DefaultsConfig) []ValidationError {
+	var errs []ValidationError
+
+	// Validate skip extensions
+	errs = append(errs, validateExtensions(defaults.Skip.Extensions, "defaults.skip.extensions")...)
+
+	// Validate skip directories (glob patterns allowed)
+	errs = append(errs, validateGlobPatterns(defaults.Skip.Directories, "defaults.skip.directories")...)
+
+	// Validate skip files (glob patterns allowed)
+	errs = append(errs, validateGlobPatterns(defaults.Skip.Files, "defaults.skip.files")...)
+
+	// Validate include extensions
+	errs = append(errs, validateExtensions(defaults.Include.Extensions, "defaults.include.extensions")...)
+
+	// Validate include directories (glob patterns allowed)
+	errs = append(errs, validateGlobPatterns(defaults.Include.Directories, "defaults.include.directories")...)
+
+	// Validate include files (glob patterns allowed)
+	errs = append(errs, validateGlobPatterns(defaults.Include.Files, "defaults.include.files")...)
+
+	return errs
 }

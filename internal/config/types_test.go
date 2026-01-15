@@ -94,6 +94,29 @@ func TestNewDefaultConfig(t *testing.T) {
 	if cfg.Embeddings.APIKeyEnv != DefaultEmbeddingsAPIKeyEnv {
 		t.Errorf("Embeddings.APIKeyEnv = %q, want %q", cfg.Embeddings.APIKeyEnv, DefaultEmbeddingsAPIKeyEnv)
 	}
+
+	// Test Defaults section
+	if cfg.Defaults.Skip.Hidden != DefaultSkipHidden {
+		t.Errorf("Defaults.Skip.Hidden = %v, want %v", cfg.Defaults.Skip.Hidden, DefaultSkipHidden)
+	}
+	if len(cfg.Defaults.Skip.Extensions) != len(DefaultSkipExtensions) {
+		t.Errorf("Defaults.Skip.Extensions length = %d, want %d", len(cfg.Defaults.Skip.Extensions), len(DefaultSkipExtensions))
+	}
+	if len(cfg.Defaults.Skip.Directories) != len(DefaultSkipDirectories) {
+		t.Errorf("Defaults.Skip.Directories length = %d, want %d", len(cfg.Defaults.Skip.Directories), len(DefaultSkipDirectories))
+	}
+	if len(cfg.Defaults.Skip.Files) != len(DefaultSkipFiles) {
+		t.Errorf("Defaults.Skip.Files length = %d, want %d", len(cfg.Defaults.Skip.Files), len(DefaultSkipFiles))
+	}
+	if len(cfg.Defaults.Include.Extensions) != 0 {
+		t.Errorf("Defaults.Include.Extensions length = %d, want 0", len(cfg.Defaults.Include.Extensions))
+	}
+	if len(cfg.Defaults.Include.Directories) != 0 {
+		t.Errorf("Defaults.Include.Directories length = %d, want 0", len(cfg.Defaults.Include.Directories))
+	}
+	if len(cfg.Defaults.Include.Files) != 0 {
+		t.Errorf("Defaults.Include.Files length = %d, want 0", len(cfg.Defaults.Include.Files))
+	}
 }
 
 func TestSemanticConfigResolveAPIKey(t *testing.T) {

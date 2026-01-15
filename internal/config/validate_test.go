@@ -234,3 +234,223 @@ func TestIsValidationError_WithOtherError_ReturnsFalse(t *testing.T) {
 type testError struct{}
 
 func (e *testError) Error() string { return "test error" }
+
+func TestValidateExtensions_ValidExtensions_ReturnsNoErrors(t *testing.T) {
+	exts := []string{".exe", ".dll", ".log", ".tmp"}
+	errs := validateExtensions(exts, "test.field")
+	if len(errs) != 0 {
+		t.Errorf("validateExtensions() returned %d errors, want 0", len(errs))
+	}
+}
+
+func TestValidateExtensions_MissingDot_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name string
+		ext  string
+	}{
+		{"no dot", "exe"},
+		{"space prefix", " log"},
+		{"number only", "123"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateExtensions([]string{tt.ext}, "test.field")
+			if len(errs) != 1 {
+				t.Errorf("validateExtensions() returned %d errors, want 1", len(errs))
+				return
+			}
+			if !strings.Contains(errs[0].Message, "must start with '.'") {
+				t.Errorf("error message = %q, want to contain 'must start with'", errs[0].Message)
+			}
+		})
+	}
+}
+
+func TestValidateExtensions_EmptyString_ReturnsError(t *testing.T) {
+	errs := validateExtensions([]string{""}, "test.field")
+	if len(errs) != 1 {
+		t.Errorf("validateExtensions() returned %d errors, want 1", len(errs))
+		return
+	}
+	if !strings.Contains(errs[0].Message, "empty extension") {
+		t.Errorf("error message = %q, want to contain 'empty extension'", errs[0].Message)
+	}
+}
+
+func TestValidateExtensions_WhitespaceOnly_ReturnsError(t *testing.T) {
+	errs := validateExtensions([]string{"   "}, "test.field")
+	if len(errs) != 1 {
+		t.Errorf("validateExtensions() returned %d errors, want 1", len(errs))
+		return
+	}
+	if !strings.Contains(errs[0].Message, "empty extension") {
+		t.Errorf("error message = %q, want to contain 'empty extension'", errs[0].Message)
+	}
+}
+
+func TestValidateExtensions_IncludesFieldPath(t *testing.T) {
+	errs := validateExtensions([]string{"nodot"}, "defaults.skip.extensions")
+	if len(errs) != 1 {
+		t.Fatalf("validateExtensions() returned %d errors, want 1", len(errs))
+	}
+	if errs[0].Field != "defaults.skip.extensions" {
+		t.Errorf("Field = %q, want %q", errs[0].Field, "defaults.skip.extensions")
+	}
+}
+
+func TestValidateExtensions_MultipleInvalid_ReturnsMultipleErrors(t *testing.T) {
+	errs := validateExtensions([]string{"exe", "log", ".valid", "dll"}, "test.field")
+	if len(errs) != 3 {
+		t.Errorf("validateExtensions() returned %d errors, want 3", len(errs))
+	}
+}
+
+func TestValidateGlobPatterns_ValidPatterns_ReturnsNoErrors(t *testing.T) {
+	patterns := []string{
+		"*.min.js",
+		"*.min.css",
+		"#*",
+		"*~",
+		".git",
+		"node_modules",
+		"[abc]test",
+		"file?.txt",
+	}
+	errs := validateGlobPatterns(patterns, "test.field")
+	if len(errs) != 0 {
+		t.Errorf("validateGlobPatterns() returned %d errors, want 0: %v", len(errs), errs)
+	}
+}
+
+func TestValidateGlobPatterns_InvalidPatterns_ReturnsErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+	}{
+		{"unclosed bracket", "foo["},
+		{"unclosed bracket with content", "[a-"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateGlobPatterns([]string{tt.pattern}, "test.field")
+			if len(errs) != 1 {
+				t.Errorf("validateGlobPatterns(%q) returned %d errors, want 1", tt.pattern, len(errs))
+				return
+			}
+			if !strings.Contains(errs[0].Message, "invalid pattern") {
+				t.Errorf("error message = %q, want to contain 'invalid pattern'", errs[0].Message)
+			}
+		})
+	}
+}
+
+func TestValidateGlobPatterns_EmptyString_ReturnsError(t *testing.T) {
+	errs := validateGlobPatterns([]string{""}, "test.field")
+	if len(errs) != 1 {
+		t.Errorf("validateGlobPatterns() returned %d errors, want 1", len(errs))
+		return
+	}
+	if !strings.Contains(errs[0].Message, "empty pattern") {
+		t.Errorf("error message = %q, want to contain 'empty pattern'", errs[0].Message)
+	}
+}
+
+func TestValidateGlobPatterns_IncludesFieldPath(t *testing.T) {
+	errs := validateGlobPatterns([]string{"foo["}, "defaults.skip.files")
+	if len(errs) != 1 {
+		t.Fatalf("validateGlobPatterns() returned %d errors, want 1", len(errs))
+	}
+	if errs[0].Field != "defaults.skip.files" {
+		t.Errorf("Field = %q, want %q", errs[0].Field, "defaults.skip.files")
+	}
+}
+
+func TestValidate_InvalidSkipExtension_ReturnsError(t *testing.T) {
+	cfg := NewDefaultConfig()
+	cfg.Defaults.Skip.Extensions = []string{".valid", "nodot", ".alsovalid"}
+
+	err := Validate(&cfg)
+	if err == nil {
+		t.Fatal("Validate() expected error for invalid skip extension")
+	}
+
+	errStr := err.Error()
+	if !strings.Contains(errStr, "defaults.skip.extensions") {
+		t.Errorf("error = %q, want to contain 'defaults.skip.extensions'", errStr)
+	}
+	if !strings.Contains(errStr, "nodot") {
+		t.Errorf("error = %q, want to contain 'nodot'", errStr)
+	}
+}
+
+func TestValidate_InvalidIncludeExtension_ReturnsError(t *testing.T) {
+	cfg := NewDefaultConfig()
+	cfg.Defaults.Include.Extensions = []string{"nodot"}
+
+	err := Validate(&cfg)
+	if err == nil {
+		t.Fatal("Validate() expected error for invalid include extension")
+	}
+
+	errStr := err.Error()
+	if !strings.Contains(errStr, "defaults.include.extensions") {
+		t.Errorf("error = %q, want to contain 'defaults.include.extensions'", errStr)
+	}
+}
+
+func TestValidate_InvalidSkipFilesPattern_ReturnsError(t *testing.T) {
+	cfg := NewDefaultConfig()
+	cfg.Defaults.Skip.Files = []string{"valid.txt", "bad[pattern"}
+
+	err := Validate(&cfg)
+	if err == nil {
+		t.Fatal("Validate() expected error for invalid skip files pattern")
+	}
+
+	errStr := err.Error()
+	if !strings.Contains(errStr, "defaults.skip.files") {
+		t.Errorf("error = %q, want to contain 'defaults.skip.files'", errStr)
+	}
+}
+
+func TestValidate_InvalidSkipDirectoriesPattern_ReturnsError(t *testing.T) {
+	cfg := NewDefaultConfig()
+	cfg.Defaults.Skip.Directories = []string{".git", "bad[pattern"}
+
+	err := Validate(&cfg)
+	if err == nil {
+		t.Fatal("Validate() expected error for invalid skip directories pattern")
+	}
+
+	errStr := err.Error()
+	if !strings.Contains(errStr, "defaults.skip.directories") {
+		t.Errorf("error = %q, want to contain 'defaults.skip.directories'", errStr)
+	}
+}
+
+func TestValidate_ValidDefaultsConfig_ReturnsNil(t *testing.T) {
+	cfg := NewDefaultConfig()
+	// Default config should be valid
+	err := Validate(&cfg)
+	if err != nil {
+		t.Errorf("Validate() error = %v, want nil for default config", err)
+	}
+}
+
+func TestValidate_EmptyDefaultsArrays_ReturnsNil(t *testing.T) {
+	cfg := NewDefaultConfig()
+	// Empty arrays are valid
+	cfg.Defaults.Skip.Extensions = []string{}
+	cfg.Defaults.Skip.Directories = []string{}
+	cfg.Defaults.Skip.Files = []string{}
+	cfg.Defaults.Include.Extensions = []string{}
+	cfg.Defaults.Include.Directories = []string{}
+	cfg.Defaults.Include.Files = []string{}
+
+	err := Validate(&cfg)
+	if err != nil {
+		t.Errorf("Validate() error = %v, want nil for empty defaults arrays", err)
+	}
+}

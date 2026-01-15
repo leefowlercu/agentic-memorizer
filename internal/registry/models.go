@@ -50,9 +50,6 @@ type PathConfig struct {
 	// IncludeFiles lists files to include even if in SkipFiles.
 	IncludeFiles []string `json:"include_files,omitempty"`
 
-	// IncludeHidden indicates whether to include hidden files even if SkipHidden is true.
-	IncludeHidden bool `json:"include_hidden,omitempty"`
-
 	// UseVision indicates whether to use vision API for images/PDFs.
 	// nil means use global default.
 	UseVision *bool `json:"use_vision,omitempty"`
@@ -68,6 +65,51 @@ func (c *PathConfig) MarshalJSON() ([]byte, error) {
 func (c *PathConfig) UnmarshalJSON(data []byte) error {
 	type Alias PathConfig
 	return json.Unmarshal(data, (*Alias)(c))
+}
+
+// Clone returns a deep copy of the PathConfig.
+func (c *PathConfig) Clone() *PathConfig {
+	if c == nil {
+		return nil
+	}
+
+	clone := &PathConfig{
+		SkipHidden: c.SkipHidden,
+	}
+
+	// Deep copy slices
+	if c.SkipExtensions != nil {
+		clone.SkipExtensions = make([]string, len(c.SkipExtensions))
+		copy(clone.SkipExtensions, c.SkipExtensions)
+	}
+	if c.SkipDirectories != nil {
+		clone.SkipDirectories = make([]string, len(c.SkipDirectories))
+		copy(clone.SkipDirectories, c.SkipDirectories)
+	}
+	if c.SkipFiles != nil {
+		clone.SkipFiles = make([]string, len(c.SkipFiles))
+		copy(clone.SkipFiles, c.SkipFiles)
+	}
+	if c.IncludeExtensions != nil {
+		clone.IncludeExtensions = make([]string, len(c.IncludeExtensions))
+		copy(clone.IncludeExtensions, c.IncludeExtensions)
+	}
+	if c.IncludeDirectories != nil {
+		clone.IncludeDirectories = make([]string, len(c.IncludeDirectories))
+		copy(clone.IncludeDirectories, c.IncludeDirectories)
+	}
+	if c.IncludeFiles != nil {
+		clone.IncludeFiles = make([]string, len(c.IncludeFiles))
+		copy(clone.IncludeFiles, c.IncludeFiles)
+	}
+
+	// Deep copy pointer
+	if c.UseVision != nil {
+		v := *c.UseVision
+		clone.UseVision = &v
+	}
+
+	return clone
 }
 
 // FileState tracks the state of a file for incremental processing.

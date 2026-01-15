@@ -3,10 +3,13 @@ package remember
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -25,7 +28,6 @@ var (
 	rememberAddIncludeDir  []string
 	rememberAddIncludeFile []string
 	rememberSkipHidden     bool
-	rememberIncludeHidden  bool
 	rememberUseVision      *bool
 )
 
@@ -90,8 +92,6 @@ func init() {
 	// Hidden file handling
 	RememberCmd.Flags().BoolVar(&rememberSkipHidden, "skip-hidden", true,
 		"Skip hidden files and directories")
-	RememberCmd.Flags().BoolVar(&rememberIncludeHidden, "include-hidden", false,
-		"Include hidden files even when skip-hidden is true")
 
 	// Vision API
 	RememberCmd.Flags().StringVar(&useVisionFlag, "use-vision", "",
@@ -169,7 +169,17 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	}
 	defer reg.Close()
 
-	// Build path config
+	// Check if path already exists
+	existingPath, err := reg.GetPath(ctx, absPath)
+	if err == nil && existingPath != nil {
+		// Path exists - check if modification flags are provided
+		if hasModificationFlags(cmd) {
+			return handleExistingPath(ctx, cmd, reg, absPath, existingPath)
+		}
+		return fmt.Errorf("path is already remembered: %s\nUse modification flags (--add-*, --set-*, --skip-hidden) to update configuration", absPath)
+	}
+
+	// Build path config for new path
 	pathConfig := buildPathConfig(cmd)
 
 	// Add path to registry
@@ -185,47 +195,214 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// buildPathConfig constructs a PathConfig from command flags.
-func buildPathConfig(cmd *cobra.Command) *registry.PathConfig {
-	cfg := &registry.PathConfig{
-		SkipHidden:    rememberSkipHidden,
-		IncludeHidden: rememberIncludeHidden,
-		UseVision:     rememberUseVision,
+// hasModificationFlags returns true if any config modification flags are set.
+func hasModificationFlags(cmd *cobra.Command) bool {
+	modFlags := []string{
+		"add-skip-ext", "set-skip-ext",
+		"add-skip-dir", "set-skip-dir",
+		"add-skip-file", "set-skip-file",
+		"add-include-ext", "add-include-dir", "add-include-file",
+		"skip-hidden", "use-vision",
+	}
+	for _, flag := range modFlags {
+		if cmd.Flags().Changed(flag) {
+			return true
+		}
+	}
+	return false
+}
+
+// handleExistingPath updates the configuration for an already-remembered path.
+func handleExistingPath(ctx context.Context, cmd *cobra.Command, reg *registry.SQLiteRegistry, absPath string, existing *registry.RememberedPath) error {
+	// Build updated config
+	newConfig := buildUpdatedConfig(cmd, existing.Config)
+
+	// Update the config in registry
+	err := reg.UpdatePathConfig(ctx, absPath, newConfig)
+	if err != nil {
+		return fmt.Errorf("failed to update path config; %w", err)
+	}
+
+	fmt.Printf("Updated: %s\n", absPath)
+
+	// Trigger re-walk via daemon API
+	if err := requestReWalk(); err != nil {
+		fmt.Printf("Warning: could not trigger re-walk: %v\n", err)
+		fmt.Println("The daemon may need to be restarted for changes to take effect.")
+	} else {
+		fmt.Println("Re-walk triggered successfully.")
+	}
+
+	return nil
+}
+
+// buildUpdatedConfig creates a new PathConfig by merging existing config with flag overrides.
+func buildUpdatedConfig(cmd *cobra.Command, existing *registry.PathConfig) *registry.PathConfig {
+	// Start with a clone of existing config
+	cfg := existing.Clone()
+	if cfg == nil {
+		cfg = &registry.PathConfig{}
+	}
+
+	// Override skip-hidden if explicitly set
+	if cmd.Flags().Changed("skip-hidden") {
+		cfg.SkipHidden = rememberSkipHidden
 	}
 
 	// Handle skip extensions
 	if cmd.Flags().Changed("set-skip-ext") {
 		cfg.SkipExtensions = normalizeExtensions(rememberSetSkipExt)
 	} else if cmd.Flags().Changed("add-skip-ext") {
-		cfg.SkipExtensions = normalizeExtensions(rememberAddSkipExt)
+		cfg.SkipExtensions = mergeUnique(cfg.SkipExtensions, normalizeExtensions(rememberAddSkipExt))
 	}
 
 	// Handle skip directories
 	if cmd.Flags().Changed("set-skip-dir") {
 		cfg.SkipDirectories = rememberSetSkipDir
 	} else if cmd.Flags().Changed("add-skip-dir") {
-		cfg.SkipDirectories = rememberAddSkipDir
+		cfg.SkipDirectories = mergeUnique(cfg.SkipDirectories, rememberAddSkipDir)
 	}
 
 	// Handle skip files
 	if cmd.Flags().Changed("set-skip-file") {
 		cfg.SkipFiles = rememberSetSkipFiles
 	} else if cmd.Flags().Changed("add-skip-file") {
-		cfg.SkipFiles = rememberAddSkipFiles
+		cfg.SkipFiles = mergeUnique(cfg.SkipFiles, rememberAddSkipFiles)
 	}
 
-	// Handle include flags
+	// Handle include extensions
 	if cmd.Flags().Changed("add-include-ext") {
-		cfg.IncludeExtensions = normalizeExtensions(rememberAddIncludeExt)
+		cfg.IncludeExtensions = mergeUnique(cfg.IncludeExtensions, normalizeExtensions(rememberAddIncludeExt))
 	}
+
+	// Handle include directories
 	if cmd.Flags().Changed("add-include-dir") {
-		cfg.IncludeDirectories = rememberAddIncludeDir
+		cfg.IncludeDirectories = mergeUnique(cfg.IncludeDirectories, rememberAddIncludeDir)
 	}
+
+	// Handle include files
 	if cmd.Flags().Changed("add-include-file") {
-		cfg.IncludeFiles = rememberAddIncludeFile
+		cfg.IncludeFiles = mergeUnique(cfg.IncludeFiles, rememberAddIncludeFile)
+	}
+
+	// Handle use-vision
+	if rememberUseVision != nil {
+		cfg.UseVision = rememberUseVision
 	}
 
 	return cfg
+}
+
+// requestReWalk triggers an incremental re-walk via the daemon HTTP API.
+func requestReWalk() error {
+	cfg := config.Get()
+	url := fmt.Sprintf("http://%s:%d/rebuild", cfg.Daemon.HTTPBind, cfg.Daemon.HTTPPort)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Post(url, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon; %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var result struct {
+			Error string `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Error != "" {
+			return fmt.Errorf("rebuild failed: %s", result.Error)
+		}
+		return fmt.Errorf("rebuild failed with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// buildPathConfig constructs a PathConfig from command flags merged with defaults.
+func buildPathConfig(cmd *cobra.Command) *registry.PathConfig {
+	defaults := config.Get().Defaults
+
+	cfg := &registry.PathConfig{
+		SkipHidden: defaults.Skip.Hidden,
+		UseVision:  rememberUseVision,
+	}
+
+	// Override skip-hidden if explicitly set
+	if cmd.Flags().Changed("skip-hidden") {
+		cfg.SkipHidden = rememberSkipHidden
+	}
+
+	// Handle skip extensions: set replaces, add extends defaults
+	if cmd.Flags().Changed("set-skip-ext") {
+		cfg.SkipExtensions = normalizeExtensions(rememberSetSkipExt)
+	} else if cmd.Flags().Changed("add-skip-ext") {
+		cfg.SkipExtensions = mergeUnique(defaults.Skip.Extensions, normalizeExtensions(rememberAddSkipExt))
+	} else {
+		cfg.SkipExtensions = defaults.Skip.Extensions
+	}
+
+	// Handle skip directories: set replaces, add extends defaults
+	if cmd.Flags().Changed("set-skip-dir") {
+		cfg.SkipDirectories = rememberSetSkipDir
+	} else if cmd.Flags().Changed("add-skip-dir") {
+		cfg.SkipDirectories = mergeUnique(defaults.Skip.Directories, rememberAddSkipDir)
+	} else {
+		cfg.SkipDirectories = defaults.Skip.Directories
+	}
+
+	// Handle skip files: set replaces, add extends defaults
+	if cmd.Flags().Changed("set-skip-file") {
+		cfg.SkipFiles = rememberSetSkipFiles
+	} else if cmd.Flags().Changed("add-skip-file") {
+		cfg.SkipFiles = mergeUnique(defaults.Skip.Files, rememberAddSkipFiles)
+	} else {
+		cfg.SkipFiles = defaults.Skip.Files
+	}
+
+	// Handle include extensions: add extends defaults
+	if cmd.Flags().Changed("add-include-ext") {
+		cfg.IncludeExtensions = mergeUnique(defaults.Include.Extensions, normalizeExtensions(rememberAddIncludeExt))
+	} else {
+		cfg.IncludeExtensions = defaults.Include.Extensions
+	}
+
+	// Handle include directories: add extends defaults
+	if cmd.Flags().Changed("add-include-dir") {
+		cfg.IncludeDirectories = mergeUnique(defaults.Include.Directories, rememberAddIncludeDir)
+	} else {
+		cfg.IncludeDirectories = defaults.Include.Directories
+	}
+
+	// Handle include files: add extends defaults
+	if cmd.Flags().Changed("add-include-file") {
+		cfg.IncludeFiles = mergeUnique(defaults.Include.Files, rememberAddIncludeFile)
+	} else {
+		cfg.IncludeFiles = defaults.Include.Files
+	}
+
+	return cfg
+}
+
+// mergeUnique combines two slices, removing duplicates while preserving order.
+func mergeUnique(base, additions []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(base)+len(additions))
+	for _, v := range base {
+		if !seen[v] {
+			seen[v] = true
+			result = append(result, v)
+		}
+	}
+	for _, v := range additions {
+		if !seen[v] {
+			seen[v] = true
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 // normalizeExtensions ensures all extensions start with a dot.

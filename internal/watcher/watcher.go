@@ -18,6 +18,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
+	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 )
 
 // Watcher monitors filesystem changes and publishes events.
@@ -142,6 +143,15 @@ func (w *watcher) Watch(path string) error {
 		return fmt.Errorf("path is not a directory: %s", absPath)
 	}
 
+	// Get PathConfig for filtering
+	ctx := context.Background()
+	pathConfig, err := w.reg.GetEffectiveConfig(ctx, absPath)
+	if err != nil {
+		// If no config found, use default (skip hidden)
+		pathConfig = &registry.PathConfig{SkipHidden: true}
+	}
+	filter := walker.NewFilter(pathConfig)
+
 	// Add recursive watches
 	err = filepath.WalkDir(absPath, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -152,8 +162,8 @@ func (w *watcher) Watch(path string) error {
 			return nil
 		}
 
-		// Skip hidden directories
-		if strings.HasPrefix(d.Name(), ".") && p != absPath {
+		// Use PathConfig filter for directory decisions (except root)
+		if p != absPath && !filter.ShouldProcessDir(p) {
 			return fs.SkipDir
 		}
 
@@ -311,19 +321,36 @@ func (w *watcher) handleFsEvent(event fsnotify.Event) {
 	w.stats.EventsReceived++
 	w.mu.Unlock()
 
-	// Skip temporary files and editor artifacts
-	if shouldIgnoreFile(event.Name) {
+	// Skip transient editor artifacts (vim swap files, etc.)
+	if isEditorNoise(event.Name) {
 		return
 	}
 
-	// Handle directory creation (add recursive watch)
+	// Get PathConfig for filtering
+	ctx := context.Background()
+	pathConfig, err := w.reg.GetEffectiveConfig(ctx, event.Name)
+	if err != nil {
+		// File not under a remembered path, skip silently
+		return
+	}
+	filter := walker.NewFilter(pathConfig)
+
+	// Handle directory creation (add recursive watch if not filtered)
 	if event.Has(fsnotify.Create) {
 		info, err := os.Stat(event.Name)
 		if err == nil && info.IsDir() {
-			if err := w.addWatch(event.Name); err != nil {
-				w.logger.Warn("failed to add watch for new directory", "path", event.Name, "error", err)
+			if filter.ShouldProcessDir(event.Name) {
+				if err := w.addWatch(event.Name); err != nil {
+					w.logger.Warn("failed to add watch for new directory", "path", event.Name, "error", err)
+				}
 			}
+			return // Don't process directory events further
 		}
+	}
+
+	// For file events, check if file should be processed
+	if !filter.ShouldProcessFile(event.Name) {
+		return
 	}
 
 	// Determine event type
@@ -451,38 +478,40 @@ func (w *watcher) isUnderWatchedPath(path string) bool {
 	return false
 }
 
-// shouldIgnoreFile returns true if the file should be ignored.
-func shouldIgnoreFile(path string) bool {
+// isEditorNoise returns true if the file is a transient editor artifact.
+// These are files that appear and disappear rapidly during editing
+// and should be filtered for performance. Other patterns like hidden files,
+// .DS_Store, etc. are handled by PathConfig.
+func isEditorNoise(path string) bool {
 	name := filepath.Base(path)
 
-	// Ignore common temporary files and editor artifacts
-	ignorePrefixes := []string{".", "~", "#"}
-	for _, prefix := range ignorePrefixes {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
+	// Vim swap files (created during active editing)
+	if strings.HasSuffix(name, ".swp") || strings.HasSuffix(name, ".swo") || strings.HasSuffix(name, ".swn") {
+		return true
 	}
 
-	ignoreSuffixes := []string{"~", ".swp", ".swo", ".swn", ".tmp", ".bak"}
-	for _, suffix := range ignoreSuffixes {
-		if strings.HasSuffix(name, suffix) {
-			return true
-		}
+	// Vim temporary file during save
+	if name == "4913" {
+		return true
 	}
 
-	// Ignore common patterns
-	ignorePatterns := []string{
-		"4913",        // Vim temp files
-		".DS_Store",   // macOS
-		"Thumbs.db",   // Windows
+	// Emacs auto-save files
+	if strings.HasPrefix(name, "#") && strings.HasSuffix(name, "#") {
+		return true
 	}
-	for _, pattern := range ignorePatterns {
-		if name == pattern {
-			return true
-		}
+
+	// Backup files created during save (ending with ~)
+	if strings.HasSuffix(name, "~") {
+		return true
 	}
 
 	return false
+}
+
+// shouldIgnoreFile is deprecated, use isEditorNoise for transient artifacts
+// and PathConfig filtering for other patterns.
+func shouldIgnoreFile(path string) bool {
+	return isEditorNoise(path)
 }
 
 // isWatchLimitError checks if an error indicates watch limit exhaustion.

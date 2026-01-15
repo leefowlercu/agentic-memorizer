@@ -183,9 +183,6 @@ func printConfig(out io.Writer, cfg *registry.PathConfig) {
 	if len(cfg.IncludeFiles) > 0 {
 		fmt.Fprintf(out, "      Include Files: %s\n", strings.Join(cfg.IncludeFiles, ", "))
 	}
-	if cfg.IncludeHidden {
-		fmt.Fprintf(out, "      Include Hidden: %t\n", cfg.IncludeHidden)
-	}
 
 	// Vision API
 	if cfg.UseVision != nil {

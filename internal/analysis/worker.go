@@ -80,6 +80,20 @@ type ChunkResult struct {
 	EndOffset   int
 	ChunkType   string
 	Embedding   []float32
+
+	// Code chunk metadata (from AST parsing)
+	FunctionName string
+	ClassName    string
+
+	// Markdown chunk metadata
+	Heading      string
+	HeadingLevel int
+
+	// Token count estimate
+	TokenCount int
+
+	// Per-chunk semantic summary
+	Summary string
 }
 
 // Entity represents an extracted entity.
@@ -316,6 +330,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 
 	// Step 3: Semantic analysis (if provider available)
 	var semanticErr error
+	var chunkSummaries []string // Per-chunk summaries for graph persistence
 	if w.semanticProvider != nil && w.semanticProvider.Available() {
 		var semanticResult *SemanticResult
 		var cacheHit bool
@@ -328,6 +343,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 				semanticResult = w.convertCachedSemantic(cachedResult)
 				cacheHit = true
 				w.logger.Debug("semantic cache hit", "path", item.FilePath)
+				// Note: Per-chunk summaries are not cached, so chunkSummaries stays nil
 			} else if !errors.Is(err, cache.ErrCacheMiss) {
 				w.logger.Warn("semantic cache read error", "path", item.FilePath, "error", err)
 			}
@@ -335,7 +351,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 
 		// Cache miss - perform analysis
 		if !cacheHit {
-			semanticResult, semanticErr = w.analyzeSemantics(ctx, chunkResult.Chunks)
+			semanticResult, chunkSummaries, semanticErr = w.analyzeSemantics(ctx, chunkResult.Chunks)
 			if semanticErr != nil {
 				w.logger.Warn("semantic analysis failed",
 					"path", item.FilePath,
@@ -383,7 +399,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	if w.embeddingsProvider != nil && w.embeddingsProvider.Available() {
 		var embeddings []float32
 		var chunkData []ChunkResult
-		embeddings, chunkData, embeddingsErr = w.generateEmbeddings(ctx, chunkResult.Chunks)
+		embeddings, chunkData, embeddingsErr = w.generateEmbeddings(ctx, chunkResult.Chunks, chunkSummaries)
 		if embeddingsErr != nil {
 			w.logger.Warn("embeddings generation failed",
 				"path", item.FilePath,
@@ -427,14 +443,23 @@ type SemanticResult struct {
 }
 
 // analyzeSemantics performs semantic analysis on chunks and merges results.
-func (w *Worker) analyzeSemantics(ctx context.Context, chunks []chunkers.Chunk) (*SemanticResult, error) {
+// Returns the merged result, per-chunk summaries (indexed by chunk index), and any error.
+func (w *Worker) analyzeSemantics(ctx context.Context, chunks []chunkers.Chunk) (*SemanticResult, []string, error) {
 	if len(chunks) == 0 {
-		return &SemanticResult{}, nil
+		return &SemanticResult{}, nil, nil
 	}
+
+	// Initialize per-chunk summaries slice (indexed by chunk.Index)
+	chunkSummaries := make([]string, len(chunks))
 
 	// For single chunk, analyze directly
 	if len(chunks) == 1 {
-		return w.analyzeChunk(ctx, chunks[0])
+		result, err := w.analyzeChunk(ctx, chunks[0])
+		if err != nil {
+			return nil, nil, err
+		}
+		chunkSummaries[chunks[0].Index] = result.Summary
+		return result, chunkSummaries, nil
 	}
 
 	// For multiple chunks, analyze each and merge
@@ -442,7 +467,7 @@ func (w *Worker) analyzeSemantics(ctx context.Context, chunks []chunkers.Chunk) 
 	for _, chunk := range chunks {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		default:
 		}
 
@@ -452,10 +477,15 @@ func (w *Worker) analyzeSemantics(ctx context.Context, chunks []chunkers.Chunk) 
 			continue
 		}
 		chunkResults = append(chunkResults, result)
+		// Store per-chunk summary indexed by chunk position
+		if chunk.Index < len(chunkSummaries) {
+			chunkSummaries[chunk.Index] = result.Summary
+		}
 	}
 
 	// Merge results
-	return mergeSemanticResults(ctx, w.semanticProvider, chunkResults)
+	merged, err := mergeSemanticResults(ctx, w.semanticProvider, chunkResults)
+	return merged, chunkSummaries, err
 }
 
 // analyzeChunk performs semantic analysis on a single chunk.
@@ -499,7 +529,8 @@ func (w *Worker) analyzeChunk(ctx context.Context, chunk chunkers.Chunk) (*Seman
 
 // generateEmbeddings creates embeddings for chunks using batch API with caching.
 // Returns both the file-level average embedding and per-chunk results.
-func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk) ([]float32, []ChunkResult, error) {
+// The chunkSummaries parameter is optional and provides per-chunk semantic summaries.
+func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk, chunkSummaries []string) ([]float32, []ChunkResult, error) {
 	if len(chunks) == 0 {
 		return nil, nil, nil
 	}
@@ -517,6 +548,18 @@ func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk
 			StartOffset: chunk.StartOffset,
 			EndOffset:   chunk.EndOffset,
 			ChunkType:   string(chunk.Metadata.Type),
+			// Code chunk metadata from AST parsing
+			FunctionName: chunk.Metadata.FunctionName,
+			ClassName:    chunk.Metadata.ClassName,
+			// Markdown chunk metadata
+			Heading:      chunk.Metadata.Heading,
+			HeadingLevel: chunk.Metadata.HeadingLevel,
+			// Token count estimate
+			TokenCount: chunk.Metadata.TokenEstimate,
+		}
+		// Set per-chunk summary if available
+		if chunkSummaries != nil && chunk.Index < len(chunkSummaries) {
+			chunkResults[i].Summary = chunkSummaries[chunk.Index]
 		}
 
 		// Check embeddings cache
@@ -754,8 +797,14 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 			StartOffset:      chunk.StartOffset,
 			EndOffset:        chunk.EndOffset,
 			ChunkType:        chunk.ChunkType,
+			FunctionName:     chunk.FunctionName,
+			ClassName:        chunk.ClassName,
+			Heading:          chunk.Heading,
+			HeadingLevel:     chunk.HeadingLevel,
+			Summary:          chunk.Summary,
 			Embedding:        chunk.Embedding,
 			EmbeddingVersion: 1, // TODO: get from config
+			TokenCount:       chunk.TokenCount,
 		}
 
 		if err := w.graph.UpsertChunk(ctx, chunkNode); err != nil {

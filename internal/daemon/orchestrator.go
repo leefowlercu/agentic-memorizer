@@ -439,9 +439,6 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 		return nil, fmt.Errorf("rebuild walk failed; %w", err)
 	}
 
-	// Sync watched paths with registry (picks up newly remembered paths)
-	o.syncWatchedPaths(ctx)
-
 	// Run reconciliation after walk completes to clean up stale entries
 	discoveredPaths := o.walker.DrainDiscoveredPaths()
 	if discoveredPaths != nil && o.cleaner != nil {
@@ -635,43 +632,6 @@ func (o *Orchestrator) watchRememberedPaths(ctx context.Context) {
 	}
 
 	slog.Info("watching remembered paths", "count", len(paths))
-}
-
-// syncWatchedPaths ensures the watcher is watching all current registry paths.
-// Called during rebuild to pick up newly remembered paths.
-func (o *Orchestrator) syncWatchedPaths(ctx context.Context) {
-	if o.watcher == nil {
-		return
-	}
-
-	paths, err := o.registry.ListPaths(ctx)
-	if err != nil {
-		slog.Warn("failed to list paths for watch sync", "error", err)
-		return
-	}
-
-	// Build set of currently watched paths
-	watchedSet := make(map[string]bool)
-	for _, p := range o.watcher.WatchedPaths() {
-		watchedSet[p] = true
-	}
-
-	// Watch any new paths not currently watched
-	newPaths := 0
-	for _, rp := range paths {
-		if !watchedSet[rp.Path] {
-			if err := o.watcher.Watch(rp.Path); err != nil {
-				slog.Warn("failed to watch new path", "path", rp.Path, "error", err)
-			} else {
-				slog.Info("started watching new path", "path", rp.Path)
-				newPaths++
-			}
-		}
-	}
-
-	if newPaths > 0 {
-		slog.Debug("watch sync complete", "new_paths", newPaths)
-	}
 }
 
 // walkRememberedPaths performs an initial full walk of all remembered paths.

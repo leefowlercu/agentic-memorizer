@@ -437,7 +437,7 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 		event = events.Event{
 			Type:      events.FileChanged,
 			Timestamp: time.Now(),
-			Payload: events.FileEvent{
+			Payload: &events.FileEvent{
 				Path:        ce.Path,
 				ContentHash: contentHash,
 				Size:        size,
@@ -449,7 +449,7 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 		event = events.Event{
 			Type:      events.PathDeleted,
 			Timestamp: time.Now(),
-			Payload: events.FileEvent{
+			Payload: &events.FileEvent{
 				Path: ce.Path,
 			},
 		}

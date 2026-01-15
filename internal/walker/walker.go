@@ -312,7 +312,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		event := events.Event{
 			Type:      events.FileDiscovered,
 			Timestamp: time.Now(),
-			Payload: events.FileEvent{
+			Payload: &events.FileEvent{
 				Path:        filePath,
 				ContentHash: contentHash,
 				Size:        info.Size(),

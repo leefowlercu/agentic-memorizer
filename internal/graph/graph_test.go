@@ -468,3 +468,313 @@ func TestOperationsWithoutConnection(t *testing.T) {
 		}
 	})
 }
+
+func TestMetadataNodeLabels(t *testing.T) {
+	labels := []struct {
+		name     string
+		label    string
+		expected string
+	}{
+		{"CodeMeta", LabelCodeMeta, "CodeMeta"},
+		{"DocumentMeta", LabelDocumentMeta, "DocumentMeta"},
+		{"NotebookMeta", LabelNotebookMeta, "NotebookMeta"},
+		{"BuildMeta", LabelBuildMeta, "BuildMeta"},
+		{"InfraMeta", LabelInfraMeta, "InfraMeta"},
+		{"SchemaMeta", LabelSchemaMeta, "SchemaMeta"},
+		{"StructuredMeta", LabelStructuredMeta, "StructuredMeta"},
+		{"SQLMeta", LabelSQLMeta, "SQLMeta"},
+		{"LogMeta", LabelLogMeta, "LogMeta"},
+		{"ChunkEmbedding", LabelChunkEmbedding, "ChunkEmbedding"},
+	}
+
+	for _, tt := range labels {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.label != tt.expected {
+				t.Errorf("%s = %q, want %q", tt.name, tt.label, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMetadataRelationshipTypes(t *testing.T) {
+	relationships := []struct {
+		name     string
+		rel      string
+		expected string
+	}{
+		{"HasCodeMeta", RelHasCodeMeta, "HAS_CODE_META"},
+		{"HasDocMeta", RelHasDocMeta, "HAS_DOC_META"},
+		{"HasNotebookMeta", RelHasNotebookMeta, "HAS_NOTEBOOK_META"},
+		{"HasBuildMeta", RelHasBuildMeta, "HAS_BUILD_META"},
+		{"HasInfraMeta", RelHasInfraMeta, "HAS_INFRA_META"},
+		{"HasSchemaMeta", RelHasSchemaMeta, "HAS_SCHEMA_META"},
+		{"HasStructMeta", RelHasStructMeta, "HAS_STRUCT_META"},
+		{"HasSQLMeta", RelHasSQLMeta, "HAS_SQL_META"},
+		{"HasLogMeta", RelHasLogMeta, "HAS_LOG_META"},
+		{"HasEmbedding", RelHasEmbedding, "HAS_EMBEDDING"},
+	}
+
+	for _, tt := range relationships {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.rel != tt.expected {
+				t.Errorf("%s = %q, want %q", tt.name, tt.rel, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCodeMetaNodeFields(t *testing.T) {
+	meta := CodeMetaNode{
+		Language:     "go",
+		FunctionName: "main",
+		ClassName:    "Handler",
+		Signature:    "func main()",
+		ReturnType:   "error",
+		Parameters:   []string{"ctx", "opts"},
+		Decorators:   []string{"test"},
+		Implements:   []string{"http.Handler"},
+		Visibility:   "public",
+		Docstring:    "Main entry point",
+		Namespace:    "main",
+		ParentClass:  "",
+		IsAsync:      false,
+		IsStatic:     true,
+		IsExported:   true,
+		LineStart:    10,
+		LineEnd:      25,
+	}
+
+	if meta.Language != "go" {
+		t.Errorf("Language = %q, want %q", meta.Language, "go")
+	}
+	if meta.FunctionName != "main" {
+		t.Errorf("FunctionName = %q, want %q", meta.FunctionName, "main")
+	}
+	if len(meta.Parameters) != 2 {
+		t.Errorf("len(Parameters) = %d, want 2", len(meta.Parameters))
+	}
+	if !meta.IsExported {
+		t.Error("IsExported should be true")
+	}
+	if meta.LineStart != 10 {
+		t.Errorf("LineStart = %d, want 10", meta.LineStart)
+	}
+}
+
+func TestDocumentMetaNodeFields(t *testing.T) {
+	meta := DocumentMetaNode{
+		Heading:      "Introduction",
+		HeadingLevel: 1,
+		SectionPath:  []string{"Chapter 1", "Introduction"},
+		PageNumber:   5,
+		ListType:     "bullet",
+		ListDepth:    2,
+		IsFootnote:   false,
+		IsCitation:   true,
+		IsBlockquote: false,
+	}
+
+	if meta.Heading != "Introduction" {
+		t.Errorf("Heading = %q, want %q", meta.Heading, "Introduction")
+	}
+	if meta.HeadingLevel != 1 {
+		t.Errorf("HeadingLevel = %d, want 1", meta.HeadingLevel)
+	}
+	if len(meta.SectionPath) != 2 {
+		t.Errorf("len(SectionPath) = %d, want 2", len(meta.SectionPath))
+	}
+	if !meta.IsCitation {
+		t.Error("IsCitation should be true")
+	}
+}
+
+func TestNotebookMetaNodeFields(t *testing.T) {
+	meta := NotebookMetaNode{
+		CellIndex:       5,
+		CellType:        "code",
+		ExecutionCount:  10,
+		HasOutput:       true,
+		OutputTruncated: false,
+	}
+
+	if meta.CellIndex != 5 {
+		t.Errorf("CellIndex = %d, want 5", meta.CellIndex)
+	}
+	if meta.CellType != "code" {
+		t.Errorf("CellType = %q, want %q", meta.CellType, "code")
+	}
+	if !meta.HasOutput {
+		t.Error("HasOutput should be true")
+	}
+}
+
+func TestBuildMetaNodeFields(t *testing.T) {
+	meta := BuildMetaNode{
+		TargetName:   "build",
+		TargetType:   "phony",
+		Dependencies: []string{"test", "lint"},
+		StageName:    "production",
+		ImageName:    "golang:1.22",
+		BuildArgs:    []string{"--platform=linux/amd64"},
+	}
+
+	if meta.TargetName != "build" {
+		t.Errorf("TargetName = %q, want %q", meta.TargetName, "build")
+	}
+	if len(meta.Dependencies) != 2 {
+		t.Errorf("len(Dependencies) = %d, want 2", len(meta.Dependencies))
+	}
+	if meta.StageName != "production" {
+		t.Errorf("StageName = %q, want %q", meta.StageName, "production")
+	}
+}
+
+func TestInfraMetaNodeFields(t *testing.T) {
+	meta := InfraMetaNode{
+		ResourceType: "aws_instance",
+		ResourceName: "web_server",
+		Provider:     "aws",
+		BlockType:    "resource",
+		ModuleName:   "compute",
+		References:   []string{"aws_vpc.main", "aws_subnet.public"},
+	}
+
+	if meta.ResourceType != "aws_instance" {
+		t.Errorf("ResourceType = %q, want %q", meta.ResourceType, "aws_instance")
+	}
+	if meta.BlockType != "resource" {
+		t.Errorf("BlockType = %q, want %q", meta.BlockType, "resource")
+	}
+	if len(meta.References) != 2 {
+		t.Errorf("len(References) = %d, want 2", len(meta.References))
+	}
+}
+
+func TestSchemaMetaNodeFields(t *testing.T) {
+	meta := SchemaMetaNode{
+		MessageName:  "UserRequest",
+		ServiceName:  "UserService",
+		RPCName:      "GetUser",
+		TypeName:     "User",
+		Fields:       []string{"id", "name", "email"},
+		IsDeprecated: false,
+	}
+
+	if meta.MessageName != "UserRequest" {
+		t.Errorf("MessageName = %q, want %q", meta.MessageName, "UserRequest")
+	}
+	if meta.ServiceName != "UserService" {
+		t.Errorf("ServiceName = %q, want %q", meta.ServiceName, "UserService")
+	}
+	if len(meta.Fields) != 3 {
+		t.Errorf("len(Fields) = %d, want 3", len(meta.Fields))
+	}
+}
+
+func TestStructuredMetaNodeFields(t *testing.T) {
+	meta := StructuredMetaNode{
+		RecordIndex: 0,
+		RecordCount: 100,
+		KeyNames:    []string{"id", "name", "value"},
+		ArrayPath:   "$.users",
+	}
+
+	if meta.RecordCount != 100 {
+		t.Errorf("RecordCount = %d, want 100", meta.RecordCount)
+	}
+	if len(meta.KeyNames) != 3 {
+		t.Errorf("len(KeyNames) = %d, want 3", len(meta.KeyNames))
+	}
+	if meta.ArrayPath != "$.users" {
+		t.Errorf("ArrayPath = %q, want %q", meta.ArrayPath, "$.users")
+	}
+}
+
+func TestSQLMetaNodeFields(t *testing.T) {
+	meta := SQLMetaNode{
+		StatementType: "CREATE",
+		TableNames:    []string{"users"},
+		JoinedTables:  []string{"roles", "permissions"},
+		HasSubquery:   true,
+	}
+
+	if meta.StatementType != "CREATE" {
+		t.Errorf("StatementType = %q, want %q", meta.StatementType, "CREATE")
+	}
+	if len(meta.TableNames) != 1 {
+		t.Errorf("len(TableNames) = %d, want 1", len(meta.TableNames))
+	}
+	if !meta.HasSubquery {
+		t.Error("HasSubquery should be true")
+	}
+}
+
+func TestLogMetaNodeFields(t *testing.T) {
+	meta := LogMetaNode{
+		LogLevel:   "ERROR",
+		TimeRange:  [2]string{"2024-01-01T00:00:00Z", "2024-01-01T01:00:00Z"},
+		Source:     "my-service",
+		EntryCount: 50,
+	}
+
+	if meta.LogLevel != "ERROR" {
+		t.Errorf("LogLevel = %q, want %q", meta.LogLevel, "ERROR")
+	}
+	if meta.TimeRange[0] != "2024-01-01T00:00:00Z" {
+		t.Errorf("TimeRange[0] = %q, want %q", meta.TimeRange[0], "2024-01-01T00:00:00Z")
+	}
+	if meta.EntryCount != 50 {
+		t.Errorf("EntryCount = %d, want 50", meta.EntryCount)
+	}
+}
+
+func TestChunkEmbeddingNodeFields(t *testing.T) {
+	now := time.Now()
+	embedding := ChunkEmbeddingNode{
+		Provider:   "openai",
+		Model:      "text-embedding-3-small",
+		Dimensions: 1536,
+		Embedding:  make([]float32, 1536),
+		CreatedAt:  now,
+	}
+
+	if embedding.Provider != "openai" {
+		t.Errorf("Provider = %q, want %q", embedding.Provider, "openai")
+	}
+	if embedding.Model != "text-embedding-3-small" {
+		t.Errorf("Model = %q, want %q", embedding.Model, "text-embedding-3-small")
+	}
+	if embedding.Dimensions != 1536 {
+		t.Errorf("Dimensions = %d, want 1536", embedding.Dimensions)
+	}
+	if len(embedding.Embedding) != 1536 {
+		t.Errorf("len(Embedding) = %d, want 1536", len(embedding.Embedding))
+	}
+}
+
+func TestChunkEmbeddingMultipleProviders(t *testing.T) {
+	// Test that we can have embeddings from different providers
+	openaiEmbed := ChunkEmbeddingNode{
+		Provider:   "openai",
+		Model:      "text-embedding-3-small",
+		Dimensions: 1536,
+		Embedding:  make([]float32, 1536),
+	}
+
+	cohereEmbed := ChunkEmbeddingNode{
+		Provider:   "cohere",
+		Model:      "embed-english-v3.0",
+		Dimensions: 1024,
+		Embedding:  make([]float32, 1024),
+	}
+
+	if openaiEmbed.Provider == cohereEmbed.Provider {
+		t.Error("Providers should be different")
+	}
+	if openaiEmbed.Model == cohereEmbed.Model {
+		t.Error("Models should be different")
+	}
+	if openaiEmbed.Dimensions == cohereEmbed.Dimensions {
+		t.Error("Dimensions should be different for this test")
+	}
+}

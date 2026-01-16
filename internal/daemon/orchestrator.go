@@ -80,12 +80,13 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 
 	// 3. Initialize Graph Client
 	graphCfg := graph.Config{
-		Host:        cfg.Graph.Host,
-		Port:        cfg.Graph.Port,
-		GraphName:   cfg.Graph.Name,
-		PasswordEnv: cfg.Graph.PasswordEnv,
-		MaxRetries:  cfg.Graph.MaxRetries,
-		RetryDelay:  time.Duration(cfg.Graph.RetryDelayMs) * time.Millisecond,
+		Host:               cfg.Graph.Host,
+		Port:               cfg.Graph.Port,
+		GraphName:          cfg.Graph.Name,
+		PasswordEnv:        cfg.Graph.PasswordEnv,
+		MaxRetries:         cfg.Graph.MaxRetries,
+		RetryDelay:         time.Duration(cfg.Graph.RetryDelayMs) * time.Millisecond,
+		EmbeddingDimension: cfg.Embeddings.Dimensions,
 	}
 	o.graph = graph.NewFalkorDBGraph(
 		graph.WithConfig(graphCfg),

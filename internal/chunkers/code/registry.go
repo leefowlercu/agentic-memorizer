@@ -1,4 +1,4 @@
-package treesitter
+package code
 
 import (
 	"strings"

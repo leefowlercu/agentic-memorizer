@@ -1,4 +1,4 @@
-package treesitter
+package code
 
 import (
 	sitter "github.com/smacker/go-tree-sitter"

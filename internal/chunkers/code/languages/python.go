@@ -7,7 +7,7 @@ import (
 	"github.com/smacker/go-tree-sitter/python"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // PythonStrategy implements tree-sitter parsing for Python code.
@@ -39,8 +39,8 @@ func (s *PythonStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns Python-specific node type configuration.
-func (s *PythonStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *PythonStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{
 			"function_definition",
 		},
@@ -353,4 +353,4 @@ func (s *PythonStrategy) findChild(node *sitter.Node, nodeType string) *sitter.N
 }
 
 // Ensure PythonStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*PythonStrategy)(nil)
+var _ code.LanguageStrategy = (*PythonStrategy)(nil)

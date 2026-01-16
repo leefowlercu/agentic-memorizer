@@ -8,7 +8,7 @@ import (
 	"github.com/smacker/go-tree-sitter/golang"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // GoStrategy implements tree-sitter parsing for Go code.
@@ -40,8 +40,8 @@ func (s *GoStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns Go-specific node type configuration.
-func (s *GoStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *GoStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{
 			"function_declaration",
 		},
@@ -271,4 +271,4 @@ func isExported(name string) bool {
 }
 
 // Ensure GoStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*GoStrategy)(nil)
+var _ code.LanguageStrategy = (*GoStrategy)(nil)

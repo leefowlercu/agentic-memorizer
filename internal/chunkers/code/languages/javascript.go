@@ -7,7 +7,7 @@ import (
 	"github.com/smacker/go-tree-sitter/javascript"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // JavaScriptStrategy implements tree-sitter parsing for JavaScript code.
@@ -43,8 +43,8 @@ func (s *JavaScriptStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns JavaScript-specific node type configuration.
-func (s *JavaScriptStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *JavaScriptStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{
 			"function_declaration",
 			"arrow_function",
@@ -481,4 +481,4 @@ func (s *JavaScriptStrategy) findChild(node *sitter.Node, nodeType string) *sitt
 }
 
 // Ensure JavaScriptStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*JavaScriptStrategy)(nil)
+var _ code.LanguageStrategy = (*JavaScriptStrategy)(nil)

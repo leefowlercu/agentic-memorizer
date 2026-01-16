@@ -15,8 +15,8 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter/languages"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -149,7 +149,7 @@ func defaultChunkerRegistry() *chunkers.Registry {
 	r := chunkers.DefaultRegistry()
 
 	// Create tree-sitter chunker with all language strategies
-	tsChunker := treesitter.NewTreeSitterChunker()
+	tsChunker := code.NewTreeSitterChunker()
 	tsChunker.RegisterStrategy(languages.NewGoStrategy())
 	tsChunker.RegisterStrategy(languages.NewPythonStrategy())
 	tsChunker.RegisterStrategy(languages.NewJavaScriptStrategy())

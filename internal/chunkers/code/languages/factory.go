@@ -2,7 +2,7 @@ package languages
 
 import (
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 func init() {
@@ -14,8 +14,8 @@ func init() {
 
 // NewDefaultChunker creates a TreeSitterChunker with all supported languages registered.
 // This is the recommended way to create a production TreeSitterChunker.
-func NewDefaultChunker() *treesitter.TreeSitterChunker {
-	c := treesitter.NewTreeSitterChunker()
+func NewDefaultChunker() *code.TreeSitterChunker {
+	c := code.NewTreeSitterChunker()
 
 	// Register all language strategies
 	c.RegisterStrategy(NewGoStrategy())

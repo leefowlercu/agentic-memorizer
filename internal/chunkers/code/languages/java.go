@@ -7,7 +7,7 @@ import (
 	"github.com/smacker/go-tree-sitter/java"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // JavaStrategy implements tree-sitter parsing for Java code.
@@ -43,8 +43,8 @@ func (s *JavaStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns Java-specific node type configuration.
-func (s *JavaStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *JavaStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{},
 		Methods: []string{
 			"method_declaration",
@@ -522,4 +522,4 @@ func (s *JavaStrategy) findChild(node *sitter.Node, nodeType string) *sitter.Nod
 }
 
 // Ensure JavaStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*JavaStrategy)(nil)
+var _ code.LanguageStrategy = (*JavaStrategy)(nil)

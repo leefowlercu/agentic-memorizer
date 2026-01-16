@@ -1,4 +1,4 @@
-package treesitter_test
+package code_test
 
 import (
 	"context"
@@ -6,27 +6,27 @@ import (
 	"testing"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter/languages"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages"
 )
 
 func TestTreeSitterChunker(t *testing.T) {
 	t.Run("Name", func(t *testing.T) {
-		c := treesitter.NewTreeSitterChunker()
+		c := code.NewTreeSitterChunker()
 		if c.Name() != "treesitter" {
 			t.Errorf("expected name 'treesitter', got %q", c.Name())
 		}
 	})
 
 	t.Run("Priority", func(t *testing.T) {
-		c := treesitter.NewTreeSitterChunker()
+		c := code.NewTreeSitterChunker()
 		if c.Priority() != 100 {
 			t.Errorf("expected priority 100, got %d", c.Priority())
 		}
 	})
 
 	t.Run("CanHandle", func(t *testing.T) {
-		c := treesitter.NewTreeSitterChunker()
+		c := code.NewTreeSitterChunker()
 		c.RegisterStrategy(languages.NewGoStrategy())
 		c.RegisterStrategy(languages.NewPythonStrategy())
 
@@ -54,7 +54,7 @@ func TestTreeSitterChunker(t *testing.T) {
 	})
 
 	t.Run("Languages", func(t *testing.T) {
-		c := treesitter.NewTreeSitterChunker()
+		c := code.NewTreeSitterChunker()
 		c.RegisterStrategy(languages.NewGoStrategy())
 		c.RegisterStrategy(languages.NewPythonStrategy())
 
@@ -67,7 +67,7 @@ func TestTreeSitterChunker(t *testing.T) {
 
 func TestGoStrategy(t *testing.T) {
 	strategy := languages.NewGoStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseFunction", func(t *testing.T) {
@@ -195,7 +195,7 @@ type Server struct {
 
 func TestPythonStrategy(t *testing.T) {
 	strategy := languages.NewPythonStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseFunction", func(t *testing.T) {
@@ -309,7 +309,7 @@ func TestPythonStrategy(t *testing.T) {
 
 func TestJavaScriptStrategy(t *testing.T) {
 	strategy := languages.NewJavaScriptStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseFunction", func(t *testing.T) {
@@ -379,7 +379,7 @@ func TestJavaScriptStrategy(t *testing.T) {
 
 func TestTypeScriptStrategy(t *testing.T) {
 	strategy := languages.NewTypeScriptStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseFunctionWithTypes", func(t *testing.T) {
@@ -443,7 +443,7 @@ func TestTypeScriptStrategy(t *testing.T) {
 
 func TestJavaStrategy(t *testing.T) {
 	strategy := languages.NewJavaStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseClass", func(t *testing.T) {
@@ -523,7 +523,7 @@ func TestJavaStrategy(t *testing.T) {
 
 func TestRustStrategy(t *testing.T) {
 	strategy := languages.NewRustStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseFunction", func(t *testing.T) {
@@ -591,7 +591,7 @@ func TestRustStrategy(t *testing.T) {
 
 func TestCStrategy(t *testing.T) {
 	strategy := languages.NewCStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseFunction", func(t *testing.T) {
@@ -655,7 +655,7 @@ func TestCStrategy(t *testing.T) {
 
 func TestCPPStrategy(t *testing.T) {
 	strategy := languages.NewCPPStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("ParseClass", func(t *testing.T) {
@@ -721,7 +721,7 @@ public:
 
 func TestChunkSplitting(t *testing.T) {
 	strategy := languages.NewGoStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	t.Run("LargeFunctionSplit", func(t *testing.T) {
@@ -755,7 +755,7 @@ func TestChunkSplitting(t *testing.T) {
 
 func TestEmptyContent(t *testing.T) {
 	strategy := languages.NewGoStrategy()
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	c.RegisterStrategy(strategy)
 
 	result, err := c.Chunk(context.Background(), []byte{}, chunkers.ChunkOptions{
@@ -771,7 +771,7 @@ func TestEmptyContent(t *testing.T) {
 }
 
 func TestNoMatchingStrategy(t *testing.T) {
-	c := treesitter.NewTreeSitterChunker()
+	c := code.NewTreeSitterChunker()
 	// Don't register any strategies
 
 	_, err := c.Chunk(context.Background(), []byte("some code"), chunkers.ChunkOptions{

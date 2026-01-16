@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter/languages"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages"
 )
 
 // getTestDataPath returns the path to the testdata directory.
@@ -18,7 +18,7 @@ func getTestDataPath() string {
 	if err != nil {
 		return ""
 	}
-	// We're in internal/chunkers/treesitter/languages
+	// We're in internal/chunkers/code/languages
 	return filepath.Join(wd, "../../../../testdata/code")
 }
 

@@ -7,7 +7,7 @@ import (
 	"github.com/smacker/go-tree-sitter/cpp"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // CPPStrategy implements tree-sitter parsing for C++ code.
@@ -43,8 +43,8 @@ func (s *CPPStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns C++-specific node type configuration.
-func (s *CPPStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *CPPStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{
 			"function_definition",
 		},
@@ -502,4 +502,4 @@ func (s *CPPStrategy) findChild(node *sitter.Node, nodeType string) *sitter.Node
 }
 
 // Ensure CPPStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*CPPStrategy)(nil)
+var _ code.LanguageStrategy = (*CPPStrategy)(nil)

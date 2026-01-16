@@ -7,7 +7,7 @@ import (
 	"github.com/smacker/go-tree-sitter/c"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // CStrategy implements tree-sitter parsing for C code.
@@ -43,8 +43,8 @@ func (s *CStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns C-specific node type configuration.
-func (s *CStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *CStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{
 			"function_definition",
 		},
@@ -435,4 +435,4 @@ func (s *CStrategy) findChild(node *sitter.Node, nodeType string) *sitter.Node {
 }
 
 // Ensure CStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*CStrategy)(nil)
+var _ code.LanguageStrategy = (*CStrategy)(nil)

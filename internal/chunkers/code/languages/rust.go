@@ -7,7 +7,7 @@ import (
 	"github.com/smacker/go-tree-sitter/rust"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 )
 
 // RustStrategy implements tree-sitter parsing for Rust code.
@@ -42,8 +42,8 @@ func (s *RustStrategy) GetLanguage() *sitter.Language {
 }
 
 // NodeTypes returns Rust-specific node type configuration.
-func (s *RustStrategy) NodeTypes() treesitter.NodeTypeConfig {
-	return treesitter.NodeTypeConfig{
+func (s *RustStrategy) NodeTypes() code.NodeTypeConfig {
+	return code.NodeTypeConfig{
 		Functions: []string{
 			"function_item",
 		},
@@ -548,4 +548,4 @@ func (s *RustStrategy) findChild(node *sitter.Node, nodeType string) *sitter.Nod
 }
 
 // Ensure RustStrategy implements LanguageStrategy.
-var _ treesitter.LanguageStrategy = (*RustStrategy)(nil)
+var _ code.LanguageStrategy = (*RustStrategy)(nil)

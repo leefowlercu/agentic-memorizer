@@ -6,7 +6,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	// Import to register TreeSitter factory via init()
-	_ "github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter/languages"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages"
 )
 
 func TestDefaultRegistryUsesTreeSitter(t *testing.T) {

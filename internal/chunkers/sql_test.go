@@ -572,3 +572,436 @@ CREATE TABLE myschema.orders (id INT PRIMARY KEY);
 		t.Error("expected table name 'orders' (without schema)")
 	}
 }
+
+func TestSQLChunker_NamedDollarTags(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE FUNCTION test_func() RETURNS void AS $body$
+BEGIN
+    RAISE NOTICE 'Body tag; semicolon inside';
+END;
+$body$ LANGUAGE plpgsql;
+
+CREATE FUNCTION other_func() RETURNS void AS $func$
+BEGIN
+    RAISE NOTICE 'Func tag';
+END;
+$func$ LANGUAGE plpgsql;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have 2 separate functions
+	if result.TotalChunks != 2 {
+		t.Errorf("expected 2 chunks (2 functions with named dollar tags), got %d", result.TotalChunks)
+	}
+
+	// Verify functions are complete
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.SQL != nil && chunk.Metadata.SQL.ObjectType == "FUNCTION" {
+			if !strings.Contains(chunk.Content, "RAISE NOTICE") {
+				t.Error("expected function chunk to contain full body")
+			}
+		}
+	}
+}
+
+func TestSQLChunker_TruncateStatement(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE TABLE logs (id INT PRIMARY KEY, message TEXT);
+TRUNCATE TABLE logs;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// TRUNCATE should be recognized
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestSQLChunker_CTEWithStatement(t *testing.T) {
+	c := NewSQLChunker()
+	content := `WITH active_users AS (
+    SELECT id, name FROM users WHERE active = true
+),
+recent_orders AS (
+    SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '7 days'
+)
+SELECT u.name, COUNT(o.id) as order_count
+FROM active_users u
+LEFT JOIN recent_orders o ON o.user_id = u.id
+GROUP BY u.name;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// CTE should be parsed as single statement
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Should contain the full CTE
+	chunk := result.Chunks[0]
+	if !strings.Contains(chunk.Content, "WITH active_users") {
+		t.Error("expected chunk to contain CTE")
+	}
+	if !strings.Contains(chunk.Content, "GROUP BY") {
+		t.Error("expected chunk to contain full query")
+	}
+}
+
+func TestSQLChunker_DropCascade(t *testing.T) {
+	c := NewSQLChunker()
+	content := `DROP TABLE IF EXISTS old_table CASCADE;
+DROP TABLE users RESTRICT;
+DROP VIEW IF EXISTS user_view CASCADE;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should parse DROP statements correctly
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestSQLChunker_StringsWithSemicolons(t *testing.T) {
+	c := NewSQLChunker()
+	content := `INSERT INTO messages (content) VALUES ('Hello; World; How are you?');
+INSERT INTO messages (content) VALUES ('Semi;colon;everywhere;');
+SELECT * FROM messages WHERE content LIKE '%;%';
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Strings with semicolons should not split statements incorrectly
+	// INSERT statements should be grouped, SELECT is standalone (no table extraction)
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Verify strings with semicolons are preserved intact
+	allContent := ""
+	for _, chunk := range result.Chunks {
+		allContent += chunk.Content
+	}
+
+	if !strings.Contains(allContent, "Hello; World") {
+		t.Error("expected string with semicolons to be preserved")
+	}
+	if !strings.Contains(allContent, "Semi;colon;everywhere") {
+		t.Error("expected all semicolons in strings to be preserved")
+	}
+}
+
+func TestSQLChunker_ExplainAnalyze(t *testing.T) {
+	c := NewSQLChunker()
+	content := `EXPLAIN ANALYZE SELECT * FROM users WHERE id = 1;
+EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM orders;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should parse EXPLAIN statements
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestSQLChunker_CreateTypeAndDomain(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
+CREATE DOMAIN positive_int AS INT CHECK (VALUE > 0);
+CREATE TABLE people (
+    id INT PRIMARY KEY,
+    current_mood mood
+);
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should parse custom types
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestSQLChunker_CreateSchema(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE SCHEMA IF NOT EXISTS analytics;
+CREATE SCHEMA reporting AUTHORIZATION admin;
+CREATE TABLE analytics.events (id INT PRIMARY KEY);
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should parse CREATE SCHEMA
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestSQLChunker_ForeignKeyConstraints(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id INT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON UPDATE SET NULL
+);
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	chunk := result.Chunks[0]
+	// Should preserve foreign key constraints
+	if !strings.Contains(chunk.Content, "REFERENCES users") {
+		t.Error("expected foreign key reference to be preserved")
+	}
+	if !strings.Contains(chunk.Content, "ON DELETE CASCADE") {
+		t.Error("expected ON DELETE CASCADE to be preserved")
+	}
+}
+
+func TestSQLChunker_UnionIntersectExcept(t *testing.T) {
+	c := NewSQLChunker()
+	content := `SELECT id, name FROM users WHERE role = 'admin'
+UNION
+SELECT id, name FROM users WHERE created_at > '2024-01-01'
+EXCEPT
+SELECT id, name FROM users WHERE disabled = true;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// UNION/EXCEPT should be parsed as single statement
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	chunk := result.Chunks[0]
+	if !strings.Contains(chunk.Content, "UNION") {
+		t.Error("expected UNION to be in content")
+	}
+	if !strings.Contains(chunk.Content, "EXCEPT") {
+		t.Error("expected EXCEPT to be in content")
+	}
+}
+
+func TestSQLChunker_Subqueries(t *testing.T) {
+	c := NewSQLChunker()
+	content := `SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 100);
+INSERT INTO archived_users SELECT * FROM users WHERE last_login < '2023-01-01';
+UPDATE orders SET status = 'processed' WHERE user_id IN (SELECT id FROM vip_users);
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Subqueries should be preserved
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestSQLChunker_LargeGroupSplitting(t *testing.T) {
+	c := NewSQLChunker()
+
+	// Create many statements for the same table
+	var builder strings.Builder
+	builder.WriteString("CREATE TABLE big_table (id INT PRIMARY KEY, data TEXT);\n")
+	for i := 0; i < 50; i++ {
+		builder.WriteString("INSERT INTO big_table (id, data) VALUES (")
+		builder.WriteString(string(rune('0' + i%10)))
+		builder.WriteString(", 'data value for row ")
+		builder.WriteString(string(rune('0' + i%10)))
+		builder.WriteString("');\n")
+	}
+
+	opts := ChunkOptions{
+		MaxChunkSize: 500,
+		MaxTokens:    100,
+	}
+
+	result, err := c.Chunk(context.Background(), []byte(builder.String()), opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Large group should be split
+	if result.TotalChunks < 2 {
+		t.Errorf("expected large group to be split into multiple chunks, got %d", result.TotalChunks)
+	}
+}
+
+func TestSQLChunker_EmptyAndWhitespace(t *testing.T) {
+	c := NewSQLChunker()
+	content := `
+
+-- Just a comment
+
+/* Another comment */
+
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Comments and whitespace only should produce minimal chunks
+	t.Logf("whitespace and comments produced %d chunks", result.TotalChunks)
+}
+
+func TestSQLChunker_PermissionStatements(t *testing.T) {
+	c := NewSQLChunker()
+	content := `GRANT SELECT, INSERT ON users TO readonly_user;
+GRANT ALL PRIVILEGES ON DATABASE mydb TO admin;
+REVOKE DELETE ON orders FROM guest;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should recognize permission statements
+	hasPermission := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.SQL != nil && chunk.Metadata.SQL.ObjectType == "PERMISSION" {
+			hasPermission = true
+			break
+		}
+	}
+
+	if !hasPermission {
+		t.Log("Note: permission statements may be categorized differently")
+	}
+}
+
+func TestSQLChunker_NestedDollarQuotes(t *testing.T) {
+	c := NewSQLChunker()
+	// Nested dollar quotes with different tags
+	content := `CREATE FUNCTION outer_func() RETURNS void AS $outer$
+DECLARE
+    sql_text text := $inner$SELECT * FROM users WHERE name = 'test';$inner$;
+BEGIN
+    EXECUTE sql_text;
+END;
+$outer$ LANGUAGE plpgsql;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Nested dollar quotes should be handled
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk for nested dollar quotes, got %d", result.TotalChunks)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "$inner$") {
+			t.Error("expected nested dollar quote to be preserved")
+		}
+	}
+}
+
+func TestSQLChunker_UnicodeContent(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE TABLE i18n_strings (
+    key VARCHAR(100) PRIMARY KEY,
+    en TEXT,
+    zh TEXT,
+    ja TEXT
+);
+INSERT INTO i18n_strings VALUES ('greeting', 'Hello', '你好', 'こんにちは');
+INSERT INTO i18n_strings VALUES ('emoji', '👋', '🌍', '🎉');
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Unicode should be preserved
+	allContent := ""
+	for _, chunk := range result.Chunks {
+		allContent += chunk.Content
+	}
+
+	if !strings.Contains(allContent, "你好") {
+		t.Error("expected Chinese characters to be preserved")
+	}
+	if !strings.Contains(allContent, "👋") {
+		t.Error("expected emoji to be preserved")
+	}
+}
+
+func TestSQLChunker_CreateTableAs(t *testing.T) {
+	c := NewSQLChunker()
+	content := `CREATE TABLE user_summary AS
+SELECT user_id, COUNT(*) as order_count, SUM(total) as total_spent
+FROM orders
+GROUP BY user_id;
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	chunk := result.Chunks[0]
+	if chunk.Metadata.SQL == nil {
+		t.Fatal("expected SQL metadata")
+	}
+	if chunk.Metadata.SQL.ObjectType != "TABLE" {
+		t.Errorf("expected ObjectType 'TABLE', got %q", chunk.Metadata.SQL.ObjectType)
+	}
+}

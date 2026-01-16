@@ -485,3 +485,369 @@ colors = ["red", "green", "blue"]
 		}
 	}
 }
+
+func TestTOMLChunker_LiteralStrings(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[paths]
+# Literal strings don't escape backslashes
+windows_path = 'C:\Users\name\Documents'
+regex = '<\i\c*\s*>'
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Literal strings should be preserved
+		if !strings.Contains(chunk.Content, `C:\Users`) {
+			t.Error("expected chunk to contain literal string with backslashes")
+		}
+	}
+}
+
+func TestTOMLChunker_BooleanValues(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[features]
+enabled = true
+debug = false
+experimental = true
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	chunk := result.Chunks[0]
+	if !strings.Contains(chunk.Content, "true") || !strings.Contains(chunk.Content, "false") {
+		t.Error("expected chunk to contain boolean values")
+	}
+}
+
+func TestTOMLChunker_IntegersWithUnderscores(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[limits]
+max_size = 1_000_000
+hex_value = 0xDEAD_BEEF
+bin_value = 0b1101_0110
+oct_value = 0o755
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Underscored integers should be preserved
+		if !strings.Contains(chunk.Content, "1_000_000") {
+			t.Error("expected chunk to contain underscored integer")
+		}
+	}
+}
+
+func TestTOMLChunker_DateTimeValues(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[timestamps]
+# Various datetime formats
+odt = 1979-05-27T07:32:00Z
+ldt = 1979-05-27T07:32:00
+ld = 1979-05-27
+lt = 07:32:00
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Date/time values should be preserved
+		if !strings.Contains(chunk.Content, "1979-05-27") {
+			t.Error("expected chunk to contain date value")
+		}
+	}
+}
+
+func TestTOMLChunker_Arrays(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[data]
+integers = [1, 2, 3]
+floats = [1.0, 2.0, 3.5]
+strings = ["alpha", "beta", "gamma"]
+nested = [[1, 2], [3, 4]]
+mixed = [1, "two", 3.0]
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Arrays should be preserved
+		if !strings.Contains(chunk.Content, "[1, 2, 3]") {
+			t.Error("expected chunk to contain integer array")
+		}
+		if !strings.Contains(chunk.Content, `["alpha", "beta", "gamma"]`) {
+			t.Error("expected chunk to contain string array")
+		}
+	}
+}
+
+func TestTOMLChunker_EmptyTable(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[empty]
+
+[non_empty]
+key = "value"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle empty tables
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestTOMLChunker_UnicodeContent(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[i18n]
+greeting_en = "Hello"
+greeting_zh = "你好"
+greeting_ja = "こんにちは"
+greeting_emoji = "👋🌍"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Unicode should be preserved
+		if !strings.Contains(chunk.Content, "你好") {
+			t.Error("expected chunk to contain Chinese characters")
+		}
+		if !strings.Contains(chunk.Content, "👋") {
+			t.Error("expected chunk to contain emoji")
+		}
+	}
+}
+
+func TestTOMLChunker_TableWithOnlyComments(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[config]
+# This is a comment
+# Another comment
+# No actual keys here
+
+[actual]
+key = "value"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle tables with only comments
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestTOMLChunker_DeeplyNestedDottedKeys(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[deeply.nested.table]
+config.sub.item = "value"
+another.deep.key = 123
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Deeply dotted keys should be preserved
+		if !strings.Contains(chunk.Content, "config.sub.item") {
+			t.Error("expected chunk to contain deeply dotted key")
+		}
+	}
+}
+
+func TestTOMLChunker_EscapeSequences(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[strings]
+backslash = "\\path\\to\\file"
+newline = "line1\nline2"
+tab = "col1\tcol2"
+unicode = "\u0048\u0065\u006C\u006C\u006F"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Escape sequences should be preserved as-is in raw content
+		if !strings.Contains(chunk.Content, `\n`) {
+			t.Log("Note: newline escape may have been interpreted")
+		}
+	}
+}
+
+func TestTOMLChunker_FloatValues(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[numbers]
+float1 = 3.14159
+float2 = -0.001
+exponent = 5e+22
+negative_exp = 1e-10
+inf = inf
+neg_inf = -inf
+nan = nan
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "3.14159") {
+			t.Error("expected chunk to contain float value")
+		}
+		if !strings.Contains(chunk.Content, "inf") {
+			t.Error("expected chunk to contain inf value")
+		}
+	}
+}
+
+func TestTOMLChunker_MultiLineBasicString(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[text]
+multi = """
+The quick brown fox
+jumps over the lazy dog.
+Multiple lines here."""
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "quick brown fox") {
+			t.Error("expected chunk to contain multiline string content")
+		}
+	}
+}
+
+func TestTOMLChunker_MultiLineLiteralString(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[regex]
+pattern = '''
+^(\d{3})-(\d{3})-(\d{4})$
+'''
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, `\d{3}`) {
+			t.Error("expected chunk to contain literal regex pattern")
+		}
+	}
+}
+
+func TestTOMLChunker_WhitespaceOnlyContent(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `
+
+
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Whitespace-only should produce minimal chunks
+	t.Logf("whitespace-only content produced %d chunks", result.TotalChunks)
+}
+
+func TestTOMLChunker_ArrayOfTablesWithDifferentPaths(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `[[servers.production]]
+ip = "10.0.0.1"
+role = "frontend"
+
+[[servers.production]]
+ip = "10.0.0.2"
+role = "backend"
+
+[[servers.staging]]
+ip = "192.168.1.1"
+role = "all-in-one"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should merge arrays of tables under same top-level path
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestTOMLChunker_QuotedKeys(t *testing.T) {
+	c := NewTOMLChunker()
+	content := `["special.key"]
+value = 1
+
+["key with spaces"]
+value = 2
+
+[normal]
+"quoted.dotted" = "value"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle quoted table names
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}

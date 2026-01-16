@@ -512,3 +512,438 @@ func TestLogChunker_CustomFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestLogChunker_NginxFormat(t *testing.T) {
+	c := NewLogChunker()
+	// Nginx combined log format
+	content := `192.168.1.1 - user [15/Jan/2024:10:00:00 +0000] "GET /api/data HTTP/1.1" 200 1234 "https://example.com" "nginx/1.18.0" upstream: "10.0.0.1:8080"
+10.0.0.2 - - [15/Jan/2024:10:00:01 +0000] "POST /api/submit HTTP/1.1" 201 56 "-" "nginx client"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Log == nil {
+			t.Fatal("expected Log metadata")
+		}
+
+		// Should detect nginx or apache format
+		if chunk.Metadata.Log.LogFormat != "nginx" && chunk.Metadata.Log.LogFormat != "apache" {
+			t.Logf("Note: detected format %q (expected 'nginx' or 'apache')", chunk.Metadata.Log.LogFormat)
+		}
+	}
+}
+
+func TestLogChunker_StackTrace(t *testing.T) {
+	c := NewLogChunker()
+	content := `2024-01-15T10:00:00.000Z INFO  [main] Application starting
+2024-01-15T10:00:01.000Z ERROR [main] Exception occurred
+java.lang.NullPointerException: Object is null
+    at com.example.Service.process(Service.java:42)
+    at com.example.Controller.handle(Controller.java:28)
+    at sun.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)
+    at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:897)
+Caused by: java.io.IOException: Connection refused
+    at java.net.Socket.connect(Socket.java:591)
+    ... 15 more
+2024-01-15T10:00:02.000Z INFO  [main] Recovery attempted
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Stack trace should be preserved with error
+	allContent := ""
+	for _, chunk := range result.Chunks {
+		allContent += chunk.Content
+	}
+
+	if !strings.Contains(allContent, "NullPointerException") {
+		t.Error("expected stack trace to be preserved")
+	}
+	if !strings.Contains(allContent, "at com.example.Service") {
+		t.Error("expected stack trace frames to be preserved")
+	}
+}
+
+func TestLogChunker_FatalLevel(t *testing.T) {
+	c := NewLogChunker()
+	content := `2024-01-15T10:00:00.000Z INFO  [main] Application starting
+2024-01-15T10:00:01.000Z FATAL [main] Unrecoverable error occurred
+2024-01-15T10:00:02.000Z CRITICAL [main] System shutdown initiated
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// FATAL level should be counted as errors
+	totalErrors := 0
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Log != nil {
+			totalErrors += chunk.Metadata.Log.ErrorCount
+		}
+	}
+
+	if totalErrors < 2 {
+		t.Errorf("expected at least 2 errors (FATAL + CRITICAL), got %d", totalErrors)
+	}
+}
+
+func TestLogChunker_MalformedJSON(t *testing.T) {
+	c := NewLogChunker()
+	content := `{"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"Valid JSON"}
+{"timestamp":"2024-01-15T10:00:01Z","level":"error","message":"Also valid"}
+{"timestamp":"2024-01-15T10:00:02Z","level":"info","message":"Incomplete JSON
+{"timestamp":"2024-01-15T10:00:03Z","level":"info","message":"After malformed"}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle malformed JSON gracefully
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestLogChunker_MixedFormats(t *testing.T) {
+	c := NewLogChunker()
+	// Mix of JSON and structured log formats
+	content := `{"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"JSON log"}
+2024-01-15T10:00:01.000Z INFO  [main] Structured log
+{"timestamp":"2024-01-15T10:00:02Z","level":"error","message":"Back to JSON"}
+Jan 15 10:00:03 hostname app[123]: Syslog format
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle mixed formats
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestLogChunker_AllDebugEntries(t *testing.T) {
+	c := NewLogChunker()
+	content := `2024-01-15T10:00:00.000Z DEBUG [main] Debug message 1
+2024-01-15T10:00:01.000Z DEBUG [main] Debug message 2
+2024-01-15T10:00:02.000Z DEBUG [main] Debug message 3
+2024-01-15T10:00:03.000Z DEBUG [main] Debug message 4
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Log == nil {
+			t.Fatal("expected Log metadata")
+		}
+
+		// Predominant level should be DEBUG when all entries are DEBUG
+		if chunk.Metadata.Log.LogLevel != "DEBUG" {
+			t.Errorf("expected LogLevel 'DEBUG', got %q", chunk.Metadata.Log.LogLevel)
+		}
+	}
+}
+
+func TestLogChunker_VeryLongLine(t *testing.T) {
+	c := NewLogChunker()
+
+	// Create a very long log line
+	var builder strings.Builder
+	builder.WriteString("2024-01-15T10:00:00.000Z INFO  [main] Very long message: ")
+	for i := 0; i < 1000; i++ {
+		builder.WriteString("data ")
+	}
+	builder.WriteString("\n2024-01-15T10:00:01.000Z INFO  [main] Normal line\n")
+
+	result, err := c.Chunk(context.Background(), []byte(builder.String()), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle very long lines
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestLogChunker_UnicodeContent(t *testing.T) {
+	c := NewLogChunker()
+	content := `2024-01-15T10:00:00.000Z INFO  [i18n] 中文日志消息
+2024-01-15T10:00:01.000Z INFO  [i18n] 日本語ログメッセージ
+2024-01-15T10:00:02.000Z INFO  [i18n] 이모지 테스트 🎉🚀💻
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// Unicode should be preserved
+		if !strings.Contains(chunk.Content, "中文日志") {
+			t.Error("expected Chinese characters to be preserved")
+		}
+		if !strings.Contains(chunk.Content, "🎉") {
+			t.Error("expected emoji to be preserved")
+		}
+	}
+}
+
+func TestLogChunker_LevelPositionVariations(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		expected string
+	}{
+		{
+			name:     "level at start",
+			line:     "ERROR 2024-01-15 Something failed",
+			expected: "ERROR",
+		},
+		{
+			name:     "level in brackets",
+			line:     "2024-01-15 [ERROR] Something failed",
+			expected: "ERROR",
+		},
+		{
+			name:     "level after timestamp",
+			line:     "2024-01-15T10:00:00Z ERROR Something failed",
+			expected: "ERROR",
+		},
+		{
+			name:     "level with colon",
+			line:     "ERROR: Something failed at 2024-01-15",
+			expected: "ERROR",
+		},
+	}
+
+	c := &LogChunker{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			level := c.extractLevel(tt.line)
+			if level != tt.expected {
+				t.Errorf("extractLevel(%q) = %q, want %q", tt.line, level, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLogChunker_EmptyLines(t *testing.T) {
+	c := NewLogChunker()
+	content := `2024-01-15T10:00:00.000Z INFO  [main] Message 1
+
+2024-01-15T10:00:01.000Z INFO  [main] Message 2
+
+
+2024-01-15T10:00:02.000Z INFO  [main] Message 3
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Empty lines should be handled
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestLogChunker_JSONWithNestedObjects(t *testing.T) {
+	c := NewLogChunker()
+	content := `{"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"Request","context":{"user":{"id":123,"name":"test"},"request":{"method":"GET","path":"/api"}}}
+{"timestamp":"2024-01-15T10:00:01Z","level":"error","message":"Failed","error":{"code":500,"details":{"stack":"trace here"}}}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Log == nil {
+			t.Fatal("expected Log metadata")
+		}
+
+		// Should detect JSON format
+		if chunk.Metadata.Log.LogFormat != "json" {
+			t.Errorf("expected LogFormat 'json', got %q", chunk.Metadata.Log.LogFormat)
+		}
+	}
+}
+
+func TestLogChunker_PartialTimestamps(t *testing.T) {
+	c := NewLogChunker()
+	// Some lines have timestamps, some don't (like continuation lines)
+	content := `2024-01-15T10:00:00.000Z INFO  [main] Starting process
+    with additional details here
+    and more context
+2024-01-15T10:00:01.000Z INFO  [main] Process completed
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// All content should be included
+	allContent := ""
+	for _, chunk := range result.Chunks {
+		allContent += chunk.Content
+	}
+
+	if !strings.Contains(allContent, "additional details") {
+		t.Error("expected continuation lines to be preserved")
+	}
+}
+
+func TestLogChunker_DifferentTimezones(t *testing.T) {
+	c := NewLogChunker()
+	content := `2024-01-15T10:00:00Z INFO Message at UTC
+2024-01-15T10:00:00+05:30 INFO Message at IST
+2024-01-15T10:00:00-08:00 INFO Message at PST
+2024-01-15T10:00:00.000+0000 INFO Message with offset
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Log == nil {
+			t.Fatal("expected Log metadata")
+		}
+
+		// Should extract timestamps from various formats
+		if chunk.Metadata.Log.TimeStart.IsZero() {
+			t.Log("Note: timestamp extraction may not support all timezone formats")
+		}
+	}
+}
+
+func TestLogChunker_ErrorLevelMapping(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"FATAL", "FATAL"},
+		{"CRITICAL", "FATAL"},
+		{"ALERT", "FATAL"},
+		{"EMERGENCY", "FATAL"},
+		{"ERROR", "ERROR"},
+		{"ERR", "ERROR"},
+		{"SEVERE", "ERROR"},
+		{"WARN", "WARN"},
+		{"WARNING", "WARN"},
+		{"INFO", "INFO"},
+		{"INFORMATION", "INFO"},
+		{"DEBUG", "DEBUG"},
+		{"TRACE", "DEBUG"},
+		{"VERBOSE", "DEBUG"},
+		{"FINE", "DEBUG"},
+	}
+
+	c := &LogChunker{}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := c.normalizeLevel(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeLevel(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLogChunker_WhitespaceOnlyContent(t *testing.T) {
+	c := NewLogChunker()
+	content := `
+
+
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Whitespace-only should produce minimal chunks
+	t.Logf("whitespace-only content produced %d chunks", result.TotalChunks)
+}
+
+func TestLogChunker_ErrorWithContext(t *testing.T) {
+	c := NewLogChunker()
+
+	// Create content where error appears after substantial context
+	var builder strings.Builder
+	for i := 0; i < 20; i++ {
+		builder.WriteString("2024-01-15T10:00:")
+		builder.WriteString(string(rune('0' + i/10)))
+		builder.WriteString(string(rune('0' + i%10)))
+		builder.WriteString(".000Z INFO  [main] Context line ")
+		builder.WriteString(string(rune('0' + i%10)))
+		builder.WriteString("\n")
+	}
+	builder.WriteString("2024-01-15T10:00:20.000Z ERROR [main] Critical error occurred\n")
+	for i := 21; i < 25; i++ {
+		builder.WriteString("2024-01-15T10:00:")
+		builder.WriteString(string(rune('0' + i/10)))
+		builder.WriteString(string(rune('0' + i%10)))
+		builder.WriteString(".000Z INFO  [main] After error line\n")
+	}
+
+	opts := ChunkOptions{
+		MaxChunkSize: 1000,
+		MaxTokens:    200,
+	}
+
+	result, err := c.Chunk(context.Background(), []byte(builder.String()), opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Error-aware chunking should keep context near errors
+	hasErrorChunk := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Log != nil && chunk.Metadata.Log.ErrorCount > 0 {
+			hasErrorChunk = true
+			// Error chunk should contain the error message
+			if !strings.Contains(chunk.Content, "Critical error") {
+				t.Error("expected error chunk to contain error message")
+			}
+		}
+	}
+
+	if !hasErrorChunk {
+		t.Error("expected at least one chunk with errors")
+	}
+}

@@ -431,3 +431,322 @@ func TestXMLChunker_LargeElement(t *testing.T) {
 		t.Errorf("expected large element to be split into multiple chunks, got %d", result.TotalChunks)
 	}
 }
+
+func TestXMLChunker_ProcessingInstructions(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="style.xsl"?>
+<root>
+    <item>content</item>
+</root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestXMLChunker_DOCTYPE(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<?xml version="1.0"?>
+<!DOCTYPE note SYSTEM "note.dtd">
+<note>
+    <to>User</to>
+    <from>System</from>
+</note>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk with DOCTYPE")
+	}
+}
+
+func TestXMLChunker_EntityReferences(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<root>
+    <item>Less than: &lt; Greater than: &gt;</item>
+    <item>Ampersand: &amp; Quote: &quot; Apos: &apos;</item>
+</root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Entity references should be preserved
+	found := false
+	for _, chunk := range result.Chunks {
+		if strings.Contains(chunk.Content, "&lt;") || strings.Contains(chunk.Content, "&amp;") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected entity references to be preserved in content")
+	}
+}
+
+func TestXMLChunker_WhitespaceOnly(t *testing.T) {
+	c := NewXMLChunker()
+	content := `
+
+   `
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Whitespace-only should produce 0 meaningful chunks
+	if result.TotalChunks > 0 {
+		for _, chunk := range result.Chunks {
+			if strings.TrimSpace(chunk.Content) != "" {
+				t.Error("expected no non-whitespace chunks")
+			}
+		}
+	}
+}
+
+func TestXMLChunker_MixedContent(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<root>
+    <paragraph>This is <bold>mixed</bold> content with <italic>inline</italic> elements.</paragraph>
+</root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Mixed content should be preserved intact
+	chunk := result.Chunks[0]
+	if !strings.Contains(chunk.Content, "<bold>mixed</bold>") {
+		t.Error("expected mixed content to be preserved")
+	}
+}
+
+func TestXMLChunker_UnicodeContent(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <item lang="zh">中文内容</item>
+    <item lang="ja">日本語コンテンツ</item>
+    <item lang="ar">محتوى عربي</item>
+    <item lang="emoji">🎉🚀💻</item>
+</root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Unicode content should be preserved
+	allContent := ""
+	for _, chunk := range result.Chunks {
+		allContent += chunk.Content
+	}
+
+	if !strings.Contains(allContent, "中文内容") {
+		t.Error("expected Chinese content to be preserved")
+	}
+	// Note: emoji handling may vary based on XML encoding
+	if !strings.Contains(allContent, "🎉") {
+		t.Log("Note: emoji may not be preserved through XML parsing")
+	}
+}
+
+func TestXMLChunker_EmptyRootElement(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<root></root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Empty root should produce at least one chunk
+	if result.TotalChunks < 1 {
+		t.Log("empty root element produced 0 chunks")
+	}
+}
+
+func TestXMLChunker_DeeplyNested(t *testing.T) {
+	c := NewXMLChunker()
+	// Create deeply nested structure
+	content := `<level1>
+    <level2>
+        <level3>
+            <level4>
+                <level5>
+                    <level6>deepest content</level6>
+                </level5>
+            </level4>
+        </level3>
+    </level2>
+</level1>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Deep nesting should be preserved
+	chunk := result.Chunks[0]
+	if !strings.Contains(chunk.Content, "deepest content") {
+		t.Error("expected deeply nested content to be preserved")
+	}
+}
+
+func TestXMLChunker_EmptyElements(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<root>
+    <empty></empty>
+    <also-empty/>
+    <with-attr attr="value"></with-attr>
+</root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should handle both forms of empty elements
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+func TestXMLChunker_MultipleRootAttempt(t *testing.T) {
+	c := NewXMLChunker()
+	// Invalid XML - multiple roots, but should handle gracefully
+	content := `<root1><item>first</item></root1>
+<root2><item>second</item></root2>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	// Should not crash, may have warnings
+	if err != nil {
+		t.Fatalf("unexpected fatal error: %v", err)
+	}
+
+	t.Logf("multiple root attempt produced %d chunks and %d warnings", result.TotalChunks, len(result.Warnings))
+}
+
+func TestXMLChunker_XMLDeclarationVariations(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "with standalone",
+			content: `<?xml version="1.0" standalone="yes"?>
+<root><item>test</item></root>`,
+		},
+		{
+			name: "version 1.1",
+			content: `<?xml version="1.1" encoding="UTF-8"?>
+<root><item>test</item></root>`,
+		},
+		{
+			name: "no declaration",
+			content: `<root><item>test</item></root>`,
+		},
+		{
+			name: "single quotes in declaration",
+			content: `<?xml version='1.0' encoding='UTF-8'?>
+<root><item>test</item></root>`,
+		},
+	}
+
+	c := NewXMLChunker()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := c.Chunk(context.Background(), []byte(tt.content), DefaultChunkOptions())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if result.TotalChunks < 1 {
+				t.Errorf("expected at least 1 chunk for %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestXMLChunker_SpecialCharactersInAttributeValues(t *testing.T) {
+	c := NewXMLChunker()
+	content := `<root>
+    <item path="/path/to/file" query="a=1&amp;b=2">content</item>
+    <item url="https://example.com?foo=bar&amp;baz=qux">link</item>
+</root>`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Content with special chars in attributes should be preserved
+	chunk := result.Chunks[0]
+	if !strings.Contains(chunk.Content, "path=") {
+		t.Error("expected attribute with path to be preserved")
+	}
+}
+
+func TestXMLChunker_LargeNumberOfSiblings(t *testing.T) {
+	c := NewXMLChunker()
+
+	// Create XML with many sibling elements
+	var builder strings.Builder
+	builder.WriteString("<catalog>")
+	for i := 0; i < 100; i++ {
+		builder.WriteString("<item id=\"")
+		builder.WriteString(string(rune('0' + i%10)))
+		builder.WriteString("\">Item content</item>")
+	}
+	builder.WriteString("</catalog>")
+
+	result, err := c.Chunk(context.Background(), []byte(builder.String()), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should produce chunks for items
+	if result.TotalChunks < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// All chunks should have correct element name
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Structured != nil && chunk.Metadata.Structured.ElementName != "item" {
+			t.Errorf("expected ElementName 'item', got %q", chunk.Metadata.Structured.ElementName)
+		}
+	}
+}

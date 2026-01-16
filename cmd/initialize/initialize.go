@@ -181,8 +181,8 @@ func runInteractive(cfg *config.Config, stepList []initialize.Step) error {
 		return fmt.Errorf("wizard failed; %w", err)
 	}
 
-	if result.Cancelled {
-		slog.Info("wizard cancelled by user")
+	if result.Canceled {
+		slog.Info("wizard canceled by user")
 		return nil
 	}
 
@@ -280,4 +280,3 @@ func writeConfig(cfg *config.Config) error {
 	slog.Info("configuration written successfully", "path", configPath)
 	return nil
 }
-

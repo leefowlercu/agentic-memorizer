@@ -602,8 +602,8 @@ This section has emojis.
 
 	// Verify specific headings are found
 	expectedHeadings := map[string]bool{
-		"日本語のタイトル":       false,
-		"Привет мир":       false,
+		"日本語のタイトル":            false,
+		"Привет мир":          false,
 		"Émojis 🎉 in heading": false,
 	}
 	for _, h := range headings {

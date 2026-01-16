@@ -5,8 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 var (
@@ -58,7 +59,7 @@ func runReset(cmd *cobra.Command, args []string) error {
 		fmt.Scanln(&response)
 
 		if response != "y" && response != "Y" {
-			fmt.Println("Reset cancelled.")
+			fmt.Println("Reset canceled.")
 			return nil
 		}
 	}

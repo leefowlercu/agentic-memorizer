@@ -30,7 +30,7 @@ type Component interface {
 	Name() string
 
 	// Start initializes and starts the component.
-	// The context may be cancelled to abort startup.
+	// The context may be canceled to abort startup.
 	// Returns error if startup fails.
 	Start(ctx context.Context) error
 

@@ -393,7 +393,7 @@ func TestIsEditorNoise(t *testing.T) {
 		{"/test/normal.go", false},
 		{"/test/main.py", false},
 		{"/test/README.md", false},
-		{"/test/~temp", false}, // Starts with ~ but not backup file
+		{"/test/~temp", false},    // Starts with ~ but not backup file
 		{"/test/#partial", false}, // Starts with # but no trailing #
 	}
 

@@ -236,9 +236,9 @@ func TestLogChunker_TimestampExtraction(t *testing.T) {
 	c := &LogChunker{}
 
 	tests := []struct {
-		name     string
-		line     string
-		hasTime  bool
+		name    string
+		line    string
+		hasTime bool
 	}{
 		{"ISO8601", "2024-01-15T10:00:00.000Z INFO message", true},
 		{"ISO8601 no ms", "2024-01-15T10:00:00Z INFO message", true},

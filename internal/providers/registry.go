@@ -18,11 +18,11 @@ var (
 
 // Registry manages provider registration and lookup.
 type Registry struct {
-	mu                 sync.RWMutex
-	semanticProviders  map[string]SemanticProvider
+	mu                  sync.RWMutex
+	semanticProviders   map[string]SemanticProvider
 	embeddingsProviders map[string]EmbeddingsProvider
-	defaultSemantic    string
-	defaultEmbeddings  string
+	defaultSemantic     string
+	defaultEmbeddings   string
 }
 
 // NewRegistry creates a new provider registry.

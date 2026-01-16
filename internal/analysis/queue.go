@@ -59,20 +59,20 @@ type Queue struct {
 	retryDelay    time.Duration
 	queueCapacity int
 
-	state        QueueState
-	workChan     chan WorkItem
-	workers      []*Worker
-	wg           sync.WaitGroup
-	stopChan     chan struct{}
-	ctx          context.Context
-	cancelFn     context.CancelFunc
+	state    QueueState
+	workChan chan WorkItem
+	workers  []*Worker
+	wg       sync.WaitGroup
+	stopChan chan struct{}
+	ctx      context.Context
+	cancelFn context.CancelFunc
 
 	// Stats
-	processedCount          atomic.Int64
-	analysisFailedCount     atomic.Int64
-	persistenceFailedCount  atomic.Int64
-	activeWorkers           atomic.Int32
-	totalProcTime           atomic.Int64
+	processedCount         atomic.Int64
+	analysisFailedCount    atomic.Int64
+	persistenceFailedCount atomic.Int64
+	activeWorkers          atomic.Int32
+	totalProcTime          atomic.Int64
 }
 
 // QueueOption configures the analysis queue.

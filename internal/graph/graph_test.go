@@ -209,9 +209,9 @@ func TestFileNodeFields(t *testing.T) {
 func TestChunkNodeFields(t *testing.T) {
 	now := time.Now()
 	chunk := ChunkNode{
-		ID:               "chunk-1",
-		FilePath:         "/test/file.go",
-		Index:            0,
+		ID:          "chunk-1",
+		FilePath:    "/test/file.go",
+		Index:       0,
 		Content:     "func main() {}",
 		ContentHash: "xyz789",
 		StartOffset: 0,

@@ -31,7 +31,7 @@ RED    := \033[0;31m
 NC     := \033[0m
 CHECK  := \xE2\x9C\x93
 
-.PHONY: build build-nocolor install install-nocolor clean clean-nocolor test test-nocolor test-race test-race-nocolor
+.PHONY: build build-nocolor install install-nocolor clean clean-nocolor test test-nocolor test-race test-race-nocolor lint lint-nocolor lint-fix
 
 # Build with colored output
 build:
@@ -91,3 +91,20 @@ test-race-nocolor:
 	@printf "Running tests with race detector..."
 	@go test -race ./... -v
 	@printf " $(CHECK)\n"
+
+# Run golangci-lint
+lint:
+	@printf "Running linter..."
+	@golangci-lint run ./...
+	@printf " $(GREEN)$(CHECK)$(NC)\n"
+
+lint-nocolor:
+	@printf "Running linter..."
+	@golangci-lint run ./...
+	@printf " $(CHECK)\n"
+
+# Run golangci-lint with auto-fix
+lint-fix:
+	@printf "Running linter with auto-fix..."
+	@golangci-lint run --fix ./...
+	@printf " $(GREEN)$(CHECK)$(NC)\n"

@@ -6,9 +6,10 @@ import (
 
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 	"github.com/leefowlercu/agentic-memorizer/internal/testutil"
-	"github.com/spf13/cobra"
 )
 
 func TestRememberCmd_Basic(t *testing.T) {
@@ -680,7 +681,7 @@ func TestBuildUpdatedConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "nil existing config",
+			name:     "nil existing config",
 			existing: nil,
 			args:     []string{"/tmp/test", "--add-skip-ext=.log"},
 			check: func(t *testing.T, cfg *registry.PathConfig) {

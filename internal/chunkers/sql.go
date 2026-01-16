@@ -14,27 +14,27 @@ const (
 // SQL statement patterns
 var (
 	// DDL patterns
-	sqlCreateTableRegex    = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlAlterTableRegex     = regexp.MustCompile(`(?i)^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlDropTableRegex      = regexp.MustCompile(`(?i)^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlCreateIndexRegex    = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)\s+ON\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlCreateViewRegex     = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?(?:MATERIALIZED\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlCreateTriggerRegex  = regexp.MustCompile(`(?i)CREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)(?:\s|\n)+(?:BEFORE|AFTER|INSTEAD\s+OF).*?ON\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
+	sqlCreateTableRegex   = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlAlterTableRegex    = regexp.MustCompile(`(?i)^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlDropTableRegex     = regexp.MustCompile(`(?i)^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlCreateIndexRegex   = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)\s+ON\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlCreateViewRegex    = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?(?:MATERIALIZED\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlCreateTriggerRegex = regexp.MustCompile(`(?i)CREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)(?:\s|\n)+(?:BEFORE|AFTER|INSTEAD\s+OF).*?ON\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
 
 	// Procedure/Function patterns
-	sqlCreateFunctionRegex  = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlCreateProcedureRegex = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?PROCEDURE\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
+	sqlCreateFunctionRegex  = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlCreateProcedureRegex = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?PROCEDURE\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
 
 	// DML patterns
-	sqlInsertRegex = regexp.MustCompile(`(?i)^\s*INSERT\s+INTO\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlUpdateRegex = regexp.MustCompile(`(?i)^\s*UPDATE\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
-	sqlDeleteRegex = regexp.MustCompile(`(?i)^\s*DELETE\s+FROM\s+(["`+"`)"+`]?[\w.]+["`+"`)"+`]?)`)
+	sqlInsertRegex = regexp.MustCompile(`(?i)^\s*INSERT\s+INTO\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlUpdateRegex = regexp.MustCompile(`(?i)^\s*UPDATE\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
+	sqlDeleteRegex = regexp.MustCompile(`(?i)^\s*DELETE\s+FROM\s+(["` + "`)" + `]?[\w.]+["` + "`)" + `]?)`)
 	sqlSelectRegex = regexp.MustCompile(`(?i)^\s*SELECT\b`)
 
 	// Dialect detection patterns
-	sqlPostgresPatterns = []string{"SERIAL", "RETURNING", "::"}
-	sqlMySQLPatterns    = []string{"AUTO_INCREMENT", "ENGINE=", "CHARSET="}
-	sqlSQLitePatterns   = []string{"AUTOINCREMENT", "INTEGER PRIMARY KEY"}
+	sqlPostgresPatterns  = []string{"SERIAL", "RETURNING", "::"}
+	sqlMySQLPatterns     = []string{"AUTO_INCREMENT", "ENGINE=", "CHARSET="}
+	sqlSQLitePatterns    = []string{"AUTOINCREMENT", "INTEGER PRIMARY KEY"}
 	sqlSQLServerPatterns = []string{"IDENTITY(", "NVARCHAR", "TOP ", "WITH (NOLOCK)"}
 	sqlOraclePatterns    = []string{"NUMBER(", "VARCHAR2", "NVL(", "DECODE("}
 )
@@ -393,7 +393,7 @@ func (c *SQLChunker) parseStatement(text string) sqlStatement {
 // cleanIdentifier removes quotes and schema prefixes from an identifier.
 func (c *SQLChunker) cleanIdentifier(id string) string {
 	// Remove quotes
-	id = strings.Trim(id, `"'` + "`" + `[]`)
+	id = strings.Trim(id, `"'`+"`"+`[]`)
 
 	// Extract table name if schema-qualified
 	parts := strings.Split(id, ".")

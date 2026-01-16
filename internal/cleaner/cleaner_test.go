@@ -16,13 +16,13 @@ import (
 
 // mockRegistry implements registry.Registry for testing.
 type mockRegistry struct {
-	mu                    sync.Mutex
-	fileStates            map[string]registry.FileState
-	deletedPaths          []string
-	bulkDeletedPaths      []string
-	deleteError           error
-	bulkDeleteError       error
-	listStatesError       error
+	mu               sync.Mutex
+	fileStates       map[string]registry.FileState
+	deletedPaths     []string
+	bulkDeletedPaths []string
+	deleteError      error
+	bulkDeleteError  error
+	listStatesError  error
 }
 
 func newMockRegistry() *mockRegistry {
@@ -155,15 +155,15 @@ func (m *mockRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, err
 
 // mockGraph implements graph.Graph for testing.
 type mockGraph struct {
-	mu                        sync.Mutex
-	deletedPaths              []string
-	deletedDirectories        []string
-	deletedFilesUnderPaths    []string
-	deletedDirsUnderPaths     []string
-	deleteError               error
-	deleteDirectoryError      error
-	deleteFilesUnderError     error
-	deleteDirsUnderError      error
+	mu                     sync.Mutex
+	deletedPaths           []string
+	deletedDirectories     []string
+	deletedFilesUnderPaths []string
+	deletedDirsUnderPaths  []string
+	deleteError            error
+	deleteDirectoryError   error
+	deleteFilesUnderError  error
+	deleteDirsUnderError   error
 }
 
 func newMockGraph() *mockGraph {
@@ -738,7 +738,7 @@ func TestCleaner_Reconcile_RespectsContextCancellation(t *testing.T) {
 
 	c := New(reg, nil, bus)
 
-	// Create already-cancelled context
+	// Create already-canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

@@ -393,13 +393,17 @@ type mockEmbeddingsProvider struct {
 	embedding []float32
 }
 
-func (m *mockEmbeddingsProvider) Name() string                         { return "mock-embeddings" }
-func (m *mockEmbeddingsProvider) Type() providers.ProviderType         { return providers.ProviderTypeEmbeddings }
-func (m *mockEmbeddingsProvider) Available() bool                      { return m.available }
-func (m *mockEmbeddingsProvider) RateLimit() providers.RateLimitConfig { return providers.RateLimitConfig{} }
-func (m *mockEmbeddingsProvider) ModelName() string                    { return "mock-model" }
-func (m *mockEmbeddingsProvider) Dimensions() int                      { return len(m.embedding) }
-func (m *mockEmbeddingsProvider) MaxTokens() int                       { return 8192 }
+func (m *mockEmbeddingsProvider) Name() string { return "mock-embeddings" }
+func (m *mockEmbeddingsProvider) Type() providers.ProviderType {
+	return providers.ProviderTypeEmbeddings
+}
+func (m *mockEmbeddingsProvider) Available() bool { return m.available }
+func (m *mockEmbeddingsProvider) RateLimit() providers.RateLimitConfig {
+	return providers.RateLimitConfig{}
+}
+func (m *mockEmbeddingsProvider) ModelName() string { return "mock-model" }
+func (m *mockEmbeddingsProvider) Dimensions() int   { return len(m.embedding) }
+func (m *mockEmbeddingsProvider) MaxTokens() int    { return 8192 }
 func (m *mockEmbeddingsProvider) Embed(ctx context.Context, req providers.EmbeddingsRequest) (*providers.EmbeddingsResult, error) {
 	return &providers.EmbeddingsResult{Embedding: m.embedding, Dimensions: len(m.embedding)}, nil
 }
@@ -417,13 +421,15 @@ type mockSemanticProvider struct {
 	summaries map[int]string // Map chunk index to summary
 }
 
-func (m *mockSemanticProvider) Name() string                         { return "mock-semantic" }
-func (m *mockSemanticProvider) Type() providers.ProviderType         { return providers.ProviderTypeSemantic }
-func (m *mockSemanticProvider) Available() bool                      { return m.available }
-func (m *mockSemanticProvider) RateLimit() providers.RateLimitConfig { return providers.RateLimitConfig{} }
-func (m *mockSemanticProvider) SupportedMIMETypes() []string         { return []string{"text/plain"} }
-func (m *mockSemanticProvider) MaxContentSize() int64                { return 100000 }
-func (m *mockSemanticProvider) SupportsVision() bool                 { return false }
+func (m *mockSemanticProvider) Name() string                 { return "mock-semantic" }
+func (m *mockSemanticProvider) Type() providers.ProviderType { return providers.ProviderTypeSemantic }
+func (m *mockSemanticProvider) Available() bool              { return m.available }
+func (m *mockSemanticProvider) RateLimit() providers.RateLimitConfig {
+	return providers.RateLimitConfig{}
+}
+func (m *mockSemanticProvider) SupportedMIMETypes() []string { return []string{"text/plain"} }
+func (m *mockSemanticProvider) MaxContentSize() int64        { return 100000 }
+func (m *mockSemanticProvider) SupportsVision() bool         { return false }
 func (m *mockSemanticProvider) Analyze(ctx context.Context, req providers.SemanticRequest) (*providers.SemanticResult, error) {
 	summary := "Default summary"
 	// Check if this is for a specific chunk (content-based lookup would be ideal, but for testing we use a simple approach)
@@ -445,33 +451,57 @@ type mockGraph struct {
 	chunks []*graph.ChunkNode
 }
 
-func (m *mockGraph) Name() string                                    { return "mock-graph" }
-func (m *mockGraph) Start(ctx context.Context) error                 { return nil }
-func (m *mockGraph) Stop(ctx context.Context) error                  { return nil }
-func (m *mockGraph) IsConnected() bool                               { return true }
+func (m *mockGraph) Name() string                                               { return "mock-graph" }
+func (m *mockGraph) Start(ctx context.Context) error                            { return nil }
+func (m *mockGraph) Stop(ctx context.Context) error                             { return nil }
+func (m *mockGraph) IsConnected() bool                                          { return true }
 func (m *mockGraph) UpsertFile(ctx context.Context, file *graph.FileNode) error { return nil }
-func (m *mockGraph) DeleteFile(ctx context.Context, path string) error { return nil }
-func (m *mockGraph) GetFile(ctx context.Context, path string) (*graph.FileNode, error) { return nil, nil }
+func (m *mockGraph) DeleteFile(ctx context.Context, path string) error          { return nil }
+func (m *mockGraph) GetFile(ctx context.Context, path string) (*graph.FileNode, error) {
+	return nil, nil
+}
 func (m *mockGraph) UpsertDirectory(ctx context.Context, dir *graph.DirectoryNode) error { return nil }
-func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error { return nil }
-func (m *mockGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error { return nil }
-func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error { return nil }
+func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error              { return nil }
+func (m *mockGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error   { return nil }
+func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error {
+	return nil
+}
 func (m *mockGraph) UpsertChunkWithMetadata(ctx context.Context, chunk *graph.ChunkNode, meta *chunkers.ChunkMetadata) error {
 	m.chunks = append(m.chunks, chunk)
 	return nil
 }
-func (m *mockGraph) UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *graph.ChunkEmbeddingNode) error { return nil }
-func (m *mockGraph) DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error { return nil }
-func (m *mockGraph) DeleteChunks(ctx context.Context, path string) error { return nil }
+func (m *mockGraph) UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *graph.ChunkEmbeddingNode) error {
+	return nil
+}
+func (m *mockGraph) DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error {
+	return nil
+}
+func (m *mockGraph) DeleteChunks(ctx context.Context, path string) error               { return nil }
 func (m *mockGraph) SetFileTags(ctx context.Context, path string, tags []string) error { return nil }
-func (m *mockGraph) SetFileTopics(ctx context.Context, path string, topics []graph.Topic) error { return nil }
-func (m *mockGraph) SetFileEntities(ctx context.Context, path string, entities []graph.Entity) error { return nil }
-func (m *mockGraph) SetFileReferences(ctx context.Context, path string, refs []graph.Reference) error { return nil }
-func (m *mockGraph) Query(ctx context.Context, cypher string) (*graph.QueryResult, error) { return nil, nil }
-func (m *mockGraph) HasEmbedding(ctx context.Context, contentHash string, version int) (bool, error) { return false, nil }
-func (m *mockGraph) ExportSnapshot(ctx context.Context) (*graph.GraphSnapshot, error) { return nil, nil }
-func (m *mockGraph) GetFileWithRelations(ctx context.Context, path string) (*graph.FileWithRelations, error) { return nil, nil }
-func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkNode, error) { return nil, nil }
+func (m *mockGraph) SetFileTopics(ctx context.Context, path string, topics []graph.Topic) error {
+	return nil
+}
+func (m *mockGraph) SetFileEntities(ctx context.Context, path string, entities []graph.Entity) error {
+	return nil
+}
+func (m *mockGraph) SetFileReferences(ctx context.Context, path string, refs []graph.Reference) error {
+	return nil
+}
+func (m *mockGraph) Query(ctx context.Context, cypher string) (*graph.QueryResult, error) {
+	return nil, nil
+}
+func (m *mockGraph) HasEmbedding(ctx context.Context, contentHash string, version int) (bool, error) {
+	return false, nil
+}
+func (m *mockGraph) ExportSnapshot(ctx context.Context) (*graph.GraphSnapshot, error) {
+	return nil, nil
+}
+func (m *mockGraph) GetFileWithRelations(ctx context.Context, path string) (*graph.FileWithRelations, error) {
+	return nil, nil
+}
+func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkNode, error) {
+	return nil, nil
+}
 
 func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 	bus := events.NewBus()

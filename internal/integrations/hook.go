@@ -230,8 +230,8 @@ func (h *HookIntegration) addHooksToConfig(content map[string]any) error {
 	// Add each hook
 	for _, hook := range h.hooks {
 		hookEntry := map[string]any{
-			"matcher":    hook.Matcher,
-			"hooks":      []any{hook.Command},
+			"matcher": hook.Matcher,
+			"hooks":   []any{hook.Command},
 		}
 		if hook.Timeout > 0 {
 			hookEntry["timeout"] = hook.Timeout

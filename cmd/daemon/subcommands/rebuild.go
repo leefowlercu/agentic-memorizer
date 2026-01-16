@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 var (

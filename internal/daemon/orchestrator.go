@@ -642,7 +642,7 @@ func (o *Orchestrator) walkRememberedPaths(ctx context.Context) {
 	result, err := o.handleRebuild(ctx, true) // Full rebuild on daemon start
 	if err != nil {
 		if ctx.Err() != nil {
-			slog.Debug("initial walk cancelled")
+			slog.Debug("initial walk canceled")
 			return
 		}
 		slog.Warn("initial walk failed", "error", err)

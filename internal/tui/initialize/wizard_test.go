@@ -133,8 +133,8 @@ func TestWizardModel_Cancel(t *testing.T) {
 	model, cmd := wizard.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	wizard = model.(WizardModel)
 
-	if !wizard.cancelled {
-		t.Error("expected wizard to be cancelled")
+	if !wizard.canceled {
+		t.Error("expected wizard to be canceled")
 	}
 
 	// Should return quit command
@@ -146,7 +146,7 @@ func TestWizardModel_Cancel(t *testing.T) {
 func TestWizardResult(t *testing.T) {
 	result := WizardResult{
 		Confirmed: true,
-		Cancelled: false,
+		Canceled:  false,
 		Err:       nil,
 	}
 
@@ -154,8 +154,8 @@ func TestWizardResult(t *testing.T) {
 		t.Error("expected Confirmed to be true")
 	}
 
-	if result.Cancelled {
-		t.Error("expected Cancelled to be false")
+	if result.Canceled {
+		t.Error("expected Canceled to be false")
 	}
 
 	if result.Err != nil {

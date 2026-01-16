@@ -2,8 +2,9 @@
 package daemon
 
 import (
-	"github.com/leefowlercu/agentic-memorizer/cmd/daemon/subcommands"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/cmd/daemon/subcommands"
 )
 
 // DaemonCmd is the parent command for all daemon-related subcommands.

@@ -8,16 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
-	"github.com/spf13/cobra"
 )
 
 // DaemonStatus holds the status information about the daemon.
 type DaemonStatus struct {
-	Running      bool                `json:"running"`
-	PID          int                 `json:"pid,omitempty"`
-	StalePIDFile bool                `json:"stale_pid_file,omitempty"`
+	Running      bool                 `json:"running"`
+	PID          int                  `json:"pid,omitempty"`
+	StalePIDFile bool                 `json:"stale_pid_file,omitempty"`
 	Health       *daemon.HealthStatus `json:"health,omitempty"`
 }
 

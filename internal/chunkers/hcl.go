@@ -278,10 +278,11 @@ func (c *HCLChunker) findBlockEnd(content []byte, start int) int {
 			continue
 		}
 
-		if ch == '{' {
+		switch ch {
+		case '{':
 			braceCount++
 			foundFirstBrace = true
-		} else if ch == '}' {
+		case '}':
 			braceCount--
 			if foundFirstBrace && braceCount == 0 {
 				return i + 1

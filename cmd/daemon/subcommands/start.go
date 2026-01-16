@@ -9,9 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
-	"github.com/spf13/cobra"
 )
 
 // StartCmd starts the daemon in foreground mode.

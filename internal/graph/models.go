@@ -26,24 +26,24 @@ const (
 
 // Relationship types for the graph schema.
 const (
-	RelContains        = "CONTAINS"         // Directory -> File/Directory
-	RelHasChunk        = "HAS_CHUNK"        // File -> Chunk
-	RelHasTag          = "HAS_TAG"          // File -> Tag
-	RelCoversTopic     = "COVERS_TOPIC"     // File -> Topic
-	RelMentions        = "MENTIONS"         // File/Chunk -> Entity
-	RelReferences      = "REFERENCES"       // File/Chunk -> File/URL
-	RelSimilarTo       = "SIMILAR_TO"       // Chunk -> Chunk (semantic similarity)
-	RelDependsOn       = "DEPENDS_ON"       // File -> File (code dependencies)
-	RelHasCodeMeta     = "HAS_CODE_META"    // Chunk -> CodeMeta
-	RelHasDocMeta      = "HAS_DOC_META"     // Chunk -> DocumentMeta
+	RelContains        = "CONTAINS"          // Directory -> File/Directory
+	RelHasChunk        = "HAS_CHUNK"         // File -> Chunk
+	RelHasTag          = "HAS_TAG"           // File -> Tag
+	RelCoversTopic     = "COVERS_TOPIC"      // File -> Topic
+	RelMentions        = "MENTIONS"          // File/Chunk -> Entity
+	RelReferences      = "REFERENCES"        // File/Chunk -> File/URL
+	RelSimilarTo       = "SIMILAR_TO"        // Chunk -> Chunk (semantic similarity)
+	RelDependsOn       = "DEPENDS_ON"        // File -> File (code dependencies)
+	RelHasCodeMeta     = "HAS_CODE_META"     // Chunk -> CodeMeta
+	RelHasDocMeta      = "HAS_DOC_META"      // Chunk -> DocumentMeta
 	RelHasNotebookMeta = "HAS_NOTEBOOK_META" // Chunk -> NotebookMeta
-	RelHasBuildMeta    = "HAS_BUILD_META"   // Chunk -> BuildMeta
-	RelHasInfraMeta    = "HAS_INFRA_META"   // Chunk -> InfraMeta
-	RelHasSchemaMeta   = "HAS_SCHEMA_META"  // Chunk -> SchemaMeta
-	RelHasStructMeta   = "HAS_STRUCT_META"  // Chunk -> StructuredMeta
-	RelHasSQLMeta      = "HAS_SQL_META"     // Chunk -> SQLMeta
-	RelHasLogMeta      = "HAS_LOG_META"     // Chunk -> LogMeta
-	RelHasEmbedding    = "HAS_EMBEDDING"    // Chunk -> ChunkEmbedding
+	RelHasBuildMeta    = "HAS_BUILD_META"    // Chunk -> BuildMeta
+	RelHasInfraMeta    = "HAS_INFRA_META"    // Chunk -> InfraMeta
+	RelHasSchemaMeta   = "HAS_SCHEMA_META"   // Chunk -> SchemaMeta
+	RelHasStructMeta   = "HAS_STRUCT_META"   // Chunk -> StructuredMeta
+	RelHasSQLMeta      = "HAS_SQL_META"      // Chunk -> SQLMeta
+	RelHasLogMeta      = "HAS_LOG_META"      // Chunk -> LogMeta
+	RelHasEmbedding    = "HAS_EMBEDDING"     // Chunk -> ChunkEmbedding
 )
 
 // FileNode represents a file in the knowledge graph.
@@ -200,12 +200,12 @@ type InfraMetaNode struct {
 
 // SchemaMetaNode stores schema definition metadata for a chunk.
 type SchemaMetaNode struct {
-	MessageName    string   `json:"message_name,omitempty"`
-	ServiceName    string   `json:"service_name,omitempty"`
-	RPCName        string   `json:"rpc_name,omitempty"`
-	TypeName       string   `json:"type_name,omitempty"`
-	Fields         []string `json:"fields,omitempty"`
-	IsDeprecated   bool     `json:"is_deprecated,omitempty"`
+	MessageName  string   `json:"message_name,omitempty"`
+	ServiceName  string   `json:"service_name,omitempty"`
+	RPCName      string   `json:"rpc_name,omitempty"`
+	TypeName     string   `json:"type_name,omitempty"`
+	Fields       []string `json:"fields,omitempty"`
+	IsDeprecated bool     `json:"is_deprecated,omitempty"`
 }
 
 // StructuredMetaNode stores structured data metadata for a chunk.
@@ -346,12 +346,12 @@ type QueryResult struct {
 
 // QueryStats contains statistics about query execution.
 type QueryStats struct {
-	NodesCreated      int
-	NodesDeleted      int
-	RelationsCreated  int
-	RelationsDeleted  int
-	PropertiesSet     int
-	ExecutionTimeMs   float64
+	NodesCreated     int
+	NodesDeleted     int
+	RelationsCreated int
+	RelationsDeleted int
+	PropertiesSet    int
+	ExecutionTimeMs  float64
 }
 
 // GraphSnapshot contains a point-in-time snapshot of the graph.
@@ -386,10 +386,10 @@ type GraphSnapshot struct {
 
 // FileWithRelations contains a file node with its related data.
 type FileWithRelations struct {
-	File       FileNode   `json:"file"`
-	Tags       []string   `json:"tags"`
-	Topics     []Topic    `json:"topics"`
-	Entities   []Entity   `json:"entities"`
+	File       FileNode    `json:"file"`
+	Tags       []string    `json:"tags"`
+	Topics     []Topic     `json:"topics"`
+	Entities   []Entity    `json:"entities"`
 	References []Reference `json:"references"`
-	ChunkCount int        `json:"chunk_count"`
+	ChunkCount int         `json:"chunk_count"`
 }

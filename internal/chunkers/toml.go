@@ -371,4 +371,3 @@ func (c *TOMLChunker) splitLargeTable(ctx context.Context, table tomlTable, maxS
 
 	return chunks
 }
-

@@ -6,8 +6,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/integrations"
 )
 
 // Flag variables

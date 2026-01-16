@@ -165,10 +165,11 @@ func (c *AsciiDocChunker) splitBySections(text string) []asciidocSection {
 		// Track delimited blocks to avoid false positives
 		// Check for block delimiters: ---- (source), .... (literal), //// (comment), ++++ (passthrough), **** (sidebar), ____ (quote)
 		if delimiter := c.getBlockDelimiter(trimmed); delimiter != "" {
-			if currentBlockDelimiter == "" {
+			switch currentBlockDelimiter {
+			case "":
 				// Opening a new block
 				currentBlockDelimiter = delimiter
-			} else if currentBlockDelimiter == delimiter {
+			case delimiter:
 				// Closing the current block (same delimiter type)
 				currentBlockDelimiter = ""
 			}

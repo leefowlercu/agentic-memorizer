@@ -69,7 +69,7 @@ type ChunkOptions struct {
 // DefaultChunkOptions returns sensible default chunking options.
 func DefaultChunkOptions() ChunkOptions {
 	return ChunkOptions{
-		MaxChunkSize:      8000,  // ~2000 tokens for most content
+		MaxChunkSize:      8000, // ~2000 tokens for most content
 		MaxTokens:         2000,
 		Overlap:           200,
 		PreserveStructure: true,

@@ -3,8 +3,9 @@ package version
 import (
 	"fmt"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/version"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/version"
 )
 
 // VersionCmd displays version and build information.

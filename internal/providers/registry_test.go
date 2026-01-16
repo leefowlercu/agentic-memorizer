@@ -11,13 +11,13 @@ type mockSemanticProvider struct {
 	available bool
 }
 
-func (p *mockSemanticProvider) Name() string                   { return p.name }
-func (p *mockSemanticProvider) Type() ProviderType             { return ProviderTypeSemantic }
-func (p *mockSemanticProvider) Available() bool                { return p.available }
-func (p *mockSemanticProvider) RateLimit() RateLimitConfig     { return RateLimitConfig{} }
-func (p *mockSemanticProvider) SupportedMIMETypes() []string   { return nil }
-func (p *mockSemanticProvider) MaxContentSize() int64          { return 0 }
-func (p *mockSemanticProvider) SupportsVision() bool           { return false }
+func (p *mockSemanticProvider) Name() string                 { return p.name }
+func (p *mockSemanticProvider) Type() ProviderType           { return ProviderTypeSemantic }
+func (p *mockSemanticProvider) Available() bool              { return p.available }
+func (p *mockSemanticProvider) RateLimit() RateLimitConfig   { return RateLimitConfig{} }
+func (p *mockSemanticProvider) SupportedMIMETypes() []string { return nil }
+func (p *mockSemanticProvider) MaxContentSize() int64        { return 0 }
+func (p *mockSemanticProvider) SupportsVision() bool         { return false }
 func (p *mockSemanticProvider) Analyze(ctx context.Context, req SemanticRequest) (*SemanticResult, error) {
 	return nil, nil
 }

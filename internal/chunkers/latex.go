@@ -316,7 +316,7 @@ func (c *LaTeXChunker) splitPreservingMath(content string) []string {
 		"multline": true, "multline*": true,
 		"eqnarray": true, "eqnarray*": true,
 		"displaymath": true,
-		"math": true,
+		"math":        true,
 	}
 
 	lines := strings.Split(content, "\n")

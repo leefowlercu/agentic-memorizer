@@ -255,10 +255,11 @@ func (c *ProtobufChunker) findDefinitionEnd(lines []string, startLine int) int {
 	for i := startLine; i < len(lines); i++ {
 		line := lines[i]
 		for _, ch := range line {
-			if ch == '{' {
+			switch ch {
+			case '{':
 				braceCount++
 				foundFirstBrace = true
-			} else if ch == '}' {
+			case '}':
 				braceCount--
 				if foundFirstBrace && braceCount == 0 {
 					return i + 1 // Return next line (exclusive)

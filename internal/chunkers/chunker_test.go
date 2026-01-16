@@ -14,8 +14,8 @@ func TestEstimateTokens(t *testing.T) {
 		expected int
 	}{
 		{"empty string", "", 0},
-		{"short text", "hello", 1},                                                                                                                      // tiktoken: 1 token
-		{"medium text", "hello world, this is a test", 7},                                                                                               // tiktoken: 7 tokens
+		{"short text", "hello", 1},                        // tiktoken: 1 token
+		{"medium text", "hello world, this is a test", 7}, // tiktoken: 7 tokens
 		{"long text", "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.", 22}, // tiktoken: 22 tokens
 	}
 
@@ -1179,7 +1179,7 @@ list:
 		for i := 0; i < 100; i++ {
 			items = append(items, fmt.Sprintf(`{"id": %d}`, i))
 		}
-		content := []byte("[" + fmt.Sprintf("%s", items[0]))
+		content := []byte("[" + items[0])
 		for i := 1; i < len(items); i++ {
 			content = append(content, ',')
 			content = append(content, items[i]...)

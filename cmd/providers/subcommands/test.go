@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
 // TestCmd tests connectivity to an AI provider.

@@ -191,7 +191,7 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 		// Check context periodically (every 100 files) to support cancellation
 		if i%100 == 0 {
 			if err := ctx.Err(); err != nil {
-				c.logger.Debug("reconciliation cancelled", "processed", i, "total", len(states))
+				c.logger.Debug("reconciliation canceled", "processed", i, "total", len(states))
 				result.Duration = time.Since(start)
 				return result, err
 			}

@@ -671,7 +671,7 @@ func TestXMLChunker_XMLDeclarationVariations(t *testing.T) {
 <root><item>test</item></root>`,
 		},
 		{
-			name: "no declaration",
+			name:    "no declaration",
 			content: `<root><item>test</item></root>`,
 		},
 		{

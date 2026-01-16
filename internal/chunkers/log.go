@@ -366,4 +366,3 @@ func (c *LogChunker) parseTimestamp(ts string) time.Time {
 
 	return time.Time{}
 }
-

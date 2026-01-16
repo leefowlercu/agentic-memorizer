@@ -2,8 +2,9 @@
 package config
 
 import (
-	"github.com/leefowlercu/agentic-memorizer/cmd/config/subcommands"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/cmd/config/subcommands"
 )
 
 // ConfigCmd is the parent command for all config-related subcommands.

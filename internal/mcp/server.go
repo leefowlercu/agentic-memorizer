@@ -6,21 +6,22 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/export"
-	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/export"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 )
 
 // Server wraps the MCP server with memorizer-specific functionality.
 type Server struct {
-	mcpServer  *server.MCPServer
-	sseServer  *server.SSEServer
-	graph      graph.Graph
-	exporter   *export.Exporter
-	subs       *SubscriptionManager
-	mu         sync.RWMutex
-	running    bool
+	mcpServer *server.MCPServer
+	sseServer *server.SSEServer
+	graph     graph.Graph
+	exporter  *export.Exporter
+	subs      *SubscriptionManager
+	mu        sync.RWMutex
+	running   bool
 }
 
 // Config contains MCP server configuration.

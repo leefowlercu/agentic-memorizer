@@ -161,7 +161,7 @@ func (d *Daemon) TriggerConfigReload() {
 	}
 }
 
-// Start starts the daemon and blocks until the context is cancelled.
+// Start starts the daemon and blocks until the context is canceled.
 // It claims the PID file, starts all components, starts the HTTP server,
 // and then blocks until shutdown is requested.
 func (d *Daemon) Start(ctx context.Context) error {

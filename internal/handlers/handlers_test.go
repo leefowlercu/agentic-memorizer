@@ -237,7 +237,7 @@ func TestStructuredDataHandler_JSON(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "data.json")
 
 	data := map[string]any{
-		"name": "test",
+		"name":  "test",
 		"count": 42,
 		"items": []any{"a", "b", "c"},
 	}
@@ -532,6 +532,6 @@ func TestContextCancellation(t *testing.T) {
 
 	_, err := h.Extract(ctx, testFile, 7)
 	if err == nil {
-		t.Error("expected error for cancelled context")
+		t.Error("expected error for canceled context")
 	}
 }

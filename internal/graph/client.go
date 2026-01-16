@@ -12,6 +12,7 @@ import (
 
 	"github.com/RedisGraph/redisgraph-go"
 	"github.com/gomodule/redigo/redis"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 )
@@ -1581,11 +1582,12 @@ func getBoolFromRecord(record *redisgraph.Record, index int) bool {
 func escapeString(s string) string {
 	result := ""
 	for _, c := range s {
-		if c == '\'' {
+		switch c {
+		case '\'':
 			result += "\\'"
-		} else if c == '\\' {
+		case '\\':
 			result += "\\\\"
-		} else {
+		default:
 			result += string(c)
 		}
 	}

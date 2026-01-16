@@ -30,8 +30,8 @@ type WizardResult struct {
 	Config *config.Config
 	// Confirmed indicates whether the user confirmed the configuration.
 	Confirmed bool
-	// Cancelled indicates whether the user cancelled the wizard.
-	Cancelled bool
+	// Canceled indicates whether the user canceled the wizard.
+	Canceled bool
 	// Err contains any error that occurred during the wizard.
 	Err error
 }
@@ -43,7 +43,7 @@ type WizardModel struct {
 	config      *config.Config
 	progress    components.Progress
 	err         error
-	cancelled   bool
+	canceled    bool
 	confirmed   bool
 	quitting    bool
 	width       int
@@ -84,8 +84,8 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
-			slog.Debug("wizard cancelled via Ctrl+C")
-			m.cancelled = true
+			slog.Debug("wizard canceled via Ctrl+C")
+			m.canceled = true
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -116,8 +116,8 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the wizard UI.
 func (m WizardModel) View() string {
 	if m.quitting {
-		if m.cancelled {
-			return styles.ErrorText.Render("Initialization cancelled.") + "\n"
+		if m.canceled {
+			return styles.ErrorText.Render("Initialization canceled.") + "\n"
 		}
 		return ""
 	}
@@ -218,7 +218,7 @@ func (m WizardModel) Result() WizardResult {
 	return WizardResult{
 		Config:    m.config,
 		Confirmed: m.confirmed,
-		Cancelled: m.cancelled,
+		Canceled:  m.canceled,
 		Err:       m.err,
 	}
 }

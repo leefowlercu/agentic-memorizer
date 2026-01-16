@@ -254,7 +254,7 @@ func TestBus_ContextCancellation(t *testing.T) {
 	// First event fills the buffer
 	bus.Publish(context.Background(), NewEvent(FileDiscovered, nil))
 
-	// Second event with cancelled context
+	// Second event with canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

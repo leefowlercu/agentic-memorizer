@@ -14,17 +14,17 @@ type UnattendedConfig struct {
 	GraphPort int
 
 	// Semantic provider configuration
-	SemanticProvider   string
-	SemanticModel      string
-	SemanticAPIKey     string
+	SemanticProvider     string
+	SemanticModel        string
+	SemanticAPIKey       string
 	SemanticAPIKeySource string // "flag", "MEMORIZER_SEMANTIC_API_KEY", or provider env var name
 
 	// Embeddings configuration
-	EmbeddingsEnabled    bool
-	EmbeddingsProvider   string
-	EmbeddingsModel      string
-	EmbeddingsDimensions int
-	EmbeddingsAPIKey     string
+	EmbeddingsEnabled      bool
+	EmbeddingsProvider     string
+	EmbeddingsModel        string
+	EmbeddingsDimensions   int
+	EmbeddingsAPIKey       string
 	EmbeddingsAPIKeySource string // "flag", "MEMORIZER_EMBEDDINGS_API_KEY", or provider env var name
 
 	// Daemon configuration

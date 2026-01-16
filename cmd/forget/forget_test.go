@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 	"github.com/leefowlercu/agentic-memorizer/internal/testutil"
-	"github.com/spf13/cobra"
 )
 
 func TestForgetCmd_Basic(t *testing.T) {

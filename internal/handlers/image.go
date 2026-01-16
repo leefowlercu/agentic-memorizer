@@ -20,8 +20,8 @@ const DefaultMaxImageSize = 50 * 1024 * 1024
 
 // ImageHandler handles image files with optional vision API support.
 type ImageHandler struct {
-	maxSize    int64
-	useVision  bool
+	maxSize   int64
+	useVision bool
 }
 
 // ImageHandlerOption configures the ImageHandler.

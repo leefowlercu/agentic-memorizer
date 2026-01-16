@@ -41,12 +41,12 @@ const (
 type ServiceInstallStep struct {
 	BaseStep
 
-	radio         components.RadioGroup
-	state         installState
-	progressMsg   string
-	resultMsg     string
-	err           error
-	cfg           *config.Config
+	radio          components.RadioGroup
+	state          installState
+	progressMsg    string
+	resultMsg      string
+	err            error
+	cfg            *config.Config
 	managerFactory func() (servicemanager.DaemonManager, error)
 }
 

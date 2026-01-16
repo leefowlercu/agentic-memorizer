@@ -168,14 +168,14 @@ func TestFormatTextOutput(t *testing.T) {
 
 func TestFormatTextOutput_EmbeddingsDisabled(t *testing.T) {
 	resolved := &UnattendedConfig{
-		GraphHost:         "localhost",
-		GraphPort:         6379,
-		SemanticProvider:  "anthropic",
-		SemanticModel:     "claude-sonnet-4-5-20250929",
-		SemanticAPIKey:    "key",
+		GraphHost:            "localhost",
+		GraphPort:            6379,
+		SemanticProvider:     "anthropic",
+		SemanticModel:        "claude-sonnet-4-5-20250929",
+		SemanticAPIKey:       "key",
 		SemanticAPIKeySource: "flag",
-		EmbeddingsEnabled: false,
-		HTTPPort:          7600,
+		EmbeddingsEnabled:    false,
+		HTTPPort:             7600,
 	}
 
 	output := formatTextOutput(resolved)

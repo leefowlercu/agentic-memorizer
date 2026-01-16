@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 var (

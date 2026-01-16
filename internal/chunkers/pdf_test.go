@@ -280,7 +280,7 @@ func TestPDFChunker_EdgeCases(t *testing.T) {
 	t.Run("ContextCancellation", func(t *testing.T) {
 		// Note: PDF chunker parses content before checking context in the chunking loop.
 		// For empty/minimal PDFs that parse quickly, cancellation may not be detected.
-		// This test verifies the chunker handles cancelled context gracefully.
+		// This test verifies the chunker handles canceled context gracefully.
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 

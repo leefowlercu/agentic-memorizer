@@ -161,7 +161,7 @@ func DefaultRegistry() *Registry {
 	r.Register(NewLaTeXChunker())    // Priority 53: LaTeX
 
 	// Other chunkers
-	r.Register(NewMarkdownChunker())   // Priority 50: Markdown documents
+	r.Register(NewMarkdownChunker()) // Priority 50: Markdown documents
 
 	// DevOps chunkers
 	r.Register(NewDockerfileChunker()) // Priority 45: Dockerfiles

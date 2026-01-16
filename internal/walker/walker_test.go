@@ -258,12 +258,12 @@ func TestWalker_Walk(t *testing.T) {
 
 	// Create test files
 	files := map[string]string{
-		"main.go":           "package main",
-		"utils.go":          "package main",
-		"README.md":         "# README",
-		"src/handler.go":    "package src",
+		"main.go":             "package main",
+		"utils.go":            "package main",
+		"README.md":           "# README",
+		"src/handler.go":      "package src",
 		"src/handler_test.go": "package src",
-		"docs/guide.md":     "# Guide",
+		"docs/guide.md":       "# Guide",
 	}
 	createTestFiles(t, tmpDir, files)
 
@@ -301,8 +301,8 @@ func TestWalker_Walk_SkipExtensions(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	files := map[string]string{
-		"main.go":    "package main",
-		"data.json":  "{}",
+		"main.go":     "package main",
+		"data.json":   "{}",
 		"config.yaml": "key: value",
 	}
 	createTestFiles(t, tmpDir, files)
@@ -333,10 +333,10 @@ func TestWalker_Walk_SkipDirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	files := map[string]string{
-		"main.go":              "package main",
-		"node_modules/pkg.js":  "module.exports = {}",
-		"vendor/dep.go":        "package vendor",
-		"src/app.go":           "package src",
+		"main.go":             "package main",
+		"node_modules/pkg.js": "module.exports = {}",
+		"vendor/dep.go":       "package vendor",
+		"src/app.go":          "package src",
 	}
 	createTestFiles(t, tmpDir, files)
 
@@ -398,10 +398,10 @@ func TestWalker_Walk_IncludeExtensions(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	files := map[string]string{
-		"main.go":    "package main",
-		"app.py":     "print('hello')",
-		"data.json":  "{}",
-		"README.md":  "# README",
+		"main.go":   "package main",
+		"app.py":    "print('hello')",
+		"data.json": "{}",
+		"README.md": "# README",
 	}
 	createTestFiles(t, tmpDir, files)
 
@@ -577,7 +577,7 @@ func TestWalker_ContextCancellation(t *testing.T) {
 
 	err := w.Walk(ctx, tmpDir)
 	if err == nil {
-		t.Error("expected error from cancelled context")
+		t.Error("expected error from canceled context")
 	}
 }
 

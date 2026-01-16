@@ -7,10 +7,10 @@ import (
 
 // StrategyRegistry manages language strategies for the tree-sitter chunker.
 type StrategyRegistry struct {
-	mu               sync.RWMutex
-	strategies       map[string]LanguageStrategy // keyed by language name
-	extensionMap     map[string]LanguageStrategy // keyed by extension (e.g., ".go")
-	mimeTypeMap      map[string]LanguageStrategy // keyed by MIME type
+	mu           sync.RWMutex
+	strategies   map[string]LanguageStrategy // keyed by language name
+	extensionMap map[string]LanguageStrategy // keyed by extension (e.g., ".go")
+	mimeTypeMap  map[string]LanguageStrategy // keyed by MIME type
 }
 
 // NewStrategyRegistry creates a new strategy registry.

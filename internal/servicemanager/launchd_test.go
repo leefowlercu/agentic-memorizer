@@ -245,10 +245,10 @@ func TestLaunchdManager_StopDaemon(t *testing.T) {
 
 func TestLaunchdManager_IsInstalled(t *testing.T) {
 	tests := []struct {
-		name        string
-		createFile  bool
-		want        bool
-		wantErr     bool
+		name       string
+		createFile bool
+		want       bool
+		wantErr    bool
 	}{
 		{
 			name:       "not installed",

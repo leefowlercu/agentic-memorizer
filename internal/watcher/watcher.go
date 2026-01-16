@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -82,11 +83,11 @@ func WithLogger(logger *slog.Logger) WatcherOption {
 
 // watcher implements the Watcher interface.
 type watcher struct {
-	fsWatcher  *fsnotify.Watcher
-	bus        events.Bus
-	reg        registry.Registry
-	coalescer  *Coalescer
-	logger     *slog.Logger
+	fsWatcher *fsnotify.Watcher
+	bus       events.Bus
+	reg       registry.Registry
+	coalescer *Coalescer
+	logger    *slog.Logger
 
 	debounceWindow    time.Duration
 	deleteGracePeriod time.Duration

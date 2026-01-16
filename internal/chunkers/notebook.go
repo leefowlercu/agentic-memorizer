@@ -231,12 +231,13 @@ func (c *NotebookChunker) buildGroupContent(group cellGroup) (text string, headi
 		source := c.extractSource(cell.Source)
 
 		// Add cell type marker for clarity
-		if cell.CellType == "markdown" {
+		switch cell.CellType {
+		case "markdown":
 			// Check for heading
 			if h, _ := c.extractHeading(source); h != "" && heading == "" {
 				heading = h
 			}
-		} else if cell.CellType == "code" {
+		case "code":
 			builder.WriteString("```")
 			builder.WriteString("\n")
 		}

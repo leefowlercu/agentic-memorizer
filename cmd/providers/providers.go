@@ -2,8 +2,9 @@
 package providers
 
 import (
-	"github.com/leefowlercu/agentic-memorizer/cmd/providers/subcommands"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/cmd/providers/subcommands"
 )
 
 // ProvidersCmd is the parent command for all provider-related subcommands.

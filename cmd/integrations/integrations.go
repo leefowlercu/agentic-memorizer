@@ -2,8 +2,9 @@
 package integrations
 
 import (
-	"github.com/leefowlercu/agentic-memorizer/cmd/integrations/subcommands"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/cmd/integrations/subcommands"
 )
 
 // IntegrationsCmd is the parent command for integration management.

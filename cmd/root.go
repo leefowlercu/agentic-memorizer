@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	configcmd "github.com/leefowlercu/agentic-memorizer/cmd/config"
 	"github.com/leefowlercu/agentic-memorizer/cmd/daemon"
 	"github.com/leefowlercu/agentic-memorizer/cmd/forget"
@@ -17,7 +19,6 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/cmd/version"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/logging"
-	"github.com/spf13/cobra"
 )
 
 // logManager is the global logging manager, created in init() and upgraded after config loads

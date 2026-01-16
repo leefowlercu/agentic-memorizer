@@ -808,8 +808,8 @@ func main() {
 		// The chunker should either return an error or complete quickly
 		// depending on when cancellation is checked
 		if err != nil && err != context.Canceled {
-			// Some errors are acceptable; context was cancelled
-			t.Logf("got error (expected for cancelled context): %v", err)
+			// Some errors are acceptable; context was canceled
+			t.Logf("got error (expected for canceled context): %v", err)
 		}
 	})
 

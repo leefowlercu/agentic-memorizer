@@ -5,8 +5,9 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 // EditCmd opens the configuration file in an editor.

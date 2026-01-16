@@ -167,7 +167,7 @@ func (c *PDFChunker) detectQuality(pdfCtx *model.Context) string {
 	}
 
 	// Check XRefTable size as indicator of document complexity
-	if pdfCtx.XRefTable != nil && len(pdfCtx.XRefTable.Table) > 100 {
+	if pdfCtx.XRefTable != nil && len(pdfCtx.Table) > 100 {
 		return "medium"
 	}
 

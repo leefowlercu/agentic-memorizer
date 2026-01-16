@@ -9,8 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 )
 
 // Errors for stop command

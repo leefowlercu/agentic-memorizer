@@ -152,18 +152,18 @@ func extensionToMIME(ext string) string {
 		".zig":   "text/x-zig",
 
 		// Markup and config
-		".md":       "text/markdown",
-		".markdown": "text/markdown",
-		".rst":      "text/x-rst",
-		".adoc":     "text/asciidoc",
-		".tex":      "text/x-tex",
-		".yaml":     "text/yaml",
-		".yml":      "text/yaml",
-		".toml":     "text/toml",
-		".ini":      "text/ini",
-		".cfg":      "text/ini",
-		".conf":     "text/plain",
-		".env":      "text/plain",
+		".md":         "text/markdown",
+		".markdown":   "text/markdown",
+		".rst":        "text/x-rst",
+		".adoc":       "text/asciidoc",
+		".tex":        "text/x-tex",
+		".yaml":       "text/yaml",
+		".yml":        "text/yaml",
+		".toml":       "text/toml",
+		".ini":        "text/ini",
+		".cfg":        "text/ini",
+		".conf":       "text/plain",
+		".env":        "text/plain",
 		".properties": "text/x-java-properties",
 
 		// Data formats
@@ -203,26 +203,26 @@ func extensionToMIME(ext string) string {
 		".avif": "image/avif",
 
 		// Archives
-		".zip":  "application/zip",
-		".tar":  "application/x-tar",
-		".gz":   "application/gzip",
-		".tgz":  "application/gzip",
-		".bz2":  "application/x-bzip2",
-		".xz":   "application/x-xz",
-		".7z":   "application/x-7z-compressed",
-		".rar":  "application/vnd.rar",
-		".jar":  "application/java-archive",
-		".war":  "application/java-archive",
-		".ear":  "application/java-archive",
+		".zip": "application/zip",
+		".tar": "application/x-tar",
+		".gz":  "application/gzip",
+		".tgz": "application/gzip",
+		".bz2": "application/x-bzip2",
+		".xz":  "application/x-xz",
+		".7z":  "application/x-7z-compressed",
+		".rar": "application/vnd.rar",
+		".jar": "application/java-archive",
+		".war": "application/java-archive",
+		".ear": "application/java-archive",
 
 		// Binary/executable
-		".exe": "application/x-executable",
-		".dll": "application/x-executable",
-		".so":  "application/x-sharedlib",
+		".exe":   "application/x-executable",
+		".dll":   "application/x-executable",
+		".so":    "application/x-sharedlib",
 		".dylib": "application/x-sharedlib",
-		".a":   "application/x-archive",
-		".o":   "application/x-object",
-		".wasm": "application/wasm",
+		".a":     "application/x-archive",
+		".o":     "application/x-object",
+		".wasm":  "application/wasm",
 	}
 
 	if mimeType, ok := mimeMap[ext]; ok {
@@ -257,14 +257,14 @@ func IsImageMIME(mimeType string) bool {
 // IsArchiveMIME returns true if the MIME type represents an archive.
 func IsArchiveMIME(mimeType string) bool {
 	archiveMIMEs := map[string]bool{
-		"application/zip":              true,
-		"application/x-tar":            true,
-		"application/gzip":             true,
-		"application/x-bzip2":          true,
-		"application/x-xz":             true,
-		"application/x-7z-compressed":  true,
-		"application/vnd.rar":          true,
-		"application/java-archive":     true,
+		"application/zip":             true,
+		"application/x-tar":           true,
+		"application/gzip":            true,
+		"application/x-bzip2":         true,
+		"application/x-xz":            true,
+		"application/x-7z-compressed": true,
+		"application/vnd.rar":         true,
+		"application/java-archive":    true,
 	}
 
 	return archiveMIMEs[mimeType]

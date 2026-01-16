@@ -6,10 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/export"
-	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/export"
+	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 )
 
 // Flag variables

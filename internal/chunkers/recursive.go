@@ -12,16 +12,16 @@ const (
 
 // Default separators in order of preference (largest to smallest boundaries).
 var defaultSeparators = []string{
-	"\n\n\n",  // Triple newline (section break)
-	"\n\n",    // Double newline (paragraph)
-	"\n",      // Single newline
-	". ",      // Sentence end
-	"? ",      // Question end
-	"! ",      // Exclamation end
-	"; ",      // Semicolon
-	", ",      // Comma
-	" ",       // Space
-	"",        // Character level (last resort)
+	"\n\n\n", // Triple newline (section break)
+	"\n\n",   // Double newline (paragraph)
+	"\n",     // Single newline
+	". ",     // Sentence end
+	"? ",     // Question end
+	"! ",     // Exclamation end
+	"; ",     // Semicolon
+	", ",     // Comma
+	" ",      // Space
+	"",       // Character level (last resort)
 }
 
 // RecursiveChunker splits content by progressively smaller separators.

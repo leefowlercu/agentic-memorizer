@@ -145,8 +145,8 @@ type docxSection struct {
 
 // docxDocument represents the document.xml structure.
 type docxDocument struct {
-	XMLName xml.Name    `xml:"document"`
-	Body    docxBody    `xml:"body"`
+	XMLName xml.Name `xml:"document"`
+	Body    docxBody `xml:"body"`
 }
 
 type docxBody struct {
@@ -196,7 +196,7 @@ type docxElement struct {
 
 // docxStyles represents the styles.xml structure.
 type docxStyles struct {
-	XMLName xml.Name     `xml:"styles"`
+	XMLName xml.Name       `xml:"styles"`
 	Styles  []docxStyleDef `xml:"style"`
 }
 

@@ -65,14 +65,14 @@ func (h *StructuredDataHandler) Name() string {
 // CanHandle returns true if this handler can process the given MIME type and extension.
 func (h *StructuredDataHandler) CanHandle(mimeType string, ext string) bool {
 	structuredMIMEs := map[string]bool{
-		"application/json":         true,
-		"application/x-ndjson":     true,
-		"text/csv":                 true,
+		"application/json":          true,
+		"application/x-ndjson":      true,
+		"text/csv":                  true,
 		"text/tab-separated-values": true,
-		"text/yaml":                true,
-		"application/yaml":         true,
-		"application/xml":          true,
-		"text/xml":                 true,
+		"text/yaml":                 true,
+		"application/yaml":          true,
+		"application/xml":           true,
+		"text/xml":                  true,
 	}
 
 	if structuredMIMEs[mimeType] {
@@ -444,22 +444,22 @@ func formatSchemaHelper(buf *strings.Builder, schema any, indent int) {
 	switch s := schema.(type) {
 	case map[string]any:
 		schemaType, _ := s["type"].(string)
-		buf.WriteString(fmt.Sprintf("%s%s", prefix, schemaType))
+		fmt.Fprintf(buf, "%s%s", prefix, schemaType)
 
 		if fields, ok := s["fields"].(map[string]any); ok {
 			buf.WriteString(" {\n")
 			for key, val := range fields {
-				buf.WriteString(fmt.Sprintf("%s  %s: ", prefix, key))
+				fmt.Fprintf(buf, "%s  %s: ", prefix, key)
 				formatSchemaHelper(buf, val, indent+1)
 				buf.WriteString("\n")
 			}
-			buf.WriteString(fmt.Sprintf("%s}", prefix))
+			fmt.Fprintf(buf, "%s}", prefix)
 		} else if items, ok := s["items"]; ok {
 			buf.WriteString(" of ")
 			formatSchemaHelper(buf, items, indent)
 		}
 	default:
-		buf.WriteString(fmt.Sprintf("%v", schema))
+		fmt.Fprintf(buf, "%v", schema)
 	}
 }
 

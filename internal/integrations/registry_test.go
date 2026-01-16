@@ -7,23 +7,23 @@ import (
 
 // mockIntegration is a test implementation of Integration.
 type mockIntegration struct {
-	name        string
-	harness     string
-	intType     IntegrationType
-	description string
-	installed   bool
-	setupCalled bool
+	name           string
+	harness        string
+	intType        IntegrationType
+	description    string
+	installed      bool
+	setupCalled    bool
 	teardownCalled bool
 }
 
-func (m *mockIntegration) Name() string                              { return m.name }
-func (m *mockIntegration) Harness() string                           { return m.harness }
-func (m *mockIntegration) Type() IntegrationType                     { return m.intType }
-func (m *mockIntegration) Description() string                       { return m.description }
-func (m *mockIntegration) Setup(ctx context.Context) error           { m.setupCalled = true; return nil }
-func (m *mockIntegration) Teardown(ctx context.Context) error        { m.teardownCalled = true; return nil }
-func (m *mockIntegration) IsInstalled() (bool, error)                { return m.installed, nil }
-func (m *mockIntegration) Validate() error                           { return nil }
+func (m *mockIntegration) Name() string                       { return m.name }
+func (m *mockIntegration) Harness() string                    { return m.harness }
+func (m *mockIntegration) Type() IntegrationType              { return m.intType }
+func (m *mockIntegration) Description() string                { return m.description }
+func (m *mockIntegration) Setup(ctx context.Context) error    { m.setupCalled = true; return nil }
+func (m *mockIntegration) Teardown(ctx context.Context) error { m.teardownCalled = true; return nil }
+func (m *mockIntegration) IsInstalled() (bool, error)         { return m.installed, nil }
+func (m *mockIntegration) Validate() error                    { return nil }
 func (m *mockIntegration) Status() (*StatusInfo, error) {
 	status := StatusNotInstalled
 	if m.installed {

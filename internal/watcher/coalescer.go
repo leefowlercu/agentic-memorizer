@@ -26,12 +26,12 @@ type Coalescer struct {
 	debounceWindow    time.Duration
 	deleteGracePeriod time.Duration
 
-	mu          sync.Mutex
-	pending     map[string]*pendingEvent
-	events      chan CoalescedEvent
-	stopCh      chan struct{}
-	stopped     bool
-	wg          sync.WaitGroup
+	mu      sync.Mutex
+	pending map[string]*pendingEvent
+	events  chan CoalescedEvent
+	stopCh  chan struct{}
+	stopped bool
+	wg      sync.WaitGroup
 }
 
 // pendingEvent tracks a pending event with its timer.

@@ -35,7 +35,7 @@ func NewRateLimiter(config RateLimitConfig) *RateLimiter {
 	}
 }
 
-// Wait blocks until a token is available or context is cancelled.
+// Wait blocks until a token is available or context is canceled.
 func (r *RateLimiter) Wait(ctx context.Context) error {
 	for {
 		r.mu.Lock()

@@ -73,14 +73,14 @@ type Integration interface {
 
 // HarnessInfo contains information about an AI harness.
 type HarnessInfo struct {
-	Name           string
-	BinaryName     string
-	ConfigPath     string
-	ConfigFormat   string // "json", "toml", "yaml"
-	Description    string
-	Documentation  string
-	IsInstalled    bool
-	InstalledPath  string
+	Name          string
+	BinaryName    string
+	ConfigPath    string
+	ConfigFormat  string // "json", "toml", "yaml"
+	Description   string
+	Documentation string
+	IsInstalled   bool
+	InstalledPath string
 }
 
 // SetupResult contains the result of a setup operation.

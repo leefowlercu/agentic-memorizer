@@ -3,10 +3,11 @@ package subcommands
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers/embeddings"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers/semantic"
-	"github.com/spf13/cobra"
 )
 
 var (

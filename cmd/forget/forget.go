@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
-	"github.com/spf13/cobra"
 )
 
 // Flag variables for the forget command.

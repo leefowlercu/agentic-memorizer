@@ -98,6 +98,7 @@ type watcher struct {
 	running      bool
 	stopCh       chan struct{}
 	doneCh       chan struct{}
+	stopOnce     sync.Once
 }
 
 // New creates a new Watcher with the given dependencies.
@@ -179,6 +180,7 @@ func (w *watcher) Watch(path string) error {
 		return nil
 	})
 
+	// Only mark as watched if walk succeeded
 	if err != nil {
 		return fmt.Errorf("failed to walk directory; %w", err)
 	}
@@ -258,21 +260,27 @@ func (w *watcher) Start(ctx context.Context) error {
 
 // Stop stops the watcher.
 func (w *watcher) Stop() error {
-	w.mu.Lock()
-	if !w.running {
+	var stopErr error
+	w.stopOnce.Do(func() {
+		w.mu.Lock()
+		if !w.running {
+			w.mu.Unlock()
+			return
+		}
+		w.running = false
+		w.stats.IsRunning = false
 		w.mu.Unlock()
-		return nil
-	}
-	w.running = false
-	w.stats.IsRunning = false
-	w.mu.Unlock()
 
-	close(w.stopCh)
-	<-w.doneCh
+		// Stop coalescer first to unblock processCoalescedEvents
+		w.coalescer.Stop()
 
-	w.coalescer.Stop()
+		// Then signal stop and wait for goroutines
+		close(w.stopCh)
+		<-w.doneCh
 
-	return w.fsWatcher.Close()
+		stopErr = w.fsWatcher.Close()
+	})
+	return stopErr
 }
 
 // Stats returns current watcher statistics.

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
@@ -111,7 +112,7 @@ type Worker struct {
 	queue    *Queue
 	logger   *slog.Logger
 	stopChan chan struct{}
-	stopped  bool
+	stopOnce sync.Once
 
 	// Providers (injected or looked up)
 	semanticProvider   providers.SemanticProvider
@@ -190,10 +191,9 @@ func (w *Worker) Run(ctx context.Context) {
 
 // Stop signals the worker to stop.
 func (w *Worker) Stop() {
-	if !w.stopped {
+	w.stopOnce.Do(func() {
 		close(w.stopChan)
-		w.stopped = true
-	}
+	})
 }
 
 // processItem handles a single work item with retry logic.
@@ -285,6 +285,18 @@ func (w *Worker) calculateBackoff(retries int) time.Duration {
 
 // analyze performs the full analysis pipeline.
 func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, error) {
+	// Maximum file size: 100MB (prevents OOM on large files)
+	const maxFileSize = 100 * 1024 * 1024
+
+	// Check file size before reading
+	info, err := os.Stat(item.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file; %w", err)
+	}
+	if info.Size() > maxFileSize {
+		return nil, fmt.Errorf("file too large: %d bytes (max %d)", info.Size(), maxFileSize)
+	}
+
 	// Read file content
 	content, err := os.ReadFile(item.FilePath)
 	if err != nil {
@@ -313,6 +325,9 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	result.MetadataHash = computeMetadataHash(item.FilePath, item.FileSize, item.ModTime)
 
 	// Check if content has changed (requires clearing previous analysis state)
+	// Note: This check-then-act is subject to race conditions if multiple workers
+	// process the same file concurrently. This is rare in practice but possible
+	// during full rebuilds. The registry should ideally support atomic compare-and-swap.
 	if w.registry != nil {
 		existingState, err := w.registry.GetFileState(ctx, item.FilePath)
 		if err == nil && existingState.ContentHash != result.ContentHash {
@@ -496,8 +511,12 @@ func (w *Worker) analyzeSemantics(ctx context.Context, chunks []chunkers.Chunk) 
 		}
 		chunkResults = append(chunkResults, result)
 		// Store per-chunk summary indexed by chunk position
-		if chunk.Index < len(chunkSummaries) {
+		if chunk.Index >= 0 && chunk.Index < len(chunkSummaries) {
 			chunkSummaries[chunk.Index] = result.Summary
+		} else {
+			w.logger.Warn("chunk index out of bounds for summary storage",
+				"chunk_index", chunk.Index,
+				"summaries_len", len(chunkSummaries))
 		}
 	}
 
@@ -794,8 +813,7 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 
 	// Delete existing chunks before inserting new ones (clean slate on reanalysis)
 	if err := w.graph.DeleteChunks(ctx, result.FilePath); err != nil {
-		w.logger.Warn("failed to delete existing chunks", "path", result.FilePath, "error", err)
-		// Continue - not fatal
+		return fmt.Errorf("failed to delete existing chunks; %w", err)
 	}
 
 	// Persist chunks with metadata and embeddings

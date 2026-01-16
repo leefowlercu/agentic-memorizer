@@ -67,14 +67,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Start orchestrated components
 	if err := orchestrator.Start(ctx); err != nil {
+		// Update health even on failure to reflect component states
+		d.UpdateComponentHealth(orchestrator.ComponentStatuses())
 		return fmt.Errorf("failed to start components; %w", err)
 	}
 
 	// Update daemon health with component statuses
 	d.UpdateComponentHealth(orchestrator.ComponentStatuses())
 
-	// Ensure orchestrator cleanup on exit
-	defer orchestrator.Stop(ctx)
+	// Ensure orchestrator cleanup on exit with separate shutdown context
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		orchestrator.Stop(shutdownCtx)
+	}()
 
 	// Start daemon (blocking)
 	slog.Info("starting daemon",

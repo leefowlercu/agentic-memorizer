@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -74,6 +75,8 @@ func (s *Server) setupRoutes() {
 
 // SetMCPHandler sets the MCP server handler.
 func (s *Server) SetMCPHandler(handler http.Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.mcpHandler = handler
 	// Re-setup routes to include MCP
 	s.router = chi.NewRouter()
@@ -82,6 +85,8 @@ func (s *Server) SetMCPHandler(handler http.Handler) {
 
 // SetMetricsHandler sets the Prometheus metrics handler.
 func (s *Server) SetMetricsHandler(handler http.Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.metricsHandler = handler
 	// Re-setup routes to include metrics
 	s.router = chi.NewRouter()
@@ -95,6 +100,8 @@ func (s *Server) SetRebuildFunc(fn RebuildFunc) {
 
 // Handler returns the HTTP handler for testing purposes.
 func (s *Server) Handler() http.Handler {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.router
 }
 
@@ -142,8 +149,12 @@ func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
 	// Check for full rebuild flag
 	full := r.URL.Query().Get("full") == "true"
 
-	// Execute rebuild
-	result, err := s.rebuildFunc(r.Context(), full)
+	// Execute rebuild with dedicated context (not tied to HTTP request)
+	// This allows rebuild to complete even if client disconnects
+	rebuildCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	result, err := s.rebuildFunc(rebuildCtx, full)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(RebuildResult{

@@ -100,11 +100,13 @@ func (p *PIDFile) IsStale() (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		// If we can't read the file, check if it exists
+		// If we got a read error (not NotExist), verify file actually exists
 		if _, statErr := os.Stat(p.path); os.IsNotExist(statErr) {
+			// File was deleted between Read() and Stat(), treat as not stale
 			return false, nil
 		}
-		return false, err
+		// File exists but couldn't be read - propagate error
+		return false, fmt.Errorf("PID file exists but unreadable; %w", err)
 	}
 
 	// Check if process exists by sending signal 0

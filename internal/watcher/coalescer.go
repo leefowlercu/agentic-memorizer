@@ -66,8 +66,14 @@ func (c *Coalescer) Add(event CoalescedEvent) {
 
 	// Check if there's already a pending event for this path
 	if pe, exists := c.pending[path]; exists {
-		// Stop existing timer
+		// Stop existing timer (emit() checks pending map, so late fires are safe)
 		pe.timer.Stop()
+
+		// Special case: Create + Delete = skip entirely (transient file)
+		if pe.event.Type == EventCreate && event.Type == EventDelete {
+			delete(c.pending, path)
+			return
+		}
 
 		// Update event type based on sequence
 		pe.event = c.mergeEvents(pe.event, event)

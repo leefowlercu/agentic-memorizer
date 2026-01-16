@@ -248,12 +248,13 @@ func (q *Queue) subscribeToEvents() {
 // Enqueue adds a work item to the queue.
 func (q *Queue) Enqueue(item WorkItem) error {
 	q.mu.RLock()
+	defer q.mu.RUnlock()
+
 	if q.state != QueueStateRunning {
-		q.mu.RUnlock()
 		return fmt.Errorf("queue not running")
 	}
-	q.mu.RUnlock()
 
+	// Non-blocking send to avoid deadlock while holding lock
 	select {
 	case q.workChan <- item:
 		return nil

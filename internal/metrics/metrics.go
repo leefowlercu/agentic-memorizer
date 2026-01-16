@@ -164,6 +164,16 @@ var (
 	})
 )
 
+// Event bus metrics track internal event delivery.
+var (
+	// EventBusDroppedEvents is the total number of events dropped due to full subscriber buffers.
+	EventBusDroppedEvents = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "eventbus_dropped_events_total",
+		Help:      "Total number of events dropped due to full subscriber buffers",
+	}, []string{"event_type"})
+)
+
 // Graph operation metrics track database operations.
 var (
 	// GraphOperationsTotal is the total number of graph operations.

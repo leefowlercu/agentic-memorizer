@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 )
 
 // Bus is the interface for the event bus.
@@ -27,11 +29,12 @@ type Bus interface {
 
 // subscription represents a registered event handler.
 type subscription struct {
-	id        uint64
-	eventType EventType // empty string means subscribe to all
-	handler   EventHandler
-	events    chan Event
-	done      chan struct{}
+	id           uint64
+	eventType    EventType // empty string means subscribe to all
+	handler      EventHandler
+	events       chan Event
+	done         chan struct{}
+	unsubscribed atomic.Bool
 }
 
 // EventBus is the default implementation of the Bus interface.
@@ -107,6 +110,7 @@ func (b *EventBus) Publish(ctx context.Context, event Event) error {
 				"event_type", event.Type,
 				"subscriber_id", sub.id,
 			)
+			metrics.EventBusDroppedEvents.WithLabelValues(string(event.Type)).Inc()
 		}
 	}
 
@@ -203,8 +207,8 @@ func (b *EventBus) unsubscribe(id uint64) {
 	}
 	b.mu.Unlock()
 
-	if ok {
-		// Signal done and close channel to stop processing
+	if ok && sub.unsubscribed.CompareAndSwap(false, true) {
+		// Signal done and close channels (only once)
 		close(sub.done)
 		close(sub.events)
 	}
@@ -225,10 +229,12 @@ func (b *EventBus) Close() error {
 	b.subscriptions = make(map[uint64]*subscription)
 	b.mu.Unlock()
 
-	// Close all subscriptions
+	// Close all subscriptions (with double-close protection)
 	for _, sub := range subs {
-		close(sub.done)
-		close(sub.events)
+		if sub.unsubscribed.CompareAndSwap(false, true) {
+			close(sub.done)
+			close(sub.events)
+		}
 	}
 
 	return nil

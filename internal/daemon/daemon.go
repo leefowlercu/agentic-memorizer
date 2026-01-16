@@ -135,11 +135,27 @@ func (d *Daemon) Health() HealthStatus {
 
 // RegisterComponent adds a component to be managed by the daemon.
 func (d *Daemon) RegisterComponent(c Component) {
+	if c == nil {
+		slog.Warn("attempted to register nil component")
+		return
+	}
+
+	// Check for duplicate component names
+	for _, existing := range d.components {
+		if existing.Name() == c.Name() {
+			slog.Warn("component already registered", "name", c.Name())
+			return
+		}
+	}
+
 	d.components = append(d.components, c)
+	slog.Debug("component registered", "name", c.Name())
 }
 
 // OnConfigReload registers a callback to be invoked when config is reloaded.
 func (d *Daemon) OnConfigReload(fn ConfigReloadFunc) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.reloadCallbacks = append(d.reloadCallbacks, fn)
 }
 
@@ -151,14 +167,31 @@ func (d *Daemon) UpdateComponentHealth(statuses map[string]ComponentHealth) {
 }
 
 // TriggerConfigReload invokes all registered config reload callbacks.
-// Errors are logged but do not stop processing of other callbacks.
-func (d *Daemon) TriggerConfigReload() {
+// Errors are logged and aggregated, but all callbacks are attempted.
+// Returns an error if any callbacks failed.
+func (d *Daemon) TriggerConfigReload() error {
 	slog.Info("config reload triggered")
-	for _, fn := range d.reloadCallbacks {
+
+	// Copy callbacks under lock to avoid race with OnConfigReload
+	d.mu.RLock()
+	callbacks := make([]ConfigReloadFunc, len(d.reloadCallbacks))
+	copy(callbacks, d.reloadCallbacks)
+	d.mu.RUnlock()
+
+	var failedCount int
+	for i, fn := range callbacks {
 		if err := fn(); err != nil {
-			slog.Error("config reload callback failed", "error", err)
+			slog.Error("config reload callback failed",
+				"callback_index", i,
+				"error", err)
+			failedCount++
 		}
 	}
+
+	if failedCount > 0 {
+		return fmt.Errorf("%d of %d reload callbacks failed", failedCount, len(callbacks))
+	}
+	return nil
 }
 
 // Start starts the daemon and blocks until the context is canceled.
@@ -173,7 +206,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to claim PID file; %w", err)
 	}
 
-	// Ensure PID file is cleaned up on exit
+	// Ensure PID file is cleaned up on exit (only after successful claim)
 	defer d.pidFile.Remove()
 
 	// Start all registered components

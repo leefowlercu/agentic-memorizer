@@ -209,11 +209,9 @@ func (c *LaTeXChunker) splitBySections(text string) []latexSection {
 				flushSection()
 
 				// Update section stack
-				// Pop deeper or same-level headings (level is 0-indexed)
-				for len(sectionStack) > 0 && len(sectionStack) > level {
-					sectionStack = sectionStack[:len(sectionStack)-1]
-				}
-				// Also pop if we're at same level (replacing)
+				// For level L (0-indexed), keep only items at indices 0 to L-1 (first L items)
+				// e.g., for \chapter (level=1), we want to keep only \part items (index 0) if any
+				// This correctly handles going back up the hierarchy
 				if len(sectionStack) > level {
 					sectionStack = sectionStack[:level]
 				}

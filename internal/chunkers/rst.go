@@ -3,6 +3,7 @@ package chunkers
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -135,8 +136,9 @@ func (c *RSTChunker) buildLevelMap(lines []string) map[byte]int {
 
 			// Check if previous line could be a heading
 			if i > 0 && c.isHeadingText(lines[i-1]) {
-				headingLen := len(strings.TrimRight(lines[i-1], " \t"))
-				underlineLen := len(strings.TrimRight(line, " \t"))
+				// Use rune count for proper Unicode support
+				headingLen := utf8.RuneCountInString(strings.TrimRight(lines[i-1], " \t"))
+				underlineLen := len(strings.TrimRight(line, " \t")) // Underline is ASCII, len is fine
 
 				// Underline must be at least as long as heading
 				if underlineLen >= headingLen {
@@ -200,8 +202,9 @@ func (c *RSTChunker) splitBySections(lines []string, levelMap map[byte]int) []rs
 		// Check for heading pattern: text followed by underline
 		if i+1 < len(lines) && c.isUnderline(lines[i+1]) && c.isHeadingText(line) {
 			underlineChar := lines[i+1][0]
-			headingLen := len(strings.TrimRight(line, " \t"))
-			underlineLen := len(strings.TrimRight(lines[i+1], " \t"))
+			// Use rune count for proper Unicode support
+			headingLen := utf8.RuneCountInString(strings.TrimRight(line, " \t"))
+			underlineLen := len(strings.TrimRight(lines[i+1], " \t")) // Underline is ASCII, len is fine
 
 			if underlineLen >= headingLen {
 				// Check for overline

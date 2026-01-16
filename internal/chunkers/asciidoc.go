@@ -132,7 +132,9 @@ func (c *AsciiDocChunker) splitBySections(text string) []asciidocSection {
 	var sectionStack []string // Track heading hierarchy for section path
 	var pendingAnchor string  // Anchor on previous line
 
-	inSourceBlock := false
+	// Track delimited blocks to avoid detecting headings inside them
+	// AsciiDoc uses matched delimiter lines: ----, ...., ////, ++++, ****, ____
+	var currentBlockDelimiter string
 
 	flushSection := func() {
 		if len(currentLines) > 0 {
@@ -160,14 +162,23 @@ func (c *AsciiDocChunker) splitBySections(text string) []asciidocSection {
 		line := lines[i]
 		trimmed := strings.TrimSpace(line)
 
-		// Track source blocks to avoid false positives
-		if strings.HasPrefix(trimmed, "----") || strings.HasPrefix(trimmed, "....") {
-			inSourceBlock = !inSourceBlock
+		// Track delimited blocks to avoid false positives
+		// Check for block delimiters: ---- (source), .... (literal), //// (comment), ++++ (passthrough), **** (sidebar), ____ (quote)
+		if delimiter := c.getBlockDelimiter(trimmed); delimiter != "" {
+			if currentBlockDelimiter == "" {
+				// Opening a new block
+				currentBlockDelimiter = delimiter
+			} else if currentBlockDelimiter == delimiter {
+				// Closing the current block (same delimiter type)
+				currentBlockDelimiter = ""
+			}
+			// Note: if delimiters don't match, we're inside nested content - keep the current block open
 			currentLines = append(currentLines, line)
 			continue
 		}
 
-		if inSourceBlock {
+		if currentBlockDelimiter != "" {
+			// Inside a delimited block, don't process as heading
 			currentLines = append(currentLines, line)
 			continue
 		}
@@ -297,4 +308,34 @@ func (c *AsciiDocChunker) splitLargeSection(ctx context.Context, section asciido
 	}
 
 	return chunks
+}
+
+// getBlockDelimiter checks if a line is an AsciiDoc block delimiter.
+// Returns the delimiter type (e.g., "----", "....") or empty string if not a delimiter.
+// AsciiDoc block delimiters must be at least 4 characters of the same type.
+func (c *AsciiDocChunker) getBlockDelimiter(trimmed string) string {
+	if len(trimmed) < 4 {
+		return ""
+	}
+
+	// Check for known delimiter types
+	delimiters := []string{"----", "....", "////", "++++", "****", "____"}
+	for _, d := range delimiters {
+		if strings.HasPrefix(trimmed, d) {
+			// Verify the entire line consists of this delimiter character
+			firstChar := d[0]
+			isValid := true
+			for _, ch := range trimmed {
+				if byte(ch) != firstChar {
+					isValid = false
+					break
+				}
+			}
+			if isValid {
+				return d
+			}
+		}
+	}
+
+	return ""
 }

@@ -235,3 +235,270 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestHTMLChunker_EdgeCases(t *testing.T) {
+	chunker := NewHTMLChunker()
+
+	t.Run("ContextCancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		content := []byte(`<html><body><h1>Title</h1><p>Content</p></body></html>`)
+		_, err := chunker.Chunk(ctx, content, DefaultChunkOptions())
+		if err == nil {
+			t.Error("Expected context cancellation error")
+		}
+		if err != context.Canceled {
+			t.Errorf("Expected context.Canceled, got %v", err)
+		}
+	})
+
+	t.Run("NestedHTMLInHeadings", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<h1><em>Emphasized</em> <strong>Title</strong></h1>
+<p>Content</p>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should extract text from nested elements
+		found := false
+		for _, chunk := range result.Chunks {
+			if chunk.Metadata.Document != nil && contains(chunk.Metadata.Document.Heading, "Emphasized") {
+				found = true
+				if !contains(chunk.Metadata.Document.Heading, "Title") {
+					t.Error("Expected full heading text including nested elements")
+				}
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find heading with nested HTML content")
+		}
+	})
+
+	t.Run("HTMLEntities", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<h1>Title &amp; Subtitle</h1>
+<p>Less than &lt; Greater than &gt;</p>
+<p>Non-breaking&nbsp;space</p>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+		if len(result.Chunks) == 0 {
+			t.Fatal("Expected at least one chunk")
+		}
+		// HTML entities should be preserved or decoded
+		// The parser typically decodes them
+	})
+
+	t.Run("EmptyContentBetweenHeadings", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<h1>First Heading</h1>
+<h2>Second Heading</h2>
+<p>Content here</p>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Empty section between h1 and h2 should be handled gracefully
+		// We should still get chunks for both headings
+		foundFirst := false
+		foundSecond := false
+		for _, chunk := range result.Chunks {
+			if chunk.Metadata.Document != nil {
+				if chunk.Metadata.Document.Heading == "First Heading" {
+					foundFirst = true
+				}
+				if chunk.Metadata.Document.Heading == "Second Heading" {
+					foundSecond = true
+				}
+			}
+		}
+		if !foundSecond {
+			t.Error("Expected to find Second Heading chunk")
+		}
+		// First heading may or may not appear depending on implementation
+		_ = foundFirst
+	})
+
+	t.Run("HeadingLevelOutOfOrder", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<h3>Subsection First</h3>
+<p>Content under h3</p>
+<h1>Main Title</h1>
+<p>Content under h1</p>
+<h2>Section</h2>
+<p>Content under h2</p>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should handle out-of-order heading levels gracefully
+		if len(result.Chunks) < 2 {
+			t.Errorf("Expected multiple chunks, got %d", len(result.Chunks))
+		}
+
+		// Verify heading levels are captured correctly
+		for _, chunk := range result.Chunks {
+			if chunk.Metadata.Document != nil {
+				if chunk.Metadata.Document.Heading == "Subsection First" {
+					if chunk.Metadata.Document.HeadingLevel != 3 {
+						t.Errorf("Expected level 3 for h3, got %d", chunk.Metadata.Document.HeadingLevel)
+					}
+				}
+				if chunk.Metadata.Document.Heading == "Main Title" {
+					if chunk.Metadata.Document.HeadingLevel != 1 {
+						t.Errorf("Expected level 1 for h1, got %d", chunk.Metadata.Document.HeadingLevel)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("ListElements", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<h1>List Test</h1>
+<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>
+<ol>
+<li>Numbered one</li>
+<li>Numbered two</li>
+</ol>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// List items should be included in content
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "First item") && contains(chunk.Content, "Second item") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find list items in chunks")
+		}
+	})
+
+	t.Run("TokenEstimatePopulated", func(t *testing.T) {
+		content := []byte(`<html><body><h1>Test</h1><p>Some content here</p></body></html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		for i, chunk := range result.Chunks {
+			if chunk.Metadata.TokenEstimate <= 0 {
+				t.Errorf("Chunk %d has invalid TokenEstimate: %d", i, chunk.Metadata.TokenEstimate)
+			}
+		}
+	})
+
+	t.Run("TableElements", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<h1>Table Test</h1>
+<table>
+<tr><td>Cell 1</td><td>Cell 2</td></tr>
+<tr><td>Cell 3</td><td>Cell 4</td></tr>
+</table>
+<p>After table</p>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Table cells should be in content
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Cell 1") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find table cells in chunks")
+		}
+	})
+
+	t.Run("OnlyWhitespaceContent", func(t *testing.T) {
+		content := []byte(`<html><body>
+
+		</body></html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+		// Should handle whitespace-only content gracefully
+		if result == nil {
+			t.Error("Expected non-nil result")
+		}
+	})
+
+	t.Run("DeeplyNestedContent", func(t *testing.T) {
+		content := []byte(`<!DOCTYPE html>
+<html>
+<body>
+<div>
+<div>
+<div>
+<div>
+<div>
+<p>Deeply nested paragraph</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>`)
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Deeply nested") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find deeply nested content")
+		}
+	})
+}

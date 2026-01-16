@@ -460,3 +460,542 @@ extend type User {
 		t.Error("expected to find extend type definition")
 	}
 }
+
+func TestGraphQLChunker_SubscriptionType(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type Subscription {
+  userCreated: User
+  messageReceived: Message
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Schema.TypeName != "Subscription" {
+			t.Errorf("expected type name 'Subscription', got %q", chunk.Metadata.Schema.TypeName)
+		}
+	}
+}
+
+func TestGraphQLChunker_DirectiveDefinition(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `directive @deprecated(
+  reason: String = "No longer supported"
+) on FIELD_DEFINITION | ENUM_VALUE
+
+type User {
+  id: ID!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have directive + type
+	if result.TotalChunks < 2 {
+		t.Errorf("expected at least 2 chunks, got %d", result.TotalChunks)
+	}
+
+	// Check for directive
+	hasDirective := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Schema != nil && chunk.Metadata.Schema.TypeKind == "directive" {
+			hasDirective = true
+			if chunk.Metadata.Schema.TypeName != "@deprecated" {
+				t.Errorf("expected directive name '@deprecated', got %q", chunk.Metadata.Schema.TypeName)
+			}
+			break
+		}
+	}
+	if !hasDirective {
+		t.Error("expected to find directive definition")
+	}
+}
+
+func TestGraphQLChunker_SchemaDefinition(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `schema {
+  query: RootQuery
+  mutation: RootMutation
+  subscription: RootSubscription
+}
+
+type RootQuery {
+  user(id: ID!): User
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have schema + type
+	if result.TotalChunks < 2 {
+		t.Errorf("expected at least 2 chunks, got %d", result.TotalChunks)
+	}
+
+	// Check for schema definition
+	hasSchema := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Schema != nil && chunk.Metadata.Schema.TypeKind == "schema" {
+			hasSchema = true
+			break
+		}
+	}
+	if !hasSchema {
+		t.Error("expected to find schema definition")
+	}
+}
+
+func TestGraphQLChunker_ImplementsInterface(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `interface Node {
+  id: ID!
+}
+
+type User implements Node {
+  id: ID!
+  name: String!
+}
+
+type Post implements Node {
+  id: ID!
+  title: String!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have interface + 2 types
+	if result.TotalChunks != 3 {
+		t.Errorf("expected 3 chunks, got %d", result.TotalChunks)
+	}
+
+	// Check that implements is preserved
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Schema != nil && chunk.Metadata.Schema.TypeName == "User" {
+			if !strings.Contains(chunk.Content, "implements Node") {
+				t.Error("expected User type to contain 'implements Node'")
+			}
+			break
+		}
+	}
+}
+
+func TestGraphQLChunker_FieldArguments(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type Query {
+  user(id: ID!, includeDeleted: Boolean = false): User
+  users(first: Int, after: String, filter: UserFilter): UserConnection
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Field arguments should be preserved
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "id: ID!") {
+			t.Error("expected chunk to contain field argument")
+		}
+		if !strings.Contains(chunk.Content, "includeDeleted: Boolean = false") {
+			t.Error("expected chunk to contain default argument value")
+		}
+	}
+}
+
+func TestGraphQLChunker_LargeQueryTypeSplitting(t *testing.T) {
+	c := NewGraphQLChunker()
+
+	// Create a Query type with many fields
+	var largeQuery strings.Builder
+	largeQuery.WriteString("type Query {\n")
+	for i := range 30 {
+		largeQuery.WriteString("  field_" + string(rune('a'+i%26)) + "(id: ID!): String\n")
+	}
+	largeQuery.WriteString("}\n")
+
+	content := largeQuery.String()
+
+	// Use a small max chunk size to trigger splitting
+	opts := ChunkOptions{MaxChunkSize: 300}
+
+	result, err := c.Chunk(context.Background(), []byte(content), opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be split into multiple chunks
+	if result.TotalChunks < 2 {
+		t.Errorf("expected content to be split into multiple chunks, got %d", result.TotalChunks)
+	}
+
+	// All chunks should have Schema metadata with Query type name
+	for i, chunk := range result.Chunks {
+		if chunk.Metadata.Schema == nil {
+			t.Errorf("chunk %d missing Schema metadata", i)
+		} else if chunk.Metadata.Schema.TypeName != "Query" {
+			t.Errorf("chunk %d: expected TypeName 'Query', got %q", i, chunk.Metadata.Schema.TypeName)
+		}
+	}
+}
+
+func TestGraphQLChunker_HashComments(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `# This is a hash comment
+type User {
+  # Field comment
+  id: ID!
+  name: String!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Errorf("expected at least 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Find User type chunk
+	found := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Schema != nil && chunk.Metadata.Schema.TypeName == "User" {
+			found = true
+			// Field comment should be in chunk
+			if !strings.Contains(chunk.Content, "# Field comment") {
+				t.Error("expected chunk to contain field comment")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find User type chunk")
+	}
+}
+
+func TestGraphQLChunker_EmptyTypeDefinition(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type Empty {
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Schema.TypeName != "Empty" {
+			t.Errorf("expected type name 'Empty', got %q", chunk.Metadata.Schema.TypeName)
+		}
+	}
+}
+
+func TestGraphQLChunker_OriginalSizeTracked(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type Test {
+  id: ID!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.OriginalSize != len(content) {
+		t.Errorf("expected OriginalSize %d, got %d", len(content), result.OriginalSize)
+	}
+}
+
+func TestGraphQLChunker_TokenEstimatePopulated(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type User {
+  id: ID!
+  name: String!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.TokenEstimate <= 0 {
+			t.Error("expected TokenEstimate to be positive")
+		}
+	}
+}
+
+func TestGraphQLChunker_ChunkIndexes(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type A {
+  id: ID!
+}
+
+type B {
+  id: ID!
+}
+
+type C {
+  id: ID!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify chunk indexes are sequential starting from 0
+	for i, chunk := range result.Chunks {
+		if chunk.Index != i {
+			t.Errorf("expected chunk index %d, got %d", i, chunk.Index)
+		}
+	}
+}
+
+func TestGraphQLChunker_StartEndOffsets(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type Test {
+  id: ID!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.EndOffset <= chunk.StartOffset {
+			t.Errorf("expected EndOffset > StartOffset, got StartOffset=%d EndOffset=%d",
+				chunk.StartOffset, chunk.EndOffset)
+		}
+	}
+}
+
+func TestGraphQLChunker_CustomDirectiveUsage(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type User {
+  id: ID!
+  email: String! @auth(requires: ADMIN)
+  name: String @deprecated(reason: "Use fullName instead")
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Directives on fields should be preserved
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "@auth") {
+			t.Error("expected chunk to contain @auth directive")
+		}
+		if !strings.Contains(chunk.Content, "@deprecated") {
+			t.Error("expected chunk to contain @deprecated directive")
+		}
+	}
+}
+
+func TestGraphQLChunker_ListTypes(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `type Query {
+  users: [User!]!
+  posts: [Post]
+  comments: [Comment!]
+  tags: [String]!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Various list type syntaxes should be preserved
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "[User!]!") {
+			t.Error("expected chunk to contain non-nullable list of non-nullable")
+		}
+		if !strings.Contains(chunk.Content, "[Post]") {
+			t.Error("expected chunk to contain nullable list of nullable")
+		}
+	}
+}
+
+func TestGraphQLChunker_MultipleInterfaces(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `interface Node {
+  id: ID!
+}
+
+interface Timestamped {
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type User implements Node & Timestamped {
+  id: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  name: String!
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have 2 interfaces + 1 type
+	if result.TotalChunks != 3 {
+		t.Errorf("expected 3 chunks, got %d", result.TotalChunks)
+	}
+
+	// Check that multiple interface implementation is preserved
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Schema != nil && chunk.Metadata.Schema.TypeName == "User" {
+			if !strings.Contains(chunk.Content, "implements Node & Timestamped") {
+				t.Error("expected User type to contain 'implements Node & Timestamped'")
+			}
+			break
+		}
+	}
+}
+
+func TestGraphQLChunker_EnumWithDescriptions(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `"""
+Role enum represents user roles in the system
+"""
+enum Role {
+  "Admin has full access"
+  ADMIN
+  "User has standard access"
+  USER
+  "Guest has limited access"
+  GUEST
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks < 1 {
+		t.Errorf("expected at least 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Find the enum chunk
+	found := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Schema != nil && chunk.Metadata.Schema.TypeKind == "enum" {
+			found = true
+			// Descriptions should be in chunk
+			if !strings.Contains(chunk.Content, "Admin has full access") {
+				t.Error("expected chunk to contain enum value description")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find enum chunk")
+	}
+}
+
+func TestGraphQLChunker_InputWithDefaultValues(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `input CreateUserInput {
+  name: String!
+  email: String!
+  role: Role = USER
+  active: Boolean = true
+  tags: [String!] = []
+}
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Default values should be preserved
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "role: Role = USER") {
+			t.Error("expected chunk to contain default enum value")
+		}
+		if !strings.Contains(chunk.Content, "active: Boolean = true") {
+			t.Error("expected chunk to contain default boolean value")
+		}
+	}
+}
+
+func TestGraphQLChunker_OnlyComments(t *testing.T) {
+	c := NewGraphQLChunker()
+	content := `# This is just a comment file
+# with multiple lines of comments
+# and no actual types
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should produce at least one chunk with the comments
+	if result.TotalChunks < 1 {
+		t.Errorf("expected at least 1 chunk, got %d", result.TotalChunks)
+	}
+}

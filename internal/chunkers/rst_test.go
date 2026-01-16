@@ -455,3 +455,407 @@ But no headings at all.
 		t.Errorf("expected level 0 for no heading, got %d", result.Chunks[0].Metadata.Document.HeadingLevel)
 	}
 }
+
+// Edge case: Underline shorter than heading text should NOT be recognized as heading
+func TestRSTChunker_ShortUnderline(t *testing.T) {
+	c := NewRSTChunker()
+	content := `This Is A Long Heading
+====
+
+Not a heading because underline is too short.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be a single chunk with no heading detected
+	if len(result.Chunks) != 1 {
+		t.Errorf("expected 1 chunk, got %d", len(result.Chunks))
+	}
+
+	// No heading should be detected because underline is too short
+	if result.Chunks[0].Metadata.Document.HeadingLevel != 0 {
+		t.Errorf("expected level 0 (no heading), got %d", result.Chunks[0].Metadata.Document.HeadingLevel)
+	}
+}
+
+// Edge case: Mixed underline characters on same line should NOT be valid
+func TestRSTChunker_MixedUnderlineChars(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Title
+=-==-
+
+This should not have a heading.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Mixed underline chars should not be recognized as heading
+	if len(result.Chunks) != 1 {
+		t.Errorf("expected 1 chunk, got %d", len(result.Chunks))
+	}
+
+	if result.Chunks[0].Metadata.Document.HeadingLevel != 0 {
+		t.Errorf("expected level 0 (no heading), got %d", result.Chunks[0].Metadata.Document.HeadingLevel)
+	}
+}
+
+// Edge case: Consecutive headings without content between them
+func TestRSTChunker_ConsecutiveHeadings(t *testing.T) {
+	c := NewRSTChunker()
+	content := `First Heading
+=============
+
+Second Heading
+--------------
+
+Third Heading
+~~~~~~~~~~~~~
+
+Finally some content.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Each heading should create a section even if empty
+	if len(result.Chunks) < 3 {
+		t.Errorf("expected at least 3 chunks for consecutive headings, got %d", len(result.Chunks))
+	}
+
+	// Verify heading names
+	headings := []string{}
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Document != nil && chunk.Metadata.Document.Heading != "" {
+			headings = append(headings, chunk.Metadata.Document.Heading)
+		}
+	}
+
+	expectedHeadings := []string{"First Heading", "Second Heading", "Third Heading"}
+	for _, expected := range expectedHeadings {
+		found := false
+		for _, h := range headings {
+			if h == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected to find heading %q, headings found: %v", expected, headings)
+		}
+	}
+}
+
+// Edge case: Unicode in heading text
+// RST heading detection now uses character (rune) count, not byte count,
+// so underlines only need to match the character length of the heading.
+func TestRSTChunker_UnicodeHeadings(t *testing.T) {
+	c := NewRSTChunker()
+	// Underlines match character count (not byte count)
+	// "日本語のタイトル" = 8 characters
+	// "Привет мир" = 10 characters
+	// "Émojis 🎉 in heading" = 20 characters
+	content := `日本語のタイトル
+================
+
+This section has a Japanese title.
+
+Привет мир
+----------
+
+This section has a Russian title.
+
+Émojis 🎉 in heading
+====================
+
+This section has emojis.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should recognize Unicode headings
+	if len(result.Chunks) < 3 {
+		t.Fatalf("expected at least 3 chunks, got %d", len(result.Chunks))
+	}
+
+	// Check that Unicode headings are preserved
+	headings := []string{}
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Document != nil && chunk.Metadata.Document.Heading != "" {
+			headings = append(headings, chunk.Metadata.Document.Heading)
+		}
+	}
+
+	if len(headings) < 3 {
+		t.Errorf("expected at least 3 headings, got %d: %v", len(headings), headings)
+	}
+
+	// Verify specific headings are found
+	expectedHeadings := map[string]bool{
+		"日本語のタイトル":       false,
+		"Привет мир":       false,
+		"Émojis 🎉 in heading": false,
+	}
+	for _, h := range headings {
+		if _, ok := expectedHeadings[h]; ok {
+			expectedHeadings[h] = true
+		}
+	}
+	for heading, found := range expectedHeadings {
+		if !found {
+			t.Errorf("expected to find heading %q", heading)
+		}
+	}
+}
+
+// Edge case: Overline with mismatched underline character should NOT form valid heading
+func TestRSTChunker_MismatchedOverlineUnderline(t *testing.T) {
+	c := NewRSTChunker()
+	content := `========
+Title
+--------
+
+Content here.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Mismatched overline/underline should not form a valid overlined heading
+	// The behavior depends on implementation - either treated as two separate things
+	// or not recognized as a heading at all
+	if len(result.Chunks) == 0 {
+		t.Fatal("expected at least 1 chunk")
+	}
+}
+
+// Edge case: Single character underline should NOT be valid
+func TestRSTChunker_SingleCharUnderline(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Title
+=
+
+Not a heading.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Single char underline is not valid (must be at least 2 chars)
+	if len(result.Chunks) != 1 {
+		t.Errorf("expected 1 chunk, got %d", len(result.Chunks))
+	}
+
+	if result.Chunks[0].Metadata.Document.HeadingLevel != 0 {
+		t.Errorf("expected level 0 (no heading), got %d", result.Chunks[0].Metadata.Document.HeadingLevel)
+	}
+}
+
+// Edge case: Invalid underline characters (not in RST spec)
+func TestRSTChunker_InvalidUnderlineChars(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Title
+@@@@@
+
+This should not be a heading.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// '@' is not a valid RST underline character
+	if len(result.Chunks) != 1 {
+		t.Errorf("expected 1 chunk, got %d", len(result.Chunks))
+	}
+
+	if result.Chunks[0].Metadata.Document.HeadingLevel != 0 {
+		t.Errorf("expected level 0 (no heading), got %d", result.Chunks[0].Metadata.Document.HeadingLevel)
+	}
+}
+
+// Edge case: Heading with trailing whitespace on underline
+func TestRSTChunker_UnderlineWithTrailingWhitespace(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Title
+=====
+
+Content after heading with trailing spaces on underline.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Trailing whitespace should be stripped and heading recognized
+	if len(result.Chunks) != 1 {
+		t.Errorf("expected 1 chunk, got %d", len(result.Chunks))
+	}
+
+	if result.Chunks[0].Metadata.Document == nil {
+		t.Fatal("expected Document metadata")
+	}
+
+	if result.Chunks[0].Metadata.Document.Heading != "Title" {
+		t.Errorf("expected heading 'Title', got %q", result.Chunks[0].Metadata.Document.Heading)
+	}
+}
+
+// Edge case: Very short heading with very long underline
+func TestRSTChunker_LongUnderlineShortHeading(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Hi
+================================================
+
+Short heading with very long underline.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Long underline should still work with short heading
+	if len(result.Chunks) != 1 {
+		t.Errorf("expected 1 chunk, got %d", len(result.Chunks))
+	}
+
+	if result.Chunks[0].Metadata.Document.Heading != "Hi" {
+		t.Errorf("expected heading 'Hi', got %q", result.Chunks[0].Metadata.Document.Heading)
+	}
+
+	if result.Chunks[0].Metadata.Document.HeadingLevel != 1 {
+		t.Errorf("expected level 1, got %d", result.Chunks[0].Metadata.Document.HeadingLevel)
+	}
+}
+
+// Edge case: Heading at very end of file with no trailing newline
+func TestRSTChunker_HeadingAtEndNoTrailingNewline(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Intro content.
+
+Final Section
+=============`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should still recognize heading at end
+	if len(result.Chunks) < 1 {
+		t.Fatal("expected at least 1 chunk")
+	}
+
+	// Find the Final Section heading
+	found := false
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Document != nil && chunk.Metadata.Document.Heading == "Final Section" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Error("expected to find 'Final Section' heading at end of file")
+	}
+}
+
+// Edge case: Directive that looks like it could be a heading
+func TestRSTChunker_DirectiveNotHeading(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Real Title
+==========
+
+.. note:: This is a note directive
+
+.. This is a comment
+   ================
+   This underline is inside a comment
+
+Regular paragraph.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only one heading should be detected
+	headingCount := 0
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Document != nil && chunk.Metadata.Document.HeadingLevel > 0 {
+			headingCount++
+		}
+	}
+
+	if headingCount != 1 {
+		t.Errorf("expected 1 heading (Real Title), got %d", headingCount)
+	}
+}
+
+// Edge case: Same underline char at different positions creates consistent levels
+func TestRSTChunker_SameCharReusedLevel(t *testing.T) {
+	c := NewRSTChunker()
+	content := `Chapter One
+===========
+
+Content.
+
+Section A
+---------
+
+Content.
+
+Chapter Two
+===========
+
+Content.
+
+Section B
+---------
+
+Content.
+`
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify that same underline char produces same level
+	levelMap := make(map[string]int)
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Document != nil && chunk.Metadata.Document.Heading != "" {
+			levelMap[chunk.Metadata.Document.Heading] = chunk.Metadata.Document.HeadingLevel
+		}
+	}
+
+	// Both chapters should be level 1
+	if levelMap["Chapter One"] != levelMap["Chapter Two"] {
+		t.Errorf("expected same level for chapters: One=%d, Two=%d",
+			levelMap["Chapter One"], levelMap["Chapter Two"])
+	}
+
+	// Both sections should be level 2
+	if levelMap["Section A"] != levelMap["Section B"] {
+		t.Errorf("expected same level for sections: A=%d, B=%d",
+			levelMap["Section A"], levelMap["Section B"])
+	}
+}

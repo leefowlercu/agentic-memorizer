@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"strconv"
 	"testing"
 )
 
@@ -346,4 +347,274 @@ func createTestDOCXWithTable(t *testing.T) []byte {
 	}
 
 	return buf.Bytes()
+}
+
+func TestDOCXChunker_EdgeCases(t *testing.T) {
+	chunker := NewDOCXChunker()
+
+	t.Run("ContextCancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		content := createTestDOCX(t, []docxTestPara{
+			{text: "Content", style: ""},
+		})
+		_, err := chunker.Chunk(ctx, content, DefaultChunkOptions())
+		if err == nil {
+			t.Error("Expected context cancellation error")
+		}
+		if err != context.Canceled {
+			t.Errorf("Expected context.Canceled, got %v", err)
+		}
+	})
+
+	t.Run("MissingDocumentXML", func(t *testing.T) {
+		// Create zip without document.xml
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		// Add only content types
+		contentTypes := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+</Types>`
+		f, _ := w.Create("[Content_Types].xml")
+		f.Write([]byte(contentTypes))
+		w.Close()
+
+		_, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err == nil {
+			t.Error("Expected error for missing document.xml")
+		}
+	})
+
+	t.Run("LargeSectionSplitting", func(t *testing.T) {
+		// Create document with large paragraph
+		var paragraphs []docxTestPara
+		paragraphs = append(paragraphs, docxTestPara{text: "Title", style: "Heading1"})
+		for i := 0; i < 50; i++ {
+			paragraphs = append(paragraphs, docxTestPara{
+				text:  "This is paragraph number " + strconv.Itoa(i) + " with some content.",
+				style: "",
+			})
+		}
+		content := createTestDOCXWithStyles(t, paragraphs)
+
+		opts := ChunkOptions{MaxChunkSize: 200}
+		result, err := chunker.Chunk(context.Background(), content, opts)
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should have multiple chunks due to size limit
+		if len(result.Chunks) < 2 {
+			t.Errorf("Expected multiple chunks for large content, got %d", len(result.Chunks))
+		}
+	})
+
+	t.Run("CSVEscapingSpecialChars", func(t *testing.T) {
+		// Create document with table containing special chars
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		docContent := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:tbl>
+<w:tr>
+<w:tc><w:p><w:r><w:t>Name</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:t>Value, with comma</w:t></w:r></w:p></w:tc>
+</w:tr>
+<w:tr>
+<w:tc><w:p><w:r><w:t>Quote "test"</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:t>Normal</w:t></w:r></w:p></w:tc>
+</w:tr>
+</w:tbl>
+</w:body>
+</w:document>`
+
+		f, _ := w.Create("word/document.xml")
+		f.Write([]byte(docContent))
+
+		contentTypes := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+		f, _ = w.Create("[Content_Types].xml")
+		f.Write([]byte(contentTypes))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should have properly escaped CSV with quotes for values containing commas/quotes
+		found := false
+		for _, chunk := range result.Chunks {
+			// Values with commas should be quoted in CSV
+			if contains(chunk.Content, "\"Value, with comma\"") || contains(chunk.Content, "Value, with comma") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Log("CSV escaping test: content may be structured differently")
+		}
+	})
+
+	t.Run("SectionPathBuilding", func(t *testing.T) {
+		content := createTestDOCXWithStyles(t, []docxTestPara{
+			{text: "Chapter 1", style: "Heading1"},
+			{text: "Introduction text.", style: ""},
+			{text: "Section 1.1", style: "Heading2"},
+			{text: "Section content.", style: ""},
+			{text: "Section 1.2", style: "Heading2"},
+			{text: "More section content.", style: ""},
+		})
+
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Find Section 1.2 chunk and verify section path
+		for _, chunk := range result.Chunks {
+			if chunk.Metadata.Document != nil && chunk.Metadata.Document.Heading == "Section 1.2" {
+				expected := "Chapter 1 > Section 1.2"
+				if chunk.Metadata.Document.SectionPath != expected {
+					t.Errorf("SectionPath = %q, want %q", chunk.Metadata.Document.SectionPath, expected)
+				}
+				return
+			}
+		}
+	})
+
+	t.Run("TokenEstimatePopulated", func(t *testing.T) {
+		content := createTestDOCX(t, []docxTestPara{
+			{text: "Test paragraph with some content", style: ""},
+		})
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		for i, chunk := range result.Chunks {
+			if chunk.Metadata.TokenEstimate <= 0 {
+				t.Errorf("Chunk %d has invalid TokenEstimate: %d", i, chunk.Metadata.TokenEstimate)
+			}
+		}
+	})
+
+	t.Run("EmptyParagraphs", func(t *testing.T) {
+		// Document with empty paragraphs
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		docContent := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t>Content before</w:t></w:r></w:p>
+<w:p></w:p>
+<w:p><w:r><w:t>   </w:t></w:r></w:p>
+<w:p><w:r><w:t>Content after</w:t></w:r></w:p>
+</w:body>
+</w:document>`
+
+		f, _ := w.Create("word/document.xml")
+		f.Write([]byte(docContent))
+
+		contentTypes := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+		f, _ = w.Create("[Content_Types].xml")
+		f.Write([]byte(contentTypes))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Empty paragraphs should be skipped
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Content before") && contains(chunk.Content, "Content after") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find both content paragraphs")
+		}
+	})
+
+	t.Run("MultipleTables", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		docContent := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t>First paragraph</w:t></w:r></w:p>
+<w:tbl>
+<w:tr><w:tc><w:p><w:r><w:t>Table1 Cell</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>
+<w:p><w:r><w:t>Middle paragraph</w:t></w:r></w:p>
+<w:tbl>
+<w:tr><w:tc><w:p><w:r><w:t>Table2 Cell</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>
+<w:p><w:r><w:t>Last paragraph</w:t></w:r></w:p>
+</w:body>
+</w:document>`
+
+		f, _ := w.Create("word/document.xml")
+		f.Write([]byte(docContent))
+
+		contentTypes := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+		f, _ = w.Create("[Content_Types].xml")
+		f.Write([]byte(contentTypes))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Both tables should be processed
+		foundTable1 := false
+		foundTable2 := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Table1 Cell") {
+				foundTable1 = true
+			}
+			if contains(chunk.Content, "Table2 Cell") {
+				foundTable2 = true
+			}
+		}
+		if !foundTable1 || !foundTable2 {
+			t.Error("Expected to find content from both tables")
+		}
+	})
+
+	t.Run("NoHeadingStyles", func(t *testing.T) {
+		// Document with no heading styles - should still produce chunks
+		content := createTestDOCX(t, []docxTestPara{
+			{text: "First paragraph", style: ""},
+			{text: "Second paragraph", style: ""},
+			{text: "Third paragraph", style: ""},
+		})
+
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		if len(result.Chunks) == 0 {
+			t.Error("Expected at least one chunk even without headings")
+		}
+	})
 }

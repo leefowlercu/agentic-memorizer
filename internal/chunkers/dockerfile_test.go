@@ -315,3 +315,356 @@ RUN apk add curl
 		}
 	}
 }
+
+func TestDockerfileChunker_FromWithDigest(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM alpine@sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b
+
+RUN echo "test"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Build == nil {
+			t.Fatal("expected Build metadata")
+		}
+		// Base image should include the digest
+		if chunk.Metadata.Build.BaseImage != "alpine@sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b" {
+			t.Errorf("expected base image with digest, got %q", chunk.Metadata.Build.BaseImage)
+		}
+	}
+}
+
+func TestDockerfileChunker_ArgBeforeFrom(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `ARG BASE_IMAGE=alpine:latest
+FROM ${BASE_IMAGE}
+
+RUN echo "test"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// The ARG before FROM should be included as preamble
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "ARG BASE_IMAGE") {
+			t.Error("expected chunk to contain ARG preamble")
+		}
+		if !strings.Contains(chunk.Content, "FROM ${BASE_IMAGE}") {
+			t.Error("expected chunk to contain FROM instruction")
+		}
+	}
+}
+
+func TestDockerfileChunker_ScratchImage(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM scratch
+
+COPY binary /binary
+ENTRYPOINT ["/binary"]
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Build.BaseImage != "scratch" {
+			t.Errorf("expected base image 'scratch', got %q", chunk.Metadata.Build.BaseImage)
+		}
+	}
+}
+
+func TestDockerfileChunker_EmptyStage(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM alpine AS base
+
+FROM base AS final
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Both stages should be captured even though they're minimal
+	if result.TotalChunks < 1 {
+		t.Errorf("expected at least 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Check that we have the named stages
+	stageNames := make(map[string]bool)
+	for _, chunk := range result.Chunks {
+		if chunk.Metadata.Build != nil {
+			stageNames[chunk.Metadata.Build.StageName] = true
+		}
+	}
+
+	if !stageNames["base"] {
+		t.Error("expected to find stage 'base'")
+	}
+}
+
+func TestDockerfileChunker_CaseInsensitiveInstructions(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `from alpine
+run echo "lowercase"
+COPY . /app
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// Lowercase FROM should still be recognized
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Build.BaseImage != "alpine" {
+			t.Errorf("expected base image 'alpine', got %q", chunk.Metadata.Build.BaseImage)
+		}
+	}
+}
+
+func TestDockerfileChunker_MultiplePlatformFlags(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM --platform=$BUILDPLATFORM golang:1.22 AS builder
+
+RUN go build
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.Build.BaseImage != "golang:1.22" {
+			t.Errorf("expected base image 'golang:1.22', got %q", chunk.Metadata.Build.BaseImage)
+		}
+		if chunk.Metadata.Build.StageName != "builder" {
+			t.Errorf("expected stage name 'builder', got %q", chunk.Metadata.Build.StageName)
+		}
+	}
+}
+
+func TestDockerfileChunker_OriginalSizeTracked(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM alpine
+RUN echo "test"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.OriginalSize != len(content) {
+		t.Errorf("expected OriginalSize %d, got %d", len(content), result.OriginalSize)
+	}
+}
+
+func TestDockerfileChunker_LargeStageSpiltting(t *testing.T) {
+	c := NewDockerfileChunker()
+
+	// Create a dockerfile with a very large RUN command
+	var largeRun strings.Builder
+	largeRun.WriteString("FROM alpine\n\nRUN ")
+	for i := 0; i < 100; i++ {
+		largeRun.WriteString("echo 'line " + string(rune('0'+i%10)) + "' && \\\n    ")
+	}
+	largeRun.WriteString("echo 'done'\n")
+
+	content := largeRun.String()
+
+	// Use a small max chunk size to trigger splitting
+	opts := ChunkOptions{MaxChunkSize: 500}
+
+	result, err := c.Chunk(context.Background(), []byte(content), opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be split into multiple chunks
+	if result.TotalChunks < 2 {
+		t.Errorf("expected content to be split into multiple chunks, got %d", result.TotalChunks)
+	}
+
+	// All chunks should have Build metadata with same stage info
+	for i, chunk := range result.Chunks {
+		if chunk.Metadata.Build == nil {
+			t.Errorf("chunk %d missing Build metadata", i)
+		}
+	}
+}
+
+func TestDockerfileChunker_ThreeStagesWithNames(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM golang:1.22 AS builder
+RUN go build
+
+FROM alpine AS runtime
+COPY --from=builder /app/bin /app/bin
+
+FROM runtime AS final
+CMD ["/app/bin/server"]
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 3 {
+		t.Errorf("expected 3 chunks, got %d", result.TotalChunks)
+	}
+
+	// Verify all stage names are correctly extracted
+	expectedStages := []struct {
+		name      string
+		baseImage string
+	}{
+		{"builder", "golang:1.22"},
+		{"runtime", "alpine"},
+		{"final", "runtime"},
+	}
+
+	for i, expected := range expectedStages {
+		if i >= result.TotalChunks {
+			break
+		}
+		chunk := result.Chunks[i]
+		if chunk.Metadata.Build.StageName != expected.name {
+			t.Errorf("chunk %d: expected stage name %q, got %q", i, expected.name, chunk.Metadata.Build.StageName)
+		}
+		if chunk.Metadata.Build.BaseImage != expected.baseImage {
+			t.Errorf("chunk %d: expected base image %q, got %q", i, expected.baseImage, chunk.Metadata.Build.BaseImage)
+		}
+	}
+}
+
+func TestDockerfileChunker_OnlyCommentsBeforeFrom(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `# syntax=docker/dockerfile:1
+# This is a multi-line
+# comment block
+
+FROM alpine
+RUN echo "test"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks != 1 {
+		t.Errorf("expected 1 chunk, got %d", result.TotalChunks)
+	}
+
+	// The syntax directive and comments should be included as preamble
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if !strings.Contains(chunk.Content, "# syntax=docker/dockerfile:1") {
+			t.Error("expected chunk to contain syntax directive in preamble")
+		}
+	}
+}
+
+func TestDockerfileChunker_TokenEstimatePopulated(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM alpine
+RUN apk add --no-cache curl wget git
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		if chunk.Metadata.TokenEstimate <= 0 {
+			t.Error("expected TokenEstimate to be positive")
+		}
+	}
+}
+
+func TestDockerfileChunker_ChunkIndexes(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM golang AS builder
+RUN go build
+
+FROM alpine
+COPY --from=builder /app /app
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify chunk indexes are sequential starting from 0
+	for i, chunk := range result.Chunks {
+		if chunk.Index != i {
+			t.Errorf("expected chunk index %d, got %d", i, chunk.Index)
+		}
+	}
+}
+
+func TestDockerfileChunker_StartEndOffsets(t *testing.T) {
+	c := NewDockerfileChunker()
+	content := `FROM alpine
+RUN echo "test"
+`
+
+	result, err := c.Chunk(context.Background(), []byte(content), DefaultChunkOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalChunks > 0 {
+		chunk := result.Chunks[0]
+		// StartOffset should be 0 for first chunk
+		if chunk.StartOffset != 0 {
+			t.Errorf("expected StartOffset 0, got %d", chunk.StartOffset)
+		}
+		// EndOffset should be greater than StartOffset
+		if chunk.EndOffset <= chunk.StartOffset {
+			t.Errorf("expected EndOffset > StartOffset, got StartOffset=%d EndOffset=%d",
+				chunk.StartOffset, chunk.EndOffset)
+		}
+	}
+}

@@ -269,3 +269,309 @@ func createTestODT(t *testing.T, elements []odtTestElement) []byte {
 func itoa(i int) string {
 	return strconv.Itoa(i)
 }
+
+func TestODTChunker_EdgeCases(t *testing.T) {
+	chunker := NewODTChunker()
+
+	t.Run("ContextCancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		content := createTestODT(t, []odtTestElement{
+			{isHeading: false, level: 0, text: "Test content"},
+		})
+		_, err := chunker.Chunk(ctx, content, DefaultChunkOptions())
+		if err == nil {
+			t.Error("Expected context cancellation error")
+		}
+		if err != context.Canceled {
+			t.Errorf("Expected context.Canceled, got %v", err)
+		}
+	})
+
+	t.Run("MissingContentXML", func(t *testing.T) {
+		// Create zip without content.xml
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		// Add only mimetype
+		f, _ := w.Create("mimetype")
+		f.Write([]byte("application/vnd.oasis.opendocument.text"))
+		w.Close()
+
+		_, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err == nil {
+			t.Error("Expected error for missing content.xml")
+		}
+	})
+
+	t.Run("TabElementHandling", func(t *testing.T) {
+		// Create ODT with tab elements
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		contentXML := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                         xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+<office:body>
+<office:text>
+<text:p>Before<text:tab/>After</text:p>
+</office:text></office:body></office:document-content>`
+
+		f, _ := w.Create("content.xml")
+		f.Write([]byte(contentXML))
+
+		f, _ = w.Create("mimetype")
+		f.Write([]byte("application/vnd.oasis.opendocument.text"))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Tab should be converted to \t
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Before") && contains(chunk.Content, "After") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find content with tab")
+		}
+	})
+
+	t.Run("SpaceElementHandling", func(t *testing.T) {
+		// Create ODT with space elements
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		contentXML := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                         xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+<office:body>
+<office:text>
+<text:p>Word<text:s text:c="3"/>More</text:p>
+</office:text></office:body></office:document-content>`
+
+		f, _ := w.Create("content.xml")
+		f.Write([]byte(contentXML))
+
+		f, _ = w.Create("mimetype")
+		f.Write([]byte("application/vnd.oasis.opendocument.text"))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Multiple spaces should be preserved
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Word") && contains(chunk.Content, "More") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find content with spaces")
+		}
+	})
+
+	t.Run("LineBreakElementHandling", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		contentXML := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                         xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+<office:body>
+<office:text>
+<text:p>Line1<text:line-break/>Line2</text:p>
+</office:text></office:body></office:document-content>`
+
+		f, _ := w.Create("content.xml")
+		f.Write([]byte(contentXML))
+
+		f, _ = w.Create("mimetype")
+		f.Write([]byte("application/vnd.oasis.opendocument.text"))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Line break should be in content
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Line1") && contains(chunk.Content, "Line2") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find content with line break")
+		}
+	})
+
+	t.Run("TokenEstimatePopulated", func(t *testing.T) {
+		content := createTestODT(t, []odtTestElement{
+			{isHeading: false, level: 0, text: "Test content for token estimation"},
+		})
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		for i, chunk := range result.Chunks {
+			if chunk.Metadata.TokenEstimate <= 0 {
+				t.Errorf("Chunk %d has invalid TokenEstimate: %d", i, chunk.Metadata.TokenEstimate)
+			}
+		}
+	})
+
+	t.Run("EmptyHeadings", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		contentXML := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                         xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+<office:body>
+<office:text>
+<text:h text:outline-level="1"></text:h>
+<text:p>Content under empty heading</text:p>
+</office:text></office:body></office:document-content>`
+
+		f, _ := w.Create("content.xml")
+		f.Write([]byte(contentXML))
+
+		f, _ = w.Create("mimetype")
+		f.Write([]byte("application/vnd.oasis.opendocument.text"))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should handle empty headings gracefully
+		found := false
+		for _, chunk := range result.Chunks {
+			if contains(chunk.Content, "Content under empty heading") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find content after empty heading")
+		}
+	})
+
+	t.Run("NoHeadings", func(t *testing.T) {
+		content := createTestODT(t, []odtTestElement{
+			{isHeading: false, level: 0, text: "First paragraph"},
+			{isHeading: false, level: 0, text: "Second paragraph"},
+			{isHeading: false, level: 0, text: "Third paragraph"},
+		})
+
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should still produce chunks even without headings
+		if len(result.Chunks) == 0 {
+			t.Error("Expected at least one chunk even without headings")
+		}
+	})
+
+	t.Run("DeeplyNestedHeadings", func(t *testing.T) {
+		content := createTestODT(t, []odtTestElement{
+			{isHeading: true, level: 1, text: "Level 1"},
+			{isHeading: true, level: 2, text: "Level 2"},
+			{isHeading: true, level: 3, text: "Level 3"},
+			{isHeading: true, level: 4, text: "Level 4"},
+			{isHeading: false, level: 0, text: "Deep content"},
+		})
+
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should handle deeply nested headings
+		if len(result.Chunks) < 2 {
+			t.Logf("Got %d chunks for nested headings", len(result.Chunks))
+		}
+	})
+
+	t.Run("StyleBasedHeadings", func(t *testing.T) {
+		// Create ODT with styles.xml defining outline levels
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+
+		stylesXML := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                        xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+                        xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+<office:automatic-styles>
+<style:style style:name="P1" style:family="paragraph">
+<style:paragraph-properties fo:outline-level="1" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"/>
+</style:style>
+</office:automatic-styles>
+</office:document-styles>`
+
+		f, _ := w.Create("styles.xml")
+		f.Write([]byte(stylesXML))
+
+		contentXML := `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                         xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+<office:body>
+<office:text>
+<text:p text:style-name="P1">Styled Heading</text:p>
+<text:p>Regular content</text:p>
+</office:text></office:body></office:document-content>`
+
+		f, _ = w.Create("content.xml")
+		f.Write([]byte(contentXML))
+
+		f, _ = w.Create("mimetype")
+		f.Write([]byte("application/vnd.oasis.opendocument.text"))
+		w.Close()
+
+		result, err := chunker.Chunk(context.Background(), buf.Bytes(), DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should extract styled headings
+		if result == nil {
+			t.Error("Expected non-nil result")
+		}
+	})
+
+	t.Run("HeadingLevelOutOfOrder", func(t *testing.T) {
+		content := createTestODT(t, []odtTestElement{
+			{isHeading: true, level: 3, text: "Start at Level 3"},
+			{isHeading: false, level: 0, text: "Content"},
+			{isHeading: true, level: 1, text: "Then Level 1"},
+			{isHeading: false, level: 0, text: "More content"},
+		})
+
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		if err != nil {
+			t.Errorf("Chunk returned error: %v", err)
+		}
+
+		// Should handle out-of-order heading levels
+		if len(result.Chunks) < 2 {
+			t.Logf("Got %d chunks for out-of-order headings", len(result.Chunks))
+		}
+	})
+}

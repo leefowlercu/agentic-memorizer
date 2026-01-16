@@ -88,7 +88,6 @@ type Daemon struct {
 	mu              sync.RWMutex
 	config          DaemonConfig
 	state           DaemonState
-	components      []Component
 	server          *Server
 	health          *HealthManager
 	pidFile         *PIDFile
@@ -105,12 +104,11 @@ func NewDaemon(cfg DaemonConfig) *Daemon {
 	pidFile := NewPIDFile(cfg.PIDFile)
 
 	return &Daemon{
-		config:     cfg,
-		state:      DaemonStateStopped,
-		components: make([]Component, 0),
-		server:     server,
-		health:     health,
-		pidFile:    pidFile,
+		config:  cfg,
+		state:   DaemonStateStopped,
+		server:  server,
+		health:  health,
+		pidFile: pidFile,
 	}
 }
 
@@ -131,25 +129,6 @@ func (d *Daemon) setState(state DaemonState) {
 // Health returns the current aggregate health status.
 func (d *Daemon) Health() HealthStatus {
 	return d.health.Status()
-}
-
-// RegisterComponent adds a component to be managed by the daemon.
-func (d *Daemon) RegisterComponent(c Component) {
-	if c == nil {
-		slog.Warn("attempted to register nil component")
-		return
-	}
-
-	// Check for duplicate component names
-	for _, existing := range d.components {
-		if existing.Name() == c.Name() {
-			slog.Warn("component already registered", "name", c.Name())
-			return
-		}
-	}
-
-	d.components = append(d.components, c)
-	slog.Debug("component registered", "name", c.Name())
 }
 
 // OnConfigReload registers a callback to be invoked when config is reloaded.
@@ -195,8 +174,8 @@ func (d *Daemon) TriggerConfigReload() error {
 }
 
 // Start starts the daemon and blocks until the context is canceled.
-// It claims the PID file, starts all components, starts the HTTP server,
-// and then blocks until shutdown is requested.
+// It claims the PID file, starts the HTTP server, and then blocks until
+// shutdown is requested.
 func (d *Daemon) Start(ctx context.Context) error {
 	d.setState(DaemonStateStarting)
 
@@ -208,26 +187,6 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	// Ensure PID file is cleaned up on exit (only after successful claim)
 	defer d.pidFile.Remove()
-
-	// Start all registered components
-	for _, c := range d.components {
-		if err := c.Start(ctx); err != nil {
-			slog.Error("failed to start component",
-				"component", c.Name(),
-				"error", err,
-			)
-			d.health.UpdateComponent(c.Name(), ComponentHealth{
-				Status:      ComponentStatusFailed,
-				Error:       err.Error(),
-				LastChecked: time.Now(),
-			})
-		} else {
-			d.health.UpdateComponent(c.Name(), ComponentHealth{
-				Status:      ComponentStatusRunning,
-				LastChecked: time.Now(),
-			})
-		}
-	}
 
 	d.setState(DaemonStateRunning)
 	slog.Info("daemon started",
@@ -266,24 +225,9 @@ func (d *Daemon) Stop() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), d.config.ShutdownTimeout)
 	defer cancel()
 
-	// Shutdown HTTP server first
+	// Shutdown HTTP server
 	if err := d.server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("failed to shutdown http server", "error", err)
-	}
-
-	// Stop components in reverse order
-	for i := len(d.components) - 1; i >= 0; i-- {
-		c := d.components[i]
-		if err := c.Stop(shutdownCtx); err != nil {
-			slog.Error("failed to stop component",
-				"component", c.Name(),
-				"error", err,
-			)
-		}
-		d.health.UpdateComponent(c.Name(), ComponentHealth{
-			Status:      ComponentStatusStopped,
-			LastChecked: time.Now(),
-		})
 	}
 
 	d.setState(DaemonStateStopped)

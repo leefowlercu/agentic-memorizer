@@ -232,7 +232,6 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.setState(DaemonStateRunning)
 	slog.Info("daemon started",
 		"state", d.State(),
-		"components", len(d.components),
 	)
 
 	// Start HTTP server in background

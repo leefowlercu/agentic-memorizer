@@ -6,24 +6,44 @@ import (
 
 // Node labels for the graph schema.
 const (
-	LabelFile      = "File"
-	LabelChunk     = "Chunk"
-	LabelDirectory = "Directory"
-	LabelTag       = "Tag"
-	LabelTopic     = "Topic"
-	LabelEntity    = "Entity"
+	LabelFile           = "File"
+	LabelChunk          = "Chunk"
+	LabelDirectory      = "Directory"
+	LabelTag            = "Tag"
+	LabelTopic          = "Topic"
+	LabelEntity         = "Entity"
+	LabelCodeMeta       = "CodeMeta"
+	LabelDocumentMeta   = "DocumentMeta"
+	LabelNotebookMeta   = "NotebookMeta"
+	LabelBuildMeta      = "BuildMeta"
+	LabelInfraMeta      = "InfraMeta"
+	LabelSchemaMeta     = "SchemaMeta"
+	LabelStructuredMeta = "StructuredMeta"
+	LabelSQLMeta        = "SQLMeta"
+	LabelLogMeta        = "LogMeta"
+	LabelChunkEmbedding = "ChunkEmbedding"
 )
 
 // Relationship types for the graph schema.
 const (
-	RelContains     = "CONTAINS"      // Directory -> File/Directory
-	RelHasChunk     = "HAS_CHUNK"     // File -> Chunk
-	RelHasTag       = "HAS_TAG"       // File -> Tag
-	RelCoversTopic  = "COVERS_TOPIC"  // File -> Topic
-	RelMentions     = "MENTIONS"      // File/Chunk -> Entity
-	RelReferences   = "REFERENCES"    // File/Chunk -> File/URL
-	RelSimilarTo    = "SIMILAR_TO"    // Chunk -> Chunk (semantic similarity)
-	RelDependsOn    = "DEPENDS_ON"    // File -> File (code dependencies)
+	RelContains        = "CONTAINS"         // Directory -> File/Directory
+	RelHasChunk        = "HAS_CHUNK"        // File -> Chunk
+	RelHasTag          = "HAS_TAG"          // File -> Tag
+	RelCoversTopic     = "COVERS_TOPIC"     // File -> Topic
+	RelMentions        = "MENTIONS"         // File/Chunk -> Entity
+	RelReferences      = "REFERENCES"       // File/Chunk -> File/URL
+	RelSimilarTo       = "SIMILAR_TO"       // Chunk -> Chunk (semantic similarity)
+	RelDependsOn       = "DEPENDS_ON"       // File -> File (code dependencies)
+	RelHasCodeMeta     = "HAS_CODE_META"    // Chunk -> CodeMeta
+	RelHasDocMeta      = "HAS_DOC_META"     // Chunk -> DocumentMeta
+	RelHasNotebookMeta = "HAS_NOTEBOOK_META" // Chunk -> NotebookMeta
+	RelHasBuildMeta    = "HAS_BUILD_META"   // Chunk -> BuildMeta
+	RelHasInfraMeta    = "HAS_INFRA_META"   // Chunk -> InfraMeta
+	RelHasSchemaMeta   = "HAS_SCHEMA_META"  // Chunk -> SchemaMeta
+	RelHasStructMeta   = "HAS_STRUCT_META"  // Chunk -> StructuredMeta
+	RelHasSQLMeta      = "HAS_SQL_META"     // Chunk -> SQLMeta
+	RelHasLogMeta      = "HAS_LOG_META"     // Chunk -> LogMeta
+	RelHasEmbedding    = "HAS_EMBEDDING"    // Chunk -> ChunkEmbedding
 )
 
 // FileNode represents a file in the knowledge graph.
@@ -75,6 +95,8 @@ type FileNode struct {
 }
 
 // ChunkNode represents a chunk of a file in the knowledge graph.
+// Metadata (code, document, etc.) and embeddings are stored in separate nodes
+// connected via relationships (HAS_CODE_META, HAS_DOC_META, HAS_EMBEDDING, etc.).
 type ChunkNode struct {
 	// ID is the unique chunk identifier.
 	ID string `json:"id"`
@@ -100,35 +122,124 @@ type ChunkNode struct {
 	// ChunkType is the type of content (code, markdown, prose, etc.).
 	ChunkType string `json:"chunk_type"`
 
-	// FunctionName is the function/method name (for code chunks).
-	FunctionName string `json:"function_name,omitempty"`
-
-	// ClassName is the class/struct name (for code chunks).
-	ClassName string `json:"class_name,omitempty"`
-
-	// Heading is the section heading (for markdown chunks).
-	Heading string `json:"heading,omitempty"`
-
-	// HeadingLevel is the heading depth (for markdown chunks).
-	HeadingLevel int `json:"heading_level,omitempty"`
+	// TokenCount is the estimated token count.
+	TokenCount int `json:"token_count,omitempty"`
 
 	// Summary is the semantic summary of the chunk.
 	Summary string `json:"summary,omitempty"`
-
-	// Embedding is the vector embedding.
-	Embedding []float32 `json:"embedding,omitempty"`
-
-	// EmbeddingVersion is the version of the embedding model.
-	EmbeddingVersion int `json:"embedding_version,omitempty"`
-
-	// TokenCount is the estimated token count.
-	TokenCount int `json:"token_count,omitempty"`
 
 	// CreatedAt is when the node was created.
 	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is when the node was last updated.
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// CodeMetaNode stores code-specific metadata for a chunk.
+type CodeMetaNode struct {
+	Language     string   `json:"language,omitempty"`
+	FunctionName string   `json:"function_name,omitempty"`
+	ClassName    string   `json:"class_name,omitempty"`
+	Signature    string   `json:"signature,omitempty"`
+	ReturnType   string   `json:"return_type,omitempty"`
+	Parameters   []string `json:"parameters,omitempty"`
+	Decorators   []string `json:"decorators,omitempty"`
+	Implements   []string `json:"implements,omitempty"`
+	Visibility   string   `json:"visibility,omitempty"`
+	Docstring    string   `json:"docstring,omitempty"`
+	Namespace    string   `json:"namespace,omitempty"`
+	ParentClass  string   `json:"parent_class,omitempty"`
+	IsAsync      bool     `json:"is_async,omitempty"`
+	IsStatic     bool     `json:"is_static,omitempty"`
+	IsExported   bool     `json:"is_exported,omitempty"`
+	LineStart    int      `json:"line_start,omitempty"`
+	LineEnd      int      `json:"line_end,omitempty"`
+}
+
+// DocumentMetaNode stores document-specific metadata for a chunk.
+type DocumentMetaNode struct {
+	Heading      string   `json:"heading,omitempty"`
+	HeadingLevel int      `json:"heading_level,omitempty"`
+	SectionPath  []string `json:"section_path,omitempty"`
+	PageNumber   int      `json:"page_number,omitempty"`
+	ListType     string   `json:"list_type,omitempty"`
+	ListDepth    int      `json:"list_depth,omitempty"`
+	IsFootnote   bool     `json:"is_footnote,omitempty"`
+	IsCitation   bool     `json:"is_citation,omitempty"`
+	IsBlockquote bool     `json:"is_blockquote,omitempty"`
+}
+
+// NotebookMetaNode stores notebook-specific metadata for a chunk.
+type NotebookMetaNode struct {
+	CellIndex       int    `json:"cell_index,omitempty"`
+	CellType        string `json:"cell_type,omitempty"`
+	ExecutionCount  int    `json:"execution_count,omitempty"`
+	HasOutput       bool   `json:"has_output,omitempty"`
+	OutputTruncated bool   `json:"output_truncated,omitempty"`
+}
+
+// BuildMetaNode stores build configuration metadata for a chunk.
+type BuildMetaNode struct {
+	TargetName   string   `json:"target_name,omitempty"`
+	TargetType   string   `json:"target_type,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
+	StageName    string   `json:"stage_name,omitempty"`
+	ImageName    string   `json:"image_name,omitempty"`
+	BuildArgs    []string `json:"build_args,omitempty"`
+}
+
+// InfraMetaNode stores infrastructure configuration metadata for a chunk.
+type InfraMetaNode struct {
+	ResourceType string   `json:"resource_type,omitempty"`
+	ResourceName string   `json:"resource_name,omitempty"`
+	Provider     string   `json:"provider,omitempty"`
+	BlockType    string   `json:"block_type,omitempty"`
+	ModuleName   string   `json:"module_name,omitempty"`
+	References   []string `json:"references,omitempty"`
+}
+
+// SchemaMetaNode stores schema definition metadata for a chunk.
+type SchemaMetaNode struct {
+	MessageName    string   `json:"message_name,omitempty"`
+	ServiceName    string   `json:"service_name,omitempty"`
+	RPCName        string   `json:"rpc_name,omitempty"`
+	TypeName       string   `json:"type_name,omitempty"`
+	Fields         []string `json:"fields,omitempty"`
+	IsDeprecated   bool     `json:"is_deprecated,omitempty"`
+}
+
+// StructuredMetaNode stores structured data metadata for a chunk.
+type StructuredMetaNode struct {
+	RecordIndex int      `json:"record_index,omitempty"`
+	RecordCount int      `json:"record_count,omitempty"`
+	KeyNames    []string `json:"key_names,omitempty"`
+	ArrayPath   string   `json:"array_path,omitempty"`
+}
+
+// SQLMetaNode stores SQL-specific metadata for a chunk.
+type SQLMetaNode struct {
+	StatementType string   `json:"statement_type,omitempty"`
+	TableNames    []string `json:"table_names,omitempty"`
+	JoinedTables  []string `json:"joined_tables,omitempty"`
+	HasSubquery   bool     `json:"has_subquery,omitempty"`
+}
+
+// LogMetaNode stores log-specific metadata for a chunk.
+type LogMetaNode struct {
+	LogLevel   string    `json:"log_level,omitempty"`
+	TimeRange  [2]string `json:"time_range,omitempty"`
+	Source     string    `json:"source,omitempty"`
+	EntryCount int       `json:"entry_count,omitempty"`
+}
+
+// ChunkEmbeddingNode stores vector embeddings for a chunk.
+// Supports multiple embeddings from different providers/models.
+type ChunkEmbeddingNode struct {
+	Provider   string    `json:"provider"`
+	Model      string    `json:"model"`
+	Dimensions int       `json:"dimensions"`
+	Embedding  []float32 `json:"embedding"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // DirectoryNode represents a directory in the knowledge graph.

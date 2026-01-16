@@ -15,6 +15,8 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/treesitter/languages"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -62,7 +64,7 @@ type AnalysisResult struct {
 	Embeddings []float32
 
 	// Per-chunk data for graph persistence
-	Chunks []ChunkResult
+	Chunks []AnalyzedChunk
 
 	// Processing info
 	ChunkerUsed     string
@@ -71,8 +73,8 @@ type AnalysisResult struct {
 	AnalyzedAt      time.Time
 }
 
-// ChunkResult contains data for a single chunk including embedding.
-type ChunkResult struct {
+// AnalyzedChunk contains data for a single analyzed chunk including embedding.
+type AnalyzedChunk struct {
 	Index       int
 	Content     string
 	ContentHash string
@@ -81,18 +83,13 @@ type ChunkResult struct {
 	ChunkType   string
 	Embedding   []float32
 
-	// Code chunk metadata (from AST parsing)
-	FunctionName string
-	ClassName    string
+	// Metadata contains typed metadata from chunking (Code, Document, etc.)
+	Metadata *chunkers.ChunkMetadata
 
-	// Markdown chunk metadata
-	Heading      string
-	HeadingLevel int
-
-	// Token count estimate
+	// TokenCount is the estimated token count.
 	TokenCount int
 
-	// Per-chunk semantic summary
+	// Summary is the per-chunk semantic summary.
 	Summary string
 }
 
@@ -142,8 +139,29 @@ func NewWorker(id int, queue *Queue) *Worker {
 		queue:           queue,
 		logger:          queue.logger.With("worker_id", id),
 		stopChan:        make(chan struct{}),
-		chunkerRegistry: chunkers.DefaultRegistry(),
+		chunkerRegistry: defaultChunkerRegistry(),
 	}
+}
+
+// defaultChunkerRegistry creates a chunker registry with all standard chunkers
+// including the tree-sitter multi-language chunker.
+func defaultChunkerRegistry() *chunkers.Registry {
+	r := chunkers.DefaultRegistry()
+
+	// Create tree-sitter chunker with all language strategies
+	tsChunker := treesitter.NewTreeSitterChunker()
+	tsChunker.RegisterStrategy(languages.NewGoStrategy())
+	tsChunker.RegisterStrategy(languages.NewPythonStrategy())
+	tsChunker.RegisterStrategy(languages.NewJavaScriptStrategy())
+	tsChunker.RegisterStrategy(languages.NewTypeScriptStrategy())
+	tsChunker.RegisterStrategy(languages.NewJavaStrategy())
+	tsChunker.RegisterStrategy(languages.NewRustStrategy())
+	tsChunker.RegisterStrategy(languages.NewCStrategy())
+	tsChunker.RegisterStrategy(languages.NewCPPStrategy())
+
+	r.Register(tsChunker)
+
+	return r
 }
 
 // Run starts the worker processing loop.
@@ -398,7 +416,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	var embeddingsErr error
 	if w.embeddingsProvider != nil && w.embeddingsProvider.Available() {
 		var embeddings []float32
-		var chunkData []ChunkResult
+		var chunkData []AnalyzedChunk
 		embeddings, chunkData, embeddingsErr = w.generateEmbeddings(ctx, chunkResult.Chunks, chunkSummaries)
 		if embeddingsErr != nil {
 			w.logger.Warn("embeddings generation failed",
@@ -530,32 +548,26 @@ func (w *Worker) analyzeChunk(ctx context.Context, chunk chunkers.Chunk) (*Seman
 // generateEmbeddings creates embeddings for chunks using batch API with caching.
 // Returns both the file-level average embedding and per-chunk results.
 // The chunkSummaries parameter is optional and provides per-chunk semantic summaries.
-func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk, chunkSummaries []string) ([]float32, []ChunkResult, error) {
+func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk, chunkSummaries []string) ([]float32, []AnalyzedChunk, error) {
 	if len(chunks) == 0 {
 		return nil, nil, nil
 	}
 
 	// Prepare chunk results and identify cache hits/misses
-	chunkResults := make([]ChunkResult, len(chunks))
+	chunkResults := make([]AnalyzedChunk, len(chunks))
 	var needsEmbedding []int // indices of chunks that need embedding
 
 	for i, chunk := range chunks {
 		chunkHash := computeContentHash([]byte(chunk.Content))
-		chunkResults[i] = ChunkResult{
+		chunkResults[i] = AnalyzedChunk{
 			Index:       chunk.Index,
 			Content:     chunk.Content,
 			ContentHash: chunkHash,
 			StartOffset: chunk.StartOffset,
 			EndOffset:   chunk.EndOffset,
 			ChunkType:   string(chunk.Metadata.Type),
-			// Code chunk metadata from AST parsing
-			FunctionName: chunk.Metadata.FunctionName,
-			ClassName:    chunk.Metadata.ClassName,
-			// Markdown chunk metadata
-			Heading:      chunk.Metadata.Heading,
-			HeadingLevel: chunk.Metadata.HeadingLevel,
-			// Token count estimate
-			TokenCount: chunk.Metadata.TokenEstimate,
+			TokenCount:  chunk.Metadata.TokenEstimate,
+			Metadata:    &chunk.Metadata, // Preserve full typed metadata
 		}
 		// Set per-chunk summary if available
 		if chunkSummaries != nil && chunk.Index < len(chunkSummaries) {
@@ -786,33 +798,44 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 		// Continue - not fatal
 	}
 
-	// Persist chunks with embeddings
+	// Persist chunks with metadata and embeddings
 	for _, chunk := range result.Chunks {
 		chunkNode := &graph.ChunkNode{
-			ID:               chunk.ContentHash, // Use content hash as ID for deduplication
-			FilePath:         result.FilePath,
-			Index:            chunk.Index,
-			Content:          chunk.Content,
-			ContentHash:      chunk.ContentHash,
-			StartOffset:      chunk.StartOffset,
-			EndOffset:        chunk.EndOffset,
-			ChunkType:        chunk.ChunkType,
-			FunctionName:     chunk.FunctionName,
-			ClassName:        chunk.ClassName,
-			Heading:          chunk.Heading,
-			HeadingLevel:     chunk.HeadingLevel,
-			Summary:          chunk.Summary,
-			Embedding:        chunk.Embedding,
-			EmbeddingVersion: 1, // TODO: get from config
-			TokenCount:       chunk.TokenCount,
+			ID:          chunk.ContentHash, // Use content hash as ID for deduplication
+			FilePath:    result.FilePath,
+			Index:       chunk.Index,
+			Content:     chunk.Content,
+			ContentHash: chunk.ContentHash,
+			StartOffset: chunk.StartOffset,
+			EndOffset:   chunk.EndOffset,
+			ChunkType:   chunk.ChunkType,
+			Summary:     chunk.Summary,
+			TokenCount:  chunk.TokenCount,
 		}
 
-		if err := w.graph.UpsertChunk(ctx, chunkNode); err != nil {
-			w.logger.Warn("failed to upsert chunk",
+		// Upsert chunk with its typed metadata
+		if err := w.graph.UpsertChunkWithMetadata(ctx, chunkNode, chunk.Metadata); err != nil {
+			w.logger.Warn("failed to upsert chunk with metadata",
 				"path", result.FilePath,
 				"chunk", chunk.Index,
 				"error", err)
-			// Continue with other chunks
+			continue // Skip embedding if chunk failed
+		}
+
+		// Upsert embedding if present
+		if len(chunk.Embedding) > 0 {
+			embNode := &graph.ChunkEmbeddingNode{
+				Provider:   "default", // TODO: get from config
+				Model:      "default", // TODO: get from config
+				Dimensions: len(chunk.Embedding),
+				Embedding:  chunk.Embedding,
+			}
+			if err := w.graph.UpsertChunkEmbedding(ctx, chunk.ContentHash, embNode); err != nil {
+				w.logger.Warn("failed to upsert embedding",
+					"path", result.FilePath,
+					"chunk", chunk.Index,
+					"error", err)
+			}
 		}
 	}
 

@@ -2,6 +2,7 @@ package chunkers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -12,9 +13,9 @@ func TestEstimateTokens(t *testing.T) {
 		expected int
 	}{
 		{"empty string", "", 0},
-		{"short text", "hello", 2},
-		{"medium text", "hello world, this is a test", 7},
-		{"long text", "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.", 31},
+		{"short text", "hello", 1},                                                                                                                      // tiktoken: 1 token
+		{"medium text", "hello world, this is a test", 7},                                                                                               // tiktoken: 7 tokens
+		{"long text", "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.", 22}, // tiktoken: 22 tokens
 	}
 
 	for _, tt := range tests {
@@ -66,26 +67,26 @@ func TestFallbackChunker(t *testing.T) {
 	})
 
 	t.Run("EmptyContent", func(t *testing.T) {
-		chunks, err := chunker.Chunk(context.Background(), []byte{}, DefaultChunkOptions())
+		result, err := chunker.Chunk(context.Background(), []byte{}, DefaultChunkOptions())
 		if err != nil {
 			t.Errorf("Chunk returned error: %v", err)
 		}
-		if len(chunks) != 0 {
-			t.Errorf("Expected 0 chunks for empty content, got %d", len(chunks))
+		if len(result.Chunks) != 0 {
+			t.Errorf("Expected 0 chunks for empty content, got %d", len(result.Chunks))
 		}
 	})
 
 	t.Run("SmallContent", func(t *testing.T) {
 		content := []byte("Hello, world!")
-		chunks, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
 		if err != nil {
 			t.Errorf("Chunk returned error: %v", err)
 		}
-		if len(chunks) != 1 {
-			t.Errorf("Expected 1 chunk for small content, got %d", len(chunks))
+		if len(result.Chunks) != 1 {
+			t.Errorf("Expected 1 chunk for small content, got %d", len(result.Chunks))
 		}
-		if chunks[0].Content != "Hello, world!" {
-			t.Errorf("Content = %q, want %q", chunks[0].Content, "Hello, world!")
+		if result.Chunks[0].Content != "Hello, world!" {
+			t.Errorf("Content = %q, want %q", result.Chunks[0].Content, "Hello, world!")
 		}
 	})
 
@@ -97,12 +98,12 @@ func TestFallbackChunker(t *testing.T) {
 			content[i] = 'a'
 		}
 
-		chunks, err := chunker.Chunk(context.Background(), content, opts)
+		result, err := chunker.Chunk(context.Background(), content, opts)
 		if err != nil {
 			t.Errorf("Chunk returned error: %v", err)
 		}
-		if len(chunks) < 2 {
-			t.Errorf("Expected multiple chunks, got %d", len(chunks))
+		if len(result.Chunks) < 2 {
+			t.Errorf("Expected multiple chunks, got %d", len(result.Chunks))
 		}
 	})
 }
@@ -144,11 +145,11 @@ func TestRecursiveChunker(t *testing.T) {
 
 	t.Run("ParagraphSplitting", func(t *testing.T) {
 		content := []byte("First paragraph.\n\nSecond paragraph.\n\nThird paragraph.")
-		chunks, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
 		if err != nil {
 			t.Errorf("Chunk returned error: %v", err)
 		}
-		if len(chunks) == 0 {
+		if len(result.Chunks) == 0 {
 			t.Error("Expected at least one chunk")
 		}
 	})
@@ -202,16 +203,16 @@ Content under heading 2.
 
 Content under heading 3.
 `)
-		chunks, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
+		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
 		if err != nil {
 			t.Errorf("Chunk returned error: %v", err)
 		}
-		if len(chunks) < 2 {
-			t.Errorf("Expected multiple chunks for headings, got %d", len(chunks))
+		if len(result.Chunks) < 2 {
+			t.Errorf("Expected multiple chunks for headings, got %d", len(result.Chunks))
 		}
 
 		// Check that metadata includes heading info
-		for _, chunk := range chunks {
+		for _, chunk := range result.Chunks {
 			if chunk.Metadata.Type != ChunkTypeMarkdown {
 				t.Errorf("Expected ChunkTypeMarkdown, got %v", chunk.Metadata.Type)
 			}
@@ -260,93 +261,12 @@ func TestStructuredChunker(t *testing.T) {
 			MIMEType:     "application/json",
 			MaxChunkSize: 1000,
 		}
-		chunks, err := chunker.Chunk(context.Background(), content, opts)
+		result, err := chunker.Chunk(context.Background(), content, opts)
 		if err != nil {
 			t.Errorf("Chunk returned error: %v", err)
 		}
-		if len(chunks) == 0 {
+		if len(result.Chunks) == 0 {
 			t.Error("Expected at least one chunk")
-		}
-	})
-}
-
-func TestASTChunker(t *testing.T) {
-	chunker := NewASTChunker()
-
-	t.Run("Name", func(t *testing.T) {
-		if chunker.Name() != "ast" {
-			t.Errorf("Name() = %q, want %q", chunker.Name(), "ast")
-		}
-	})
-
-	t.Run("Priority", func(t *testing.T) {
-		if chunker.Priority() != 100 {
-			t.Errorf("Priority() = %d, want 100", chunker.Priority())
-		}
-	})
-
-	t.Run("CanHandle", func(t *testing.T) {
-		tests := []struct {
-			mimeType string
-			language string
-			expected bool
-		}{
-			{"text/x-go", "", true},
-			{"", "go", true},
-			{"", "golang", true},
-			{"", ".go", true},
-			{"text/plain", "", false},
-			{"", "python", false},
-		}
-
-		for _, tt := range tests {
-			result := chunker.CanHandle(tt.mimeType, tt.language)
-			if result != tt.expected {
-				t.Errorf("CanHandle(%q, %q) = %v, want %v", tt.mimeType, tt.language, result, tt.expected)
-			}
-		}
-	})
-
-	t.Run("GoCodeParsing", func(t *testing.T) {
-		content := []byte(`package main
-
-func hello() {
-	println("hello")
-}
-
-func world() {
-	println("world")
-}
-`)
-		opts := ChunkOptions{
-			Language:     "go",
-			MaxChunkSize: 8000,
-		}
-		chunks, err := chunker.Chunk(context.Background(), content, opts)
-		if err != nil {
-			t.Errorf("Chunk returned error: %v", err)
-		}
-		if len(chunks) < 2 {
-			t.Errorf("Expected at least 2 chunks for two functions, got %d", len(chunks))
-		}
-
-		// Verify function names are captured
-		foundHello := false
-		foundWorld := false
-		for _, chunk := range chunks {
-			if chunk.Metadata.FunctionName == "hello" {
-				foundHello = true
-			}
-			if chunk.Metadata.FunctionName == "world" {
-				foundWorld = true
-			}
-		}
-
-		if !foundHello {
-			t.Error("Expected to find function 'hello'")
-		}
-		if !foundWorld {
-			t.Error("Expected to find function 'world'")
 		}
 	})
 }
@@ -456,4 +376,132 @@ func TestRegistry(t *testing.T) {
 			t.Error("Expected at least one chunk")
 		}
 	})
+
+	t.Run("GracefulDegradation", func(t *testing.T) {
+		registry := NewRegistry()
+		// Register a failing chunker with high priority
+		registry.Register(&failingChunker{priority: 100})
+		// Register a working chunker with lower priority
+		registry.Register(NewRecursiveChunker())
+		registry.SetFallback(NewFallbackChunker())
+
+		content := []byte("Hello, world!")
+		opts := ChunkOptions{
+			MIMEType:     "text/plain",
+			MaxChunkSize: 8000,
+		}
+
+		result, err := registry.Chunk(context.Background(), content, opts)
+		if err != nil {
+			t.Errorf("Chunk should have degraded gracefully, got error: %v", err)
+		}
+		if result == nil {
+			t.Fatal("Chunk returned nil result")
+		}
+
+		// Should have used recursive chunker after failing chunker failed
+		if result.ChunkerUsed != "recursive" {
+			t.Errorf("Expected recursive chunker, got %q", result.ChunkerUsed)
+		}
+	})
+
+	t.Run("WarningAggregation", func(t *testing.T) {
+		registry := NewRegistry()
+		// Register a failing chunker
+		registry.Register(&failingChunker{priority: 100})
+		// Register a working chunker
+		registry.Register(NewRecursiveChunker())
+
+		content := []byte("Hello, world!")
+		opts := ChunkOptions{
+			MIMEType:     "text/plain",
+			MaxChunkSize: 8000,
+		}
+
+		result, err := registry.Chunk(context.Background(), content, opts)
+		if err != nil {
+			t.Fatalf("Chunk returned error: %v", err)
+		}
+
+		// Should have warning about the failed chunker
+		if len(result.Warnings) == 0 {
+			t.Error("Expected warnings about failed chunker")
+		}
+
+		foundWarning := false
+		for _, w := range result.Warnings {
+			if w.Code == "CHUNKER_FAILED" {
+				foundWarning = true
+				break
+			}
+		}
+		if !foundWarning {
+			t.Error("Expected CHUNKER_FAILED warning")
+		}
+	})
+
+	t.Run("AllChunkersFail", func(t *testing.T) {
+		registry := NewRegistry()
+		// Register only failing chunkers
+		registry.Register(&failingChunker{priority: 100})
+		registry.Register(&failingChunker{priority: 50})
+		// No fallback set
+
+		content := []byte("Hello, world!")
+		opts := ChunkOptions{
+			MIMEType:     "text/plain",
+			MaxChunkSize: 8000,
+		}
+
+		_, err := registry.Chunk(context.Background(), content, opts)
+		if err == nil {
+			t.Error("Expected error when all chunkers fail")
+		}
+	})
+
+	t.Run("FallbackUsedAfterAllFail", func(t *testing.T) {
+		registry := NewRegistry()
+		// Register only failing chunkers
+		registry.Register(&failingChunker{priority: 100})
+		// Set working fallback
+		registry.SetFallback(NewFallbackChunker())
+
+		content := []byte("Hello, world!")
+		opts := ChunkOptions{
+			MIMEType:     "text/plain",
+			MaxChunkSize: 8000,
+		}
+
+		result, err := registry.Chunk(context.Background(), content, opts)
+		if err != nil {
+			t.Errorf("Chunk should have used fallback, got error: %v", err)
+		}
+		if result == nil {
+			t.Fatal("Chunk returned nil result")
+		}
+
+		// Should have used fallback chunker
+		if result.ChunkerUsed != "fallback" {
+			t.Errorf("Expected fallback chunker, got %q", result.ChunkerUsed)
+		}
+
+		// Should have warning about the failed chunker
+		if len(result.Warnings) == 0 {
+			t.Error("Expected warnings about failed chunker")
+		}
+	})
+}
+
+// failingChunker is a test chunker that always fails.
+type failingChunker struct {
+	priority int
+}
+
+func (f *failingChunker) Name() string { return "failing" }
+func (f *failingChunker) CanHandle(mimeType string, language string) bool {
+	return mimeType == "text/plain" || mimeType == ""
+}
+func (f *failingChunker) Priority() int { return f.priority }
+func (f *failingChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) (*ChunkResult, error) {
+	return nil, fmt.Errorf("intentional failure for testing")
 }

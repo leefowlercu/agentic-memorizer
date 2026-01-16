@@ -40,9 +40,15 @@ func (c *MarkdownChunker) Priority() int {
 }
 
 // Chunk splits markdown content by headings.
-func (c *MarkdownChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) ([]Chunk, error) {
+func (c *MarkdownChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) (*ChunkResult, error) {
 	if len(content) == 0 {
-		return []Chunk{}, nil
+		return &ChunkResult{
+			Chunks:       []Chunk{},
+			Warnings:     nil,
+			TotalChunks:  0,
+			ChunkerUsed:  markdownChunkerName,
+			OriginalSize: 0,
+		}, nil
 	}
 
 	maxSize := opts.MaxChunkSize
@@ -80,9 +86,11 @@ func (c *MarkdownChunker) Chunk(ctx context.Context, content []byte, opts ChunkO
 				EndOffset:   offset + len(section),
 				Metadata: ChunkMetadata{
 					Type:          ChunkTypeMarkdown,
-					Heading:       heading,
-					HeadingLevel:  level,
 					TokenEstimate: EstimateTokens(section),
+					Document: &DocumentMetadata{
+						Heading:      heading,
+						HeadingLevel: level,
+					},
 				},
 			})
 		}
@@ -90,7 +98,13 @@ func (c *MarkdownChunker) Chunk(ctx context.Context, content []byte, opts ChunkO
 		offset += len(section)
 	}
 
-	return chunks, nil
+	return &ChunkResult{
+		Chunks:       chunks,
+		Warnings:     nil,
+		TotalChunks:  len(chunks),
+		ChunkerUsed:  markdownChunkerName,
+		OriginalSize: len(content),
+	}, nil
 }
 
 // splitBySections splits markdown by top-level headings.
@@ -170,9 +184,11 @@ func (c *MarkdownChunker) splitLargeSection(ctx context.Context, section, headin
 				EndOffset:   offset,
 				Metadata: ChunkMetadata{
 					Type:          ChunkTypeMarkdown,
-					Heading:       heading,
-					HeadingLevel:  level,
 					TokenEstimate: EstimateTokens(content),
+					Document: &DocumentMetadata{
+						Heading:      heading,
+						HeadingLevel: level,
+					},
 				},
 			})
 			current.Reset()
@@ -194,9 +210,11 @@ func (c *MarkdownChunker) splitLargeSection(ctx context.Context, section, headin
 			EndOffset:   offset,
 			Metadata: ChunkMetadata{
 				Type:          ChunkTypeMarkdown,
-				Heading:       heading,
-				HeadingLevel:  level,
 				TokenEstimate: EstimateTokens(content),
+				Document: &DocumentMetadata{
+					Heading:      heading,
+					HeadingLevel: level,
+				},
 			},
 		})
 	}

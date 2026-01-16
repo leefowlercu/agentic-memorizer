@@ -456,10 +456,12 @@ func (m *mockGraph) UpsertDirectory(ctx context.Context, dir *graph.DirectoryNod
 func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error { return nil }
 func (m *mockGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error { return nil }
 func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error { return nil }
-func (m *mockGraph) UpsertChunk(ctx context.Context, chunk *graph.ChunkNode) error {
+func (m *mockGraph) UpsertChunkWithMetadata(ctx context.Context, chunk *graph.ChunkNode, meta *chunkers.ChunkMetadata) error {
 	m.chunks = append(m.chunks, chunk)
 	return nil
 }
+func (m *mockGraph) UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *graph.ChunkEmbeddingNode) error { return nil }
+func (m *mockGraph) DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error { return nil }
 func (m *mockGraph) DeleteChunks(ctx context.Context, path string) error { return nil }
 func (m *mockGraph) SetFileTags(ctx context.Context, path string, tags []string) error { return nil }
 func (m *mockGraph) SetFileTopics(ctx context.Context, path string, topics []graph.Topic) error { return nil }
@@ -494,10 +496,12 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 				EndOffset:   18,
 				Metadata: chunkers.ChunkMetadata{
 					Type:          chunkers.ChunkTypeCode,
-					Language:      "go",
-					FunctionName:  "TestFunc",
-					ClassName:     "TestClass",
 					TokenEstimate: 10,
+					Code: &chunkers.CodeMetadata{
+						Language:     "go",
+						FunctionName: "TestFunc",
+						ClassName:    "TestClass",
+					},
 				},
 			},
 		}
@@ -512,11 +516,14 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 		}
 
 		result := results[0]
-		if result.FunctionName != "TestFunc" {
-			t.Errorf("FunctionName = %q, want %q", result.FunctionName, "TestFunc")
+		if result.Metadata == nil || result.Metadata.Code == nil {
+			t.Fatal("Expected Metadata.Code to be populated")
 		}
-		if result.ClassName != "TestClass" {
-			t.Errorf("ClassName = %q, want %q", result.ClassName, "TestClass")
+		if result.Metadata.Code.FunctionName != "TestFunc" {
+			t.Errorf("FunctionName = %q, want %q", result.Metadata.Code.FunctionName, "TestFunc")
+		}
+		if result.Metadata.Code.ClassName != "TestClass" {
+			t.Errorf("ClassName = %q, want %q", result.Metadata.Code.ClassName, "TestClass")
 		}
 		if result.TokenCount != 10 {
 			t.Errorf("TokenCount = %d, want 10", result.TokenCount)
@@ -535,9 +542,11 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 				EndOffset:   35,
 				Metadata: chunkers.ChunkMetadata{
 					Type:          chunkers.ChunkTypeMarkdown,
-					Heading:       "Configuration",
-					HeadingLevel:  2,
 					TokenEstimate: 8,
+					Document: &chunkers.DocumentMetadata{
+						Heading:      "Configuration",
+						HeadingLevel: 2,
+					},
 				},
 			},
 		}
@@ -552,11 +561,14 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 		}
 
 		result := results[0]
-		if result.Heading != "Configuration" {
-			t.Errorf("Heading = %q, want %q", result.Heading, "Configuration")
+		if result.Metadata == nil || result.Metadata.Document == nil {
+			t.Fatal("Expected Metadata.Document to be populated")
 		}
-		if result.HeadingLevel != 2 {
-			t.Errorf("HeadingLevel = %d, want 2", result.HeadingLevel)
+		if result.Metadata.Document.Heading != "Configuration" {
+			t.Errorf("Heading = %q, want %q", result.Metadata.Document.Heading, "Configuration")
+		}
+		if result.Metadata.Document.HeadingLevel != 2 {
+			t.Errorf("HeadingLevel = %d, want 2", result.Metadata.Document.HeadingLevel)
 		}
 		if result.TokenCount != 8 {
 			t.Errorf("TokenCount = %d, want 8", result.TokenCount)
@@ -705,21 +717,24 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 		result := &AnalysisResult{
 			FilePath:    "/test/file.go",
 			ContentHash: "abc123",
-			Chunks: []ChunkResult{
+			Chunks: []AnalyzedChunk{
 				{
-					Index:        0,
-					Content:      "func TestFunc() {}",
-					ContentHash:  "chunk0hash",
-					StartOffset:  0,
-					EndOffset:    18,
-					ChunkType:    "code",
-					FunctionName: "TestFunc",
-					ClassName:    "TestClass",
-					Heading:      "",
-					HeadingLevel: 0,
-					TokenCount:   10,
-					Summary:      "This is a test function",
-					Embedding:    []float32{0.1, 0.2, 0.3},
+					Index:       0,
+					Content:     "func TestFunc() {}",
+					ContentHash: "chunk0hash",
+					StartOffset: 0,
+					EndOffset:   18,
+					ChunkType:   "code",
+					Metadata: &chunkers.ChunkMetadata{
+						Type: chunkers.ChunkTypeCode,
+						Code: &chunkers.CodeMetadata{
+							FunctionName: "TestFunc",
+							ClassName:    "TestClass",
+						},
+					},
+					TokenCount: 10,
+					Summary:    "This is a test function",
+					Embedding:  []float32{0.1, 0.2, 0.3},
 				},
 			},
 		}
@@ -734,12 +749,7 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 		}
 
 		chunk := mockG.chunks[0]
-		if chunk.FunctionName != "TestFunc" {
-			t.Errorf("FunctionName = %q, want %q", chunk.FunctionName, "TestFunc")
-		}
-		if chunk.ClassName != "TestClass" {
-			t.Errorf("ClassName = %q, want %q", chunk.ClassName, "TestClass")
-		}
+		// Note: FunctionName and ClassName are now stored in CodeMetaNode (separate upsert)
 		if chunk.TokenCount != 10 {
 			t.Errorf("TokenCount = %d, want 10", chunk.TokenCount)
 		}
@@ -754,19 +764,24 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 		result := &AnalysisResult{
 			FilePath:    "/test/file.md",
 			ContentHash: "def456",
-			Chunks: []ChunkResult{
+			Chunks: []AnalyzedChunk{
 				{
-					Index:        0,
-					Content:      "## Configuration\nDetails here.",
-					ContentHash:  "chunk0hash",
-					StartOffset:  0,
-					EndOffset:    30,
-					ChunkType:    "markdown",
-					Heading:      "Configuration",
-					HeadingLevel: 2,
-					TokenCount:   8,
-					Summary:      "Configuration section",
-					Embedding:    []float32{0.1, 0.2},
+					Index:       0,
+					Content:     "## Configuration\nDetails here.",
+					ContentHash: "chunk0hash",
+					StartOffset: 0,
+					EndOffset:   30,
+					ChunkType:   "markdown",
+					Metadata: &chunkers.ChunkMetadata{
+						Type: chunkers.ChunkTypeMarkdown,
+						Document: &chunkers.DocumentMetadata{
+							Heading:      "Configuration",
+							HeadingLevel: 2,
+						},
+					},
+					TokenCount: 8,
+					Summary:    "Configuration section",
+					Embedding:  []float32{0.1, 0.2},
 				},
 			},
 		}
@@ -781,50 +796,48 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 		}
 
 		chunk := mockG.chunks[0]
-		if chunk.Heading != "Configuration" {
-			t.Errorf("Heading = %q, want %q", chunk.Heading, "Configuration")
-		}
-		if chunk.HeadingLevel != 2 {
-			t.Errorf("HeadingLevel = %d, want 2", chunk.HeadingLevel)
+		// Note: Heading and HeadingLevel are now stored in DocumentMetaNode (separate upsert)
+		if chunk.ChunkType != "markdown" {
+			t.Errorf("ChunkType = %q, want %q", chunk.ChunkType, "markdown")
 		}
 	})
 }
 
-func TestChunkResultContainsAllFields(t *testing.T) {
-	// This test verifies the ChunkResult struct has all expected fields
-	cr := ChunkResult{
-		Index:        1,
-		Content:      "test content",
-		ContentHash:  "hash123",
-		StartOffset:  0,
-		EndOffset:    12,
-		ChunkType:    "code",
-		Embedding:    []float32{0.1},
-		FunctionName: "myFunc",
-		ClassName:    "MyClass",
-		Heading:      "My Heading",
-		HeadingLevel: 2,
-		TokenCount:   5,
-		Summary:      "test summary",
+func TestAnalyzedChunkContainsAllFields(t *testing.T) {
+	// This test verifies the AnalyzedChunk struct has all expected fields
+	ac := AnalyzedChunk{
+		Index:       1,
+		Content:     "test content",
+		ContentHash: "hash123",
+		StartOffset: 0,
+		EndOffset:   12,
+		ChunkType:   "code",
+		Embedding:   []float32{0.1},
+		Metadata: &chunkers.ChunkMetadata{
+			Type: chunkers.ChunkTypeCode,
+			Code: &chunkers.CodeMetadata{
+				FunctionName: "myFunc",
+				ClassName:    "MyClass",
+			},
+		},
+		TokenCount: 5,
+		Summary:    "test summary",
 	}
 
 	// Verify all fields are accessible and have expected values
-	if cr.FunctionName != "myFunc" {
-		t.Errorf("FunctionName = %q, want %q", cr.FunctionName, "myFunc")
+	if ac.Metadata == nil || ac.Metadata.Code == nil {
+		t.Fatal("Expected Metadata.Code to be populated")
 	}
-	if cr.ClassName != "MyClass" {
-		t.Errorf("ClassName = %q, want %q", cr.ClassName, "MyClass")
+	if ac.Metadata.Code.FunctionName != "myFunc" {
+		t.Errorf("FunctionName = %q, want %q", ac.Metadata.Code.FunctionName, "myFunc")
 	}
-	if cr.Heading != "My Heading" {
-		t.Errorf("Heading = %q, want %q", cr.Heading, "My Heading")
+	if ac.Metadata.Code.ClassName != "MyClass" {
+		t.Errorf("ClassName = %q, want %q", ac.Metadata.Code.ClassName, "MyClass")
 	}
-	if cr.HeadingLevel != 2 {
-		t.Errorf("HeadingLevel = %d, want 2", cr.HeadingLevel)
+	if ac.TokenCount != 5 {
+		t.Errorf("TokenCount = %d, want 5", ac.TokenCount)
 	}
-	if cr.TokenCount != 5 {
-		t.Errorf("TokenCount = %d, want 5", cr.TokenCount)
-	}
-	if cr.Summary != "test summary" {
-		t.Errorf("Summary = %q, want %q", cr.Summary, "test summary")
+	if ac.Summary != "test summary" {
+		t.Errorf("Summary = %q, want %q", ac.Summary, "test summary")
 	}
 }

@@ -43,9 +43,15 @@ func (c *StructuredChunker) Priority() int {
 }
 
 // Chunk splits structured content by records.
-func (c *StructuredChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) ([]Chunk, error) {
+func (c *StructuredChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) (*ChunkResult, error) {
 	if len(content) == 0 {
-		return []Chunk{}, nil
+		return &ChunkResult{
+			Chunks:       []Chunk{},
+			Warnings:     nil,
+			TotalChunks:  0,
+			ChunkerUsed:  structuredChunkerName,
+			OriginalSize: 0,
+		}, nil
 	}
 
 	mimeType := opts.MIMEType
@@ -54,15 +60,30 @@ func (c *StructuredChunker) Chunk(ctx context.Context, content []byte, opts Chun
 		maxSize = DefaultChunkOptions().MaxChunkSize
 	}
 
+	var chunks []Chunk
+	var err error
+
 	switch {
 	case strings.Contains(mimeType, "json"):
-		return c.chunkJSON(ctx, content, maxSize)
+		chunks, err = c.chunkJSON(ctx, content, maxSize)
 	case strings.Contains(mimeType, "csv"):
-		return c.chunkCSV(ctx, content, maxSize)
+		chunks, err = c.chunkCSV(ctx, content, maxSize)
 	default:
 		// Fallback to line-based chunking for unknown structured formats
-		return c.chunkLines(ctx, content, maxSize)
+		chunks, err = c.chunkLines(ctx, content, maxSize)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ChunkResult{
+		Chunks:       chunks,
+		Warnings:     nil,
+		TotalChunks:  len(chunks),
+		ChunkerUsed:  structuredChunkerName,
+		OriginalSize: len(content),
+	}, nil
 }
 
 // chunkJSON splits JSON content by array elements or object keys.
@@ -80,14 +101,16 @@ func (c *StructuredChunker) chunkJSON(ctx context.Context, content []byte, maxSi
 	}
 
 	// Fall back to treating as single chunk
+	contentStr := string(content)
 	return []Chunk{{
 		Index:       0,
-		Content:     string(content),
+		Content:     contentStr,
 		StartOffset: 0,
 		EndOffset:   len(content),
 		Metadata: ChunkMetadata{
 			Type:          ChunkTypeStructured,
-			TokenEstimate: EstimateTokens(string(content)),
+			TokenEstimate: EstimateTokens(contentStr),
+			Structured:    &StructuredMetadata{},
 		},
 	}}, nil
 }
@@ -146,8 +169,11 @@ func (c *StructuredChunker) createArrayChunk(records []json.RawMessage, index, o
 		EndOffset:   offset + len(content),
 		Metadata: ChunkMetadata{
 			Type:          ChunkTypeStructured,
-			RecordIndex:   index,
 			TokenEstimate: EstimateTokens(content),
+			Structured: &StructuredMetadata{
+				RecordIndex: index,
+				RecordCount: len(records),
+			},
 		},
 	}
 }
@@ -156,14 +182,16 @@ func (c *StructuredChunker) createArrayChunk(records []json.RawMessage, index, o
 func (c *StructuredChunker) chunkJSONObject(ctx context.Context, obj map[string]json.RawMessage, original []byte, maxSize int) ([]Chunk, error) {
 	// If object fits in one chunk, return as-is
 	if len(original) <= maxSize {
+		contentStr := string(original)
 		return []Chunk{{
 			Index:       0,
-			Content:     string(original),
+			Content:     contentStr,
 			StartOffset: 0,
 			EndOffset:   len(original),
 			Metadata: ChunkMetadata{
 				Type:          ChunkTypeStructured,
-				TokenEstimate: EstimateTokens(string(original)),
+				TokenEstimate: EstimateTokens(contentStr),
+				Structured:    &StructuredMetadata{},
 			},
 		}}, nil
 	}
@@ -223,8 +251,11 @@ func (c *StructuredChunker) createObjectChunk(keys []string, vals []json.RawMess
 		EndOffset:   offset + len(content),
 		Metadata: ChunkMetadata{
 			Type:          ChunkTypeStructured,
-			RecordIndex:   index,
 			TokenEstimate: EstimateTokens(content),
+			Structured: &StructuredMetadata{
+				RecordIndex: index,
+				KeyNames:    keys,
+			},
 		},
 	}
 }
@@ -264,16 +295,18 @@ func (c *StructuredChunker) chunkCSV(ctx context.Context, content []byte, maxSiz
 
 		lineLen := len(line) + 1 // +1 for newline
 		if current.Len()+lineLen > maxSize && current.Len() > len(header) {
-			content := current.String()
+			chunkContent := current.String()
 			chunks = append(chunks, Chunk{
 				Index:       len(chunks),
-				Content:     content,
+				Content:     chunkContent,
 				StartOffset: offset - current.Len(),
 				EndOffset:   offset,
 				Metadata: ChunkMetadata{
 					Type:          ChunkTypeStructured,
-					RecordIndex:   recordIndex,
-					TokenEstimate: EstimateTokens(content),
+					TokenEstimate: EstimateTokens(chunkContent),
+					Structured: &StructuredMetadata{
+						RecordIndex: recordIndex,
+					},
 				},
 			})
 			current.Reset()
@@ -288,16 +321,18 @@ func (c *StructuredChunker) chunkCSV(ctx context.Context, content []byte, maxSiz
 
 	// Finalize
 	if current.Len() > len(header) {
-		content := current.String()
+		chunkContent := current.String()
 		chunks = append(chunks, Chunk{
 			Index:       len(chunks),
-			Content:     content,
+			Content:     chunkContent,
 			StartOffset: offset - current.Len(),
 			EndOffset:   offset,
 			Metadata: ChunkMetadata{
 				Type:          ChunkTypeStructured,
-				RecordIndex:   recordIndex,
-				TokenEstimate: EstimateTokens(content),
+				TokenEstimate: EstimateTokens(chunkContent),
+				Structured: &StructuredMetadata{
+					RecordIndex: recordIndex,
+				},
 			},
 		})
 	}
@@ -322,15 +357,16 @@ func (c *StructuredChunker) chunkLines(ctx context.Context, content []byte, maxS
 
 		lineLen := len(line) + 1
 		if current.Len()+lineLen > maxSize && current.Len() > 0 {
-			content := current.String()
+			chunkContent := current.String()
 			chunks = append(chunks, Chunk{
 				Index:       len(chunks),
-				Content:     content,
+				Content:     chunkContent,
 				StartOffset: offset - current.Len(),
 				EndOffset:   offset,
 				Metadata: ChunkMetadata{
 					Type:          ChunkTypeStructured,
-					TokenEstimate: EstimateTokens(content),
+					TokenEstimate: EstimateTokens(chunkContent),
+					Structured:    &StructuredMetadata{},
 				},
 			})
 			current.Reset()
@@ -342,15 +378,16 @@ func (c *StructuredChunker) chunkLines(ctx context.Context, content []byte, maxS
 	}
 
 	if current.Len() > 0 {
-		content := current.String()
+		chunkContent := current.String()
 		chunks = append(chunks, Chunk{
 			Index:       len(chunks),
-			Content:     content,
+			Content:     chunkContent,
 			StartOffset: offset - current.Len(),
 			EndOffset:   offset,
 			Metadata: ChunkMetadata{
 				Type:          ChunkTypeStructured,
-				TokenEstimate: EstimateTokens(content),
+				TokenEstimate: EstimateTokens(chunkContent),
+				Structured:    &StructuredMetadata{},
 			},
 		})
 	}

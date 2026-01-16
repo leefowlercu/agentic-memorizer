@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -233,7 +234,15 @@ func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath s
 	return nil
 }
 
-func (m *mockGraph) UpsertChunk(ctx context.Context, chunk *graph.ChunkNode) error {
+func (m *mockGraph) UpsertChunkWithMetadata(ctx context.Context, chunk *graph.ChunkNode, meta *chunkers.ChunkMetadata) error {
+	return nil
+}
+
+func (m *mockGraph) UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *graph.ChunkEmbeddingNode) error {
+	return nil
+}
+
+func (m *mockGraph) DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error {
 	return nil
 }
 

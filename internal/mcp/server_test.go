@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 )
 
@@ -55,7 +56,11 @@ func (m *mockGraph) UpsertDirectory(ctx context.Context, dir *graph.DirectoryNod
 func (m *mockGraph) DeleteDirectory(ctx context.Context, path string) error                  { return nil }
 func (m *mockGraph) DeleteFilesUnderPath(ctx context.Context, parentPath string) error       { return nil }
 func (m *mockGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error { return nil }
-func (m *mockGraph) UpsertChunk(ctx context.Context, chunk *graph.ChunkNode) error           { return nil }
+func (m *mockGraph) UpsertChunkWithMetadata(ctx context.Context, chunk *graph.ChunkNode, meta *chunkers.ChunkMetadata) error {
+	return nil
+}
+func (m *mockGraph) UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *graph.ChunkEmbeddingNode) error { return nil }
+func (m *mockGraph) DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error { return nil }
 func (m *mockGraph) DeleteChunks(ctx context.Context, filePath string) error             { return nil }
 func (m *mockGraph) SetFileTags(ctx context.Context, path string, tags []string) error   { return nil }
 func (m *mockGraph) SetFileTopics(ctx context.Context, path string, topics []graph.Topic) error {

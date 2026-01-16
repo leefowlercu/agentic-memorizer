@@ -1,0 +1,51 @@
+# Sample TOML configuration file for testing chunkers.
+
+title = "Sample Configuration"
+version = "1.0.0"
+
+[server]
+host = "localhost"
+port = 8080
+timeout = 30
+debug = false
+
+[server.tls]
+enabled = true
+cert_file = "/etc/certs/server.crt"
+key_file = "/etc/certs/server.key"
+
+[database]
+driver = "postgres"
+host = "localhost"
+port = 5432
+name = "myapp"
+user = "admin"
+max_connections = 100
+idle_timeout = 300
+
+[logging]
+level = "info"
+format = "json"
+output = "stdout"
+
+[[logging.files]]
+path = "/var/log/app/app.log"
+max_size = 100
+max_age = 30
+compress = true
+
+[[logging.files]]
+path = "/var/log/app/error.log"
+max_size = 50
+max_age = 7
+compress = true
+
+[features]
+new_dashboard = true
+beta_api = false
+experimental_cache = false
+
+[rate_limit]
+enabled = true
+requests_per_minute = 100
+burst = 20

@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/RedisGraph/redisgraph-go"
 	"github.com/gomodule/redigo/redis"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 )
 
@@ -46,8 +48,15 @@ type Graph interface {
 	// DeleteDirectoriesUnderPath removes all directory nodes under a parent path.
 	DeleteDirectoriesUnderPath(ctx context.Context, parentPath string) error
 
-	// UpsertChunk creates or updates a chunk node.
-	UpsertChunk(ctx context.Context, chunk *ChunkNode) error
+	// UpsertChunkWithMetadata creates or updates a chunk node with its typed metadata.
+	// This replaces the old UpsertChunk method and handles all metadata types.
+	UpsertChunkWithMetadata(ctx context.Context, chunk *ChunkNode, meta *chunkers.ChunkMetadata) error
+
+	// UpsertChunkEmbedding creates or updates an embedding for a chunk.
+	UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *ChunkEmbeddingNode) error
+
+	// DeleteChunkEmbeddings deletes embeddings for a chunk.
+	DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error
 
 	// DeleteChunks removes all chunks for a file.
 	DeleteChunks(ctx context.Context, filePath string) error
@@ -195,8 +204,8 @@ func (g *FalkorDBGraph) Start(ctx context.Context) error {
 	g.graph = redisgraph.GraphNew(g.config.GraphName, conn)
 	g.connected = true
 
-	// Create schema constraints
-	if err := g.createSchema(ctx); err != nil {
+	// Create schema indexes and constraints
+	if err := g.initSchema(ctx); err != nil {
 		g.logger.Warn("failed to create schema constraints", "error", err)
 	}
 
@@ -269,74 +278,6 @@ func (g *FalkorDBGraph) CollectMetrics(ctx context.Context) error {
 	metrics.FilesTotal.Set(float64(files))
 	metrics.DirectoriesTotal.Set(float64(dirs))
 	metrics.ChunksTotal.Set(float64(chunks))
-
-	return nil
-}
-
-// createSchema creates indexes and constraints.
-func (g *FalkorDBGraph) createSchema(ctx context.Context) error {
-	queries := []string{
-		// Create indexes for common lookups
-		"CREATE INDEX FOR (f:File) ON (f.path)",
-		"CREATE INDEX FOR (f:File) ON (f.content_hash)",
-		"CREATE INDEX FOR (c:Chunk) ON (c.id)",
-		"CREATE INDEX FOR (c:Chunk) ON (c.file_path)",
-		"CREATE INDEX FOR (d:Directory) ON (d.path)",
-		"CREATE INDEX FOR (t:Tag) ON (t.normalized_name)",
-		"CREATE INDEX FOR (t:Topic) ON (t.normalized_name)",
-		"CREATE INDEX FOR (e:Entity) ON (e.normalized_name)",
-	}
-
-	for _, q := range queries {
-		if _, err := g.graph.Query(q); err != nil {
-			// Ignore errors for existing indexes
-			g.logger.Debug("schema query", "query", q, "error", err)
-		}
-	}
-
-	// Create vector index for chunk embeddings
-	if err := g.createVectorIndex(ctx); err != nil {
-		g.logger.Warn("failed to create vector index", "error", err)
-	}
-
-	return nil
-}
-
-// createVectorIndex creates an HNSW vector index on Chunk.embedding.
-func (g *FalkorDBGraph) createVectorIndex(ctx context.Context) error {
-	dim := g.config.EmbeddingDimension
-	if dim == 0 {
-		dim = 1536 // Default
-	}
-
-	// FalkorDB uses CREATE VECTOR INDEX syntax
-	// Note: This syntax may need to be adjusted based on FalkorDB version
-	query := fmt.Sprintf(`
-		CREATE VECTOR INDEX FOR (c:Chunk) ON (c.embedding)
-		OPTIONS {
-			indexType: 'HNSW',
-			dimension: %d,
-			similarityFunction: 'cosine'
-		}
-	`, dim)
-
-	if _, err := g.graph.Query(query); err != nil {
-		// Try alternative syntax for older FalkorDB versions
-		altQuery := fmt.Sprintf(`
-			CALL db.idx.vector.createNodeIndex('Chunk', 'embedding', %d, 'cosine')
-		`, dim)
-		if _, altErr := g.graph.Query(altQuery); altErr != nil {
-			g.logger.Debug("vector index creation failed",
-				"primary_error", err,
-				"alt_error", altErr)
-			// Index may already exist, not fatal
-		}
-	}
-
-	g.logger.Info("vector index created/verified",
-		"label", "Chunk",
-		"property", "embedding",
-		"dimension", dim)
 
 	return nil
 }
@@ -595,15 +536,14 @@ func (g *FalkorDBGraph) DeleteDirectoriesUnderPath(ctx context.Context, parentPa
 	return g.queueWriteSync(query)
 }
 
-// UpsertChunk creates or updates a chunk node.
-func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error {
+// UpsertChunkWithMetadata creates or updates a chunk node with its typed metadata.
+// This handles all metadata types (Code, Document, Notebook, Build, Infra, Schema, Structured, SQL, Log).
+func (g *FalkorDBGraph) UpsertChunkWithMetadata(ctx context.Context, chunk *ChunkNode, meta *chunkers.ChunkMetadata) error {
 	if !g.IsConnected() {
 		return fmt.Errorf("not connected to graph database")
 	}
 
-	// Format embedding as array literal for FalkorDB
-	embeddingStr := formatEmbeddingArray(chunk.Embedding)
-
+	// Create core chunk node
 	query := fmt.Sprintf(`
 		MERGE (c:Chunk {id: '%s'})
 		SET c.file_path = '%s',
@@ -612,14 +552,8 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 			c.start_offset = %d,
 			c.end_offset = %d,
 			c.chunk_type = '%s',
-			c.function_name = '%s',
-			c.class_name = '%s',
-			c.heading = '%s',
-			c.heading_level = %d,
-			c.summary = '%s',
-			c.embedding = %s,
-			c.embedding_version = %d,
 			c.token_count = %d,
+			c.summary = '%s',
 			c.updated_at = %d
 	`, escapeString(chunk.ID),
 		escapeString(chunk.FilePath),
@@ -628,14 +562,8 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 		chunk.StartOffset,
 		chunk.EndOffset,
 		escapeString(chunk.ChunkType),
-		escapeString(chunk.FunctionName),
-		escapeString(chunk.ClassName),
-		escapeString(chunk.Heading),
-		chunk.HeadingLevel,
-		escapeString(chunk.Summary),
-		embeddingStr,
-		chunk.EmbeddingVersion,
 		chunk.TokenCount,
+		escapeString(chunk.Summary),
 		time.Now().Unix())
 
 	if err := g.queueWrite(query); err != nil {
@@ -649,7 +577,332 @@ func (g *FalkorDBGraph) UpsertChunk(ctx context.Context, chunk *ChunkNode) error
 		MERGE (f)-[:HAS_CHUNK]->(c)
 	`, escapeString(chunk.FilePath), escapeString(chunk.ID))
 
-	return g.queueWrite(relQuery)
+	if err := g.queueWrite(relQuery); err != nil {
+		return err
+	}
+
+	// Create metadata node based on type
+	if meta == nil {
+		return nil
+	}
+
+	switch {
+	case meta.Code != nil:
+		return g.upsertCodeMeta(ctx, chunk.ID, meta.Code)
+	case meta.Document != nil:
+		return g.upsertDocumentMeta(ctx, chunk.ID, meta.Document)
+	case meta.Notebook != nil:
+		return g.upsertNotebookMeta(ctx, chunk.ID, meta.Notebook)
+	case meta.Build != nil:
+		return g.upsertBuildMeta(ctx, chunk.ID, meta.Build)
+	case meta.Infra != nil:
+		return g.upsertInfraMeta(ctx, chunk.ID, meta.Infra)
+	case meta.Schema != nil:
+		return g.upsertSchemaMeta(ctx, chunk.ID, meta.Schema)
+	case meta.Structured != nil:
+		return g.upsertStructuredMeta(ctx, chunk.ID, meta.Structured)
+	case meta.SQL != nil:
+		return g.upsertSQLMeta(ctx, chunk.ID, meta.SQL)
+	case meta.Log != nil:
+		return g.upsertLogMeta(ctx, chunk.ID, meta.Log)
+	}
+
+	return nil
+}
+
+// upsertCodeMeta creates or updates code metadata for a chunk.
+func (g *FalkorDBGraph) upsertCodeMeta(ctx context.Context, chunkID string, meta *chunkers.CodeMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_CODE_META]->(m:CodeMeta)
+		SET m.language = '%s',
+			m.function_name = '%s',
+			m.class_name = '%s',
+			m.signature = '%s',
+			m.return_type = '%s',
+			m.visibility = '%s',
+			m.docstring = '%s',
+			m.namespace = '%s',
+			m.parent_class = '%s',
+			m.is_async = %t,
+			m.is_static = %t,
+			m.is_exported = %t,
+			m.is_generator = %t,
+			m.is_getter = %t,
+			m.is_setter = %t,
+			m.is_constructor = %t,
+			m.line_start = %d,
+			m.line_end = %d,
+			m.parameters = %s,
+			m.decorators = %s,
+			m.implements = %s
+	`, escapeString(chunkID),
+		escapeString(meta.Language),
+		escapeString(meta.FunctionName),
+		escapeString(meta.ClassName),
+		escapeString(meta.Signature),
+		escapeString(meta.ReturnType),
+		escapeString(meta.Visibility),
+		escapeString(meta.Docstring),
+		escapeString(meta.Namespace),
+		escapeString(meta.ParentClass),
+		meta.IsAsync,
+		meta.IsStatic,
+		meta.IsExported,
+		meta.IsGenerator,
+		meta.IsGetter,
+		meta.IsSetter,
+		meta.IsConstructor,
+		meta.LineStart,
+		meta.LineEnd,
+		formatStringArray(meta.Parameters),
+		formatStringArray(meta.Decorators),
+		formatStringArray(meta.Implements))
+
+	return g.queueWrite(query)
+}
+
+// upsertDocumentMeta creates or updates document metadata for a chunk.
+func (g *FalkorDBGraph) upsertDocumentMeta(ctx context.Context, chunkID string, meta *chunkers.DocumentMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_DOC_META]->(m:DocumentMeta)
+		SET m.heading = '%s',
+			m.heading_level = %d,
+			m.section_path = '%s',
+			m.section_number = '%s',
+			m.author = '%s',
+			m.page_number = %d,
+			m.page_count = %d,
+			m.word_count = %d,
+			m.has_code_block = %t,
+			m.code_language = '%s',
+			m.list_depth = %d,
+			m.is_table = %t,
+			m.is_footnote = %t,
+			m.extraction_quality = '%s'
+	`, escapeString(chunkID),
+		escapeString(meta.Heading),
+		meta.HeadingLevel,
+		escapeString(meta.SectionPath),
+		escapeString(meta.SectionNumber),
+		escapeString(meta.Author),
+		meta.PageNumber,
+		meta.PageCount,
+		meta.WordCount,
+		meta.HasCodeBlock,
+		escapeString(meta.CodeLanguage),
+		meta.ListDepth,
+		meta.IsTable,
+		meta.IsFootnote,
+		escapeString(meta.ExtractionQuality))
+
+	return g.queueWrite(query)
+}
+
+// upsertNotebookMeta creates or updates notebook metadata for a chunk.
+func (g *FalkorDBGraph) upsertNotebookMeta(ctx context.Context, chunkID string, meta *chunkers.NotebookMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_NOTEBOOK_META]->(m:NotebookMeta)
+		SET m.cell_type = '%s',
+			m.cell_index = %d,
+			m.execution_count = %d,
+			m.has_output = %t,
+			m.output_types = %s,
+			m.kernel = '%s'
+	`, escapeString(chunkID),
+		escapeString(meta.CellType),
+		meta.CellIndex,
+		meta.ExecutionCount,
+		meta.HasOutput,
+		formatStringArray(meta.OutputTypes),
+		escapeString(meta.Kernel))
+
+	return g.queueWrite(query)
+}
+
+// upsertBuildMeta creates or updates build metadata for a chunk.
+func (g *FalkorDBGraph) upsertBuildMeta(ctx context.Context, chunkID string, meta *chunkers.BuildMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_BUILD_META]->(m:BuildMeta)
+		SET m.target_name = '%s',
+			m.dependencies = %s,
+			m.stage_name = '%s',
+			m.base_image = '%s'
+	`, escapeString(chunkID),
+		escapeString(meta.TargetName),
+		formatStringArray(meta.Dependencies),
+		escapeString(meta.StageName),
+		escapeString(meta.BaseImage))
+
+	return g.queueWrite(query)
+}
+
+// upsertInfraMeta creates or updates infrastructure metadata for a chunk.
+func (g *FalkorDBGraph) upsertInfraMeta(ctx context.Context, chunkID string, meta *chunkers.InfraMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_INFRA_META]->(m:InfraMeta)
+		SET m.resource_type = '%s',
+			m.resource_name = '%s',
+			m.block_type = '%s'
+	`, escapeString(chunkID),
+		escapeString(meta.ResourceType),
+		escapeString(meta.ResourceName),
+		escapeString(meta.BlockType))
+
+	return g.queueWrite(query)
+}
+
+// upsertSchemaMeta creates or updates schema metadata for a chunk.
+func (g *FalkorDBGraph) upsertSchemaMeta(ctx context.Context, chunkID string, meta *chunkers.SchemaMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_SCHEMA_META]->(m:SchemaMeta)
+		SET m.message_name = '%s',
+			m.service_name = '%s',
+			m.rpc_name = '%s',
+			m.type_name = '%s',
+			m.type_kind = '%s'
+	`, escapeString(chunkID),
+		escapeString(meta.MessageName),
+		escapeString(meta.ServiceName),
+		escapeString(meta.RPCName),
+		escapeString(meta.TypeName),
+		escapeString(meta.TypeKind))
+
+	return g.queueWrite(query)
+}
+
+// upsertStructuredMeta creates or updates structured data metadata for a chunk.
+func (g *FalkorDBGraph) upsertStructuredMeta(ctx context.Context, chunkID string, meta *chunkers.StructuredMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_STRUCT_META]->(m:StructuredMeta)
+		SET m.schema_path = '%s',
+			m.element_name = '%s',
+			m.element_path = '%s',
+			m.table_path = '%s',
+			m.record_index = %d,
+			m.record_count = %d,
+			m.key_names = %s
+	`, escapeString(chunkID),
+		escapeString(meta.SchemaPath),
+		escapeString(meta.ElementName),
+		escapeString(meta.ElementPath),
+		escapeString(meta.TablePath),
+		meta.RecordIndex,
+		meta.RecordCount,
+		formatStringArray(meta.KeyNames))
+
+	return g.queueWrite(query)
+}
+
+// upsertSQLMeta creates or updates SQL metadata for a chunk.
+func (g *FalkorDBGraph) upsertSQLMeta(ctx context.Context, chunkID string, meta *chunkers.SQLMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_SQL_META]->(m:SQLMeta)
+		SET m.statement_type = '%s',
+			m.object_type = '%s',
+			m.table_name = '%s',
+			m.procedure_name = '%s',
+			m.sql_dialect = '%s'
+	`, escapeString(chunkID),
+		escapeString(meta.StatementType),
+		escapeString(meta.ObjectType),
+		escapeString(meta.TableName),
+		escapeString(meta.ProcedureName),
+		escapeString(meta.SQLDialect))
+
+	return g.queueWrite(query)
+}
+
+// upsertLogMeta creates or updates log metadata for a chunk.
+func (g *FalkorDBGraph) upsertLogMeta(ctx context.Context, chunkID string, meta *chunkers.LogMetadata) error {
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_LOG_META]->(m:LogMeta)
+		SET m.time_start = %d,
+			m.time_end = %d,
+			m.log_level = '%s',
+			m.log_format = '%s',
+			m.error_count = %d,
+			m.source_app = '%s'
+	`, escapeString(chunkID),
+		meta.TimeStart.Unix(),
+		meta.TimeEnd.Unix(),
+		escapeString(meta.LogLevel),
+		escapeString(meta.LogFormat),
+		meta.ErrorCount,
+		escapeString(meta.SourceApp))
+
+	return g.queueWrite(query)
+}
+
+// formatStringArray formats a string slice as a Cypher array literal.
+func formatStringArray(arr []string) string {
+	if len(arr) == 0 {
+		return "[]"
+	}
+	var parts []string
+	for _, s := range arr {
+		parts = append(parts, fmt.Sprintf("'%s'", escapeString(s)))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+// UpsertChunkEmbedding creates or updates an embedding for a chunk.
+func (g *FalkorDBGraph) UpsertChunkEmbedding(ctx context.Context, chunkID string, emb *ChunkEmbeddingNode) error {
+	if !g.IsConnected() {
+		return fmt.Errorf("not connected to graph database")
+	}
+
+	embeddingStr := formatEmbeddingArray(emb.Embedding)
+
+	query := fmt.Sprintf(`
+		MATCH (c:Chunk {id: '%s'})
+		MERGE (c)-[:HAS_EMBEDDING]->(e:ChunkEmbedding {provider: '%s', model: '%s'})
+		SET e.dimensions = %d,
+			e.embedding = %s,
+			e.created_at = %d
+	`, escapeString(chunkID),
+		escapeString(emb.Provider),
+		escapeString(emb.Model),
+		emb.Dimensions,
+		embeddingStr,
+		time.Now().Unix())
+
+	return g.queueWrite(query)
+}
+
+// DeleteChunkEmbeddings deletes embeddings for a chunk, optionally filtered by provider/model.
+func (g *FalkorDBGraph) DeleteChunkEmbeddings(ctx context.Context, chunkID string, provider, model string) error {
+	if !g.IsConnected() {
+		return fmt.Errorf("not connected to graph database")
+	}
+
+	var query string
+	if provider != "" && model != "" {
+		query = fmt.Sprintf(`
+			MATCH (c:Chunk {id: '%s'})-[:HAS_EMBEDDING]->(e:ChunkEmbedding {provider: '%s', model: '%s'})
+			DETACH DELETE e
+		`, escapeString(chunkID), escapeString(provider), escapeString(model))
+	} else if provider != "" {
+		query = fmt.Sprintf(`
+			MATCH (c:Chunk {id: '%s'})-[:HAS_EMBEDDING]->(e:ChunkEmbedding {provider: '%s'})
+			DETACH DELETE e
+		`, escapeString(chunkID), escapeString(provider))
+	} else {
+		query = fmt.Sprintf(`
+			MATCH (c:Chunk {id: '%s'})-[:HAS_EMBEDDING]->(e:ChunkEmbedding)
+			DETACH DELETE e
+		`, escapeString(chunkID))
+	}
+
+	return g.queueWrite(query)
 }
 
 // formatEmbeddingArray formats a float32 slice as a Cypher array literal.
@@ -670,12 +923,22 @@ func formatEmbeddingArray(embedding []float32) string {
 	return result
 }
 
-// DeleteChunks removes all chunks for a file.
+// DeleteChunks removes all chunks for a file, including their metadata and embedding nodes.
 func (g *FalkorDBGraph) DeleteChunks(ctx context.Context, filePath string) error {
 	if !g.IsConnected() {
 		return fmt.Errorf("not connected to graph database")
 	}
 
+	// Delete metadata nodes first
+	metaQuery := fmt.Sprintf(`
+		MATCH (c:Chunk {file_path: '%s'})-[:HAS_CODE_META|HAS_DOC_META|HAS_NOTEBOOK_META|HAS_BUILD_META|HAS_INFRA_META|HAS_SCHEMA_META|HAS_STRUCT_META|HAS_SQL_META|HAS_LOG_META|HAS_EMBEDDING]->(m)
+		DETACH DELETE m
+	`, escapeString(filePath))
+	if err := g.queueWriteSync(metaQuery); err != nil {
+		return err
+	}
+
+	// Delete chunks
 	query := fmt.Sprintf(`
 		MATCH (c:Chunk {file_path: '%s'})
 		DETACH DELETE c

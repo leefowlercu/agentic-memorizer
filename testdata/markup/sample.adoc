@@ -1,0 +1,251 @@
+= Sample AsciiDoc Document
+:author: Test Author
+:revdate: 2024-01-15
+:toc:
+:icons: font
+
+This is a sample AsciiDoc document for testing the AsciiDoc chunker.
+
+== Introduction
+
+AsciiDoc is a lightweight markup language for authoring notes, articles, documentation, books, and more.
+
+=== Key Features
+
+The format supports many features:
+
+* Rich text formatting
+* Tables and lists
+* Code blocks with syntax highlighting
+* Cross-references and links
+
+=== Document Structure
+
+AsciiDoc documents are organized into sections using heading markers:
+
+[source,asciidoc]
+----
+= Document Title (Level 0)
+== Section (Level 1)
+=== Subsection (Level 2)
+==== Sub-subsection (Level 3)
+----
+
+== Installation
+
+To get started with AsciiDoc, you need to install a processor.
+
+=== Using Ruby
+
+Install Asciidoctor gem:
+
+[source,bash]
+----
+gem install asciidoctor
+----
+
+=== Using Docker
+
+Alternatively, use Docker:
+
+[source,bash]
+----
+docker run --rm -v $(pwd):/documents/ asciidoctor/docker-asciidoctor asciidoctor sample.adoc
+----
+
+=== Using npm
+
+Or install via npm:
+
+[source,bash]
+----
+npm install -g @asciidoctor/core
+----
+
+== Text Formatting
+
+AsciiDoc supports various text styles:
+
+*Bold text* is marked with asterisks.
+
+_Italic text_ is marked with underscores.
+
+`Monospace text` is marked with backticks.
+
+*_Bold italic_* combines both styles.
+
+== Lists
+
+=== Unordered Lists
+
+* First item
+* Second item
+** Nested item
+** Another nested item
+* Third item
+
+=== Ordered Lists
+
+. First step
+. Second step
+.. Substep A
+.. Substep B
+. Third step
+
+=== Definition Lists
+
+Term 1::
+  Definition of term 1
+
+Term 2::
+  Definition of term 2
+
+== Tables
+
+.Sample Table
+[cols="1,2,1",options="header"]
+|===
+|Column 1 |Column 2 |Column 3
+
+|Cell A1
+|Cell A2
+|Cell A3
+
+|Cell B1
+|Cell B2
+|Cell B3
+|===
+
+== Code Blocks
+
+=== Inline Code
+
+Use `git status` to check the current state.
+
+=== Source Blocks
+
+[source,python]
+----
+def calculate_sum(numbers):
+    """Calculate the sum of a list of numbers."""
+    total = 0
+    for num in numbers:
+        total += num
+    return total
+
+result = calculate_sum([1, 2, 3, 4, 5])
+print(f"Sum: {result}")
+----
+
+=== With Callouts
+
+[source,java]
+----
+public class HelloWorld {
+    public static void main(String[] args) { // <1>
+        System.out.println("Hello, World!"); // <2>
+    }
+}
+----
+<1> Entry point of the application
+<2> Print greeting to console
+
+== Admonitions
+
+NOTE: This is a note admonition.
+
+TIP: This is a tip admonition.
+
+IMPORTANT: This is an important admonition.
+
+WARNING: This is a warning admonition.
+
+CAUTION: This is a caution admonition.
+
+== Links and References
+
+=== External Links
+
+Visit https://asciidoctor.org[the AsciiDoctor website] for more information.
+
+=== Cross-references
+
+See <<_installation>> for setup instructions.
+
+=== Anchors
+
+[[custom-anchor]]
+This paragraph has a custom anchor.
+
+== Images
+
+.A sample image
+image::sample-image.png[Sample Image,300,200]
+
+== Includes
+
+Include content from other files:
+
+----
+\include::partial.adoc[]
+----
+
+== API Documentation
+
+=== Classes
+
+==== MyClass
+
+A sample class for demonstration purposes.
+
+.Constructor Parameters
+[options="header"]
+|===
+|Parameter |Type |Description
+
+|name
+|String
+|The name of the instance
+
+|options
+|Map
+|Configuration options
+|===
+
+==== Methods
+
+===== doSomething()
+
+Performs an important operation.
+
+*Parameters:*
+
+* `input` - The input value
+
+*Returns:*
+
+A boolean indicating success.
+
+== Troubleshooting
+
+=== Common Issues
+
+==== Build Failures
+
+If the build fails, check the following:
+
+. Verify all dependencies are installed
+. Check file permissions
+. Review the error log
+
+==== Rendering Issues
+
+For rendering problems:
+
+* Clear the cache
+* Update to the latest version
+* Check syntax errors
+
+== Conclusion
+
+This document demonstrates various AsciiDoc features for testing purposes.

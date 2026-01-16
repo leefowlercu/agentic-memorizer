@@ -33,31 +33,16 @@ type Chunk struct {
 	Metadata ChunkMetadata
 }
 
-// ChunkMetadata contains additional information about a chunk.
-type ChunkMetadata struct {
-	// Type indicates the content type of this chunk.
-	Type ChunkType
+// ChunkWarning represents a non-fatal parsing issue encountered during chunking.
+type ChunkWarning struct {
+	// Offset is the byte offset where the issue occurred in the original content.
+	Offset int
 
-	// Language is the programming language (for code chunks).
-	Language string
+	// Message is a human-readable description of the issue.
+	Message string
 
-	// Heading is the section heading (for markdown chunks).
-	Heading string
-
-	// HeadingLevel is the heading depth (1-6 for markdown).
-	HeadingLevel int
-
-	// FunctionName is the function/method name (for AST chunks).
-	FunctionName string
-
-	// ClassName is the class/struct name (for AST chunks).
-	ClassName string
-
-	// RecordIndex is the record number (for structured data chunks).
-	RecordIndex int
-
-	// TokenEstimate is an estimated token count for this chunk.
-	TokenEstimate int
+	// Code is a machine-readable identifier for the warning type.
+	Code string
 }
 
 // ChunkOptions configures chunking behavior.
@@ -100,7 +85,9 @@ type Chunker interface {
 	CanHandle(mimeType string, language string) bool
 
 	// Chunk splits content into chunks according to the options.
-	Chunk(ctx context.Context, content []byte, opts ChunkOptions) ([]Chunk, error)
+	// Returns ChunkResult containing chunks and any non-fatal warnings.
+	// Errors are reserved for fatal failures (cannot parse at all, context canceled).
+	Chunk(ctx context.Context, content []byte, opts ChunkOptions) (*ChunkResult, error)
 
 	// Priority returns the chunker's priority (higher = preferred).
 	Priority() int
@@ -111,6 +98,10 @@ type ChunkResult struct {
 	// Chunks is the list of content chunks.
 	Chunks []Chunk
 
+	// Warnings contains non-fatal parsing issues encountered during chunking.
+	// The caller decides how to handle/log these warnings.
+	Warnings []ChunkWarning
+
 	// TotalChunks is the total number of chunks.
 	TotalChunks int
 
@@ -119,10 +110,4 @@ type ChunkResult struct {
 
 	// OriginalSize is the original content size in bytes.
 	OriginalSize int
-}
-
-// EstimateTokens provides a rough token estimate for text.
-// Uses a simple heuristic of ~4 characters per token for English text.
-func EstimateTokens(text string) int {
-	return (len(text) + 3) / 4
 }

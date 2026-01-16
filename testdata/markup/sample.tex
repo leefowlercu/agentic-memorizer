@@ -1,0 +1,228 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\title{Sample LaTeX Document}
+\author{Test Author}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This is a sample LaTeX document for testing the LaTeX chunker.
+It demonstrates various sectioning commands and mathematical typesetting.
+\end{abstract}
+
+\tableofcontents
+
+\section{Introduction}
+
+LaTeX is a typesetting system widely used for scientific and technical documents.
+This document demonstrates various LaTeX features.
+
+\subsection{History}
+
+LaTeX was created by Leslie Lamport in 1984 as a set of macros for TeX.
+It has become the standard for academic publishing in many fields.
+
+\subsection{Key Features}
+
+LaTeX provides many powerful features:
+
+\begin{itemize}
+    \item Professional typography
+    \item Mathematical equation support
+    \item Automated numbering and cross-references
+    \item Bibliography management
+\end{itemize}
+
+\section{Mathematics}
+
+LaTeX excels at mathematical typesetting.
+
+\subsection{Inline Math}
+
+Inline equations like $E = mc^2$ are easy to write.
+The quadratic formula is $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$.
+
+\subsection{Display Math}
+
+For important equations, use display mode:
+
+\begin{equation}
+    \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+\end{equation}
+
+The Euler identity is particularly beautiful:
+
+\begin{equation}
+    e^{i\pi} + 1 = 0
+\end{equation}
+
+\subsection{Multi-line Equations}
+
+The align environment handles multi-line equations:
+
+\begin{align}
+    (x + y)^2 &= x^2 + 2xy + y^2 \\
+    (x - y)^2 &= x^2 - 2xy + y^2 \\
+    x^2 - y^2 &= (x+y)(x-y)
+\end{align}
+
+\subsection{Matrices}
+
+Matrices are straightforward:
+
+\begin{equation}
+    \begin{pmatrix}
+        a & b \\
+        c & d
+    \end{pmatrix}
+    \begin{pmatrix}
+        x \\
+        y
+    \end{pmatrix}
+    =
+    \begin{pmatrix}
+        ax + by \\
+        cx + dy
+    \end{pmatrix}
+\end{equation}
+
+\section{Code Listings}
+
+LaTeX can display code with the listings package:
+
+\begin{lstlisting}[language=Python, caption=A Python Example]
+def fibonacci(n):
+    """Generate Fibonacci sequence up to n."""
+    a, b = 0, 1
+    result = []
+    while a < n:
+        result.append(a)
+        a, b = b, a + b
+    return result
+
+print(fibonacci(100))
+\end{lstlisting}
+
+\subsection{Inline Code}
+
+Use \texttt{verbatim} for inline code: \texttt{print("Hello, World!")}.
+
+\section{Tables and Figures}
+
+\subsection{Tables}
+
+Here is a sample table:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|r|}
+    \hline
+    Left & Center & Right \\
+    \hline
+    A1 & B1 & C1 \\
+    A2 & B2 & C2 \\
+    A3 & B3 & C3 \\
+    \hline
+\end{tabular}
+\caption{A sample table}
+\label{tab:sample}
+\end{table}
+
+\subsection{Figures}
+
+Figures would be included as follows:
+
+\begin{figure}[h]
+\centering
+% \includegraphics[width=0.5\textwidth]{sample-image}
+\caption{A sample figure placeholder}
+\label{fig:sample}
+\end{figure}
+
+\section{Theorems and Proofs}
+
+\subsection{Theorem Environments}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+
+\begin{definition}
+A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself.
+\end{definition}
+
+\begin{theorem}[Euclid]
+There are infinitely many prime numbers.
+\end{theorem}
+
+\begin{proof}
+Assume there are finitely many primes $p_1, p_2, \ldots, p_n$.
+Consider $N = p_1 p_2 \cdots p_n + 1$.
+This number is not divisible by any $p_i$, so it must have a prime factor not in our list.
+This contradicts our assumption.
+\end{proof}
+
+\section{Cross-References}
+
+As shown in Table~\ref{tab:sample} and Figure~\ref{fig:sample}, LaTeX handles cross-references automatically.
+
+\subsection{Citations}
+
+Citations use BibTeX: According to~\cite{lamport1994latex}, LaTeX is powerful.
+
+\section{Advanced Topics}
+
+\subsection{Custom Commands}
+
+Define custom commands for convenience:
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+
+The real numbers $\R$ and natural numbers $\N$ are fundamental sets.
+
+\subsection{Environments}
+
+Custom environments provide structure:
+
+\newenvironment{example}
+{\begin{quote}\textbf{Example:}}
+{\end{quote}}
+
+\begin{example}
+This is an example environment.
+\end{example}
+
+\subsubsection{Nested Sections}
+
+LaTeX supports deep nesting of sections.
+
+\paragraph{Paragraphs}
+
+Paragraphs are even more specific than subsubsections.
+
+\subparagraph{Subparagraphs}
+
+Subparagraphs are the deepest standard sectioning level.
+
+\section{Conclusion}
+
+This document demonstrates various LaTeX features for testing purposes.
+The chunker should properly identify section boundaries and preserve equations.
+
+\begin{thebibliography}{9}
+\bibitem{lamport1994latex}
+    Leslie Lamport,
+    \textit{LaTeX: A Document Preparation System},
+    Addison-Wesley, 1994.
+\end{thebibliography}
+
+\end{document}

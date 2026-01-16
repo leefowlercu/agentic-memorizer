@@ -52,9 +52,15 @@ func (c *RecursiveChunker) Priority() int {
 }
 
 // Chunk splits content recursively using separators.
-func (c *RecursiveChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) ([]Chunk, error) {
+func (c *RecursiveChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) (*ChunkResult, error) {
 	if len(content) == 0 {
-		return []Chunk{}, nil
+		return &ChunkResult{
+			Chunks:       []Chunk{},
+			Warnings:     nil,
+			TotalChunks:  0,
+			ChunkerUsed:  recursiveChunkerName,
+			OriginalSize: 0,
+		}, nil
 	}
 
 	maxSize := opts.MaxChunkSize
@@ -68,7 +74,13 @@ func (c *RecursiveChunker) Chunk(ctx context.Context, content []byte, opts Chunk
 	// Merge small segments and create chunks
 	chunks := c.mergeSegments(ctx, segments, maxSize, opts.Overlap)
 
-	return chunks, nil
+	return &ChunkResult{
+		Chunks:       chunks,
+		Warnings:     nil,
+		TotalChunks:  len(chunks),
+		ChunkerUsed:  recursiveChunkerName,
+		OriginalSize: len(content),
+	}, nil
 }
 
 // splitRecursive splits text using the first applicable separator.

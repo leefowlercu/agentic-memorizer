@@ -212,24 +212,22 @@ func TestChunkNodeFields(t *testing.T) {
 		ID:               "chunk-1",
 		FilePath:         "/test/file.go",
 		Index:            0,
-		Content:          "func main() {}",
-		ContentHash:      "xyz789",
-		StartOffset:      0,
-		EndOffset:        14,
-		ChunkType:        "code",
-		FunctionName:     "main",
-		Summary:          "Main function",
-		EmbeddingVersion: 1,
-		TokenCount:       5,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Content:     "func main() {}",
+		ContentHash: "xyz789",
+		StartOffset: 0,
+		EndOffset:   14,
+		ChunkType:   "code",
+		Summary:     "Main function",
+		TokenCount:  5,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if chunk.ID != "chunk-1" {
 		t.Errorf("ID = %q, want %q", chunk.ID, "chunk-1")
 	}
-	if chunk.FunctionName != "main" {
-		t.Errorf("FunctionName = %q, want %q", chunk.FunctionName, "main")
+	if chunk.ChunkType != "code" {
+		t.Errorf("ChunkType = %q, want %q", chunk.ChunkType, "code")
 	}
 }
 

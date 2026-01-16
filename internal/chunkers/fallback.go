@@ -34,9 +34,15 @@ func (c *FallbackChunker) Priority() int {
 }
 
 // Chunk splits content into fixed-size chunks with overlap.
-func (c *FallbackChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) ([]Chunk, error) {
+func (c *FallbackChunker) Chunk(ctx context.Context, content []byte, opts ChunkOptions) (*ChunkResult, error) {
 	if len(content) == 0 {
-		return []Chunk{}, nil
+		return &ChunkResult{
+			Chunks:       []Chunk{},
+			Warnings:     nil,
+			TotalChunks:  0,
+			ChunkerUsed:  fallbackChunkerName,
+			OriginalSize: 0,
+		}, nil
 	}
 
 	maxSize := opts.MaxChunkSize
@@ -74,14 +80,15 @@ func (c *FallbackChunker) Chunk(ctx context.Context, content []byte, opts ChunkO
 			}
 		}
 
+		chunkContent := string(content[offset:end])
 		chunk := Chunk{
 			Index:       len(chunks),
-			Content:     string(content[offset:end]),
+			Content:     chunkContent,
 			StartOffset: offset,
 			EndOffset:   end,
 			Metadata: ChunkMetadata{
 				Type:          ChunkTypeUnknown,
-				TokenEstimate: EstimateTokens(string(content[offset:end])),
+				TokenEstimate: EstimateTokens(chunkContent),
 			},
 		}
 		chunks = append(chunks, chunk)
@@ -97,7 +104,13 @@ func (c *FallbackChunker) Chunk(ctx context.Context, content []byte, opts ChunkO
 		offset = nextOffset
 	}
 
-	return chunks, nil
+	return &ChunkResult{
+		Chunks:       chunks,
+		Warnings:     nil,
+		TotalChunks:  len(chunks),
+		ChunkerUsed:  fallbackChunkerName,
+		OriginalSize: contentLen,
+	}, nil
 }
 
 // findBreakPoint finds a good break point (whitespace) near the end of the range.

@@ -205,18 +205,6 @@ make build
 make install
 ```
 
-**Platform service registration:**
-
-macOS (launchd):
-```bash
-memorizer daemon start --register
-```
-
-Linux (systemd):
-```bash
-memorizer daemon start --register
-```
-
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

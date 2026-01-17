@@ -2,10 +2,7 @@ package watcher
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -17,6 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
@@ -446,7 +444,7 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 			modTime = info.ModTime()
 
 			// Compute content hash
-			hash, err := computeFileHash(ce.Path)
+			hash, err := filetype.HashFile(ce.Path)
 			if err != nil {
 				w.logger.Warn("failed to compute hash", "path", ce.Path, "error", err)
 				return
@@ -551,17 +549,3 @@ func isWatchLimitError(err error) bool {
 }
 
 // computeFileHash computes the SHA-256 hash of a file's contents.
-func computeFileHash(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
-}

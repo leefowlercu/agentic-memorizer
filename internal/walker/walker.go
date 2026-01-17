@@ -2,10 +2,7 @@ package walker
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
@@ -303,7 +301,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		}
 
 		// Compute content hash
-		contentHash, err := computeFileHash(filePath)
+		contentHash, err := filetype.HashFile(filePath)
 		if err != nil {
 			return nil // Skip files we can't hash
 		}
@@ -364,17 +362,3 @@ func (w *walker) hasFileChanged(ctx context.Context, path string, info fs.FileIn
 }
 
 // computeFileHash computes the SHA-256 hash of a file's contents.
-func computeFileHash(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
-}

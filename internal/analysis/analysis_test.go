@@ -10,6 +10,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
+	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -210,7 +211,7 @@ func TestQueueRegistryUpdatesFileState(t *testing.T) {
 		t.Fatalf("failed to read file state: %v", err)
 	}
 
-	expectedContentHash := computeContentHash(content)
+	expectedContentHash := filetype.HashBytes(content)
 	if state.ContentHash != expectedContentHash {
 		t.Errorf("ContentHash = %q, want %q", state.ContentHash, expectedContentHash)
 	}
@@ -430,78 +431,15 @@ func TestWorkerBackoff(t *testing.T) {
 	}
 }
 
-func TestDetectMIMEType(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"/test/file.go", "text/x-go"},
-		{"/test/file.py", "text/x-python"},
-		{"/test/file.js", "text/javascript"},
-		{"/test/file.ts", "text/typescript"},
-		{"/test/file.md", "text/markdown"},
-		{"/test/file.json", "application/json"},
-		{"/test/file.yaml", "text/yaml"},
-		{"/test/file.unknown", "application/octet-stream"},
+func TestComputeMetadataHash(t *testing.T) {
+	now := time.Now()
+
+	hash1 := computeMetadataHash("/path/to/file1", 100, now)
+	hash2 := computeMetadataHash("/path/to/file2", 100, now)
+
+	if hash1 == hash2 {
+		t.Error("Different paths should produce different hashes")
 	}
-
-	for _, tt := range tests {
-		result := detectMIMEType(tt.path, nil)
-		if result != tt.expected {
-			t.Errorf("detectMIMEType(%q) = %q, want %q", tt.path, result, tt.expected)
-		}
-	}
-}
-
-func TestDetectLanguage(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"/test/file.go", "go"},
-		{"/test/file.py", "python"},
-		{"/test/file.js", "javascript"},
-		{"/test/file.ts", "typescript"},
-		{"/test/file.rs", "rust"},
-		{"/test/file.rb", "ruby"},
-		{"/test/file.unknown", ""},
-	}
-
-	for _, tt := range tests {
-		result := detectLanguage(tt.path)
-		if result != tt.expected {
-			t.Errorf("detectLanguage(%q) = %q, want %q", tt.path, result, tt.expected)
-		}
-	}
-}
-
-func TestComputeHashes(t *testing.T) {
-	t.Run("ContentHash", func(t *testing.T) {
-		content1 := []byte("hello")
-		content2 := []byte("world")
-
-		hash1 := computeContentHash(content1)
-		hash2 := computeContentHash(content2)
-
-		if hash1 == hash2 {
-			t.Error("Different content should produce different hashes")
-		}
-		// SHA256 produces 32 bytes = 64 hex characters
-		if len(hash1) != 64 {
-			t.Errorf("Hash length = %d, want 64 (SHA256)", len(hash1))
-		}
-	})
-
-	t.Run("MetadataHash", func(t *testing.T) {
-		now := time.Now()
-
-		hash1 := computeMetadataHash("/path/to/file1", 100, now)
-		hash2 := computeMetadataHash("/path/to/file2", 100, now)
-
-		if hash1 == hash2 {
-			t.Error("Different paths should produce different hashes")
-		}
-	})
 }
 
 // mockEmbeddingsProvider is a mock implementation for testing.

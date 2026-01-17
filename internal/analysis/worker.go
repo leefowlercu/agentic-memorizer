@@ -2,8 +2,6 @@ package analysis
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,6 +16,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages"
+	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -299,8 +298,8 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	}
 
 	// Determine MIME type and language
-	mimeType := detectMIMEType(item.FilePath, content)
-	language := detectLanguage(item.FilePath)
+	mimeType := filetype.DetectMIME(item.FilePath, content)
+	language := filetype.DetectLanguage(item.FilePath)
 
 	// Check degradation mode
 	stats := w.queue.Stats()
@@ -313,7 +312,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 		MIMEType:    mimeType,
 		Language:    language,
 		AnalyzedAt:  time.Now(),
-		ContentHash: computeContentHash(content),
+		ContentHash: filetype.HashBytes(content),
 	}
 
 	// Step 1: Metadata analysis (always performed)
@@ -572,7 +571,7 @@ func (w *Worker) generateEmbeddings(ctx context.Context, chunks []chunkers.Chunk
 	var needsEmbedding []int // indices of chunks that need embedding
 
 	for i, chunk := range chunks {
-		chunkHash := computeContentHash([]byte(chunk.Content))
+		chunkHash := filetype.HashBytes([]byte(chunk.Content))
 		chunkResults[i] = AnalyzedChunk{
 			Index:       chunk.Index,
 			Content:     chunk.Content,
@@ -896,92 +895,6 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 }
 
 // Helper functions
-
-// detectMIMEType determines the MIME type of content.
-func detectMIMEType(path string, content []byte) string {
-	ext := filepath.Ext(path)
-	switch ext {
-	case ".go":
-		return "text/x-go"
-	case ".py":
-		return "text/x-python"
-	case ".js":
-		return "text/javascript"
-	case ".ts":
-		return "text/typescript"
-	case ".md", ".markdown":
-		return "text/markdown"
-	case ".json":
-		return "application/json"
-	case ".yaml", ".yml":
-		return "text/yaml"
-	case ".xml":
-		return "application/xml"
-	case ".html", ".htm":
-		return "text/html"
-	case ".css":
-		return "text/css"
-	case ".txt":
-		return "text/plain"
-	case ".csv":
-		return "text/csv"
-	default:
-		// Basic content sniffing
-		if len(content) > 0 {
-			if content[0] == '{' || content[0] == '[' {
-				return "application/json"
-			}
-		}
-		return "application/octet-stream"
-	}
-}
-
-// detectLanguage determines the programming language from file extension.
-func detectLanguage(path string) string {
-	ext := filepath.Ext(path)
-	switch ext {
-	case ".go":
-		return "go"
-	case ".py":
-		return "python"
-	case ".js":
-		return "javascript"
-	case ".ts":
-		return "typescript"
-	case ".java":
-		return "java"
-	case ".c":
-		return "c"
-	case ".cpp", ".cc", ".cxx":
-		return "cpp"
-	case ".rs":
-		return "rust"
-	case ".rb":
-		return "ruby"
-	case ".php":
-		return "php"
-	case ".cs":
-		return "csharp"
-	case ".swift":
-		return "swift"
-	case ".kt", ".kts":
-		return "kotlin"
-	case ".scala":
-		return "scala"
-	case ".sh", ".bash":
-		return "bash"
-	case ".sql":
-		return "sql"
-	default:
-		return ""
-	}
-}
-
-// computeContentHash computes a hash of the content.
-func computeContentHash(content []byte) string {
-	hash := sha256.Sum256(content)
-	return hex.EncodeToString(hash[:])
-}
 
 // computeMetadataHash computes a hash of file metadata.
 func computeMetadataHash(path string, size int64, modTime time.Time) string {

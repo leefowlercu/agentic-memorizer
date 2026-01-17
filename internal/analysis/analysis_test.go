@@ -2,6 +2,9 @@ package analysis
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
+	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
 func TestQueueStats(t *testing.T) {
@@ -120,6 +124,119 @@ func TestQueueEnqueue(t *testing.T) {
 	stats := queue.Stats()
 	if stats.PendingItems < 0 {
 		t.Errorf("PendingItems should not be negative")
+	}
+}
+
+func TestQueueRegistryUpdatesFileState(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, filepath.Join(t.TempDir(), "registry.db"))
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+	defer reg.Close()
+
+	queue := NewQueue(bus, WithWorkerCount(1))
+	queue.SetRegistry(reg)
+
+	if err := queue.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer queue.Stop(context.Background())
+
+	mockSemantic := &mockSemanticProvider{available: true}
+	mockEmbed := &mockEmbeddingsProvider{
+		available: true,
+		embedding: []float32{0.1, 0.2},
+	}
+	queue.SetProviders(mockSemantic, mockEmbed)
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "sample.txt")
+	content := []byte("hello registry")
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("failed to stat test file: %v", err)
+	}
+
+	done := make(chan struct{})
+	var once sync.Once
+	unsub := bus.Subscribe(events.AnalysisComplete, func(e events.Event) {
+		ae, ok := e.Payload.(*events.AnalysisEvent)
+		if !ok || ae.Path != filePath {
+			return
+		}
+		once.Do(func() {
+			close(done)
+		})
+	})
+	defer unsub()
+
+	failed := make(chan string, 1)
+	unsubFailed := bus.Subscribe(events.AnalysisFailed, func(e events.Event) {
+		ae, ok := e.Payload.(*events.AnalysisEvent)
+		if !ok || ae.Path != filePath {
+			return
+		}
+		failed <- ae.Error
+	})
+	defer unsubFailed()
+
+	err = queue.Enqueue(WorkItem{
+		FilePath:  filePath,
+		FileSize:  info.Size(),
+		ModTime:   info.ModTime(),
+		EventType: WorkItemNew,
+	})
+	if err != nil {
+		t.Fatalf("Enqueue failed: %v", err)
+	}
+
+	select {
+	case <-done:
+	case errMsg := <-failed:
+		t.Fatalf("analysis failed: %s", errMsg)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for analysis to complete")
+	}
+
+	state, err := reg.GetFileState(ctx, filePath)
+	if err != nil {
+		t.Fatalf("failed to read file state: %v", err)
+	}
+
+	expectedContentHash := computeContentHash(content)
+	if state.ContentHash != expectedContentHash {
+		t.Errorf("ContentHash = %q, want %q", state.ContentHash, expectedContentHash)
+	}
+
+	expectedMetadataHash := computeMetadataHash(filePath, info.Size(), info.ModTime())
+	if state.MetadataHash != expectedMetadataHash {
+		t.Errorf("MetadataHash = %q, want %q", state.MetadataHash, expectedMetadataHash)
+	}
+
+	if state.MetadataAnalyzedAt == nil {
+		t.Error("expected MetadataAnalyzedAt to be set")
+	}
+	if state.SemanticAnalyzedAt == nil {
+		t.Error("expected SemanticAnalyzedAt to be set")
+	}
+	if state.EmbeddingsAnalyzedAt == nil {
+		t.Error("expected EmbeddingsAnalyzedAt to be set")
+	}
+	if state.SemanticError != nil {
+		t.Errorf("expected SemanticError to be nil, got %q", *state.SemanticError)
+	}
+	if state.EmbeddingsError != nil {
+		t.Errorf("expected EmbeddingsError to be nil, got %q", *state.EmbeddingsError)
+	}
+	if state.AnalysisVersion == "" {
+		t.Error("expected AnalysisVersion to be set")
 	}
 }
 

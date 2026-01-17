@@ -97,6 +97,10 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		return err
 	}
 
+	if o.queue != nil && o.registry != nil {
+		o.queue.SetRegistry(o.registry)
+	}
+
 	// Set up job runner
 	o.jobRunner = NewJobRunner(o.bus)
 

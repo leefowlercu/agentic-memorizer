@@ -13,6 +13,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
+	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
 // QueueState represents the current state of the analysis queue.
@@ -58,6 +59,7 @@ type Queue struct {
 	maxRetries    int
 	retryDelay    time.Duration
 	queueCapacity int
+	registry      registry.Registry
 
 	state    QueueState
 	workChan chan WorkItem
@@ -124,6 +126,13 @@ func WithLogger(logger *slog.Logger) QueueOption {
 	}
 }
 
+// WithRegistry sets the registry used for file state tracking.
+func WithRegistry(reg registry.Registry) QueueOption {
+	return func(q *Queue) {
+		q.registry = reg
+	}
+}
+
 // NewQueue creates a new analysis queue.
 func NewQueue(bus events.Bus, opts ...QueueOption) *Queue {
 	q := &Queue{
@@ -168,6 +177,7 @@ func (q *Queue) Start(ctx context.Context) error {
 	q.workers = make([]*Worker, q.workerCount)
 	for i := 0; i < q.workerCount; i++ {
 		worker := NewWorker(i, q)
+		worker.SetRegistry(q.registry)
 		q.workers[i] = worker
 		q.wg.Add(1)
 		go func(w *Worker) {
@@ -337,6 +347,7 @@ func (q *Queue) SetWorkerCount(n int) {
 		// Add workers
 		for i := current; i < n; i++ {
 			worker := NewWorker(i, q)
+			worker.SetRegistry(q.registry)
 			q.workers = append(q.workers, worker)
 			q.wg.Add(1)
 			go func(w *Worker) {
@@ -382,6 +393,23 @@ func (q *Queue) SetProviders(semantic providers.SemanticProvider, embeddings pro
 		"workers", len(q.workers),
 		"semantic", semantic != nil,
 		"embeddings", embeddings != nil)
+}
+
+// SetRegistry injects the registry into all workers for file state tracking.
+func (q *Queue) SetRegistry(reg registry.Registry) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.registry = reg
+	for _, w := range q.workers {
+		if w != nil {
+			w.SetRegistry(reg)
+		}
+	}
+
+	q.logger.Debug("registry injected into workers",
+		"workers", len(q.workers),
+		"registry", reg != nil)
 }
 
 // Errors returns a channel that signals fatal worker errors.

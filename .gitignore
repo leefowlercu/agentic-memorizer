@@ -37,6 +37,7 @@ go.work.sum
 SPEC.md
 PLAN.md
 SPEC*
+docs/
 
 # Bug tracking (local development only)
 BUGS.md

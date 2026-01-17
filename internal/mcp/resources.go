@@ -13,6 +13,12 @@ const (
 
 	// ResourceURIIndexTOON is the TOON-formatted knowledge graph index.
 	ResourceURIIndexTOON = "memorizer://index/toon"
+
+	// ResourceURIFileTemplate is the RFC 6570 URI template for file resources.
+	ResourceURIFileTemplate = "memorizer://file/{path}"
+
+	// ResourceURIFilePrefix is the prefix for matching file resource URIs.
+	ResourceURIFilePrefix = "memorizer://file/"
 )
 
 // ResourceInfo contains metadata about a resource.
@@ -51,7 +57,7 @@ func AvailableResources() []ResourceInfo {
 		{
 			URI:         ResourceURIIndexTOON,
 			Name:        "Knowledge Graph Index (TOON)",
-			Description: "The memorizer knowledge graph index in token-optimized notation (~40% smaller)",
+			Description: "The memorizer knowledge graph index in token-optimized notation (TOON) format",
 			MIMEType:    "text/plain",
 			Format:      "toon",
 		},

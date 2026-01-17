@@ -3,25 +3,37 @@ package mcp
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/export"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/version"
 )
 
 // Server wraps the MCP server with memorizer-specific functionality.
 type Server struct {
-	mcpServer *server.MCPServer
-	sseServer *server.SSEServer
-	graph     graph.Graph
-	exporter  *export.Exporter
-	subs      *SubscriptionManager
-	mu        sync.RWMutex
-	running   bool
+	mcpServer  *server.MCPServer
+	httpServer *server.StreamableHTTPServer
+	graph      graph.Graph
+	registry   RegistryChecker
+	bus        *events.EventBus
+	exporter   *export.Exporter
+	subs       *SubscriptionManager
+	mu         sync.RWMutex
+	running    bool
+
+	// stopChan signals the event listener to stop
+	stopChan chan struct{}
+	// unsubscribe is the function to unsubscribe from the event bus
+	unsubscribe func()
 }
 
 // Config contains MCP server configuration.
@@ -38,15 +50,17 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Name:     "memorizer",
-		Version:  "1.0.0",
+		Version:  version.Get().Version,
 		BasePath: "/mcp",
 	}
 }
 
 // NewServer creates a new MCP server.
-func NewServer(g graph.Graph, cfg Config) *Server {
+func NewServer(g graph.Graph, reg RegistryChecker, bus *events.EventBus, cfg Config) *Server {
 	s := &Server{
 		graph:    g,
+		registry: reg,
+		bus:      bus,
 		exporter: export.NewExporter(g),
 		subs:     NewSubscriptionManager(),
 	}
@@ -61,11 +75,18 @@ func NewServer(g graph.Graph, cfg Config) *Server {
 	// Register resources
 	s.registerResources()
 
-	// Create SSE server for HTTP transport
-	s.sseServer = server.NewSSEServer(
+	// Create StreamableHTTP server for HTTP transport (MCP 2025-11-25 compliant)
+	s.httpServer = server.NewStreamableHTTPServer(
 		s.mcpServer,
-		server.WithStaticBasePath(cfg.BasePath),
-		server.WithKeepAlive(true),
+		server.WithStateful(true),
+		server.WithHeartbeatInterval(30*time.Second),
+		server.WithEndpointPath(cfg.BasePath),
+	)
+
+	slog.Info("MCP StreamableHTTP server created",
+		"name", cfg.Name,
+		"version", cfg.Version,
+		"base_path", cfg.BasePath,
 	)
 
 	return s
@@ -76,7 +97,11 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Start the event listener for notifications
+	s.startEventListener(ctx)
+
 	s.running = true
+	slog.Info("MCP server started")
 	return nil
 }
 
@@ -85,29 +110,24 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.sseServer != nil {
-		if err := s.sseServer.Shutdown(ctx); err != nil {
+	// Stop the event listener first
+	s.stopEventListener()
+
+	if s.httpServer != nil {
+		if err := s.httpServer.Shutdown(ctx); err != nil {
+			slog.Warn("MCP server shutdown error", "error", err)
 			return err
 		}
 	}
 
 	s.running = false
+	slog.Info("MCP server stopped")
 	return nil
 }
 
 // Handler returns the HTTP handler for the MCP server.
 func (s *Server) Handler() http.Handler {
-	return s.sseServer
-}
-
-// SSEHandler returns the SSE endpoint handler.
-func (s *Server) SSEHandler() http.Handler {
-	return s.sseServer.SSEHandler()
-}
-
-// MessageHandler returns the JSON-RPC message handler.
-func (s *Server) MessageHandler() http.Handler {
-	return s.sseServer.MessageHandler()
+	return s.httpServer
 }
 
 // NotifyResourceChanged notifies all subscribers that a resource has changed.
@@ -162,15 +182,30 @@ func (s *Server) registerResources() {
 		),
 		s.handleReadResource,
 	)
+
+	// File resource template (RFC 6570)
+	s.mcpServer.AddResourceTemplate(
+		mcp.NewResourceTemplate(
+			ResourceURIFileTemplate,
+			"File Resource",
+			mcp.WithTemplateDescription("Access analyzed file data from the knowledge graph. Returns file metadata, tags, topics, entities, and references."),
+			mcp.WithTemplateMIMEType("application/json"),
+		),
+		s.handleReadResource,
+	)
 }
 
 // handleReadResource handles read requests for all resource URIs.
 func (s *Server) handleReadResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 	uri := request.Params.URI
 
-	// Determine format from URI
-	format := "xml"
-	mimeType := "application/xml"
+	// Route file resource URIs to the file handler
+	if strings.HasPrefix(uri, ResourceURIFilePrefix) {
+		return s.handleReadFileResource(ctx, uri)
+	}
+
+	// Determine format from URI for index resources
+	var format, mimeType string
 
 	switch uri {
 	case ResourceURIIndex, ResourceURIIndexXML:

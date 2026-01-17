@@ -2,12 +2,38 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	mcplib "github.com/mark3labs/mcp-go/mcp"
+
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
+	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 )
+
+// mockRegistry is a test implementation of RegistryChecker.
+type mockRegistry struct {
+	rememberedPaths map[string]bool
+}
+
+func newMockRegistry() *mockRegistry {
+	return &mockRegistry{
+		rememberedPaths: map[string]bool{
+			"/test": true,
+		},
+	}
+}
+
+func (m *mockRegistry) IsPathRemembered(ctx context.Context, filePath string) bool {
+	for path := range m.rememberedPaths {
+		if len(filePath) >= len(path) && filePath[:len(path)] == path {
+			return true
+		}
+	}
+	return false
+}
 
 // mockGraph is a test implementation of graph.Graph.
 type mockGraph struct {
@@ -91,6 +117,29 @@ func (m *mockGraph) ExportSnapshot(ctx context.Context) (*graph.GraphSnapshot, e
 	return m.snapshot, nil
 }
 func (m *mockGraph) GetFileWithRelations(ctx context.Context, path string) (*graph.FileWithRelations, error) {
+	// Return sample data for test file path
+	if path == "/test/file.go" {
+		return &graph.FileWithRelations{
+			File: graph.FileNode{
+				Path:      "/test/file.go",
+				Name:      "file.go",
+				Extension: ".go",
+				Language:  "go",
+				Size:      1024,
+				Summary:   "Test file",
+			},
+			Tags:   []string{"go", "test"},
+			Topics: []graph.Topic{{Name: "Testing", Confidence: 0.9}},
+			Entities: []graph.Entity{
+				{Name: "Go", Type: "language"},
+				{Name: "Test", Type: "concept"},
+			},
+			References: []graph.Reference{
+				{Type: "package", Target: "testing"},
+			},
+			ChunkCount: 5,
+		}, nil
+	}
 	return nil, nil
 }
 func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkNode, error) {
@@ -99,9 +148,11 @@ func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32
 
 func TestNewServer(t *testing.T) {
 	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
 	cfg := DefaultConfig()
 
-	s := NewServer(g, cfg)
+	s := NewServer(g, reg, bus, cfg)
 
 	if s == nil {
 		t.Fatal("NewServer returned nil")
@@ -109,14 +160,20 @@ func TestNewServer(t *testing.T) {
 	if s.mcpServer == nil {
 		t.Error("mcpServer is nil")
 	}
-	if s.sseServer == nil {
-		t.Error("sseServer is nil")
+	if s.httpServer == nil {
+		t.Error("httpServer is nil")
 	}
 	if s.exporter == nil {
 		t.Error("exporter is nil")
 	}
 	if s.subs == nil {
 		t.Error("subs is nil")
+	}
+	if s.registry == nil {
+		t.Error("registry is nil")
+	}
+	if s.bus == nil {
+		t.Error("bus is nil")
 	}
 }
 
@@ -126,8 +183,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Name != "memorizer" {
 		t.Errorf("Name = %q, want %q", cfg.Name, "memorizer")
 	}
-	if cfg.Version != "1.0.0" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1.0.0")
+	// Version should come from version package, not be empty
+	if cfg.Version == "" {
+		t.Error("Version should not be empty")
 	}
 	if cfg.BasePath != "/mcp" {
 		t.Errorf("BasePath = %q, want %q", cfg.BasePath, "/mcp")
@@ -136,7 +194,9 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestServerStartStop(t *testing.T) {
 	g := newMockGraph()
-	s := NewServer(g, DefaultConfig())
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -163,21 +223,13 @@ func TestServerStartStop(t *testing.T) {
 
 func TestServerHandler(t *testing.T) {
 	g := newMockGraph()
-	s := NewServer(g, DefaultConfig())
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
 
 	handler := s.Handler()
 	if handler == nil {
 		t.Error("Handler returned nil")
-	}
-
-	sseHandler := s.SSEHandler()
-	if sseHandler == nil {
-		t.Error("SSEHandler returned nil")
-	}
-
-	msgHandler := s.MessageHandler()
-	if msgHandler == nil {
-		t.Error("MessageHandler returned nil")
 	}
 }
 
@@ -187,5 +239,400 @@ func TestResourceNotFoundError(t *testing.T) {
 
 	if err.Error() != expected {
 		t.Errorf("Error() = %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestPathNotRememberedError(t *testing.T) {
+	err := &PathNotRememberedError{Path: "/not/remembered"}
+	expected := "path not remembered: /not/remembered"
+
+	if err.Error() != expected {
+		t.Errorf("Error() = %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestFileNotFoundError(t *testing.T) {
+	err := &FileNotFoundError{Path: "/some/file.go"}
+	expected := "file not found: /some/file.go"
+
+	if err.Error() != expected {
+		t.Errorf("Error() = %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestServer_GracefulDegradation(t *testing.T) {
+	// Test that server can be created and started even with nil components
+	g := newMockGraph()
+	reg := newMockRegistry()
+	// nil event bus should not cause panic
+	s := NewServer(g, reg, nil, DefaultConfig())
+
+	ctx := context.Background()
+
+	// Start should succeed even without event bus
+	err := s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start failed with nil bus: %v", err)
+	}
+
+	// Server should be running
+	if !s.running {
+		t.Error("Server should be running after Start")
+	}
+
+	// Stop should succeed
+	err = s.Stop(ctx)
+	if err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+}
+
+func TestServer_GracefulDegradationNilRegistry(t *testing.T) {
+	g := newMockGraph()
+	bus := events.NewBus()
+	// nil registry should not cause panic during creation
+	s := NewServer(g, nil, bus, DefaultConfig())
+
+	if s == nil {
+		t.Fatal("NewServer returned nil with nil registry")
+	}
+
+	// isPathRemembered should handle nil registry gracefully
+	ctx := context.Background()
+	if s.isPathRemembered(ctx, "/some/path") {
+		t.Error("isPathRemembered should return false with nil registry")
+	}
+}
+
+func TestResource_ReadIndex(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		uri      string
+		mimeType string
+	}{
+		{"default index", ResourceURIIndex, "application/xml"},
+		{"xml index", ResourceURIIndexXML, "application/xml"},
+		{"json index", ResourceURIIndexJSON, "application/json"},
+		{"toon index", ResourceURIIndexTOON, "text/plain"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := mcplib.ReadResourceRequest{
+				Params: mcplib.ReadResourceParams{
+					URI: tt.uri,
+				},
+			}
+
+			contents, err := s.handleReadResource(ctx, request)
+			if err != nil {
+				t.Fatalf("handleReadResource failed: %v", err)
+			}
+
+			if len(contents) != 1 {
+				t.Fatalf("expected 1 content, got %d", len(contents))
+			}
+
+			textContent, ok := contents[0].(mcplib.TextResourceContents)
+			if !ok {
+				t.Fatalf("expected TextResourceContents, got %T", contents[0])
+			}
+
+			if textContent.MIMEType != tt.mimeType {
+				t.Errorf("MIMEType = %q, want %q", textContent.MIMEType, tt.mimeType)
+			}
+
+			if textContent.URI != tt.uri {
+				t.Errorf("URI = %q, want %q", textContent.URI, tt.uri)
+			}
+
+			if textContent.Text == "" {
+				t.Error("Text content should not be empty")
+			}
+		})
+	}
+}
+
+func TestResource_ReadFile(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	// Test reading a remembered file
+	uri := ResourceURIFilePrefix + "/test/file.go"
+	request := mcplib.ReadResourceRequest{
+		Params: mcplib.ReadResourceParams{
+			URI: uri,
+		},
+	}
+
+	contents, err := s.handleReadResource(ctx, request)
+	if err != nil {
+		t.Fatalf("handleReadResource failed: %v", err)
+	}
+
+	if len(contents) != 1 {
+		t.Fatalf("expected 1 content, got %d", len(contents))
+	}
+
+	textContent, ok := contents[0].(mcplib.TextResourceContents)
+	if !ok {
+		t.Fatalf("expected TextResourceContents, got %T", contents[0])
+	}
+
+	if textContent.MIMEType != "application/json" {
+		t.Errorf("MIMEType = %q, want %q", textContent.MIMEType, "application/json")
+	}
+
+	// Verify the response contains expected file data
+	if textContent.Text == "" {
+		t.Error("Text content should not be empty")
+	}
+
+	// Check that JSON contains expected fields
+	if !strings.Contains(textContent.Text, "file.go") {
+		t.Error("Response should contain file name")
+	}
+	if !strings.Contains(textContent.Text, "Testing") {
+		t.Error("Response should contain topic")
+	}
+}
+
+func TestResource_ReadFile_NotRemembered(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	// Test reading a file that is not under a remembered path
+	uri := ResourceURIFilePrefix + "/not/remembered/file.go"
+	request := mcplib.ReadResourceRequest{
+		Params: mcplib.ReadResourceParams{
+			URI: uri,
+		},
+	}
+
+	_, err := s.handleReadResource(ctx, request)
+	if err == nil {
+		t.Fatal("expected error for non-remembered path")
+	}
+
+	// Check it's the correct error type
+	if _, ok := err.(*PathNotRememberedError); !ok {
+		t.Errorf("expected PathNotRememberedError, got %T: %v", err, err)
+	}
+}
+
+func TestResource_ReadFile_NotFound(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	// Test reading a remembered file that doesn't exist in graph
+	// /test is remembered but /test/nonexistent.go returns nil from mockGraph
+	uri := ResourceURIFilePrefix + "/test/nonexistent.go"
+	request := mcplib.ReadResourceRequest{
+		Params: mcplib.ReadResourceParams{
+			URI: uri,
+		},
+	}
+
+	_, err := s.handleReadResource(ctx, request)
+	if err == nil {
+		t.Fatal("expected error for file not found in graph")
+	}
+
+	// Check it's the correct error type
+	if _, ok := err.(*ResourceNotFoundError); !ok {
+		t.Errorf("expected ResourceNotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestResource_InvalidURI(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		uri  string
+	}{
+		{"unknown scheme", "unknown://resource"},
+		{"invalid memorizer resource", "memorizer://invalid"},
+		{"empty uri", ""},
+		{"random string", "not-a-uri"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := mcplib.ReadResourceRequest{
+				Params: mcplib.ReadResourceParams{
+					URI: tt.uri,
+				},
+			}
+
+			_, err := s.handleReadResource(ctx, request)
+			if err == nil {
+				t.Errorf("expected error for URI %q", tt.uri)
+			}
+		})
+	}
+}
+
+func TestResource_FileEmptyPath(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	// Test reading file resource with empty path (just the prefix)
+	uri := ResourceURIFilePrefix
+	request := mcplib.ReadResourceRequest{
+		Params: mcplib.ReadResourceParams{
+			URI: uri,
+		},
+	}
+
+	_, err := s.handleReadResource(ctx, request)
+	if err == nil {
+		t.Fatal("expected error for empty file path")
+	}
+
+	if _, ok := err.(*ResourceNotFoundError); !ok {
+		t.Errorf("expected ResourceNotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestSubscription_Subscribe(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	// Test subscribing to resources
+	subscriber := &Subscriber{
+		ID:        "test-subscriber",
+		SessionID: "test-session",
+	}
+
+	// Initially no subscribers
+	if s.subs.HasSubscribers(ResourceURIIndex) {
+		t.Error("should have no subscribers initially")
+	}
+
+	// Subscribe
+	s.subs.Subscribe(ResourceURIIndex, subscriber)
+
+	// Now should have subscribers
+	if !s.subs.HasSubscribers(ResourceURIIndex) {
+		t.Error("should have subscribers after subscribe")
+	}
+
+	// Verify subscriber info
+	subs := s.subs.GetSubscribers(ResourceURIIndex)
+	if len(subs) != 1 {
+		t.Fatalf("expected 1 subscriber, got %d", len(subs))
+	}
+
+	if subs[0].ID != "test-subscriber" {
+		t.Errorf("subscriber ID = %q, want %q", subs[0].ID, "test-subscriber")
+	}
+
+	// Unsubscribe
+	s.subs.Unsubscribe(ResourceURIIndex, "test-subscriber")
+
+	if s.subs.HasSubscribers(ResourceURIIndex) {
+		t.Error("should have no subscribers after unsubscribe")
+	}
+}
+
+func TestServer_isPathRemembered(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	tests := []struct {
+		path       string
+		remembered bool
+	}{
+		{"/test", true},
+		{"/test/file.go", true},
+		{"/test/subdir/file.go", true},
+		{"/other", false},
+		{"/not/remembered", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := s.isPathRemembered(ctx, tt.path)
+			if result != tt.remembered {
+				t.Errorf("isPathRemembered(%q) = %v, want %v", tt.path, result, tt.remembered)
+			}
+		})
+	}
+}
+
+func TestNotifyResourceChanged(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	// This should not panic even if no clients are connected
+	s.NotifyResourceChanged(ResourceURIIndex)
+	s.NotifyResourceChanged(ResourceURIFilePrefix + "/test/file.go")
+}
+
+func TestServer_MultipleStartStop(t *testing.T) {
+	g := newMockGraph()
+	reg := newMockRegistry()
+	bus := events.NewBus()
+	s := NewServer(g, reg, bus, DefaultConfig())
+
+	ctx := context.Background()
+
+	// Start and stop multiple times should not cause issues
+	for i := 0; i < 3; i++ {
+		err := s.Start(ctx)
+		if err != nil {
+			t.Fatalf("Start iteration %d failed: %v", i, err)
+		}
+
+		if !s.running {
+			t.Errorf("Server should be running after Start (iteration %d)", i)
+		}
+
+		err = s.Stop(ctx)
+		if err != nil {
+			t.Fatalf("Stop iteration %d failed: %v", i, err)
+		}
+
+		if s.running {
+			t.Errorf("Server should not be running after Stop (iteration %d)", i)
+		}
 	}
 }

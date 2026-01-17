@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/gomodule/redigo v1.9.3
 	github.com/hashicorp/hcl/v2 v2.23.0
-	github.com/mark3labs/mcp-go v0.43.2
+	github.com/mark3labs/mcp-go v0.44.0-beta.2
 	github.com/pdfcpu/pdfcpu v0.9.1
 	github.com/pkoukk/tiktoken-go v0.1.7
 	github.com/prometheus/client_golang v1.23.2
@@ -22,6 +22,7 @@ require (
 	github.com/yoheimuta/go-protoparser/v4 v4.11.0
 	golang.org/x/image v0.35.0
 	golang.org/x/net v0.49.0
+	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.43.0
 )

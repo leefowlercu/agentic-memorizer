@@ -563,3 +563,112 @@ func TestServer_ConcurrentRequests(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestServer_MCP_EndpointAccessible tests that the MCP endpoint is accessible
+// when an MCP handler is configured.
+func TestServer_MCP_EndpointAccessible(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Create an MCP handler that responds with proper MCP-style response
+	mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25"}}`))
+	})
+
+	srv.SetMCPHandler(mcpHandler)
+
+	handler := srv.Handler()
+
+	// Test various MCP paths are routed correctly
+	paths := []string{
+		"/mcp",
+		"/mcp/",
+		"/mcp/sse",
+		"/mcp/message",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			// MCP handler should receive the request
+			if w.Code != http.StatusOK {
+				t.Errorf("POST %s status = %d, want %d", path, w.Code, http.StatusOK)
+			}
+
+			contentType := w.Header().Get("Content-Type")
+			if contentType != "application/json" {
+				t.Errorf("POST %s Content-Type = %q, want %q", path, contentType, "application/json")
+			}
+		})
+	}
+}
+
+// TestServer_MCP_NotFound tests that /mcp returns 404 when no handler is set.
+func TestServer_MCP_NotFound_NoHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	// Don't set MCP handler
+
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("POST /mcp without handler status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+// TestServer_MCP_MethodHandling tests that the MCP handler receives all HTTP methods.
+func TestServer_MCP_MethodHandling(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	var receivedMethod string
+	mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedMethod = r.Method
+		w.WriteHeader(http.StatusOK)
+	})
+
+	srv.SetMCPHandler(mcpHandler)
+
+	handler := srv.Handler()
+
+	methods := []string{
+		http.MethodGet,
+		http.MethodPost,
+		http.MethodDelete,
+	}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			receivedMethod = ""
+			req := httptest.NewRequest(method, "/mcp", nil)
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if receivedMethod != method {
+				t.Errorf("MCP handler received method %q, want %q", receivedMethod, method)
+			}
+		})
+	}
+}

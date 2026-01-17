@@ -43,6 +43,9 @@ const (
 	// RememberedPathRemoved is published when a remembered path is auto-removed
 	// due to the directory no longer existing on the filesystem.
 	RememberedPathRemoved EventType = "remembered_path.removed"
+
+	// RebuildComplete is published when a rebuild operation finishes.
+	RebuildComplete EventType = "rebuild.complete"
 )
 
 // Event represents a published event in the system.
@@ -153,6 +156,21 @@ type RememberedPathRemovedEvent struct {
 
 	// Reason describes why the path was removed (e.g., "not_found").
 	Reason string
+}
+
+// RebuildCompleteEvent contains data for rebuild completion events.
+type RebuildCompleteEvent struct {
+	// FilesQueued is the number of files queued for analysis.
+	FilesQueued int
+
+	// DirsProcessed is the number of directories traversed.
+	DirsProcessed int
+
+	// Duration is how long the rebuild took.
+	Duration time.Duration
+
+	// Full indicates if this was a full rebuild (true) or incremental (false).
+	Full bool
 }
 
 // EventHandler is a function that processes events.

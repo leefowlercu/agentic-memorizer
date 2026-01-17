@@ -46,6 +46,9 @@ type Orchestrator struct {
 	// graphDegraded tracks if graph connection failed during startup
 	graphDegraded bool
 
+	// mcpDegraded tracks if MCP server failed during startup
+	mcpDegraded bool
+
 	// rebuildStopChan signals the periodic rebuild goroutine to stop
 	rebuildStopChan chan struct{}
 
@@ -215,11 +218,17 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 
 	// 11. Initialize MCP Server
 	mcpCfg := mcp.DefaultConfig()
-	o.mcpServer = mcp.NewServer(o.graph, mcpCfg)
+	regAdapter := newRegistryAdapter(o.registry)
+	o.mcpServer = mcp.NewServer(o.graph, regAdapter, o.bus, mcpCfg)
 	slog.Info("MCP server initialized",
 		"name", mcpCfg.Name,
 		"base_path", mcpCfg.BasePath,
 	)
+
+	// Wire MCP handler to HTTP server
+	if o.mcpServer != nil {
+		o.daemon.server.SetMCPHandler(o.mcpServer.Handler())
+	}
 
 	// Initialize Metrics Collector
 	metricsInterval := time.Duration(cfg.Daemon.Metrics.CollectionInterval) * time.Second
@@ -313,10 +322,16 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		go o.walkRememberedPaths(ctx)
 	}
 
-	// Start MCP server
+	// Start MCP server (graceful degradation if startup fails)
 	if o.mcpServer != nil {
 		if err := o.mcpServer.Start(ctx); err != nil {
-			return fmt.Errorf("failed to start MCP server; %w", err)
+			slog.Warn("MCP server startup failed; entering degraded mode",
+				"error", err,
+			)
+			o.mcpDegraded = true
+			// Continue without MCP - graceful degradation
+		} else {
+			slog.Info("MCP server started")
 		}
 	}
 
@@ -465,6 +480,18 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 	stats := o.walker.Stats()
 	duration := time.Since(start)
 
+	// Publish rebuild complete event for MCP notifications
+	if o.bus != nil {
+		o.bus.Publish(ctx, events.NewEvent(events.RebuildComplete,
+			events.RebuildCompleteEvent{
+				FilesQueued:   int(stats.FilesDiscovered),
+				DirsProcessed: int(stats.DirsTraversed),
+				Duration:      duration,
+				Full:          full,
+			},
+		))
+	}
+
 	return &RebuildResult{
 		Status:        "completed",
 		FilesQueued:   int(stats.FilesDiscovered),
@@ -524,6 +551,11 @@ func (o *Orchestrator) Graph() graph.Graph {
 // IsGraphDegraded returns true if graph connection failed during startup.
 func (o *Orchestrator) IsGraphDegraded() bool {
 	return o.graphDegraded
+}
+
+// IsMCPDegraded returns true if MCP server startup failed.
+func (o *Orchestrator) IsMCPDegraded() bool {
+	return o.mcpDegraded
 }
 
 // MCPServer returns the initialized MCP server.
@@ -739,9 +771,17 @@ func (o *Orchestrator) ComponentStatuses() map[string]ComponentHealth {
 
 	// MCP server status
 	if o.mcpServer != nil {
-		statuses["mcp"] = ComponentHealth{
-			Status:      ComponentStatusRunning,
-			LastChecked: time.Now(),
+		if o.mcpDegraded {
+			statuses["mcp"] = ComponentHealth{
+				Status:      ComponentStatusFailed,
+				Error:       "startup failed",
+				LastChecked: time.Now(),
+			}
+		} else {
+			statuses["mcp"] = ComponentHealth{
+				Status:      ComponentStatusRunning,
+				LastChecked: time.Now(),
+			}
 		}
 	}
 

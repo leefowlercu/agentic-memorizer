@@ -36,6 +36,10 @@ go.work.sum
 /specs
 SPEC.md
 PLAN.md
+SPEC*
 
 # Bug tracking (local development only)
 BUGS.md
+
+# Temp. ignore
+GRACEFUL_DEGRADATION*

@@ -11,9 +11,8 @@ import (
 func TestMCPIntegration(t *testing.T) {
 	t.Run("NewMCPIntegration", func(t *testing.T) {
 		serverConfig := MCPServerConfig{
-			Command: "memorizer",
-			Args:    []string{"daemon", "mcp"},
-			Type:    "stdio",
+			Transport: MCPTransportRemote,
+			URL:       "http://localhost:7600/mcp",
 		}
 
 		integration := NewMCPIntegration(
@@ -42,7 +41,7 @@ func TestMCPIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("SetupAndTeardown", func(t *testing.T) {
+	t.Run("SetupAndTeardownRemote", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "mcp.json")
 
@@ -55,11 +54,11 @@ func TestMCPIntegration(t *testing.T) {
 		_ = os.Setenv("PATH", tmpDir+":"+origPath)
 		defer func() { _ = os.Setenv("PATH", origPath) }()
 
+		// Test remote transport (default)
 		serverConfig := MCPServerConfig{
-			Command: "memorizer",
-			Args:    []string{"daemon", "mcp"},
-			Type:    "stdio",
-			Env:     map[string]string{"TEST_VAR": "test"},
+			Transport: MCPTransportRemote,
+			URL:       "http://127.0.0.1:7600/mcp",
+			Env:       map[string]string{"TEST_VAR": "test"},
 		}
 
 		integration := NewMCPIntegration(
@@ -82,7 +81,7 @@ func TestMCPIntegration(t *testing.T) {
 			t.Fatalf("Setup failed: %v", err)
 		}
 
-		// Verify server added
+		// Verify server added with URL-based config
 		data, _ := os.ReadFile(configPath)
 		var config map[string]any
 		_ = json.Unmarshal(data, &config)
@@ -97,8 +96,12 @@ func TestMCPIntegration(t *testing.T) {
 			t.Fatal("memorizer server not found")
 		}
 
-		if serverEntry["command"] != "memorizer" {
-			t.Errorf("command = %v, want %v", serverEntry["command"], "memorizer")
+		// For remote transport, should have URL not command
+		if serverEntry["url"] != "http://127.0.0.1:7600/mcp" {
+			t.Errorf("url = %v, want %v", serverEntry["url"], "http://127.0.0.1:7600/mcp")
+		}
+		if _, hasCommand := serverEntry["command"]; hasCommand {
+			t.Error("remote transport should not have command field")
 		}
 
 		// IsInstalled should return true
@@ -137,6 +140,80 @@ func TestMCPIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("SetupAndTeardownStdio", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "mcp.json")
+
+		// Create a mock binary
+		binPath := filepath.Join(tmpDir, "testbin")
+		_ = os.WriteFile(binPath, []byte("#!/bin/sh\necho test"), 0755)
+
+		// Update PATH
+		origPath := os.Getenv("PATH")
+		_ = os.Setenv("PATH", tmpDir+":"+origPath)
+		defer func() { _ = os.Setenv("PATH", origPath) }()
+
+		// Test stdio transport
+		serverConfig := MCPServerConfig{
+			Transport: MCPTransportStdio,
+			Command:   "memorizer",
+			Args:      []string{"daemon", "mcp"},
+			Env:       map[string]string{"TEST_VAR": "test"},
+		}
+
+		integration := NewMCPIntegration(
+			"test-mcp",
+			"test-harness",
+			"Test",
+			"testbin",
+			configPath,
+			"json",
+			"mcpServers",
+			"memorizer",
+			serverConfig,
+		)
+
+		ctx := context.Background()
+
+		// Setup
+		err := integration.Setup(ctx)
+		if err != nil {
+			t.Fatalf("Setup failed: %v", err)
+		}
+
+		// Verify server added with command-based config
+		data, _ := os.ReadFile(configPath)
+		var config map[string]any
+		_ = json.Unmarshal(data, &config)
+
+		serversSection, ok := config["mcpServers"].(map[string]any)
+		if !ok {
+			t.Fatal("mcpServers section not found")
+		}
+
+		serverEntry, exists := serversSection["memorizer"].(map[string]any)
+		if !exists {
+			t.Fatal("memorizer server not found")
+		}
+
+		// For stdio transport, should have command not URL
+		if serverEntry["command"] != "memorizer" {
+			t.Errorf("command = %v, want %v", serverEntry["command"], "memorizer")
+		}
+		if serverEntry["type"] != "stdio" {
+			t.Errorf("type = %v, want %v", serverEntry["type"], "stdio")
+		}
+		if _, hasURL := serverEntry["url"]; hasURL {
+			t.Error("stdio transport should not have url field")
+		}
+
+		// Teardown
+		err = integration.Teardown(ctx)
+		if err != nil {
+			t.Fatalf("Teardown failed: %v", err)
+		}
+	})
+
 	t.Run("SetupPreservesExistingServers", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "mcp.json")
@@ -170,7 +247,10 @@ func TestMCPIntegration(t *testing.T) {
 			"json",
 			"mcpServers",
 			"memorizer",
-			MCPServerConfig{Command: "memorizer"},
+			MCPServerConfig{
+				Transport: MCPTransportRemote,
+				URL:       "http://localhost:7600/mcp",
+			},
 		)
 
 		ctx := context.Background()
@@ -190,6 +270,51 @@ func TestMCPIntegration(t *testing.T) {
 		}
 		if _, exists := serversSection["memorizer"]; !exists {
 			t.Error("memorizer should be added")
+		}
+	})
+
+	t.Run("SetupDefaultsToRemoteTransport", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "mcp.json")
+
+		// Create a mock binary
+		binPath := filepath.Join(tmpDir, "testbin")
+		_ = os.WriteFile(binPath, []byte("#!/bin/sh\necho test"), 0755)
+
+		origPath := os.Getenv("PATH")
+		_ = os.Setenv("PATH", tmpDir+":"+origPath)
+		defer func() { _ = os.Setenv("PATH", origPath) }()
+
+		// Empty config should default to remote transport with default URL
+		integration := NewMCPIntegration(
+			"test-mcp",
+			"test",
+			"Test",
+			"testbin",
+			configPath,
+			"json",
+			"mcpServers",
+			"memorizer",
+			MCPServerConfig{}, // Empty config
+		)
+
+		ctx := context.Background()
+		err := integration.Setup(ctx)
+		if err != nil {
+			t.Fatalf("Setup failed: %v", err)
+		}
+
+		// Verify URL is set to default
+		data, _ := os.ReadFile(configPath)
+		var config map[string]any
+		_ = json.Unmarshal(data, &config)
+
+		serversSection := config["mcpServers"].(map[string]any)
+		serverEntry := serversSection["memorizer"].(map[string]any)
+
+		// Should have default URL
+		if serverEntry["url"] != DefaultMCPURL {
+			t.Errorf("url = %v, want %v", serverEntry["url"], DefaultMCPURL)
 		}
 	})
 

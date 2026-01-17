@@ -1,22 +1,41 @@
 package integrations
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+
+	"golang.org/x/term"
 )
+
+// MCPTransport represents the MCP server transport type.
+type MCPTransport string
+
+const (
+	// MCPTransportRemote indicates an HTTP-based remote MCP server.
+	MCPTransportRemote MCPTransport = "remote"
+	// MCPTransportStdio indicates a stdio-based local MCP server.
+	MCPTransportStdio MCPTransport = "stdio"
+)
+
+// DefaultMCPURL is the default MCP server URL.
+const DefaultMCPURL = "http://127.0.0.1:7600/mcp"
 
 // MCPServerConfig defines the MCP server configuration.
 type MCPServerConfig struct {
-	// Command is the executable to run (or URL for HTTP servers).
+	// Transport is the transport type ("remote" or "stdio"). Defaults to "remote".
+	Transport MCPTransport
+	// URL is the HTTP URL for remote MCP servers.
+	URL string
+	// Command is the executable to run (for stdio transport only).
 	Command string
-	// Args are the command arguments.
+	// Args are the command arguments (for stdio transport only).
 	Args []string
 	// Env contains environment variables.
 	Env map[string]string
-	// Type is the server type (e.g., "stdio", "http", "sse").
-	Type string
 }
 
 // MCPIntegration is the base type for MCP-based integrations.
@@ -93,6 +112,13 @@ func (m *MCPIntegration) Setup(ctx context.Context) error {
 		return err
 	}
 
+	// Prompt for URL if using remote transport and stdin is a terminal
+	if m.serverConfig.Transport == "" || m.serverConfig.Transport == MCPTransportRemote {
+		if err := m.promptForURL(); err != nil {
+			return fmt.Errorf("failed to get MCP URL; %w", err)
+		}
+	}
+
 	// Backup existing config
 	backupPath, err := BackupConfig(m.configPath)
 	if err != nil {
@@ -119,6 +145,44 @@ func (m *MCPIntegration) Setup(ctx context.Context) error {
 			_ = RestoreBackup(backupPath, m.configPath)
 		}
 		return fmt.Errorf("failed to write config; %w", err)
+	}
+
+	return nil
+}
+
+// promptForURL prompts the user for the MCP server URL when in interactive mode.
+// If stdin is not a terminal, uses the default URL.
+func (m *MCPIntegration) promptForURL() error {
+	// Determine default URL
+	defaultURL := m.serverConfig.URL
+	if defaultURL == "" {
+		defaultURL = DefaultMCPURL
+	}
+
+	// Check if stdin is a terminal for interactive prompting
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		// Non-interactive mode, use default
+		m.serverConfig.URL = defaultURL
+		return nil
+	}
+
+	// Interactive mode - prompt for URL
+	fmt.Printf("MCP Server URL [%s]: ", defaultURL)
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		// On error (e.g., EOF when piped), gracefully use default URL
+		m.serverConfig.URL = defaultURL
+		return nil //nolint:nilerr // intentional: fall back to default on input error
+	}
+
+	input = strings.TrimSpace(input)
+	if input == "" {
+		// Empty input, use default
+		m.serverConfig.URL = defaultURL
+	} else {
+		m.serverConfig.URL = input
 	}
 
 	return nil
@@ -288,20 +352,34 @@ func (m *MCPIntegration) addServerToConfig(config map[string]any) error {
 		config[m.serverKey] = serversSection
 	}
 
-	// Build server entry
+	// Build server entry based on transport type
 	serverEntry := make(map[string]any)
-	serverEntry["command"] = m.serverConfig.Command
 
-	if len(m.serverConfig.Args) > 0 {
-		serverEntry["args"] = m.serverConfig.Args
+	// Determine transport type, default to remote
+	transport := m.serverConfig.Transport
+	if transport == "" {
+		transport = MCPTransportRemote
+	}
+
+	switch transport {
+	case MCPTransportRemote:
+		// Remote HTTP transport uses URL
+		url := m.serverConfig.URL
+		if url == "" {
+			url = DefaultMCPURL
+		}
+		serverEntry["url"] = url
+	case MCPTransportStdio:
+		// Stdio transport uses command/args
+		serverEntry["command"] = m.serverConfig.Command
+		if len(m.serverConfig.Args) > 0 {
+			serverEntry["args"] = m.serverConfig.Args
+		}
+		serverEntry["type"] = "stdio"
 	}
 
 	if len(m.serverConfig.Env) > 0 {
 		serverEntry["env"] = m.serverConfig.Env
-	}
-
-	if m.serverConfig.Type != "" {
-		serverEntry["type"] = m.serverConfig.Type
 	}
 
 	serversSection[m.serverName] = serverEntry

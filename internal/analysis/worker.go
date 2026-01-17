@@ -184,7 +184,12 @@ func (w *Worker) Run(ctx context.Context) {
 				w.logger.Debug("worker stopping due to closed channel")
 				return
 			}
-			w.processItem(ctx, item)
+			if err := w.processItem(ctx, item); err != nil {
+				select {
+				case w.queue.errChan <- err:
+				default:
+				}
+			}
 		}
 	}
 }
@@ -197,83 +202,73 @@ func (w *Worker) Stop() {
 }
 
 // processItem handles a single work item with retry logic.
-func (w *Worker) processItem(ctx context.Context, item WorkItem) {
+func (w *Worker) processItem(ctx context.Context, item WorkItem) error {
 	start := time.Now()
 
 	result, err := w.analyze(ctx, item)
 	if err != nil {
-		// Retry logic with exponential backoff
 		if item.Retries < w.queue.maxRetries {
 			item.Retries++
 			delay := w.calculateBackoff(item.Retries)
-
 			w.logger.Warn("analysis failed; scheduling retry",
 				"path", item.FilePath,
 				"error", err,
 				"retry", item.Retries,
 				"delay", delay)
-
 			time.AfterFunc(delay, func() {
 				if err := w.queue.Enqueue(item); err != nil {
 					w.logger.Error("failed to re-queue item", "path", item.FilePath, "error", err)
 				}
 			})
-			return
+			return nil
 		}
 
-		// Max retries exceeded
 		w.logger.Error("analysis failed permanently",
 			"path", item.FilePath,
 			"error", err,
 			"retries", item.Retries)
-
 		w.queue.recordAnalysisFailure()
 		w.queue.publishAnalysisFailed(item.FilePath, err)
-		return
+		return fmt.Errorf("analysis failed permanently; %w", err)
 	}
 
 	duration := time.Since(start)
 	result.ProcessingTime = duration
 
-	// Persist to graph (if configured)
 	if err := w.persistToGraph(ctx, result); err != nil {
-		// Treat graph write failure like analysis failure - retry
 		if item.Retries < w.queue.maxRetries {
 			item.Retries++
 			delay := w.calculateBackoff(item.Retries)
-
 			w.logger.Warn("graph persistence failed; scheduling retry",
 				"path", item.FilePath,
 				"error", err,
 				"retry", item.Retries,
 				"delay", delay)
-
 			time.AfterFunc(delay, func() {
 				if err := w.queue.Enqueue(item); err != nil {
 					w.logger.Error("failed to re-queue item", "path", item.FilePath, "error", err)
 				}
 			})
-			return
+			return nil
 		}
 
-		// Max retries exceeded for graph persistence
 		w.logger.Error("graph persistence failed permanently",
 			"path", item.FilePath,
 			"error", err,
 			"retries", item.Retries)
-
 		w.queue.recordPersistenceFailure()
 		w.queue.publishGraphPersistenceFailed(item.FilePath, err, item.Retries)
-		return
+		return fmt.Errorf("graph persistence failed permanently; %w", err)
 	}
 
 	w.queue.recordSuccess(duration)
 	w.queue.publishAnalysisComplete(item.FilePath, result)
-
 	w.logger.Info("analysis complete",
 		"path", item.FilePath,
 		"chunks", result.ChunksProcessed,
 		"duration", duration)
+
+	return nil
 }
 
 // calculateBackoff returns the delay for a retry attempt.

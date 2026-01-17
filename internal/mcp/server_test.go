@@ -109,7 +109,8 @@ func (m *mockGraph) SetFileReferences(ctx context.Context, path string, refs []g
 func (m *mockGraph) Query(ctx context.Context, cypher string) (*graph.QueryResult, error) {
 	return nil, nil
 }
-func (m *mockGraph) IsConnected() bool { return true }
+func (m *mockGraph) IsConnected() bool    { return true }
+func (m *mockGraph) Errors() <-chan error { return nil }
 func (m *mockGraph) HasEmbedding(ctx context.Context, contentHash string, version int) (bool, error) {
 	return false, nil
 }

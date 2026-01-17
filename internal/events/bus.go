@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 )
@@ -47,6 +48,16 @@ type EventBus struct {
 
 	// bufferSize is the size of each subscriber's event buffer.
 	bufferSize int
+
+	// dropCount tracks how many events were dropped due to backpressure.
+	dropCount atomic.Int64
+
+	lastStatsTime  time.Time
+	lastStatsDrops int64
+
+	criticalQueue CriticalQueue
+	criticalTypes map[EventType]bool
+	stopDrain     chan struct{}
 }
 
 // BusOption configures the event bus.
@@ -68,16 +79,35 @@ func WithLogger(logger *slog.Logger) BusOption {
 	}
 }
 
+// WithCriticalQueue enables a durable queue for critical events.
+func WithCriticalQueue(queue CriticalQueue, criticalTypes []EventType) BusOption {
+	return func(b *EventBus) {
+		b.criticalQueue = queue
+		if len(criticalTypes) > 0 {
+			b.criticalTypes = make(map[EventType]bool)
+			for _, t := range criticalTypes {
+				b.criticalTypes[t] = true
+			}
+		}
+	}
+}
+
 // NewBus creates a new event bus with the given options.
 func NewBus(opts ...BusOption) *EventBus {
 	b := &EventBus{
 		subscriptions: make(map[uint64]*subscription),
 		bufferSize:    100, // default buffer size
 		logger:        slog.Default(),
+		stopDrain:     make(chan struct{}),
 	}
 
 	for _, opt := range opts {
 		opt(b)
+	}
+
+	// Start critical drain if configured
+	if b.criticalQueue != nil {
+		go b.drainCritical()
 	}
 
 	return b
@@ -89,31 +119,40 @@ func (b *EventBus) Publish(ctx context.Context, event Event) error {
 		return ErrBusClosed
 	}
 
+	// Critical events go to durable queue if configured
+	if b.criticalQueue != nil && b.criticalTypes != nil && b.criticalTypes[event.Type] {
+		if err := b.criticalQueue.Enqueue(event); err != nil {
+			b.logger.Warn("critical queue enqueue failed", "error", err, "event_type", event.Type)
+			b.dropCount.Add(1)
+			return err
+		}
+		return nil
+	}
+
+	return b.publishToSubscribers(ctx, event)
+}
+
+func (b *EventBus) publishToSubscribers(ctx context.Context, event Event) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	for _, sub := range b.subscriptions {
-		// Check if subscriber is interested in this event type
 		if sub.eventType != "" && sub.eventType != event.Type {
 			continue
 		}
-
-		// Non-blocking send to subscriber's channel
 		select {
 		case sub.events <- event:
-			// Event delivered
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			// Buffer full, log and skip (don't block publisher)
 			b.logger.Warn("event bus subscriber buffer full, dropping event",
 				"event_type", event.Type,
 				"subscriber_id", sub.id,
 			)
+			b.dropCount.Add(1)
 			metrics.EventBusDroppedEvents.WithLabelValues(string(event.Type)).Inc()
 		}
 	}
-
 	return nil
 }
 
@@ -221,6 +260,14 @@ func (b *EventBus) Close() error {
 		return nil
 	}
 
+	if b.stopDrain != nil {
+		close(b.stopDrain)
+	}
+
+	if b.criticalQueue != nil {
+		_ = b.criticalQueue.Close()
+	}
+
 	b.mu.Lock()
 	subs := make([]*subscription, 0, len(b.subscriptions))
 	for _, sub := range b.subscriptions {
@@ -242,12 +289,65 @@ func (b *EventBus) Close() error {
 
 // Stats returns current bus statistics.
 func (b *EventBus) Stats() BusStats {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(b.lastStatsTime)
+	if b.lastStatsTime.IsZero() {
+		elapsed = 0
+	}
+	drops := b.dropCount.Load()
+	deltaDrops := drops - b.lastStatsDrops
+	var rate float64
+	if elapsed > 0 {
+		rate = float64(deltaDrops) / elapsed.Seconds()
+	}
+	b.lastStatsTime = now
+	b.lastStatsDrops = drops
+
+	var critLen int
+	var critCap int
+	if b.criticalQueue != nil {
+		if l, err := b.criticalQueue.Len(); err == nil {
+			critLen = l
+		}
+		critCap = b.criticalQueue.Cap()
+	}
 
 	return BusStats{
 		SubscriberCount: len(b.subscriptions),
 		IsClosed:        b.closed.Load(),
+		Dropped:         b.dropCount.Load(),
+		DropRatePerSec:  rate,
+		CriticalLen:     critLen,
+		CriticalCap:     critCap,
+	}
+}
+
+// drainCritical moves events from the durable queue to subscribers.
+func (b *EventBus) drainCritical() {
+	ctx := context.Background()
+	for {
+		select {
+		case <-b.stopDrain:
+			return
+		default:
+		}
+
+		event, err := b.criticalQueue.Dequeue(ctx)
+		if err != nil {
+			if err == context.Canceled || err.Error() == "queue closed" {
+				return
+			}
+			b.logger.Warn("critical queue dequeue failed", "error", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		if err := b.publishToSubscribers(ctx, event); err != nil {
+			b.logger.Warn("failed to deliver critical event", "error", err, "event_type", event.Type)
+		}
 	}
 }
 
@@ -255,4 +355,8 @@ func (b *EventBus) Stats() BusStats {
 type BusStats struct {
 	SubscriberCount int
 	IsClosed        bool
+	Dropped         int64
+	DropRatePerSec  float64
+	CriticalLen     int
+	CriticalCap     int
 }

@@ -33,6 +33,10 @@ Key capabilities:
 
 4. **Eventual Consistency**: The filesystem is the source of truth. Changes produce events that propagate asynchronously through the system. The knowledge graph reflects filesystem state only after processing completes. Queries may return stale data during processing; this is acceptable.
 
+5. **Observability**: Comprehensive logging, health checks, and status commands provide visibility into system state. Each component logs key events and errors with context. Health endpoints report component status and degradation.
+
+6. **Extensibility**: Interface-first design, registry patterns, and event-driven architecture enables easy addition or replacement of the concrete types of individual components.
+
 ### Adhering to Project Principles
 
 1. **Unix Philosophy**:

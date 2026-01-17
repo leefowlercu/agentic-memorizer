@@ -182,6 +182,10 @@ func (m *mockGraph) Stop(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockGraph) Errors() <-chan error {
+	return nil
+}
+
 func (m *mockGraph) UpsertFile(ctx context.Context, file *graph.FileNode) error {
 	return nil
 }

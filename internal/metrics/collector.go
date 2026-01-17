@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"runtime"
 	"sync"
@@ -19,11 +20,13 @@ type MetricsProvider interface {
 
 // Collector manages metric collection from various components.
 type Collector struct {
-	mu        sync.RWMutex
-	providers map[string]MetricsProvider
-	interval  time.Duration
-	stopCh    chan struct{}
-	running   bool
+	mu                  sync.RWMutex
+	providers           map[string]MetricsProvider
+	interval            time.Duration
+	stopCh              chan struct{}
+	running             bool
+	errChan             chan error
+	consecutiveFailures int
 }
 
 // NewCollector creates a new metrics collector.
@@ -32,6 +35,7 @@ func NewCollector(interval time.Duration) *Collector {
 		providers: make(map[string]MetricsProvider),
 		interval:  interval,
 		stopCh:    make(chan struct{}),
+		errChan:   make(chan error, 1),
 	}
 }
 
@@ -89,6 +93,11 @@ func (c *Collector) Stop(ctx context.Context) error {
 	return nil
 }
 
+// Errors returns a channel for fatal collector errors.
+func (c *Collector) Errors() <-chan error {
+	return c.errChan
+}
+
 // run is the main collection loop.
 func (c *Collector) run(ctx context.Context) {
 	ticker := time.NewTicker(c.interval)
@@ -108,6 +117,8 @@ func (c *Collector) run(ctx context.Context) {
 
 // collect gathers metrics from all registered providers.
 func (c *Collector) collect(ctx context.Context) {
+	hadError := false
+
 	c.mu.RLock()
 	providers := make(map[string]MetricsProvider, len(c.providers))
 	for k, v := range c.providers {
@@ -118,9 +129,27 @@ func (c *Collector) collect(ctx context.Context) {
 	for name, provider := range providers {
 		if err := provider.CollectMetrics(ctx); err != nil {
 			ComponentStatus.WithLabelValues(name).Set(0)
+			hadError = true
 		} else {
 			ComponentStatus.WithLabelValues(name).Set(1)
 		}
+	}
+
+	if hadError {
+		c.mu.Lock()
+		c.consecutiveFailures++
+		failures := c.consecutiveFailures
+		c.mu.Unlock()
+		if failures >= 3 {
+			select {
+			case c.errChan <- fmt.Errorf("metrics collection failed %d consecutive times", failures):
+			default:
+			}
+		}
+	} else {
+		c.mu.Lock()
+		c.consecutiveFailures = 0
+		c.mu.Unlock()
 	}
 }
 

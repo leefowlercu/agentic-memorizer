@@ -16,6 +16,15 @@ type ComponentHealth struct {
 
 	// LastChecked is when the health was last evaluated.
 	LastChecked time.Time `json:"last_checked"`
+
+	// Since is when the component entered the current state.
+	Since time.Time `json:"since,omitempty"`
+
+	// LastSuccess is when the component last successfully reported healthy.
+	LastSuccess time.Time `json:"last_success,omitempty"`
+
+	// Details carries optional, non-sensitive diagnostic data.
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // IsHealthy returns true if the component health indicates healthy operation.

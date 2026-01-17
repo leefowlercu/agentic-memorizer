@@ -91,6 +91,9 @@ type Graph interface {
 
 	// IsConnected returns true if connected to the database.
 	IsConnected() bool
+
+	// Errors returns fatal connection errors if supported.
+	Errors() <-chan error
 }
 
 // Config contains graph connection configuration.
@@ -130,6 +133,8 @@ type FalkorDBGraph struct {
 	writeQueue chan writeOp
 	wg         sync.WaitGroup
 	stopChan   chan struct{}
+
+	errChan chan error
 }
 
 // writeOp represents a queued write operation.
@@ -162,6 +167,7 @@ func NewFalkorDBGraph(opts ...Option) *FalkorDBGraph {
 		logger:     slog.Default(),
 		writeQueue: make(chan writeOp, 1000),
 		stopChan:   make(chan struct{}),
+		errChan:    make(chan error, 1),
 	}
 
 	for _, opt := range opts {
@@ -222,6 +228,11 @@ func (g *FalkorDBGraph) Start(ctx context.Context) error {
 	return nil
 }
 
+// Errors returns fatal connection errors.
+func (g *FalkorDBGraph) Errors() <-chan error {
+	return g.errChan
+}
+
 // Stop closes the graph connection.
 func (g *FalkorDBGraph) Stop(ctx context.Context) error {
 	g.mu.Lock()
@@ -257,6 +268,14 @@ func (g *FalkorDBGraph) Stop(ctx context.Context) error {
 	g.logger.Info("disconnected from FalkorDB")
 
 	return nil
+}
+
+// signalFatal sends a fatal error to errChan without blocking.
+func (g *FalkorDBGraph) signalFatal(err error) {
+	select {
+	case g.errChan <- err:
+	default:
+	}
 }
 
 // IsConnected returns true if connected to the database.
@@ -1449,6 +1468,7 @@ func (g *FalkorDBGraph) countNodes(ctx context.Context, label string) (int, erro
 	query := fmt.Sprintf("MATCH (n:%s) RETURN count(n)", label)
 	result, err := g.graph.Query(query)
 	if err != nil {
+		g.signalFatal(err)
 		return 0, err
 	}
 

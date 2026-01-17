@@ -73,6 +73,9 @@ type Queue struct {
 	persistenceFailedCount atomic.Int64
 	activeWorkers          atomic.Int32
 	totalProcTime          atomic.Int64
+
+	// errChan surfaces fatal worker errors for supervisor restart.
+	errChan chan error
 }
 
 // QueueOption configures the analysis queue.
@@ -132,6 +135,7 @@ func NewQueue(bus events.Bus, opts ...QueueOption) *Queue {
 		retryDelay:    time.Second,
 		queueCapacity: 1000,
 		state:         QueueStateIdle,
+		errChan:       make(chan error, 1),
 	}
 
 	for _, opt := range opts {
@@ -378,6 +382,11 @@ func (q *Queue) SetProviders(semantic providers.SemanticProvider, embeddings pro
 		"workers", len(q.workers),
 		"semantic", semantic != nil,
 		"embeddings", embeddings != nil)
+}
+
+// Errors returns a channel that signals fatal worker errors.
+func (q *Queue) Errors() <-chan error {
+	return q.errChan
 }
 
 // SetGraph injects the graph client into all workers for result persistence.

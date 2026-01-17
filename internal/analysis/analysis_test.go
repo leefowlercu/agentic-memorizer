@@ -452,6 +452,7 @@ type mockGraph struct {
 }
 
 func (m *mockGraph) Name() string                                               { return "mock-graph" }
+func (m *mockGraph) Errors() <-chan error                                       { return nil }
 func (m *mockGraph) Start(ctx context.Context) error                            { return nil }
 func (m *mockGraph) Stop(ctx context.Context) error                             { return nil }
 func (m *mockGraph) IsConnected() bool                                          { return true }

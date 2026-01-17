@@ -10,6 +10,9 @@ const (
 	// ComponentStatusFailed indicates the component has encountered an error.
 	ComponentStatusFailed ComponentStatus = "failed"
 
+	// ComponentStatusDegraded indicates the component is running with reduced capabilities.
+	ComponentStatusDegraded ComponentStatus = "degraded"
+
 	// ComponentStatusStopped indicates the component has been intentionally stopped.
 	ComponentStatusStopped ComponentStatus = "stopped"
 )

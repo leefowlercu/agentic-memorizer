@@ -34,6 +34,8 @@ type Server struct {
 	stopChan chan struct{}
 	// unsubscribe is the function to unsubscribe from the event bus
 	unsubscribe func()
+
+	errChan chan error
 }
 
 // Config contains MCP server configuration.
@@ -63,6 +65,7 @@ func NewServer(g graph.Graph, reg RegistryChecker, bus *events.EventBus, cfg Con
 		bus:      bus,
 		exporter: export.NewExporter(g),
 		subs:     NewSubscriptionManager(),
+		errChan:  make(chan error, 1),
 	}
 
 	// Create MCP server with resource capabilities
@@ -123,6 +126,11 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.running = false
 	slog.Info("MCP server stopped")
 	return nil
+}
+
+// Errors returns fatal server errors.
+func (s *Server) Errors() <-chan error {
+	return s.errChan
 }
 
 // Handler returns the HTTP handler for the MCP server.

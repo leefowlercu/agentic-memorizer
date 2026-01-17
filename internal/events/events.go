@@ -34,6 +34,9 @@ const (
 	// GraphPersistenceFailed is published when writing analysis results to the graph fails.
 	GraphPersistenceFailed EventType = "graph.persistence_failed"
 
+	// GraphFatal signals a graph fatal error (e.g., connection loss).
+	GraphFatal EventType = "graph.fatal"
+
 	// ConfigReloaded is published when configuration is successfully reloaded.
 	ConfigReloaded EventType = "config.reloaded"
 
@@ -46,6 +49,15 @@ const (
 
 	// RebuildComplete is published when a rebuild operation finishes.
 	RebuildComplete EventType = "rebuild.complete"
+
+	// JobStarted is published when a job starts.
+	JobStarted EventType = "job.started"
+
+	// JobCompleted is published when a job completes.
+	JobCompleted EventType = "job.completed"
+
+	// JobFailed is published when a job fails.
+	JobFailed EventType = "job.failed"
 )
 
 // Event represents a published event in the system.

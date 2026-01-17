@@ -44,6 +44,9 @@ type Watcher interface {
 
 	// CollectMetrics implements metrics.MetricsProvider.
 	CollectMetrics(ctx context.Context) error
+
+	// Errors reports fatal watcher errors.
+	Errors() <-chan error
 }
 
 // WatcherStats contains statistics about watcher activity.
@@ -99,6 +102,9 @@ type watcher struct {
 	stopCh       chan struct{}
 	doneCh       chan struct{}
 	stopOnce     sync.Once
+
+	// errChan reports fatal errors (fsnotify error channel).
+	errChan chan error
 }
 
 // New creates a new Watcher with the given dependencies.
@@ -118,6 +124,7 @@ func New(bus events.Bus, reg registry.Registry, opts ...WatcherOption) (Watcher,
 		watchedPaths:      make(map[string]bool),
 		stopCh:            make(chan struct{}),
 		doneCh:            make(chan struct{}),
+		errChan:           make(chan error, 1),
 	}
 
 	for _, opt := range opts {
@@ -290,6 +297,11 @@ func (w *watcher) Stats() WatcherStats {
 	return w.stats
 }
 
+// Errors returns a channel for fatal watcher errors.
+func (w *watcher) Errors() <-chan error {
+	return w.errChan
+}
+
 // CollectMetrics implements metrics.MetricsProvider.
 func (w *watcher) CollectMetrics(ctx context.Context) error {
 	stats := w.Stats()
@@ -320,6 +332,10 @@ func (w *watcher) processEvents(ctx context.Context) {
 			w.stats.Errors++
 			w.mu.Unlock()
 			w.logger.Error("fsnotify error", "error", err)
+			select {
+			case w.errChan <- err:
+			default:
+			}
 		}
 	}
 }

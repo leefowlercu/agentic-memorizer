@@ -85,12 +85,13 @@ func runRead(cmd *cobra.Command, args []string) error {
 
 	// Create graph client with config from viper
 	graphCfg := graph.Config{
-		Host:        viper.GetString("graph.host"),
-		Port:        viper.GetInt("graph.port"),
-		GraphName:   viper.GetString("graph.name"),
-		PasswordEnv: viper.GetString("graph.password_env"),
-		MaxRetries:  viper.GetInt("graph.max_retries"),
-		RetryDelay:  time.Duration(viper.GetInt("graph.retry_delay_ms")) * time.Millisecond,
+		Host:           viper.GetString("graph.host"),
+		Port:           viper.GetInt("graph.port"),
+		GraphName:      viper.GetString("graph.name"),
+		PasswordEnv:    viper.GetString("graph.password_env"),
+		MaxRetries:     viper.GetInt("graph.max_retries"),
+		RetryDelay:     time.Duration(viper.GetInt("graph.retry_delay_ms")) * time.Millisecond,
+		WriteQueueSize: viper.GetInt("graph.write_queue_size"),
 	}
 
 	// Use defaults if not configured
@@ -111,6 +112,9 @@ func runRead(cmd *cobra.Command, args []string) error {
 	}
 	if graphCfg.RetryDelay == 0 {
 		graphCfg.RetryDelay = time.Second
+	}
+	if graphCfg.WriteQueueSize == 0 {
+		graphCfg.WriteQueueSize = graph.DefaultConfig().WriteQueueSize
 	}
 
 	g := graph.NewFalkorDBGraph(graph.WithConfig(graphCfg))

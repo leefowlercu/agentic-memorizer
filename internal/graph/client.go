@@ -105,6 +105,7 @@ type Config struct {
 	MaxRetries         int
 	RetryDelay         time.Duration
 	EmbeddingDimension int // Vector embedding dimensions for index creation
+	WriteQueueSize     int // Write queue buffer size
 }
 
 // DefaultConfig returns sensible defaults.
@@ -117,6 +118,7 @@ func DefaultConfig() Config {
 		MaxRetries:         3,
 		RetryDelay:         time.Second,
 		EmbeddingDimension: 1536, // OpenAI text-embedding-3-small default
+		WriteQueueSize:     1000,
 	}
 }
 
@@ -165,7 +167,6 @@ func NewFalkorDBGraph(opts ...Option) *FalkorDBGraph {
 	g := &FalkorDBGraph{
 		config:     DefaultConfig(),
 		logger:     slog.Default(),
-		writeQueue: make(chan writeOp, 1000),
 		stopChan:   make(chan struct{}),
 		errChan:    make(chan error, 1),
 	}
@@ -173,6 +174,11 @@ func NewFalkorDBGraph(opts ...Option) *FalkorDBGraph {
 	for _, opt := range opts {
 		opt(g)
 	}
+
+	if g.config.WriteQueueSize <= 0 {
+		g.config.WriteQueueSize = DefaultConfig().WriteQueueSize
+	}
+	g.writeQueue = make(chan writeOp, g.config.WriteQueueSize)
 
 	return g
 }

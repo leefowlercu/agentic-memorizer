@@ -22,11 +22,19 @@ type DaemonConfig struct {
 	RegistryPath    string        `yaml:"registry_path" mapstructure:"registry_path"`
 	RebuildInterval int           `yaml:"rebuild_interval" mapstructure:"rebuild_interval"` // seconds, 0 = disabled
 	Metrics         MetricsConfig `yaml:"metrics" mapstructure:"metrics"`
+	EventBus        EventBusConfig `yaml:"event_bus" mapstructure:"event_bus"`
 }
 
 // MetricsConfig holds metrics collection configuration.
 type MetricsConfig struct {
 	CollectionInterval int `yaml:"collection_interval" mapstructure:"collection_interval"`
+}
+
+// EventBusConfig holds event bus configuration.
+type EventBusConfig struct {
+	BufferSize            int    `yaml:"buffer_size" mapstructure:"buffer_size"`
+	CriticalQueuePath     string `yaml:"critical_queue_path" mapstructure:"critical_queue_path"`
+	CriticalQueueCapacity int    `yaml:"critical_queue_capacity" mapstructure:"critical_queue_capacity"`
 }
 
 // GraphConfig holds FalkorDB/graph database configuration.

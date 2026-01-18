@@ -35,17 +35,17 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 		RestartPolicy: RestartNever,
 		Dependencies:  nil,
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			criticalQueuePath := config.ExpandPath("~/.config/memorizer/critqueue.db")
+			criticalQueuePath := config.ExpandPath(cfg.Daemon.EventBus.CriticalQueuePath)
 			if err := os.MkdirAll(filepath.Dir(criticalQueuePath), 0o755); err != nil {
 				slog.Warn("failed to ensure critical queue directory", "error", err)
 			}
-			cq, err := events.NewSQLiteCriticalQueue(criticalQueuePath, 1000)
+			cq, err := events.NewSQLiteCriticalQueue(criticalQueuePath, cfg.Daemon.EventBus.CriticalQueueCapacity)
 			if err != nil {
 				slog.Warn("failed to initialize critical queue; continuing without persistence", "error", err)
 				cq = nil
 			}
 
-			busOpts := []events.BusOption{events.WithBufferSize(100)}
+			busOpts := []events.BusOption{events.WithBufferSize(cfg.Daemon.EventBus.BufferSize)}
 			if cq != nil {
 				busOpts = append(busOpts, events.WithCriticalQueue(cq, []events.EventType{events.PathDeleted, events.FileDiscovered}))
 			}
@@ -87,6 +87,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 				MaxRetries:         cfg.Graph.MaxRetries,
 				RetryDelay:         time.Duration(cfg.Graph.RetryDelayMs) * time.Millisecond,
 				EmbeddingDimension: cfg.Embeddings.Dimensions,
+				WriteQueueSize:     cfg.Graph.WriteQueueSize,
 			}
 			g := graph.NewFalkorDBGraph(
 				graph.WithConfig(graphCfg),

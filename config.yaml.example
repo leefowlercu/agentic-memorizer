@@ -53,6 +53,18 @@ daemon:
     # Metrics include component health, queue depths, and processing stats.
     collection_interval: 15
 
+  # Event bus settings
+  event_bus:
+    # Buffer size for each subscriber's event channel.
+    # Larger values reduce drops but use more memory per subscriber.
+    buffer_size: 100
+
+    # Path to the SQLite database used for the critical event queue.
+    critical_queue_path: ~/.config/memorizer/critqueue.db
+
+    # Maximum number of critical events retained in the queue.
+    critical_queue_capacity: 1000
+
 # ------------------------------------------------------------------------------
 # Graph Database Configuration
 # ------------------------------------------------------------------------------

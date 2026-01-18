@@ -100,6 +100,27 @@ func Validate(cfg *Config) error {
 		})
 	}
 
+	if cfg.Daemon.EventBus.BufferSize < 1 {
+		errs = append(errs, ValidationError{
+			Field:   "daemon.event_bus.buffer_size",
+			Message: fmt.Sprintf("must be at least 1, got %d", cfg.Daemon.EventBus.BufferSize),
+		})
+	}
+
+	if cfg.Daemon.EventBus.CriticalQueuePath == "" {
+		errs = append(errs, ValidationError{
+			Field:   "daemon.event_bus.critical_queue_path",
+			Message: "must not be empty",
+		})
+	}
+
+	if cfg.Daemon.EventBus.CriticalQueueCapacity < 1 {
+		errs = append(errs, ValidationError{
+			Field:   "daemon.event_bus.critical_queue_capacity",
+			Message: fmt.Sprintf("must be at least 1, got %d", cfg.Daemon.EventBus.CriticalQueueCapacity),
+		})
+	}
+
 	// Validate graph config
 	if cfg.Graph.Host == "" {
 		errs = append(errs, ValidationError{

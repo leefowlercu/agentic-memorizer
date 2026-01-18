@@ -21,6 +21,10 @@ daemon:
   registry_path: /tmp/registry.db
   metrics:
     collection_interval: 30
+  event_bus:
+    buffer_size: 200
+    critical_queue_path: /tmp/critqueue.db
+    critical_queue_capacity: 2000
 graph:
   host: redis.example.com
   port: 6380
@@ -56,6 +60,9 @@ embeddings:
 	}
 	if cfg.Daemon.HTTPPort != 8080 {
 		t.Errorf("Daemon.HTTPPort = %d, want %d", cfg.Daemon.HTTPPort, 8080)
+	}
+	if cfg.Daemon.EventBus.BufferSize != 200 {
+		t.Errorf("Daemon.EventBus.BufferSize = %d, want %d", cfg.Daemon.EventBus.BufferSize, 200)
 	}
 	if cfg.Graph.Host != "redis.example.com" {
 		t.Errorf("Graph.Host = %q, want %q", cfg.Graph.Host, "redis.example.com")

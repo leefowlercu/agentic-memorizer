@@ -23,6 +23,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.RetryDelay != time.Second {
 		t.Errorf("RetryDelay = %v, want %v", cfg.RetryDelay, time.Second)
 	}
+	if cfg.WriteQueueSize != 1000 {
+		t.Errorf("WriteQueueSize = %d, want %d", cfg.WriteQueueSize, 1000)
+	}
 }
 
 func TestNewFalkorDBGraph(t *testing.T) {
@@ -40,6 +43,9 @@ func TestNewFalkorDBGraph(t *testing.T) {
 	if g.writeQueue == nil {
 		t.Error("writeQueue should not be nil")
 	}
+	if cap(g.writeQueue) != DefaultConfig().WriteQueueSize {
+		t.Errorf("writeQueue capacity = %d, want %d", cap(g.writeQueue), DefaultConfig().WriteQueueSize)
+	}
 	if g.stopChan == nil {
 		t.Error("stopChan should not be nil")
 	}
@@ -52,6 +58,7 @@ func TestNewFalkorDBGraphWithOptions(t *testing.T) {
 		GraphName:  "custom-graph",
 		MaxRetries: 5,
 		RetryDelay: 2 * time.Second,
+		WriteQueueSize: 42,
 	}
 
 	g := NewFalkorDBGraph(WithConfig(customConfig))
@@ -67,6 +74,9 @@ func TestNewFalkorDBGraphWithOptions(t *testing.T) {
 	}
 	if g.config.MaxRetries != 5 {
 		t.Errorf("config.MaxRetries = %d, want %d", g.config.MaxRetries, 5)
+	}
+	if cap(g.writeQueue) != 42 {
+		t.Errorf("writeQueue capacity = %d, want %d", cap(g.writeQueue), 42)
 	}
 }
 

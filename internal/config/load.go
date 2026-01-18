@@ -112,6 +112,9 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("daemon.pid_file", DefaultDaemonPIDFile)
 	v.SetDefault("daemon.registry_path", DefaultDaemonRegistryPath)
 	v.SetDefault("daemon.metrics.collection_interval", DefaultDaemonMetricsInterval)
+	v.SetDefault("daemon.event_bus.buffer_size", DefaultDaemonEventBusBufferSize)
+	v.SetDefault("daemon.event_bus.critical_queue_path", DefaultDaemonEventBusCriticalQueuePath)
+	v.SetDefault("daemon.event_bus.critical_queue_capacity", DefaultDaemonEventBusCriticalQueueCapacity)
 
 	// Graph defaults
 	v.SetDefault("graph.host", DefaultGraphHost)

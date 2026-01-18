@@ -16,6 +16,9 @@ const (
 	DefaultDaemonRegistryPath    = "~/.config/memorizer/registry.db"
 	DefaultDaemonRebuildInterval = 3600 // 1 hour in seconds, 0 = disabled
 	DefaultDaemonMetricsInterval = 15   // seconds
+	DefaultDaemonEventBusBufferSize = 100
+	DefaultDaemonEventBusCriticalQueuePath = "~/.config/memorizer/critqueue.db"
+	DefaultDaemonEventBusCriticalQueueCapacity = 1000
 
 	// Graph configuration defaults.
 	DefaultGraphHost           = "localhost"
@@ -108,6 +111,11 @@ func NewDefaultConfig() Config {
 			Metrics: MetricsConfig{
 				CollectionInterval: DefaultDaemonMetricsInterval,
 			},
+			EventBus: EventBusConfig{
+				BufferSize:            DefaultDaemonEventBusBufferSize,
+				CriticalQueuePath:     DefaultDaemonEventBusCriticalQueuePath,
+				CriticalQueueCapacity: DefaultDaemonEventBusCriticalQueueCapacity,
+			},
 		},
 		Graph: GraphConfig{
 			Host:           DefaultGraphHost,
@@ -163,6 +171,9 @@ func setDefaults() {
 	viper.SetDefault("daemon.registry_path", DefaultDaemonRegistryPath)
 	viper.SetDefault("daemon.rebuild_interval", DefaultDaemonRebuildInterval)
 	viper.SetDefault("daemon.metrics.collection_interval", DefaultDaemonMetricsInterval)
+	viper.SetDefault("daemon.event_bus.buffer_size", DefaultDaemonEventBusBufferSize)
+	viper.SetDefault("daemon.event_bus.critical_queue_path", DefaultDaemonEventBusCriticalQueuePath)
+	viper.SetDefault("daemon.event_bus.critical_queue_capacity", DefaultDaemonEventBusCriticalQueueCapacity)
 
 	// Graph defaults
 	viper.SetDefault("graph.host", DefaultGraphHost)

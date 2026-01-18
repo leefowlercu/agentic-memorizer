@@ -95,6 +95,37 @@ func TestQueueStartStop(t *testing.T) {
 	}
 }
 
+func TestQueueStopUnsubscribes(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	queue := NewQueue(bus, WithWorkerCount(1))
+
+	if err := queue.Start(context.Background()); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = queue.Stop(context.Background())
+	})
+
+	stats := bus.Stats()
+	if stats.SubscriberCount != 2 {
+		t.Fatalf("SubscriberCount = %d, want 2", stats.SubscriberCount)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := queue.Stop(ctx); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+
+	stats = bus.Stats()
+	if stats.SubscriberCount != 0 {
+		t.Errorf("SubscriberCount = %d, want 0", stats.SubscriberCount)
+	}
+}
+
 func TestQueueEnqueue(t *testing.T) {
 	bus := events.NewBus()
 	defer bus.Close()

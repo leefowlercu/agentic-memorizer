@@ -69,6 +69,7 @@ type Queue struct {
 	stopChan chan struct{}
 	ctx      context.Context
 	cancelFn context.CancelFunc
+	unsubFns []func()
 
 	// Stats
 	processedCount         atomic.Int64
@@ -165,8 +166,11 @@ func (q *Queue) Start(ctx context.Context) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.state == QueueStateRunning {
+	if q.state == QueueStateRunning || q.state == QueueStateStopping {
 		return fmt.Errorf("queue already running")
+	}
+	if len(q.unsubFns) > 0 {
+		return fmt.Errorf("queue already subscribed")
 	}
 
 	q.ctx, q.cancelFn = context.WithCancel(ctx)
@@ -201,15 +205,30 @@ func (q *Queue) Start(ctx context.Context) error {
 func (q *Queue) Stop(ctx context.Context) error {
 	q.mu.Lock()
 	if q.state != QueueStateRunning {
+		unsubFns := q.unsubFns
+		q.unsubFns = nil
 		q.mu.Unlock()
+		for _, unsub := range unsubFns {
+			unsub()
+		}
 		return nil
 	}
 	q.state = QueueStateStopping
+	unsubFns := q.unsubFns
+	q.unsubFns = nil
+	stopChan := q.stopChan
+	cancelFn := q.cancelFn
 	q.mu.Unlock()
 
+	for _, unsub := range unsubFns {
+		unsub()
+	}
+
 	// Signal stop
-	close(q.stopChan)
-	q.cancelFn()
+	close(stopChan)
+	if cancelFn != nil {
+		cancelFn()
+	}
 
 	// Wait for workers with timeout
 	done := make(chan struct{})
@@ -236,7 +255,7 @@ func (q *Queue) Stop(ctx context.Context) error {
 // subscribeToEvents registers event handlers.
 func (q *Queue) subscribeToEvents() {
 	// Subscribe to file discovery events
-	q.bus.Subscribe(events.FileDiscovered, func(e events.Event) {
+	q.unsubFns = append(q.unsubFns, q.bus.Subscribe(events.FileDiscovered, func(e events.Event) {
 		if fe, ok := e.Payload.(*events.FileEvent); ok {
 			q.Enqueue(WorkItem{
 				FilePath:  fe.Path,
@@ -245,10 +264,10 @@ func (q *Queue) subscribeToEvents() {
 				EventType: WorkItemNew,
 			})
 		}
-	})
+	}))
 
 	// Subscribe to file change events
-	q.bus.Subscribe(events.FileChanged, func(e events.Event) {
+	q.unsubFns = append(q.unsubFns, q.bus.Subscribe(events.FileChanged, func(e events.Event) {
 		if fe, ok := e.Payload.(*events.FileEvent); ok {
 			q.Enqueue(WorkItem{
 				FilePath:  fe.Path,
@@ -257,7 +276,7 @@ func (q *Queue) subscribeToEvents() {
 				EventType: WorkItemChanged,
 			})
 		}
-	})
+	}))
 }
 
 // Enqueue adds a work item to the queue.

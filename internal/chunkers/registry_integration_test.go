@@ -40,6 +40,21 @@ func TestDefaultRegistryUsesTreeSitter(t *testing.T) {
 	}
 }
 
+func TestDefaultRegistryRegistersSingleTreeSitterChunker(t *testing.T) {
+	registry := chunkers.DefaultRegistry()
+
+	count := 0
+	for _, chunker := range registry.List() {
+		if chunker.Name() == "treesitter" {
+			count++
+		}
+	}
+
+	if count != 1 {
+		t.Fatalf("expected exactly one treesitter chunker, got %d", count)
+	}
+}
+
 func TestDefaultRegistryChunksGoCode(t *testing.T) {
 	registry := chunkers.DefaultRegistry()
 

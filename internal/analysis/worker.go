@@ -14,8 +14,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code"
-	"github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages"
+	_ "github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages" // Register tree-sitter chunker factory.
 	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
@@ -143,25 +142,9 @@ func NewWorker(id int, queue *Queue) *Worker {
 	}
 }
 
-// defaultChunkerRegistry creates a chunker registry with all standard chunkers
-// including the tree-sitter multi-language chunker.
+// defaultChunkerRegistry creates a chunker registry with all standard chunkers.
 func defaultChunkerRegistry() *chunkers.Registry {
-	r := chunkers.DefaultRegistry()
-
-	// Create tree-sitter chunker with all language strategies
-	tsChunker := code.NewTreeSitterChunker()
-	tsChunker.RegisterStrategy(languages.NewGoStrategy())
-	tsChunker.RegisterStrategy(languages.NewPythonStrategy())
-	tsChunker.RegisterStrategy(languages.NewJavaScriptStrategy())
-	tsChunker.RegisterStrategy(languages.NewTypeScriptStrategy())
-	tsChunker.RegisterStrategy(languages.NewJavaStrategy())
-	tsChunker.RegisterStrategy(languages.NewRustStrategy())
-	tsChunker.RegisterStrategy(languages.NewCStrategy())
-	tsChunker.RegisterStrategy(languages.NewCPPStrategy())
-
-	r.Register(tsChunker)
-
-	return r
+	return chunkers.DefaultRegistry()
 }
 
 // Run starts the worker processing loop.

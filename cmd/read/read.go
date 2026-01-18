@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/export"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 )
@@ -82,39 +82,18 @@ func validateRead(cmd *cobra.Command, args []string) error {
 
 func runRead(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+	cfg := config.Get()
 
-	// Create graph client with config from viper
+	// Create graph client with typed config
 	graphCfg := graph.Config{
-		Host:           viper.GetString("graph.host"),
-		Port:           viper.GetInt("graph.port"),
-		GraphName:      viper.GetString("graph.name"),
-		PasswordEnv:    viper.GetString("graph.password_env"),
-		MaxRetries:     viper.GetInt("graph.max_retries"),
-		RetryDelay:     time.Duration(viper.GetInt("graph.retry_delay_ms")) * time.Millisecond,
-		WriteQueueSize: viper.GetInt("graph.write_queue_size"),
-	}
-
-	// Use defaults if not configured
-	if graphCfg.Host == "" {
-		graphCfg.Host = "localhost"
-	}
-	if graphCfg.Port == 0 {
-		graphCfg.Port = 6379
-	}
-	if graphCfg.GraphName == "" {
-		graphCfg.GraphName = "memorizer"
-	}
-	if graphCfg.PasswordEnv == "" {
-		graphCfg.PasswordEnv = "MEMORIZER_GRAPH_PASSWORD"
-	}
-	if graphCfg.MaxRetries == 0 {
-		graphCfg.MaxRetries = 3
-	}
-	if graphCfg.RetryDelay == 0 {
-		graphCfg.RetryDelay = time.Second
-	}
-	if graphCfg.WriteQueueSize == 0 {
-		graphCfg.WriteQueueSize = graph.DefaultConfig().WriteQueueSize
+		Host:               cfg.Graph.Host,
+		Port:               cfg.Graph.Port,
+		GraphName:          cfg.Graph.Name,
+		PasswordEnv:        cfg.Graph.PasswordEnv,
+		MaxRetries:         cfg.Graph.MaxRetries,
+		RetryDelay:         time.Duration(cfg.Graph.RetryDelayMs) * time.Millisecond,
+		EmbeddingDimension: cfg.Embeddings.Dimensions,
+		WriteQueueSize:     cfg.Graph.WriteQueueSize,
 	}
 
 	g := graph.NewFalkorDBGraph(graph.WithConfig(graphCfg))

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/cmdutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemonclient"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -99,19 +99,7 @@ func init() {
 }
 
 func validateRemember(cmd *cobra.Command, args []string) error {
-	path := args[0]
-
-	// Expand ~ to home directory
-	if strings.HasPrefix(path, "~") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory; %w", err)
-		}
-		path = filepath.Join(home, path[1:])
-	}
-
-	// Convert to absolute path
-	absPath, err := filepath.Abs(path)
+	absPath, err := cmdutil.ResolvePath(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to resolve path; %w", err)
 	}
@@ -153,18 +141,16 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	out := cmd.OutOrStdout()
 	quiet := isQuiet(cmd)
-	path := args[0]
-
-	// Expand and resolve path
-	if strings.HasPrefix(path, "~") {
-		home, _ := os.UserHomeDir()
-		path = filepath.Join(home, path[1:])
+	absPath, err := cmdutil.ResolvePath(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to resolve path; %w", err)
 	}
-	absPath, _ := filepath.Abs(path)
-	absPath = filepath.Clean(absPath)
 
 	// Open registry
-	registryPath := config.ExpandPath(config.Get().Daemon.RegistryPath)
+	registryPath, err := cmdutil.ResolvePath(config.Get().Daemon.RegistryPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve registry path; %w", err)
+	}
 	reg, err := registry.Open(ctx, registryPath)
 	if err != nil {
 		return fmt.Errorf("failed to open registry; %w", err)

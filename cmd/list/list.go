@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/cmdutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
@@ -52,7 +53,10 @@ func runList(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	// Open registry
-	registryPath := config.ExpandPath(config.Get().Daemon.RegistryPath)
+	registryPath, err := cmdutil.ResolvePath(config.Get().Daemon.RegistryPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve registry path; %w", err)
+	}
 	reg, err := registry.Open(ctx, registryPath)
 	if err != nil {
 		return fmt.Errorf("failed to open registry; %w", err)

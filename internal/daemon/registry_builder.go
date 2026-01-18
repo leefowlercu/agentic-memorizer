@@ -15,7 +15,6 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
-	"github.com/leefowlercu/agentic-memorizer/internal/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
@@ -197,35 +196,13 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 		},
 	})
 
-	// Handlers
-	r.Register(ComponentDefinition{
-		Name:          "handlers",
-		Kind:          ComponentKindPersistent,
-		Criticality:   CriticalityFatal,
-		RestartPolicy: RestartNever,
-		Dependencies:  nil,
-		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			hr := handlers.NewRegistry(
-				handlers.NewTextHandler(),
-				handlers.NewImageHandler(),
-				handlers.NewPDFHandler(),
-				handlers.NewRichDocumentHandler(),
-				handlers.NewStructuredDataHandler(),
-				handlers.NewArchiveHandler(),
-			)
-			hr.SetFallback(handlers.NewUnsupportedHandler())
-			slog.Info("handler registry initialized", "handlers", len(hr.ListHandlers()))
-			return hr, nil
-		},
-	})
-
 	// Queue
 	r.Register(ComponentDefinition{
 		Name:          "queue",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
 		RestartPolicy: RestartOnFailure,
-		Dependencies:  []string{"bus", "handlers"},
+		Dependencies:  []string{"bus"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
 			workerCount := runtime.NumCPU()
 			if workerCount < 2 {
@@ -256,9 +233,9 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 		Kind:          ComponentKindJob,
 		Criticality:   CriticalityDegradable,
 		RestartPolicy: RestartNever,
-		Dependencies:  []string{"registry", "bus", "handlers"},
+		Dependencies:  []string{"registry", "bus"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			w := walker.New(deps.Registry, deps.Bus, deps.Handlers)
+			w := walker.New(deps.Registry, deps.Bus)
 			slog.Info("walker initialized")
 			return w, nil
 		},
@@ -424,9 +401,6 @@ func (o *Orchestrator) buildComponents(ctx context.Context, cfg *config.Config) 
 		case graph.Graph:
 			o.graph = c
 			bag.Graph = c
-		case *handlers.Registry:
-			o.handlers = c
-			bag.Handlers = c
 		case *cache.SemanticCache:
 			o.semanticCache = c
 			bag.Caches.Semantic = c

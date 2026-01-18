@@ -11,7 +11,6 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
-	"github.com/leefowlercu/agentic-memorizer/internal/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
@@ -67,9 +66,8 @@ func WithBatchSize(size int) WalkerOption {
 
 // walker implements the Walker interface.
 type walker struct {
-	registry        registry.Registry
-	bus             events.Bus
-	handlerRegistry *handlers.Registry
+	registry registry.Registry
+	bus      events.Bus
 
 	paceInterval time.Duration
 	batchSize    int
@@ -80,13 +78,12 @@ type walker struct {
 }
 
 // New creates a new Walker with the given dependencies.
-func New(reg registry.Registry, bus events.Bus, hr *handlers.Registry, opts ...WalkerOption) Walker {
+func New(reg registry.Registry, bus events.Bus, opts ...WalkerOption) Walker {
 	w := &walker{
-		registry:        reg,
-		bus:             bus,
-		handlerRegistry: hr,
-		paceInterval:    0,
-		batchSize:       100,
+		registry:     reg,
+		bus:          bus,
+		paceInterval: 0,
+		batchSize:    100,
 	}
 
 	for _, opt := range opts {
@@ -267,15 +264,6 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		info, err := d.Info()
 		if err != nil {
 			return nil // Skip files we can't stat
-		}
-
-		// Check if a handler can process this file
-		handler := w.handlerRegistry.GetHandler(filePath)
-		if handler == nil {
-			w.mu.Lock()
-			w.stats.FilesSkipped++
-			w.mu.Unlock()
-			return nil
 		}
 
 		// Track discovered path for reconciliation

@@ -380,6 +380,9 @@ func (g *FalkorDBGraph) UpsertFile(ctx context.Context, file *FileNode) error {
 			f.extension = '%s',
 			f.mime_type = '%s',
 			f.language = '%s',
+			f.ingest_kind = '%s',
+			f.ingest_mode = '%s',
+			f.ingest_reason = '%s',
 			f.size = %d,
 			f.mod_time = %d,
 			f.content_hash = '%s',
@@ -394,6 +397,9 @@ func (g *FalkorDBGraph) UpsertFile(ctx context.Context, file *FileNode) error {
 		escapeString(file.Extension),
 		escapeString(file.MIMEType),
 		escapeString(file.Language),
+		escapeString(file.IngestKind),
+		escapeString(file.IngestMode),
+		escapeString(file.IngestReason),
 		file.Size,
 		file.ModTime.Unix(),
 		escapeString(file.ContentHash),
@@ -460,6 +466,7 @@ func (g *FalkorDBGraph) GetFile(ctx context.Context, path string) (*FileNode, er
 	query := fmt.Sprintf(`
 		MATCH (f:File {path: '%s'})
 		RETURN f.path, f.name, f.extension, f.mime_type, f.language,
+			   f.ingest_kind, f.ingest_mode, f.ingest_reason,
 			   f.size, f.mod_time, f.content_hash, f.metadata_hash,
 			   f.summary, f.complexity, f.analyzed_at, f.analysis_version
 	`, escapeString(path))
@@ -1350,6 +1357,7 @@ func (g *FalkorDBGraph) exportFiles(ctx context.Context) ([]FileNode, error) {
 	query := `
 		MATCH (f:File)
 		RETURN f.path, f.name, f.extension, f.mime_type, f.language,
+			   f.ingest_kind, f.ingest_mode, f.ingest_reason,
 			   f.size, f.mod_time, f.content_hash, f.metadata_hash,
 			   f.summary, f.complexity, f.analyzed_at, f.analysis_version
 	`
@@ -1524,14 +1532,17 @@ func parseFileFromRecord(record *redisgraph.Record) (*FileNode, error) {
 		Extension:       getStringFromRecord(record, 2),
 		MIMEType:        getStringFromRecord(record, 3),
 		Language:        getStringFromRecord(record, 4),
-		Size:            int64(getIntFromRecord(record, 5)),
-		ModTime:         time.Unix(int64(getIntFromRecord(record, 6)), 0),
-		ContentHash:     getStringFromRecord(record, 7),
-		MetadataHash:    getStringFromRecord(record, 8),
-		Summary:         getStringFromRecord(record, 9),
-		Complexity:      getIntFromRecord(record, 10),
-		AnalyzedAt:      time.Unix(int64(getIntFromRecord(record, 11)), 0),
-		AnalysisVersion: getIntFromRecord(record, 12),
+		IngestKind:      getStringFromRecord(record, 5),
+		IngestMode:      getStringFromRecord(record, 6),
+		IngestReason:    getStringFromRecord(record, 7),
+		Size:            int64(getIntFromRecord(record, 8)),
+		ModTime:         time.Unix(int64(getIntFromRecord(record, 9)), 0),
+		ContentHash:     getStringFromRecord(record, 10),
+		MetadataHash:    getStringFromRecord(record, 11),
+		Summary:         getStringFromRecord(record, 12),
+		Complexity:      getIntFromRecord(record, 13),
+		AnalyzedAt:      time.Unix(int64(getIntFromRecord(record, 14)), 0),
+		AnalysisVersion: getIntFromRecord(record, 15),
 	}
 
 	return file, nil

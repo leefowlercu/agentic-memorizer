@@ -63,6 +63,15 @@ type FileNode struct {
 	// Language is the programming language (for code files).
 	Language string `json:"language,omitempty"`
 
+	// IngestKind is the coarse file classification (text, image, etc.).
+	IngestKind string `json:"ingest_kind,omitempty"`
+
+	// IngestMode is the processing decision (chunk, metadata_only, skip).
+	IngestMode string `json:"ingest_mode,omitempty"`
+
+	// IngestReason explains why the ingest mode was selected.
+	IngestReason string `json:"ingest_reason,omitempty"`
+
 	// Size is the file size in bytes.
 	Size int64 `json:"size"`
 

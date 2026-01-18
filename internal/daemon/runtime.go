@@ -10,7 +10,6 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/cleaner"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
-	"github.com/leefowlercu/agentic-memorizer/internal/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
@@ -117,7 +116,6 @@ type ComponentContext struct {
 	Bus              *events.EventBus
 	Registry         registry.Registry
 	Graph            graph.Graph
-	Handlers         *handlers.Registry
 	Cleaner          *cleaner.Cleaner
 	Queue            *analysis.Queue
 	Walker           walker.Walker

@@ -15,7 +15,7 @@ func (j *logicalJob) Name() string           { return j.name }
 func (j *logicalJob) Kind() ComponentKind    { return ComponentKindJob }
 func (j *logicalJob) Dependencies() []string { return nil }
 func (j *logicalJob) Run(ctx context.Context) RunResult {
-	// Actual execution is routed through orchestrator handlers.
+	// Actual execution is routed through the orchestrator job flow.
 	return RunResult{
 		Status:     RunFailed,
 		StartedAt:  time.Now(),

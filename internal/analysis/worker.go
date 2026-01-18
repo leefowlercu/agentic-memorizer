@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"os"
@@ -17,6 +18,7 @@ import (
 	_ "github.com/leefowlercu/agentic-memorizer/internal/chunkers/code/languages" // Register tree-sitter chunker factory.
 	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
@@ -49,6 +51,9 @@ type AnalysisResult struct {
 	MetadataHash string
 	MIMEType     string
 	Language     string
+	IngestKind   ingest.Kind
+	IngestMode   ingest.Mode
+	IngestReason string
 
 	// Semantic analysis
 	Summary    string
@@ -262,44 +267,65 @@ func (w *Worker) calculateBackoff(retries int) time.Duration {
 
 // analyze performs the full analysis pipeline.
 func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, error) {
-	// Maximum file size: 100MB (prevents OOM on large files)
-	const maxFileSize = 100 * 1024 * 1024
-
-	// Check file size before reading
 	info, err := os.Stat(item.FilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat file; %w", err)
 	}
-	if info.Size() > maxFileSize {
-		return nil, fmt.Errorf("file too large: %d bytes (max %d)", info.Size(), maxFileSize)
-	}
-
-	// Read file content
-	content, err := os.ReadFile(item.FilePath)
+	peek, err := readHead(item.FilePath, 4096)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file; %w", err)
+		return nil, fmt.Errorf("failed to read file head; %w", err)
 	}
 
-	// Determine MIME type and language
-	mimeType := filetype.DetectMIME(item.FilePath, content)
-	language := filetype.DetectLanguage(item.FilePath)
+	kind, mimeType, language := ingest.Probe(item.FilePath, info, peek)
+	var pathConfig *registry.PathConfig
+	if w.registry != nil {
+		cfg, err := w.registry.GetEffectiveConfig(ctx, item.FilePath)
+		if err == nil {
+			pathConfig = cfg
+		}
+	}
+
+	ingestMode, ingestReason := ingest.Decide(kind, pathConfig, info.Size())
 
 	// Check degradation mode
 	stats := w.queue.Stats()
 	mode := stats.DegradationMode
+	degradedMetadata := false
+	if mode == DegradationMetadata && ingestMode == ingest.ModeChunk {
+		ingestMode = ingest.ModeMetadataOnly
+		degradedMetadata = true
+	}
+
+	var content []byte
+	var contentHash string
+	if ingestMode == ingest.ModeChunk {
+		content, err = os.ReadFile(item.FilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file; %w", err)
+		}
+		contentHash = filetype.HashBytes(content)
+	} else {
+		contentHash, err = filetype.HashFile(item.FilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash file; %w", err)
+		}
+	}
 
 	result := &AnalysisResult{
-		FilePath:    item.FilePath,
-		FileSize:    item.FileSize,
-		ModTime:     item.ModTime,
-		MIMEType:    mimeType,
-		Language:    language,
-		AnalyzedAt:  time.Now(),
-		ContentHash: filetype.HashBytes(content),
+		FilePath:     item.FilePath,
+		FileSize:     info.Size(),
+		ModTime:      info.ModTime(),
+		MIMEType:     mimeType,
+		Language:     language,
+		IngestKind:   kind,
+		IngestMode:   ingestMode,
+		IngestReason: ingestReason,
+		AnalyzedAt:   time.Now(),
+		ContentHash:  contentHash,
 	}
 
 	// Step 1: Metadata analysis (always performed)
-	result.MetadataHash = computeMetadataHash(item.FilePath, item.FileSize, item.ModTime)
+	result.MetadataHash = computeMetadataHash(item.FilePath, result.FileSize, result.ModTime)
 
 	// Check if content has changed (requires clearing previous analysis state)
 	// Note: This check-then-act is subject to race conditions if multiple workers
@@ -319,13 +345,24 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 		}
 
 		// Update metadata state
-		if err := w.registry.UpdateMetadataState(ctx, item.FilePath, result.ContentHash, result.MetadataHash, item.FileSize, item.ModTime); err != nil {
+		if err := w.registry.UpdateMetadataState(ctx, item.FilePath, result.ContentHash, result.MetadataHash, result.FileSize, result.ModTime); err != nil {
 			w.logger.Warn("failed to update metadata state", "path", item.FilePath, "error", err)
 		}
 	}
 
-	if mode == DegradationMetadata {
-		// Metadata only mode
+	if ingestMode == ingest.ModeMetadataOnly || ingestMode == ingest.ModeSkip {
+		if w.registry != nil && !degradedMetadata {
+			version := w.analysisVersion
+			if version == "" {
+				version = "1.0.0"
+			}
+			if err := w.registry.UpdateSemanticState(ctx, item.FilePath, version, nil); err != nil {
+				w.logger.Warn("failed to update semantic state", "path", item.FilePath, "error", err)
+			}
+			if err := w.registry.UpdateEmbeddingsState(ctx, item.FilePath, nil); err != nil {
+				w.logger.Warn("failed to update embeddings state", "path", item.FilePath, "error", err)
+			}
+		}
 		return result, nil
 	}
 
@@ -766,6 +803,9 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 	if w.graph == nil {
 		return nil // Graph not configured, skip persistence
 	}
+	if result.IngestMode == ingest.ModeSkip {
+		return nil
+	}
 
 	// Build FileNode from analysis result
 	fileNode := &graph.FileNode{
@@ -781,6 +821,9 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 		Summary:      result.Summary,
 		Complexity:   result.Complexity,
 		AnalyzedAt:   result.AnalyzedAt,
+		IngestKind:   string(result.IngestKind),
+		IngestMode:   string(result.IngestMode),
+		IngestReason: result.IngestReason,
 	}
 
 	// Upsert file node
@@ -878,6 +921,26 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 }
 
 // Helper functions
+
+func readHead(path string, size int) ([]byte, error) {
+	if size <= 0 {
+		size = 4096
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	buf := make([]byte, size)
+	n, err := file.Read(buf)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	return buf[:n], nil
+}
 
 // computeMetadataHash computes a hash of file metadata.
 func computeMetadataHash(path string, size int64, modTime time.Time) string {

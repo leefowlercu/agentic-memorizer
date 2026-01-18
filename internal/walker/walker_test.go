@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
-	"github.com/leefowlercu/agentic-memorizer/internal/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
@@ -269,12 +268,10 @@ func TestWalker_Walk(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember the path
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), tmpDir)
 	if err != nil {
@@ -309,14 +306,12 @@ func TestWalker_Walk_SkipExtensions(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember path with skip extensions
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{
 		SkipExtensions: []string{".json", ".yaml"},
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), tmpDir)
 	if err != nil {
@@ -342,14 +337,12 @@ func TestWalker_Walk_SkipDirectories(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember path with skip directories
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{
 		SkipDirectories: []string{"node_modules", "vendor"},
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), tmpDir)
 	if err != nil {
@@ -374,14 +367,12 @@ func TestWalker_Walk_SkipHidden(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember path with skip hidden
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{
 		SkipHidden: true,
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), tmpDir)
 	if err != nil {
@@ -407,14 +398,12 @@ func TestWalker_Walk_IncludeExtensions(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember path with include extensions only
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{
 		IncludeExtensions: []string{".go", ".py"},
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), tmpDir)
 	if err != nil {
@@ -438,8 +427,6 @@ func TestWalker_WalkIncremental(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember path
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
@@ -451,7 +438,7 @@ func TestWalker_WalkIncremental(t *testing.T) {
 		ModTime: mainInfo.ModTime(),
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.WalkIncremental(context.Background(), tmpDir)
 	if err != nil {
@@ -479,13 +466,11 @@ func TestWalker_WalkAll(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember both paths
 	_ = reg.AddPath(context.Background(), tmpDir1, &registry.PathConfig{})
 	_ = reg.AddPath(context.Background(), tmpDir2, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.WalkAll(context.Background())
 	if err != nil {
@@ -513,8 +498,6 @@ func TestWalker_WalkAllIncremental(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember both paths
 	_ = reg.AddPath(context.Background(), tmpDir1, &registry.PathConfig{})
 	_ = reg.AddPath(context.Background(), tmpDir2, &registry.PathConfig{})
@@ -534,7 +517,7 @@ func TestWalker_WalkAllIncremental(t *testing.T) {
 		ModTime: cInfo.ModTime(),
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.WalkAllIncremental(context.Background())
 	if err != nil {
@@ -565,11 +548,9 @@ func TestWalker_ContextCancellation(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	// Cancel context immediately
 	ctx, cancel := context.WithCancel(context.Background())
@@ -586,9 +567,7 @@ func TestWalker_PathNotRemembered(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), tmpDir)
 	if err == nil {
@@ -603,11 +582,9 @@ func TestWalker_PathNotDirectory(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	_ = reg.AddPath(context.Background(), filePath, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.Walk(context.Background(), filePath)
 	if err == nil {
@@ -626,11 +603,9 @@ func TestWalker_Stats(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	// Stats before walk
 	stats := w.Stats()
@@ -668,12 +643,10 @@ func TestWalker_Pacing(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
 	// Use small batch size and pace interval for testing
-	w := New(reg, bus, hr, WithBatchSize(3), WithPaceInterval(10*time.Millisecond))
+	w := New(reg, bus, WithBatchSize(3), WithPaceInterval(10*time.Millisecond))
 
 	start := time.Now()
 	err := w.Walk(context.Background(), tmpDir)
@@ -702,13 +675,11 @@ func TestWalker_DiscoveredPaths_Accumulation(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	// Remember both paths
 	_ = reg.AddPath(context.Background(), tmpDir1, &registry.PathConfig{})
 	_ = reg.AddPath(context.Background(), tmpDir2, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	// Before walk, drain should return nil
 	paths := w.DrainDiscoveredPaths()
@@ -755,11 +726,9 @@ func TestWalker_DiscoveredPaths_Drain(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	err := w.WalkAll(context.Background())
 	if err != nil {
@@ -792,8 +761,6 @@ func TestWalker_DiscoveredPaths_IncrementalTracksUnchanged(t *testing.T) {
 
 	reg := newMockRegistry()
 	bus := newMockBus()
-	hr := handlers.DefaultRegistry()
-
 	_ = reg.AddPath(context.Background(), tmpDir, &registry.PathConfig{})
 
 	// Set file state for unchanged.go (simulate already processed)
@@ -805,7 +772,7 @@ func TestWalker_DiscoveredPaths_IncrementalTracksUnchanged(t *testing.T) {
 		ModTime: unchangedInfo.ModTime(),
 	})
 
-	w := New(reg, bus, hr)
+	w := New(reg, bus)
 
 	// Incremental walk
 	err := w.WalkAllIncremental(context.Background())

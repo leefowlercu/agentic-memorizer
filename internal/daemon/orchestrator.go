@@ -13,7 +13,6 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
-	"github.com/leefowlercu/agentic-memorizer/internal/handlers"
 	"github.com/leefowlercu/agentic-memorizer/internal/mcp"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
@@ -36,7 +35,6 @@ type Orchestrator struct {
 	bus              *events.EventBus
 	registry         registry.Registry
 	graph            graph.Graph
-	handlers         *handlers.Registry
 	semanticProvider providers.SemanticProvider
 	embedProvider    providers.EmbeddingsProvider
 	queue            *analysis.Queue
@@ -630,11 +628,6 @@ func (o *Orchestrator) MCPServer() *mcp.Server {
 // MetricsCollector returns the initialized metrics collector.
 func (o *Orchestrator) MetricsCollector() *metrics.Collector {
 	return o.metricsCollector
-}
-
-// Handlers returns the initialized handler registry.
-func (o *Orchestrator) Handlers() *handlers.Registry {
-	return o.handlers
 }
 
 // SemanticProvider returns the initialized semantic provider.

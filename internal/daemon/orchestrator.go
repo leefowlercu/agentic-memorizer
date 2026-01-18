@@ -316,6 +316,7 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 				} else {
 					slog.Debug("event bus closed")
 				}
+				config.SetEventBus(nil)
 			}
 		case "registry":
 			if o.registry != nil {

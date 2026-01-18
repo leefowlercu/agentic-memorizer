@@ -396,6 +396,7 @@ func (o *Orchestrator) buildComponents(ctx context.Context, cfg *config.Config) 
 		case *events.EventBus:
 			o.bus = c
 			bag.Bus = c
+			config.SetEventBus(c)
 		case registry.Registry:
 			o.registry = c
 			bag.Registry = c

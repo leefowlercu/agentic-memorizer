@@ -12,6 +12,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
@@ -238,6 +239,132 @@ func TestQueueRegistryUpdatesFileState(t *testing.T) {
 	}
 	if state.AnalysisVersion == "" {
 		t.Error("expected AnalysisVersion to be set")
+	}
+}
+
+func TestWorkerAnalyze_DegradationMetadataSkipsSemanticAndEmbeddings(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, filepath.Join(t.TempDir(), "registry.db"))
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+	defer reg.Close()
+
+	queue := NewQueue(bus)
+	queue.queueCapacity = 1
+	queue.workChan = make(chan WorkItem, 1)
+	queue.workChan <- WorkItem{}
+
+	worker := NewWorker(0, queue)
+	worker.SetRegistry(reg)
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "sample.txt")
+	if err := os.WriteFile(filePath, []byte("metadata only"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("failed to stat test file: %v", err)
+	}
+
+	_, err = worker.analyze(ctx, WorkItem{
+		FilePath:  filePath,
+		FileSize:  info.Size(),
+		ModTime:   info.ModTime(),
+		EventType: WorkItemNew,
+	})
+	if err != nil {
+		t.Fatalf("analyze failed: %v", err)
+	}
+
+	state, err := reg.GetFileState(ctx, filePath)
+	if err != nil {
+		t.Fatalf("failed to get file state: %v", err)
+	}
+	if state.MetadataAnalyzedAt == nil {
+		t.Fatal("expected metadata_analyzed_at to be set")
+	}
+	if state.SemanticAnalyzedAt != nil {
+		t.Fatal("expected semantic_analyzed_at to be nil in degraded metadata mode")
+	}
+	if state.EmbeddingsAnalyzedAt != nil {
+		t.Fatal("expected embeddings_analyzed_at to be nil in degraded metadata mode")
+	}
+}
+
+func TestPublishAnalysisCompleteAnalysisType(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	queue := NewQueue(bus)
+	queue.ctx = context.Background()
+
+	ch := make(chan events.AnalysisType, 10)
+	unsub := bus.Subscribe(events.AnalysisComplete, func(e events.Event) {
+		ae, ok := e.Payload.(*events.AnalysisEvent)
+		if !ok {
+			return
+		}
+		ch <- ae.AnalysisType
+	})
+	defer unsub()
+
+	tests := []struct {
+		name   string
+		result *AnalysisResult
+		want   events.AnalysisType
+	}{
+		{
+			name: "metadata_only",
+			result: &AnalysisResult{
+				FilePath:   "/test/metadata.txt",
+				IngestMode: ingest.ModeMetadataOnly,
+			},
+			want: events.AnalysisMetadata,
+		},
+		{
+			name: "skip",
+			result: &AnalysisResult{
+				FilePath:   "/test/skip.bin",
+				IngestMode: ingest.ModeSkip,
+			},
+			want: events.AnalysisMetadata,
+		},
+		{
+			name: "semantic",
+			result: &AnalysisResult{
+				FilePath:   "/test/semantic.md",
+				IngestMode: ingest.ModeChunk,
+			},
+			want: events.AnalysisSemantic,
+		},
+		{
+			name: "full",
+			result: &AnalysisResult{
+				FilePath:   "/test/full.go",
+				IngestMode: ingest.ModeChunk,
+				Embeddings: []float32{0.1, 0.2},
+			},
+			want: events.AnalysisFull,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			queue.publishAnalysisComplete(tt.result.FilePath, tt.result)
+			select {
+			case got := <-ch:
+				if got != tt.want {
+					t.Fatalf("analysis type = %q, want %q", got, tt.want)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("timeout waiting for analysis event")
+			}
+		})
 	}
 }
 
@@ -503,7 +630,8 @@ func (m *mockSemanticProvider) Analyze(ctx context.Context, req providers.Semant
 
 // mockGraph is a mock implementation for testing graph persistence.
 type mockGraph struct {
-	chunks []*graph.ChunkNode
+	chunks        []*graph.ChunkNode
+	deleteFileFor []string
 }
 
 func (m *mockGraph) Name() string                                               { return "mock-graph" }
@@ -512,7 +640,10 @@ func (m *mockGraph) Start(ctx context.Context) error                            
 func (m *mockGraph) Stop(ctx context.Context) error                             { return nil }
 func (m *mockGraph) IsConnected() bool                                          { return true }
 func (m *mockGraph) UpsertFile(ctx context.Context, file *graph.FileNode) error { return nil }
-func (m *mockGraph) DeleteFile(ctx context.Context, path string) error          { return nil }
+func (m *mockGraph) DeleteFile(ctx context.Context, path string) error {
+	m.deleteFileFor = append(m.deleteFileFor, path)
+	return nil
+}
 func (m *mockGraph) GetFile(ctx context.Context, path string) (*graph.FileNode, error) {
 	return nil, nil
 }
@@ -885,6 +1016,29 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 		// Note: Heading and HeadingLevel are now stored in DocumentMetaNode (separate upsert)
 		if chunk.ChunkType != "markdown" {
 			t.Errorf("ChunkType = %q, want %q", chunk.ChunkType, "markdown")
+		}
+	})
+
+	t.Run("DeletesSkippedFiles", func(t *testing.T) {
+		mockG.chunks = nil
+		mockG.deleteFileFor = nil
+
+		result := &AnalysisResult{
+			FilePath:    "/test/skip.bin",
+			ContentHash: "skiphash",
+			IngestMode:  ingest.ModeSkip,
+		}
+
+		err := worker.persistToGraph(context.Background(), result)
+		if err != nil {
+			t.Fatalf("persistToGraph failed: %v", err)
+		}
+
+		if len(mockG.deleteFileFor) != 1 {
+			t.Fatalf("expected DeleteFile to be called once, got %d", len(mockG.deleteFileFor))
+		}
+		if mockG.deleteFileFor[0] != result.FilePath {
+			t.Fatalf("DeleteFile path = %q, want %q", mockG.deleteFileFor[0], result.FilePath)
 		}
 	})
 }

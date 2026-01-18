@@ -804,6 +804,9 @@ func (w *Worker) persistToGraph(ctx context.Context, result *AnalysisResult) err
 		return nil // Graph not configured, skip persistence
 	}
 	if result.IngestMode == ingest.ModeSkip {
+		if err := w.graph.DeleteFile(ctx, result.FilePath); err != nil {
+			return fmt.Errorf("failed to delete skipped file; %w", err)
+		}
 		return nil
 	}
 

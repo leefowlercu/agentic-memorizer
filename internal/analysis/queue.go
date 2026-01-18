@@ -11,6 +11,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
@@ -469,10 +470,17 @@ func (q *Queue) recordPersistenceFailure() {
 
 // publishAnalysisComplete publishes a success event.
 func (q *Queue) publishAnalysisComplete(path string, result *AnalysisResult) {
+	analysisType := events.AnalysisFull
+	if result.IngestMode == ingest.ModeMetadataOnly || result.IngestMode == ingest.ModeSkip {
+		analysisType = events.AnalysisMetadata
+	} else if len(result.Embeddings) == 0 {
+		analysisType = events.AnalysisSemantic
+	}
+
 	q.bus.Publish(q.ctx, events.NewEvent(events.AnalysisComplete, &events.AnalysisEvent{
 		Path:         path,
 		ContentHash:  result.ContentHash,
-		AnalysisType: events.AnalysisFull,
+		AnalysisType: analysisType,
 		Duration:     result.ProcessingTime,
 	}))
 }

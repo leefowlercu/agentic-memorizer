@@ -3,17 +3,16 @@ package remember
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemonclient"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
@@ -152,6 +151,8 @@ func validateRemember(cmd *cobra.Command, args []string) error {
 
 func runRemember(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+	out := cmd.OutOrStdout()
+	quiet := isQuiet(cmd)
 	path := args[0]
 
 	// Expand and resolve path
@@ -175,7 +176,7 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	if err == nil && existingPath != nil {
 		// Path exists - check if modification flags are provided
 		if hasModificationFlags(cmd) {
-			return handleExistingPath(ctx, cmd, reg, absPath, existingPath)
+			return handleExistingPath(ctx, cmd, reg, absPath, existingPath, out, quiet)
 		}
 		return fmt.Errorf("path is already remembered: %s\nUse modification flags (--add-*, --set-*, --skip-hidden) to update configuration", absPath)
 	}
@@ -192,12 +193,16 @@ func runRemember(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to remember path; %w", err)
 	}
 
-	fmt.Printf("Remembered: %s\n", absPath)
+	if !quiet {
+		fmt.Fprintf(out, "Remembered: %s\n", absPath)
+	}
 
 	// Notify daemon to start watching and walking the new path
-	if err := requestReWalk(); err != nil {
-		fmt.Printf("Warning: could not notify daemon: %v\n", err)
-		fmt.Println("You may need to restart the daemon or run 'memorizer daemon rebuild'.")
+	if err := requestReWalk(ctx); err != nil {
+		if !quiet {
+			fmt.Fprintf(out, "Warning: could not notify daemon: %v\n", err)
+			fmt.Fprintln(out, "You may need to restart the daemon or run 'memorizer daemon rebuild'.")
+		}
 	}
 
 	return nil
@@ -221,7 +226,7 @@ func hasModificationFlags(cmd *cobra.Command) bool {
 }
 
 // handleExistingPath updates the configuration for an already-remembered path.
-func handleExistingPath(ctx context.Context, cmd *cobra.Command, reg *registry.SQLiteRegistry, absPath string, existing *registry.RememberedPath) error {
+func handleExistingPath(ctx context.Context, cmd *cobra.Command, reg *registry.SQLiteRegistry, absPath string, existing *registry.RememberedPath, out io.Writer, quiet bool) error {
 	// Build updated config
 	newConfig := buildUpdatedConfig(cmd, existing.Config)
 
@@ -231,14 +236,20 @@ func handleExistingPath(ctx context.Context, cmd *cobra.Command, reg *registry.S
 		return fmt.Errorf("failed to update path config; %w", err)
 	}
 
-	fmt.Printf("Updated: %s\n", absPath)
+	if !quiet {
+		fmt.Fprintf(out, "Updated: %s\n", absPath)
+	}
 
 	// Trigger re-walk via daemon API
-	if err := requestReWalk(); err != nil {
-		fmt.Printf("Warning: could not trigger re-walk: %v\n", err)
-		fmt.Println("The daemon may need to be restarted for changes to take effect.")
+	if err := requestReWalk(ctx); err != nil {
+		if !quiet {
+			fmt.Fprintf(out, "Warning: could not trigger re-walk: %v\n", err)
+			fmt.Fprintln(out, "The daemon may need to be restarted for changes to take effect.")
+		}
 	} else {
-		fmt.Println("Re-walk triggered successfully.")
+		if !quiet {
+			fmt.Fprintln(out, "Re-walk triggered successfully.")
+		}
 	}
 
 	return nil
@@ -302,31 +313,23 @@ func buildUpdatedConfig(cmd *cobra.Command, existing *registry.PathConfig) *regi
 }
 
 // requestReWalk triggers an incremental re-walk via the daemon HTTP API.
-func requestReWalk() error {
-	cfg := config.Get()
-	url := fmt.Sprintf("http://%s:%d/rebuild", cfg.Daemon.HTTPBind, cfg.Daemon.HTTPPort)
-
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Post(url, "application/json", nil)
+func requestReWalk(ctx context.Context) error {
+	client, err := daemonclient.NewFromConfig(config.Get(),
+		daemonclient.WithTimeout(daemonclient.RewalkTimeout),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to connect to daemon; %w", err)
+		return fmt.Errorf("failed to initialize daemon client; %w", err)
 	}
-	defer resp.Body.Close()
+	_, err = client.Rebuild(ctx, false)
+	return err
+}
 
-	if resp.StatusCode != http.StatusOK {
-		var result struct {
-			Error string `json:"error"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Error != "" {
-			return fmt.Errorf("rebuild failed: %s", result.Error)
-		}
-		return fmt.Errorf("rebuild failed with status %d", resp.StatusCode)
+func isQuiet(cmd *cobra.Command) bool {
+	quiet, err := cmd.Flags().GetBool("quiet")
+	if err != nil {
+		return false
 	}
-
-	return nil
+	return quiet
 }
 
 // buildPathConfig constructs a PathConfig from command flags merged with defaults.

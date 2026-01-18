@@ -1,17 +1,16 @@
 package subcommands
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemonclient"
 )
 
 // DaemonStatus holds the status information about the daemon.
@@ -43,13 +42,17 @@ func validateStatus(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	pidPath := config.ExpandPath(config.Get().Daemon.PIDFile)
+	out := cmd.OutOrStdout()
+	quiet := isQuiet(cmd)
 
 	status, err := getDaemonStatus(pidPath)
 	if err != nil {
 		return fmt.Errorf("failed to get daemon status; %w", err)
 	}
 
-	fmt.Println(formatStatus(status))
+	if !quiet {
+		fmt.Fprintln(out, formatStatus(status))
+	}
 	return nil
 }
 
@@ -88,29 +91,11 @@ func getDaemonStatus(pidPath string) (*DaemonStatus, error) {
 
 // fetchHealth attempts to fetch health status from the daemon's HTTP endpoint.
 func fetchHealth() (*daemon.HealthStatus, error) {
-	cfg := config.Get()
-	url := fmt.Sprintf("http://%s:%d/readyz", cfg.Daemon.HTTPBind, cfg.Daemon.HTTPPort)
-
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	resp, err := client.Get(url)
+	client, err := daemonclient.NewFromConfig(config.Get())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize daemon client; %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var health daemon.HealthStatus
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		return nil, err
-	}
-
-	return &health, nil
+	return client.Ready(context.Background())
 }
 
 // formatStatus formats the daemon status for display.

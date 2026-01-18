@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
-	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
+	"github.com/leefowlercu/agentic-memorizer/internal/fsutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
@@ -289,7 +289,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		}
 
 		// Compute content hash
-		contentHash, err := filetype.HashFile(filePath)
+		contentHash, err := fsutil.HashFile(filePath)
 		if err != nil {
 			return nil // Skip files we can't hash
 		}

@@ -14,7 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
-	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
+	"github.com/leefowlercu/agentic-memorizer/internal/fsutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
@@ -446,7 +446,7 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 			modTime = info.ModTime()
 
 			// Compute content hash
-			hash, err := filetype.HashFile(ce.Path)
+			hash, err := fsutil.HashFile(ce.Path)
 			if err != nil {
 				w.logger.Warn("failed to compute hash", "path", ce.Path, "error", err)
 				return

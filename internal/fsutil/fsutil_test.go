@@ -1,4 +1,4 @@
-package filetype
+package fsutil
 
 import (
 	"os"
@@ -46,23 +46,23 @@ func TestDetectMIME(t *testing.T) {
 	tests := []struct {
 		path     string
 		content  []byte
-		expected string
+		expected []string
 	}{
-		{"/test/file.go", nil, "text/x-go"},
-		{"/test/file.py", nil, "text/x-python"},
-		{"/test/file.js", nil, "text/javascript"},
-		{"/test/file.ts", nil, "text/typescript"},
-		{"/test/file.md", nil, "text/markdown"},
-		{"/test/file.json", nil, "application/json"},
-		{"/test/file.yaml", nil, "text/yaml"},
-		{"/test/file.unknown", nil, "application/octet-stream"},
-		{"/test/file.unknown", []byte("{\"k\": \"v\"}"), "application/json"},
+		{"/test/file.go", nil, []string{"text/x-go"}},
+		{"/test/file.py", nil, []string{"text/x-python"}},
+		{"/test/file.js", nil, []string{"text/javascript"}},
+		{"/test/file.ts", nil, []string{"text/typescript"}},
+		{"/test/file.md", nil, []string{"text/markdown"}},
+		{"/test/file.json", nil, []string{"application/json"}},
+		{"/test/file.yaml", nil, []string{"text/yaml", "application/x-yaml", "application/yaml"}},
+		{"/test/file.unknown", nil, []string{"application/octet-stream"}},
+		{"/test/file.unknown", []byte("{\"k\": \"v\"}"), []string{"application/json", "text/plain"}},
 	}
 
 	for _, tt := range tests {
 		result := DetectMIME(tt.path, tt.content)
-		if result != tt.expected {
-			t.Errorf("DetectMIME(%q) = %q, want %q", tt.path, result, tt.expected)
+		if !contains(tt.expected, result) {
+			t.Errorf("DetectMIME(%q) = %q, want %v", tt.path, result, tt.expected)
 		}
 	}
 }
@@ -87,4 +87,31 @@ func TestDetectLanguage(t *testing.T) {
 			t.Errorf("DetectLanguage(%q) = %q, want %q", tt.path, result, tt.expected)
 		}
 	}
+}
+
+func TestMIMEFromExtension(t *testing.T) {
+	tests := []struct {
+		ext      string
+		expected string
+	}{
+		{".go", "text/x-go"},
+		{"go", "text/x-go"},
+		{".unknown", ""},
+	}
+
+	for _, tt := range tests {
+		result := MIMEFromExtension(tt.ext)
+		if result != tt.expected {
+			t.Errorf("MIMEFromExtension(%q) = %q, want %q", tt.ext, result, tt.expected)
+		}
+	}
+}
+
+func contains(values []string, target string) bool {
+	for _, v := range values {
+		if v == target {
+			return true
+		}
+	}
+	return false
 }

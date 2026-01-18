@@ -10,7 +10,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
-	"github.com/leefowlercu/agentic-memorizer/internal/filetype"
+	"github.com/leefowlercu/agentic-memorizer/internal/fsutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
@@ -243,7 +243,7 @@ func TestQueueRegistryUpdatesFileState(t *testing.T) {
 		t.Fatalf("failed to read file state: %v", err)
 	}
 
-	expectedContentHash := filetype.HashBytes(content)
+	expectedContentHash := fsutil.HashBytes(content)
 	if state.ContentHash != expectedContentHash {
 		t.Errorf("ContentHash = %q, want %q", state.ContentHash, expectedContentHash)
 	}
@@ -722,18 +722,12 @@ func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32
 }
 
 func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
-	bus := events.NewBus()
-	defer bus.Close()
-
-	queue := NewQueue(bus)
-	worker := NewWorker(0, queue)
-
 	// Set up mock embeddings provider
 	mockEmbed := &mockEmbeddingsProvider{
 		available: true,
 		embedding: []float32{0.1, 0.2, 0.3},
 	}
-	worker.SetEmbeddingsProvider(mockEmbed)
+	stage := NewEmbeddingsStage(mockEmbed, nil, nil, nil)
 
 	t.Run("PreservesCodeChunkMetadata", func(t *testing.T) {
 		chunks := []chunkers.Chunk{
@@ -754,7 +748,7 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			},
 		}
 
-		_, results, err := worker.generateEmbeddings(context.Background(), chunks, nil)
+		_, results, err := stage.Generate(context.Background(), "/test/file.go", chunks, nil)
 		if err != nil {
 			t.Fatalf("generateEmbeddings failed: %v", err)
 		}
@@ -799,7 +793,7 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			},
 		}
 
-		_, results, err := worker.generateEmbeddings(context.Background(), chunks, nil)
+		_, results, err := stage.Generate(context.Background(), "/test/file.md", chunks, nil)
 		if err != nil {
 			t.Fatalf("generateEmbeddings failed: %v", err)
 		}
@@ -833,7 +827,7 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 		}
 		summaries := []string{"Summary for first chunk", "Summary for second chunk"}
 
-		_, results, err := worker.generateEmbeddings(context.Background(), chunks, summaries)
+		_, results, err := stage.Generate(context.Background(), "/test/file.txt", chunks, summaries)
 		if err != nil {
 			t.Fatalf("generateEmbeddings failed: %v", err)
 		}
@@ -855,7 +849,7 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			{Index: 0, Content: "Test chunk"},
 		}
 
-		_, results, err := worker.generateEmbeddings(context.Background(), chunks, nil)
+		_, results, err := stage.Generate(context.Background(), "/test/file.txt", chunks, nil)
 		if err != nil {
 			t.Fatalf("generateEmbeddings failed: %v", err)
 		}
@@ -867,12 +861,6 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 }
 
 func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
-	bus := events.NewBus()
-	defer bus.Close()
-
-	queue := NewQueue(bus)
-	worker := NewWorker(0, queue)
-
 	// Set up mock semantic provider
 	mockSemantic := &mockSemanticProvider{
 		available: true,
@@ -881,14 +869,14 @@ func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
 			1: "Chunk 1 summary",
 		},
 	}
-	worker.SetSemanticProvider(mockSemantic)
+	stage := NewSemanticStage(mockSemantic, nil, nil, "", nil)
 
 	t.Run("ReturnsSummariesForSingleChunk", func(t *testing.T) {
 		chunks := []chunkers.Chunk{
 			{Index: 0, Content: "Single chunk content"},
 		}
 
-		result, summaries, err := worker.analyzeSemantics(context.Background(), chunks)
+		result, summaries, err := stage.Analyze(context.Background(), "/test/file.txt", "hash", chunks)
 		if err != nil {
 			t.Fatalf("analyzeSemantics failed: %v", err)
 		}
@@ -912,7 +900,7 @@ func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
 			{Index: 1, Content: "Second chunk"},
 		}
 
-		result, summaries, err := worker.analyzeSemantics(context.Background(), chunks)
+		result, summaries, err := stage.Analyze(context.Background(), "/test/file.txt", "hash", chunks)
 		if err != nil {
 			t.Fatalf("analyzeSemantics failed: %v", err)
 		}
@@ -935,7 +923,7 @@ func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
 	})
 
 	t.Run("ReturnsEmptyForEmptyChunks", func(t *testing.T) {
-		result, summaries, err := worker.analyzeSemantics(context.Background(), []chunkers.Chunk{})
+		result, summaries, err := stage.Analyze(context.Background(), "/test/file.txt", "hash", []chunkers.Chunk{})
 		if err != nil {
 			t.Fatalf("analyzeSemantics failed: %v", err)
 		}
@@ -951,15 +939,9 @@ func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
 }
 
 func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
-	bus := events.NewBus()
-	defer bus.Close()
-
-	queue := NewQueue(bus)
-	worker := NewWorker(0, queue)
-
 	// Set up mock graph
 	mockG := &mockGraph{}
-	worker.SetGraph(mockG)
+	stage := NewPersistenceStage(mockG, nil)
 
 	t.Run("PersistsAllChunkMetadata", func(t *testing.T) {
 		result := &AnalysisResult{
@@ -987,7 +969,7 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 			},
 		}
 
-		err := worker.persistToGraph(context.Background(), result)
+		err := stage.Persist(context.Background(), result)
 		if err != nil {
 			t.Fatalf("persistToGraph failed: %v", err)
 		}
@@ -1034,7 +1016,7 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 			},
 		}
 
-		err := worker.persistToGraph(context.Background(), result)
+		err := stage.Persist(context.Background(), result)
 		if err != nil {
 			t.Fatalf("persistToGraph failed: %v", err)
 		}
@@ -1060,7 +1042,7 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 			IngestMode:  ingest.ModeSkip,
 		}
 
-		err := worker.persistToGraph(context.Background(), result)
+		err := stage.Persist(context.Background(), result)
 		if err != nil {
 			t.Fatalf("persistToGraph failed: %v", err)
 		}

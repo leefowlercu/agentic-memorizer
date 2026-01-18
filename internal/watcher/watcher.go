@@ -292,7 +292,9 @@ func (w *watcher) Stop() error {
 func (w *watcher) Stats() WatcherStats {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.stats
+	stats := w.stats
+	stats.WatchedPaths = len(w.watchedPaths)
+	return stats
 }
 
 // Errors returns a channel for fatal watcher errors.

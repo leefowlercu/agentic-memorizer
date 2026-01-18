@@ -259,6 +259,44 @@ func TestWatcher_Unwatch(t *testing.T) {
 	}
 }
 
+func TestWatcher_StatsWatchedPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bus := newMockBus()
+	reg := newMockRegistry()
+
+	w, err := New(bus, reg)
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+	defer w.Stop()
+
+	stats := w.Stats()
+	if stats.WatchedPaths != 0 {
+		t.Errorf("expected 0 watched paths before watch, got %d", stats.WatchedPaths)
+	}
+
+	err = w.Watch(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to watch: %v", err)
+	}
+
+	stats = w.Stats()
+	if stats.WatchedPaths != 1 {
+		t.Errorf("expected 1 watched path after watch, got %d", stats.WatchedPaths)
+	}
+
+	err = w.Unwatch(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to unwatch: %v", err)
+	}
+
+	stats = w.Stats()
+	if stats.WatchedPaths != 0 {
+		t.Errorf("expected 0 watched paths after unwatch, got %d", stats.WatchedPaths)
+	}
+}
+
 func TestWatcher_Stats(t *testing.T) {
 	tmpDir := t.TempDir()
 

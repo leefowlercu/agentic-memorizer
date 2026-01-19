@@ -77,7 +77,12 @@ func (c *Cleaner) Start(ctx context.Context) error {
 		return ErrAlreadyStarted
 	}
 
-	c.unsubscribe = c.bus.Subscribe(events.PathDeleted, c.handlePathDeleted)
+	unsubPathDeleted := c.bus.Subscribe(events.PathDeleted, c.handlePathDeleted)
+	unsubRemembered := c.bus.Subscribe(events.RememberedPathRemoved, c.handleRememberedPathRemoved)
+	c.unsubscribe = func() {
+		unsubPathDeleted()
+		unsubRemembered()
+	}
 	c.started = true
 	c.logger.Info("cleaner started")
 	return nil
@@ -219,7 +224,7 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 
 // handlePathDeleted is the event handler for PathDeleted events.
 func (c *Cleaner) handlePathDeleted(e events.Event) {
-	fe, ok := e.Payload.(events.FileEvent)
+	fe, ok := e.Payload.(*events.FileEvent)
 	if !ok {
 		c.logger.Warn("invalid PathDeleted payload type")
 		return
@@ -249,6 +254,43 @@ func (c *Cleaner) handlePathDeleted(e events.Event) {
 
 	if err := c.DeletePath(ctx, fe.Path); err != nil {
 		c.logger.Error("delete handler failed", "path", fe.Path, "error", err)
+	}
+}
+
+// handleRememberedPathRemoved handles cleanup for a removed remembered path.
+func (c *Cleaner) handleRememberedPathRemoved(e events.Event) {
+	pe, ok := e.Payload.(*events.RememberedPathRemovedEvent)
+	if !ok {
+		c.logger.Warn("invalid RememberedPathRemoved payload type")
+		return
+	}
+
+	if pe.Path == "" {
+		c.logger.Warn("ignoring RememberedPathRemoved event with empty path")
+		return
+	}
+
+	if pe.KeepData {
+		c.logger.Debug("skipping cleanup for remembered path", "path", pe.Path, "reason", pe.Reason)
+		return
+	}
+
+	c.mu.Lock()
+	if !c.started {
+		c.mu.Unlock()
+		return
+	}
+	c.wg.Add(1)
+	c.mu.Unlock()
+	defer c.wg.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	c.logger.Debug("cleaning up removed remembered path", "path", pe.Path, "reason", pe.Reason)
+
+	if err := c.DeletePath(ctx, pe.Path); err != nil {
+		c.logger.Error("remembered path cleanup failed", "path", pe.Path, "error", err)
 	}
 }
 

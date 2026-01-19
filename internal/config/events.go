@@ -88,12 +88,7 @@ func publishConfigReloaded(old, new *Config) {
 			"changed_sections", changedSections)
 	}
 
-	payload := events.ConfigReloadEvent{
-		ChangedSections:   changedSections,
-		ReloadableChanges: reloadable,
-	}
-
-	event := events.NewEvent(events.ConfigReloaded, payload)
+	event := events.NewConfigReloaded(changedSections, reloadable)
 	if err := bus.Publish(context.Background(), event); err != nil {
 		slog.Error("failed to publish config reload event", "error", err)
 	}
@@ -109,11 +104,7 @@ func publishConfigReloadFailed(err error) {
 		return
 	}
 
-	payload := events.ConfigReloadEvent{
-		Error: err.Error(),
-	}
-
-	event := events.NewEvent(events.ConfigReloadFailed, payload)
+	event := events.NewConfigReloadFailed(err)
 	if pubErr := bus.Publish(context.Background(), event); pubErr != nil {
 		slog.Error("failed to publish config reload failed event", "error", pubErr)
 	}

@@ -496,49 +496,34 @@ func (q *Queue) publishAnalysisComplete(path string, result *AnalysisResult) {
 		analysisType = events.AnalysisSemantic
 	}
 
-	q.bus.Publish(q.ctx, events.NewEvent(events.AnalysisComplete, &events.AnalysisEvent{
-		Path:         path,
-		ContentHash:  result.ContentHash,
-		AnalysisType: analysisType,
-		Duration:     result.ProcessingTime,
-	}))
+	q.bus.Publish(q.ctx, events.NewAnalysisComplete(
+		path,
+		result.ContentHash,
+		analysisType,
+		result.ProcessingTime,
+	))
 }
 
 // publishAnalysisFailed publishes a failure event.
 func (q *Queue) publishAnalysisFailed(path string, err error) {
-	q.bus.Publish(q.ctx, events.NewEvent(events.AnalysisFailed, &events.AnalysisEvent{
-		Path:  path,
-		Error: err.Error(),
-	}))
+	q.bus.Publish(q.ctx, events.NewAnalysisFailed(path, err))
 }
 
 // publishGraphPersistenceFailed publishes a graph persistence failure event.
 func (q *Queue) publishGraphPersistenceFailed(path string, err error, retries int) {
-	q.bus.Publish(q.ctx, events.NewEvent(events.GraphPersistenceFailed, &events.GraphEvent{
-		Path:    path,
-		Error:   err.Error(),
-		Retries: retries,
-	}))
+	q.bus.Publish(q.ctx, events.NewGraphPersistenceFailed(path, "", err, retries))
 }
 
 // publishSemanticAnalysisFailed publishes a semantic analysis failure event.
 func (q *Queue) publishSemanticAnalysisFailed(path string, err error) {
 	metrics.SemanticAnalysisFailures.Inc()
-	q.bus.Publish(q.ctx, events.NewEvent(events.SemanticAnalysisFailed, &events.AnalysisEvent{
-		Path:         path,
-		AnalysisType: events.AnalysisSemantic,
-		Error:        err.Error(),
-	}))
+	q.bus.Publish(q.ctx, events.NewSemanticAnalysisFailed(path, err))
 }
 
 // publishEmbeddingsGenerationFailed publishes an embeddings generation failure event.
 func (q *Queue) publishEmbeddingsGenerationFailed(path string, err error) {
 	metrics.EmbeddingsGenerationFailures.Inc()
-	q.bus.Publish(q.ctx, events.NewEvent(events.EmbeddingsGenerationFailed, &events.AnalysisEvent{
-		Path:         path,
-		AnalysisType: events.AnalysisEmbeddings,
-		Error:        err.Error(),
-	}))
+	q.bus.Publish(q.ctx, events.NewEmbeddingsGenerationFailed(path, err))
 }
 
 // CollectMetrics implements metrics.MetricsProvider.

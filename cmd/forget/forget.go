@@ -9,7 +9,8 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/cmdutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/registry"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemonclient"
 )
 
 // Flag variables for the forget command.
@@ -48,49 +49,29 @@ func validateForget(cmd *cobra.Command, args []string) error {
 
 func runForget(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+	out := cmd.OutOrStdout()
 	absPath, err := cmdutil.ResolvePath(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to resolve path; %w", err)
 	}
 
-	// Open registry
-	registryPath, err := cmdutil.ResolvePath(config.Get().Daemon.RegistryPath)
+	client, err := daemonclient.NewFromConfig(config.Get())
 	if err != nil {
-		return fmt.Errorf("failed to resolve registry path; %w", err)
-	}
-	reg, err := registry.Open(ctx, registryPath)
-	if err != nil {
-		return fmt.Errorf("failed to open registry; %w", err)
-	}
-	defer reg.Close()
-
-	// Check if path exists in registry
-	_, err = reg.GetPath(ctx, absPath)
-	if err != nil {
-		if err == registry.ErrPathNotFound {
-			return fmt.Errorf("path is not remembered: %s", absPath)
-		}
-		return fmt.Errorf("failed to check path; %w", err)
+		return fmt.Errorf("failed to initialize daemon client; %w", err)
 	}
 
-	// Delete file states unless --keep-data is specified
-	if !forgetKeepData {
-		err = reg.DeleteFileStatesForPath(ctx, absPath)
-		if err != nil {
-			return fmt.Errorf("failed to delete file states; %w", err)
-		}
-	}
-
-	// Remove path from registry
-	err = reg.RemovePath(ctx, absPath)
+	_, err = client.Forget(ctx, daemon.ForgetRequest{
+		Path:     absPath,
+		KeepData: forgetKeepData,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to forget path; %w", err)
+		return fmt.Errorf("forget request failed; %w", err)
 	}
 
 	if forgetKeepData {
-		fmt.Printf("Forgot: %s (data preserved)\n", absPath)
+		fmt.Fprintf(out, "Forgot: %s (data preserved)\n", absPath)
 	} else {
-		fmt.Printf("Forgot: %s\n", absPath)
+		fmt.Fprintf(out, "Forgot: %s\n", absPath)
 	}
 
 	return nil

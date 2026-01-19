@@ -21,10 +21,7 @@ func NewJobRunner(bus *events.EventBus) *JobRunner {
 func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.Context) RunResult) RunResult {
 	started := time.Now()
 	if jr.bus != nil {
-		jr.bus.Publish(ctx, events.NewEvent(events.JobStarted, map[string]any{
-			"name":       job.Name(),
-			"started_at": started,
-		}))
+		jr.bus.Publish(ctx, events.NewJobStarted(job.Name(), started))
 	}
 
 	result := fn(ctx)
@@ -36,24 +33,24 @@ func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.
 	}
 
 	if jr.bus != nil {
-		jr.bus.Publish(ctx, events.NewEvent(events.JobCompleted, map[string]any{
-			"name":        job.Name(),
-			"status":      result.Status,
-			"error":       result.Error,
-			"counts":      result.Counts,
-			"details":     result.Details,
-			"started_at":  result.StartedAt,
-			"finished_at": result.FinishedAt,
-		}))
+		jr.bus.Publish(ctx, events.NewJobCompleted(
+			job.Name(),
+			string(result.Status),
+			result.Error,
+			result.Counts,
+			result.Details,
+			result.StartedAt,
+			result.FinishedAt,
+		))
 		if result.Status == RunFailed {
-			jr.bus.Publish(ctx, events.NewEvent(events.JobFailed, map[string]any{
-				"name":        job.Name(),
-				"error":       result.Error,
-				"counts":      result.Counts,
-				"details":     result.Details,
-				"started_at":  result.StartedAt,
-				"finished_at": result.FinishedAt,
-			}))
+			jr.bus.Publish(ctx, events.NewJobFailed(
+				job.Name(),
+				result.Error,
+				result.Counts,
+				result.Details,
+				result.StartedAt,
+				result.FinishedAt,
+			))
 		}
 	}
 

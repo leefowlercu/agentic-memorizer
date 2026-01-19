@@ -528,9 +528,7 @@ func TestCleaner_Start_SubscribesToEvents(t *testing.T) {
 	defer c.Stop()
 
 	// Publish a PathDeleted event
-	event := events.NewEvent(events.PathDeleted, events.FileEvent{
-		Path: "/test/deleted.go",
-	})
+	event := events.NewPathDeleted("/test/deleted.go")
 	bus.Publish(context.Background(), event)
 
 	// Wait for event processing
@@ -569,7 +567,7 @@ func TestCleaner_HandleDelete_InvalidPayload(t *testing.T) {
 	event := events.Event{
 		Type:      events.PathDeleted,
 		Timestamp: time.Now(),
-		Payload:   "wrong type", // Should be events.FileEvent
+		Payload:   "wrong type", // Should be *events.FileEvent
 	}
 	bus.Publish(context.Background(), event)
 
@@ -606,9 +604,7 @@ func TestCleaner_Stop_Unsubscribes(t *testing.T) {
 	reg.fileStates["/test/file.go"] = registry.FileState{Path: "/test/file.go"}
 
 	// Publish event after stop
-	event := events.NewEvent(events.PathDeleted, events.FileEvent{
-		Path: "/test/file.go",
-	})
+	event := events.NewPathDeleted("/test/file.go")
 	bus.Publish(context.Background(), event)
 
 	// Wait for any potential event processing
@@ -771,9 +767,7 @@ func TestCleaner_HandleDelete_EmptyPath(t *testing.T) {
 	defer c.Stop()
 
 	// Publish event with empty path
-	event := events.NewEvent(events.PathDeleted, events.FileEvent{
-		Path: "", // Empty path should be ignored
-	})
+	event := events.NewPathDeleted("") // Empty path should be ignored
 	bus.Publish(context.Background(), event)
 
 	// Wait for event processing
@@ -823,9 +817,7 @@ func TestCleaner_Stop_WaitsForInflightOperations(t *testing.T) {
 	}
 
 	// Publish delete event
-	event := events.NewEvent(events.PathDeleted, events.FileEvent{
-		Path: "/test/file.go",
-	})
+	event := events.NewPathDeleted("/test/file.go")
 	bus.Publish(context.Background(), event)
 
 	// Small delay to ensure event handler started

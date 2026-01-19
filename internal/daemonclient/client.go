@@ -1,9 +1,11 @@
 package daemonclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -80,7 +82,7 @@ func NormalizeBind(bind string) string {
 // Ready fetches /readyz health status.
 func (c *Client) Ready(ctx context.Context) (*daemon.HealthStatus, error) {
 	var status daemon.HealthStatus
-	if err := c.doJSON(ctx, http.MethodGet, "/readyz", &status); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/readyz", nil, &status); err != nil {
 		return nil, err
 	}
 	return &status, nil
@@ -94,16 +96,46 @@ func (c *Client) Rebuild(ctx context.Context, full bool) (*daemon.RebuildResult,
 	}
 
 	var result daemon.RebuildResult
-	if err := c.doJSON(ctx, http.MethodPost, path, &result); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, nil)
+// Remember registers a path with the daemon.
+func (c *Client) Remember(ctx context.Context, req daemon.RememberRequest) (*daemon.RememberResponse, error) {
+	var result daemon.RememberResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/remember", req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// Forget removes a remembered path from the daemon.
+func (c *Client) Forget(ctx context.Context, req daemon.ForgetRequest) (*daemon.ForgetResponse, error) {
+	var result daemon.ForgetResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/forget", req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) doJSON(ctx context.Context, method, path string, in, out any) error {
+	var body io.Reader
+	if in != nil {
+		buf := &bytes.Buffer{}
+		if err := json.NewEncoder(buf).Encode(in); err != nil {
+			return fmt.Errorf("failed to encode request; %w", err)
+		}
+		body = buf
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return fmt.Errorf("failed to create request; %w", err)
+	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 
 	resp, err := c.httpClient.Do(req)

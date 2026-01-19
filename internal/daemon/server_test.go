@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -186,6 +187,129 @@ func TestServer_Rebuild_NoHandler(t *testing.T) {
 
 	if response.Error != "rebuild not available" {
 		t.Errorf("Response error = %q, want %q", response.Error, "rebuild not available")
+	}
+}
+
+func TestServer_Remember_NoHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/remember", bytes.NewBufferString(`{"path":"/tmp/test"}`))
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /remember without handler status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Error != "remember not available" {
+		t.Errorf("response error = %q, want %q", response.Error, "remember not available")
+	}
+}
+
+func TestServer_Remember_Success(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetRememberFunc(func(ctx context.Context, req RememberRequest) (*RememberResponse, error) {
+		if req.Path == "" {
+			t.Error("expected path in request")
+		}
+		return &RememberResponse{Status: RememberStatusAdded, Path: req.Path}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/remember", bytes.NewBufferString(`{"path":"/tmp/test"}`))
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("POST /remember status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var response RememberResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Status != RememberStatusAdded {
+		t.Errorf("response status = %q, want %q", response.Status, RememberStatusAdded)
+	}
+	if response.Path != "/tmp/test" {
+		t.Errorf("response path = %q, want %q", response.Path, "/tmp/test")
+	}
+}
+
+func TestServer_Forget_NoHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/forget", bytes.NewBufferString(`{"path":"/tmp/test","keep_data":true}`))
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /forget without handler status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Error != "forget not available" {
+		t.Errorf("response error = %q, want %q", response.Error, "forget not available")
+	}
+}
+
+func TestServer_Forget_Success(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetForgetFunc(func(ctx context.Context, req ForgetRequest) (*ForgetResponse, error) {
+		if req.Path == "" {
+			t.Error("expected path in request")
+		}
+		return &ForgetResponse{Status: ForgetStatusForgotten, Path: req.Path, KeepData: req.KeepData}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/forget", bytes.NewBufferString(`{"path":"/tmp/test","keep_data":false}`))
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("POST /forget status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var response ForgetResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Status != ForgetStatusForgotten {
+		t.Errorf("response status = %q, want %q", response.Status, ForgetStatusForgotten)
+	}
+	if response.Path != "/tmp/test" {
+		t.Errorf("response path = %q, want %q", response.Path, "/tmp/test")
+	}
+	if response.KeepData {
+		t.Error("expected keep_data to be false")
 	}
 }
 

@@ -3,18 +3,24 @@ package remember
 import (
 	"bytes"
 	"context"
-
+	"net"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/cobra"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 	"github.com/leefowlercu/agentic-memorizer/internal/testutil"
 )
 
 func TestRememberCmd_Basic(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{testDir})
@@ -29,7 +35,7 @@ func TestRememberCmd_Basic(t *testing.T) {
 
 	// Verify path was added to registry
 	ctx := context.Background()
-	reg, err := registry.Open(ctx, env.RegistryPath())
+	reg, err := registry.Open(ctx, server.env.RegistryPath())
 	if err != nil {
 		t.Fatalf("failed to open registry: %v", err)
 	}
@@ -45,8 +51,8 @@ func TestRememberCmd_Basic(t *testing.T) {
 }
 
 func TestRememberCmd_WithSkipFlags(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Use --set-skip-ext to replace defaults entirely
 	cmd := createTestCommand()
@@ -59,7 +65,7 @@ func TestRememberCmd_WithSkipFlags(t *testing.T) {
 
 	// Verify config was stored
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -75,8 +81,8 @@ func TestRememberCmd_WithSkipFlags(t *testing.T) {
 }
 
 func TestRememberCmd_WithIncludeFlags(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{testDir, "--add-include-file=.env,.envrc"})
@@ -87,7 +93,7 @@ func TestRememberCmd_WithIncludeFlags(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -97,8 +103,8 @@ func TestRememberCmd_WithIncludeFlags(t *testing.T) {
 }
 
 func TestRememberCmd_NonExistentPath(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	nonExistent := env.ConfigDir + "/doesnotexist"
+	server := setupRememberServer(t)
+	nonExistent := server.env.ConfigDir + "/doesnotexist"
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{nonExistent})
@@ -110,9 +116,9 @@ func TestRememberCmd_NonExistentPath(t *testing.T) {
 }
 
 func TestRememberCmd_FileInsteadOfDir(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
-	testFile := env.CreateTestFile(testDir, "file.txt", "content")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
+	testFile := server.env.CreateTestFile(testDir, "file.txt", "content")
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{testFile})
@@ -124,8 +130,8 @@ func TestRememberCmd_FileInsteadOfDir(t *testing.T) {
 }
 
 func TestRememberCmd_DuplicatePath(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Remember once
 	cmd1 := createTestCommand()
@@ -168,8 +174,8 @@ func TestRememberCmd_UseVisionFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := testutil.NewTestEnv(t)
-			testDir := env.CreateTestDir("testproject")
+			server := setupRememberServer(t)
+			testDir := server.env.CreateTestDir("testproject")
 
 			cmd := createTestCommand()
 			cmd.SetArgs([]string{testDir, tt.flag})
@@ -187,7 +193,7 @@ func TestRememberCmd_UseVisionFlag(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			reg, _ := registry.Open(ctx, env.RegistryPath())
+			reg, _ := registry.Open(ctx, server.env.RegistryPath())
 			defer reg.Close()
 
 			rp, _ := reg.GetPath(ctx, testDir)
@@ -207,8 +213,8 @@ func TestRememberCmd_UseVisionFlag(t *testing.T) {
 }
 
 func TestRememberCmd_DefaultsApplied(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Remember with no flags - defaults should be applied
 	cmd := createTestCommand()
@@ -220,7 +226,7 @@ func TestRememberCmd_DefaultsApplied(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -244,8 +250,8 @@ func TestRememberCmd_DefaultsApplied(t *testing.T) {
 }
 
 func TestRememberCmd_AddSkipExtMergesDefaults(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Add a unique extension not in defaults
 	cmd := createTestCommand()
@@ -257,7 +263,7 @@ func TestRememberCmd_AddSkipExtMergesDefaults(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -282,8 +288,8 @@ func TestRememberCmd_AddSkipExtMergesDefaults(t *testing.T) {
 }
 
 func TestRememberCmd_SetSkipExtReplacesDefaults(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Set extensions - should replace defaults
 	cmd := createTestCommand()
@@ -295,7 +301,7 @@ func TestRememberCmd_SetSkipExtReplacesDefaults(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -309,154 +315,67 @@ func TestRememberCmd_SetSkipExtReplacesDefaults(t *testing.T) {
 	}
 }
 
-func TestMergeUnique(t *testing.T) {
-	tests := []struct {
-		name      string
-		base      []string
-		additions []string
-		want      []string
-	}{
-		{
-			name:      "empty slices",
-			base:      nil,
-			additions: nil,
-			want:      []string{},
-		},
-		{
-			name:      "only base",
-			base:      []string{"a", "b"},
-			additions: nil,
-			want:      []string{"a", "b"},
-		},
-		{
-			name:      "only additions",
-			base:      nil,
-			additions: []string{"c", "d"},
-			want:      []string{"c", "d"},
-		},
-		{
-			name:      "no overlap",
-			base:      []string{"a", "b"},
-			additions: []string{"c", "d"},
-			want:      []string{"a", "b", "c", "d"},
-		},
-		{
-			name:      "with overlap",
-			base:      []string{"a", "b", "c"},
-			additions: []string{"b", "c", "d"},
-			want:      []string{"a", "b", "c", "d"},
-		},
-		{
-			name:      "duplicates in base",
-			base:      []string{"a", "a", "b"},
-			additions: []string{"c"},
-			want:      []string{"a", "b", "c"},
-		},
-		{
-			name:      "duplicates in additions",
-			base:      []string{"a"},
-			additions: []string{"b", "b", "c", "c"},
-			want:      []string{"a", "b", "c"},
-		},
-		{
-			name:      "duplicates in both",
-			base:      []string{"a", "a", "b"},
-			additions: []string{"b", "c", "c"},
-			want:      []string{"a", "b", "c"},
-		},
-		{
-			name:      "all same values",
-			base:      []string{"a", "a"},
-			additions: []string{"a", "a"},
-			want:      []string{"a"},
-		},
-		{
-			name:      "empty strings",
-			base:      []string{"", "a"},
-			additions: []string{"b", ""},
-			want:      []string{"", "a", "b"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := mergeUnique(tt.base, tt.additions)
-			if len(got) != len(tt.want) {
-				t.Fatalf("expected %d items, got %d", len(tt.want), len(got))
-			}
-			for i, v := range got {
-				if v != tt.want[i] {
-					t.Errorf("item %d: expected %q, got %q", i, tt.want[i], v)
-				}
-			}
-		})
-	}
-}
-
-func TestNormalizeExtensions(t *testing.T) {
-	tests := []struct {
-		name  string
-		input []string
-		want  []string
-	}{
-		{
-			name:  "already with dots",
-			input: []string{".log", ".tmp"},
-			want:  []string{".log", ".tmp"},
-		},
-		{
-			name:  "without dots",
-			input: []string{"log", "tmp"},
-			want:  []string{".log", ".tmp"},
-		},
-		{
-			name:  "mixed",
-			input: []string{".log", "tmp"},
-			want:  []string{".log", ".tmp"},
-		},
-		{
-			name:  "with spaces",
-			input: []string{" .log ", " tmp "},
-			want:  []string{".log", ".tmp"},
-		},
-		{
-			name:  "empty slice",
-			input: []string{},
-			want:  []string{},
-		},
-		{
-			name:  "nil slice",
-			input: nil,
-			want:  []string{},
-		},
-		{
-			name:  "empty string in slice",
-			input: []string{".go", "", ".py"},
-			want:  []string{".go", "", ".py"},
-		},
-		{
-			name:  "whitespace only string",
-			input: []string{".go", "   ", ".py"},
-			want:  []string{".go", "", ".py"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeExtensions(tt.input)
-			if len(got) != len(tt.want) {
-				t.Fatalf("expected %d extensions, got %d", len(tt.want), len(got))
-			}
-			for i, ext := range got {
-				if ext != tt.want[i] {
-					t.Errorf("extension %d: expected %q, got %q", i, tt.want[i], ext)
-				}
-			}
-		})
-	}
-}
-
 // Helper functions
+
+type rememberTestServer struct {
+	env *testutil.TestEnv
+}
+
+func setupRememberServer(t *testing.T) *rememberTestServer {
+	t.Helper()
+
+	env := testutil.NewTestEnv(t)
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, env.RegistryPath())
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+
+	bus := events.NewBus()
+	service := daemon.NewRememberService(reg, bus, config.Get().Defaults)
+
+	server := daemon.NewServer(daemon.NewHealthManager(), daemon.ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+	server.SetRememberFunc(service.Remember)
+	server.SetForgetFunc(service.Forget)
+
+	httpServer := httptest.NewServer(server.Handler())
+	setDaemonConfigForTest(t, httpServer.URL)
+
+	t.Cleanup(func() {
+		httpServer.Close()
+		bus.Close()
+		reg.Close()
+	})
+
+	return &rememberTestServer{env: env}
+}
+
+func setDaemonConfigForTest(t *testing.T, baseURL string) {
+	t.Helper()
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("failed to parse server url: %v", err)
+	}
+
+	host, portStr, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		t.Fatalf("failed to parse server host: %v", err)
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("failed to parse server port: %v", err)
+	}
+
+	cfg := config.Get()
+	cfg.Daemon.HTTPBind = host
+	cfg.Daemon.HTTPPort = port
+}
 
 func createTestCommand() *cobra.Command {
 	// Reset flag variables
@@ -504,230 +423,9 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-func TestHasModificationFlags(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{
-			name: "no flags",
-			args: []string{"/tmp/test"},
-			want: false,
-		},
-		{
-			name: "add-skip-ext flag",
-			args: []string{"/tmp/test", "--add-skip-ext=.log"},
-			want: true,
-		},
-		{
-			name: "set-skip-ext flag",
-			args: []string{"/tmp/test", "--set-skip-ext=.log"},
-			want: true,
-		},
-		{
-			name: "add-skip-dir flag",
-			args: []string{"/tmp/test", "--add-skip-dir=vendor"},
-			want: true,
-		},
-		{
-			name: "set-skip-dir flag",
-			args: []string{"/tmp/test", "--set-skip-dir=vendor"},
-			want: true,
-		},
-		{
-			name: "add-skip-file flag",
-			args: []string{"/tmp/test", "--add-skip-file=Makefile"},
-			want: true,
-		},
-		{
-			name: "set-skip-file flag",
-			args: []string{"/tmp/test", "--set-skip-file=Makefile"},
-			want: true,
-		},
-		{
-			name: "add-include-ext flag",
-			args: []string{"/tmp/test", "--add-include-ext=.go"},
-			want: true,
-		},
-		{
-			name: "add-include-dir flag",
-			args: []string{"/tmp/test", "--add-include-dir=src"},
-			want: true,
-		},
-		{
-			name: "add-include-file flag",
-			args: []string{"/tmp/test", "--add-include-file=.env"},
-			want: true,
-		},
-		{
-			name: "skip-hidden flag",
-			args: []string{"/tmp/test", "--skip-hidden=false"},
-			want: true,
-		},
-		{
-			name: "use-vision flag",
-			args: []string{"/tmp/test", "--use-vision=true"},
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := createTestCommand()
-			cmd.SetArgs(tt.args)
-			cmd.ParseFlags(tt.args)
-
-			got := hasModificationFlags(cmd)
-			if got != tt.want {
-				t.Errorf("hasModificationFlags() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBuildUpdatedConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		existing *registry.PathConfig
-		args     []string
-		check    func(t *testing.T, cfg *registry.PathConfig)
-	}{
-		{
-			name: "override skip-hidden",
-			existing: &registry.PathConfig{
-				SkipHidden:     true,
-				SkipExtensions: []string{".exe"},
-			},
-			args: []string{"/tmp/test", "--skip-hidden=false"},
-			check: func(t *testing.T, cfg *registry.PathConfig) {
-				if cfg.SkipHidden {
-					t.Error("expected SkipHidden to be false")
-				}
-				// Original extension should be preserved
-				if len(cfg.SkipExtensions) != 1 || cfg.SkipExtensions[0] != ".exe" {
-					t.Error("expected SkipExtensions to be preserved")
-				}
-			},
-		},
-		{
-			name: "add skip extension to existing",
-			existing: &registry.PathConfig{
-				SkipExtensions: []string{".exe", ".dll"},
-			},
-			args: []string{"/tmp/test", "--add-skip-ext=.log"},
-			check: func(t *testing.T, cfg *registry.PathConfig) {
-				if len(cfg.SkipExtensions) != 3 {
-					t.Errorf("expected 3 skip extensions, got %d", len(cfg.SkipExtensions))
-				}
-				hasLog := false
-				hasExe := false
-				for _, ext := range cfg.SkipExtensions {
-					if ext == ".log" {
-						hasLog = true
-					}
-					if ext == ".exe" {
-						hasExe = true
-					}
-				}
-				if !hasLog {
-					t.Error("expected .log to be added")
-				}
-				if !hasExe {
-					t.Error("expected .exe to be preserved")
-				}
-			},
-		},
-		{
-			name: "set skip extension replaces existing",
-			existing: &registry.PathConfig{
-				SkipExtensions: []string{".exe", ".dll"},
-			},
-			args: []string{"/tmp/test", "--set-skip-ext=.only"},
-			check: func(t *testing.T, cfg *registry.PathConfig) {
-				if len(cfg.SkipExtensions) != 1 {
-					t.Errorf("expected 1 skip extension, got %d", len(cfg.SkipExtensions))
-				}
-				if cfg.SkipExtensions[0] != ".only" {
-					t.Errorf("expected .only, got %s", cfg.SkipExtensions[0])
-				}
-			},
-		},
-		{
-			name: "add include file to existing",
-			existing: &registry.PathConfig{
-				IncludeFiles: []string{".env"},
-			},
-			args: []string{"/tmp/test", "--add-include-file=.envrc"},
-			check: func(t *testing.T, cfg *registry.PathConfig) {
-				if len(cfg.IncludeFiles) != 2 {
-					t.Errorf("expected 2 include files, got %d", len(cfg.IncludeFiles))
-				}
-			},
-		},
-		{
-			name: "set use-vision",
-			existing: &registry.PathConfig{
-				UseVision: nil,
-			},
-			args: []string{"/tmp/test", "--use-vision=false"},
-			check: func(t *testing.T, cfg *registry.PathConfig) {
-				if cfg.UseVision == nil {
-					t.Fatal("expected UseVision to be set")
-				}
-				if *cfg.UseVision {
-					t.Error("expected UseVision to be false")
-				}
-			},
-		},
-		{
-			name:     "nil existing config",
-			existing: nil,
-			args:     []string{"/tmp/test", "--add-skip-ext=.log"},
-			check: func(t *testing.T, cfg *registry.PathConfig) {
-				if cfg == nil {
-					t.Fatal("expected config to not be nil")
-				}
-				hasLog := false
-				for _, ext := range cfg.SkipExtensions {
-					if ext == ".log" {
-						hasLog = true
-					}
-				}
-				if !hasLog {
-					t.Error("expected .log to be added")
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := createTestCommand()
-			cmd.SetArgs(tt.args)
-			cmd.ParseFlags(tt.args)
-
-			// Parse use-vision flag if present
-			if useVisionFlag != "" {
-				switch useVisionFlag {
-				case "true":
-					v := true
-					rememberUseVision = &v
-				case "false":
-					v := false
-					rememberUseVision = &v
-				}
-			}
-
-			got := buildUpdatedConfig(cmd, tt.existing)
-			tt.check(t, got)
-		})
-	}
-}
-
 func TestRememberCmd_UpdateExistingPath(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Remember once with initial config
 	cmd1 := createTestCommand()
@@ -739,7 +437,7 @@ func TestRememberCmd_UpdateExistingPath(t *testing.T) {
 
 	// Verify initial config
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	rp1, _ := reg.GetPath(ctx, testDir)
 	reg.Close()
 
@@ -757,7 +455,7 @@ func TestRememberCmd_UpdateExistingPath(t *testing.T) {
 	}
 
 	// Verify config was updated
-	reg2, _ := registry.Open(ctx, env.RegistryPath())
+	reg2, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg2.Close()
 
 	rp2, _ := reg2.GetPath(ctx, testDir)
@@ -785,9 +483,9 @@ func TestRememberCmd_UpdateExistingPath(t *testing.T) {
 	}
 }
 
-func TestBuildUpdatedConfig_MultipleAddFlags(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+func TestRememberCmd_MultipleAddFlags(t *testing.T) {
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Remember with initial config
 	cmd1 := createTestCommand()
@@ -809,7 +507,7 @@ func TestBuildUpdatedConfig_MultipleAddFlags(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -842,9 +540,9 @@ func TestBuildUpdatedConfig_MultipleAddFlags(t *testing.T) {
 	}
 }
 
-func TestBuildUpdatedConfig_AddSkipDir(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+func TestRememberCmd_AddSkipDir(t *testing.T) {
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Remember with initial config that has some skip dirs
 	cmd1 := createTestCommand()
@@ -861,7 +559,7 @@ func TestBuildUpdatedConfig_AddSkipDir(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -879,9 +577,9 @@ func TestBuildUpdatedConfig_AddSkipDir(t *testing.T) {
 	}
 }
 
-func TestBuildUpdatedConfig_SetSkipDirReplacesExisting(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
+func TestRememberCmd_SetSkipDirReplacesExisting(t *testing.T) {
+	server := setupRememberServer(t)
+	testDir := server.env.CreateTestDir("testproject")
 
 	// Remember with initial config
 	cmd1 := createTestCommand()
@@ -898,7 +596,7 @@ func TestBuildUpdatedConfig_SetSkipDirReplacesExisting(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
+	reg, _ := registry.Open(ctx, server.env.RegistryPath())
 	defer reg.Close()
 
 	rp, _ := reg.GetPath(ctx, testDir)
@@ -909,36 +607,5 @@ func TestBuildUpdatedConfig_SetSkipDirReplacesExisting(t *testing.T) {
 	}
 	if rp.Config.SkipDirectories[0] != "dist" {
 		t.Errorf("expected dist, got %s", rp.Config.SkipDirectories[0])
-	}
-}
-
-func TestRememberCmd_UpdateExistingPath_ReWalkWarning(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	testDir := env.CreateTestDir("testproject")
-
-	// Remember once
-	cmd1 := createTestCommand()
-	cmd1.SetArgs([]string{testDir})
-	cmd1.Execute()
-
-	// Remember again with modification - daemon isn't running so re-walk will fail
-	cmd2 := createTestCommand()
-	cmd2.SetArgs([]string{testDir, "--skip-hidden=false"})
-
-	err := cmd2.Execute()
-	// Command should succeed even if re-walk fails
-	// The warning is printed to stdout via fmt.Printf (visible in test output)
-	if err != nil {
-		t.Fatalf("update should succeed even if re-walk fails: %v", err)
-	}
-
-	// Verify config was actually updated
-	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	defer reg.Close()
-
-	rp, _ := reg.GetPath(ctx, testDir)
-	if rp.Config.SkipHidden {
-		t.Error("expected SkipHidden to be false after update")
 	}
 }

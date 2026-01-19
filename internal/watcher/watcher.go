@@ -459,25 +459,9 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 	var event events.Event
 	switch ce.Type {
 	case EventCreate, EventModify:
-		event = events.Event{
-			Type:      events.FileChanged,
-			Timestamp: time.Now(),
-			Payload: &events.FileEvent{
-				Path:        ce.Path,
-				ContentHash: contentHash,
-				Size:        size,
-				ModTime:     modTime,
-				IsNew:       ce.Type == EventCreate,
-			},
-		}
+		event = events.NewFileChanged(ce.Path, contentHash, size, modTime, ce.Type == EventCreate)
 	case EventDelete:
-		event = events.Event{
-			Type:      events.PathDeleted,
-			Timestamp: time.Now(),
-			Payload: &events.FileEvent{
-				Path: ce.Path,
-			},
-		}
+		event = events.NewPathDeleted(ce.Path)
 	}
 
 	if err := w.bus.Publish(ctx, event); err != nil {

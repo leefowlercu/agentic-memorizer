@@ -51,7 +51,7 @@ func (s *Server) stopEventListener() {
 // handleAnalysisCompleteEvent handles AnalysisComplete events and sends
 // file resource update notifications to subscribed clients.
 func (s *Server) handleAnalysisCompleteEvent(event events.Event) {
-	analysisEvent, ok := event.Payload.(events.AnalysisEvent)
+	analysisEvent, ok := event.Payload.(*events.AnalysisEvent)
 	if !ok {
 		slog.Warn("MCP received invalid AnalysisComplete event payload",
 			"type", event.Type,
@@ -83,7 +83,7 @@ func (s *Server) handleAnalysisCompleteEvent(event events.Event) {
 // handleRebuildCompleteEvent handles RebuildComplete events and sends
 // index resource update notifications to subscribed clients.
 func (s *Server) handleRebuildCompleteEvent(event events.Event) {
-	rebuildEvent, ok := event.Payload.(events.RebuildCompleteEvent)
+	rebuildEvent, ok := event.Payload.(*events.RebuildCompleteEvent)
 	if !ok {
 		slog.Warn("MCP received invalid RebuildComplete event payload",
 			"type", event.Type,

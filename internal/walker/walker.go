@@ -295,18 +295,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		}
 
 		// Publish file discovered event
-		event := events.Event{
-			Type:      events.FileDiscovered,
-			Timestamp: time.Now(),
-			Payload: &events.FileEvent{
-				Path:        filePath,
-				ContentHash: contentHash,
-				Size:        info.Size(),
-				ModTime:     info.ModTime(),
-				IsNew:       !incremental,
-			},
-		}
-
+		event := events.NewFileDiscovered(filePath, contentHash, info.Size(), info.ModTime(), !incremental)
 		if err := w.bus.Publish(ctx, event); err != nil {
 			return fmt.Errorf("failed to publish event; %w", err)
 		}

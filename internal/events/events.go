@@ -43,9 +43,14 @@ const (
 	// ConfigReloadFailed is published when configuration reload fails.
 	ConfigReloadFailed EventType = "config.reload_failed"
 
-	// RememberedPathRemoved is published when a remembered path is auto-removed
-	// due to the directory no longer existing on the filesystem.
+	// RememberedPathRemoved is published when a remembered path is removed.
 	RememberedPathRemoved EventType = "remembered_path.removed"
+
+	// RememberedPathAdded is published when a new path is remembered.
+	RememberedPathAdded EventType = "remembered_path.added"
+
+	// RememberedPathUpdated is published when a remembered path is updated.
+	RememberedPathUpdated EventType = "remembered_path.updated"
 
 	// RebuildComplete is published when a rebuild operation finishes.
 	RebuildComplete EventType = "rebuild.complete"
@@ -79,110 +84,6 @@ func NewEvent(eventType EventType, payload any) Event {
 		Timestamp: time.Now(),
 		Payload:   payload,
 	}
-}
-
-// FileEvent contains data for file-related events (discovered, changed, deleted).
-type FileEvent struct {
-	// Path is the absolute path to the file.
-	Path string
-
-	// ContentHash is the SHA256 hash of the file content (empty for deleted files).
-	ContentHash string
-
-	// Size is the file size in bytes (0 for deleted files).
-	Size int64
-
-	// ModTime is the file modification time (zero for deleted files).
-	ModTime time.Time
-
-	// IsNew indicates if this is a newly discovered file (for FileDiscovered events).
-	IsNew bool
-}
-
-// AnalysisEvent contains data for analysis-related events.
-type AnalysisEvent struct {
-	// Path is the absolute path to the analyzed file.
-	Path string
-
-	// ContentHash is the SHA256 hash of the analyzed content.
-	ContentHash string
-
-	// AnalysisType indicates what type of analysis was performed.
-	AnalysisType AnalysisType
-
-	// Duration is how long the analysis took.
-	Duration time.Duration
-
-	// Error contains the error message if analysis failed (for AnalysisFailed events).
-	Error string
-}
-
-// GraphEvent contains data for graph-related events.
-type GraphEvent struct {
-	// Path is the absolute path to the file that couldn't be persisted.
-	Path string
-
-	// Operation describes what graph operation failed (e.g., "upsert_file", "set_tags").
-	Operation string
-
-	// Error contains the error message.
-	Error string
-
-	// Retries is the number of retry attempts made before giving up.
-	Retries int
-}
-
-// AnalysisType identifies the type of analysis performed.
-type AnalysisType string
-
-const (
-	// AnalysisMetadata indicates metadata-only analysis was performed.
-	AnalysisMetadata AnalysisType = "metadata"
-
-	// AnalysisSemantic indicates semantic analysis was performed.
-	AnalysisSemantic AnalysisType = "semantic"
-
-	// AnalysisEmbeddings indicates embeddings generation was performed.
-	AnalysisEmbeddings AnalysisType = "embeddings"
-
-	// AnalysisFull indicates full analysis (metadata + semantic + embeddings) was performed.
-	AnalysisFull AnalysisType = "full"
-)
-
-// ConfigReloadEvent contains data for config reload events.
-type ConfigReloadEvent struct {
-	// ChangedSections lists which config sections were modified.
-	ChangedSections []string
-
-	// ReloadableChanges indicates if all changes are hot-reloadable.
-	ReloadableChanges bool
-
-	// Error contains the error message if reload failed (for ConfigReloadFailed events).
-	Error string
-}
-
-// RememberedPathRemovedEvent contains data for remembered path removal events.
-type RememberedPathRemovedEvent struct {
-	// Path is the remembered path that was removed.
-	Path string
-
-	// Reason describes why the path was removed (e.g., "not_found").
-	Reason string
-}
-
-// RebuildCompleteEvent contains data for rebuild completion events.
-type RebuildCompleteEvent struct {
-	// FilesQueued is the number of files queued for analysis.
-	FilesQueued int
-
-	// DirsProcessed is the number of directories traversed.
-	DirsProcessed int
-
-	// Duration is how long the rebuild took.
-	Duration time.Duration
-
-	// Full indicates if this was a full rebuild (true) or incremental (false).
-	Full bool
 }
 
 // EventHandler is a function that processes events.

@@ -51,7 +51,7 @@ func TestReload_PublishesConfigReloadedEvent(t *testing.T) {
 		if event.Type != events.ConfigReloaded {
 			t.Fatalf("expected event type %s, got %s", events.ConfigReloaded, event.Type)
 		}
-		payload, ok := event.Payload.(events.ConfigReloadEvent)
+		payload, ok := event.Payload.(*events.ConfigReloadEvent)
 		if !ok {
 			t.Fatalf("expected payload type ConfigReloadEvent, got %T", event.Payload)
 		}
@@ -108,7 +108,7 @@ func TestReload_PublishesConfigReloadFailedEvent(t *testing.T) {
 		if event.Type != events.ConfigReloadFailed {
 			t.Fatalf("expected event type %s, got %s", events.ConfigReloadFailed, event.Type)
 		}
-		payload, ok := event.Payload.(events.ConfigReloadEvent)
+		payload, ok := event.Payload.(*events.ConfigReloadEvent)
 		if !ok {
 			t.Fatalf("expected payload type ConfigReloadEvent, got %T", event.Payload)
 		}

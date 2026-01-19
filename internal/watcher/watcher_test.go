@@ -593,7 +593,7 @@ func TestWatcher_PathConfigSkipExtensions(t *testing.T) {
 	// Check events - we should only see the .go file
 	receivedEvents := bus.Events()
 	for _, ev := range receivedEvents {
-		if fe, ok := ev.Payload.(events.FileEvent); ok {
+		if fe, ok := ev.Payload.(*events.FileEvent); ok {
 			if strings.HasSuffix(fe.Path, ".log") {
 				t.Errorf("unexpected event for .log file: %s", fe.Path)
 			}

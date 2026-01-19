@@ -34,12 +34,7 @@ func TestBus_PublishSubscribe(t *testing.T) {
 	})
 	defer unsubscribe()
 
-	event := NewEvent(FileDiscovered, FileEvent{
-		Path:        "/test/file.go",
-		ContentHash: "abc123",
-		Size:        100,
-		IsNew:       true,
-	})
+	event := NewFileDiscovered("/test/file.go", "abc123", 100, time.Time{}, true)
 
 	err := bus.Publish(context.Background(), event)
 	if err != nil {
@@ -71,7 +66,7 @@ func TestBus_MultipleSubscribers(t *testing.T) {
 		defer unsubscribe()
 	}
 
-	event := NewEvent(FileChanged, FileEvent{Path: "/test/file.go"})
+	event := NewFileChanged("/test/file.go", "", 0, time.Time{}, false)
 	err := bus.Publish(context.Background(), event)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -355,7 +350,7 @@ func TestBus_WithBufferSize(t *testing.T) {
 
 func TestNewEvent(t *testing.T) {
 	before := time.Now()
-	event := NewEvent(FileDiscovered, FileEvent{Path: "/test"})
+	event := NewEvent(FileDiscovered, &FileEvent{Path: "/test"})
 	after := time.Now()
 
 	if event.Type != FileDiscovered {
@@ -366,12 +361,24 @@ func TestNewEvent(t *testing.T) {
 		t.Error("timestamp not within expected range")
 	}
 
-	payload, ok := event.Payload.(FileEvent)
+	payload, ok := event.Payload.(*FileEvent)
 	if !ok {
 		t.Fatal("expected FileEvent payload")
 	}
 	if payload.Path != "/test" {
 		t.Errorf("expected path /test, got %s", payload.Path)
+	}
+}
+
+func TestValidatePayload(t *testing.T) {
+	valid := NewFileDiscovered("/test/file.go", "abc123", 1, time.Time{}, true)
+	if err := ValidatePayload(valid); err != nil {
+		t.Fatalf("expected payload to validate, got error: %v", err)
+	}
+
+	invalid := NewEvent(FileDiscovered, "wrong type")
+	if err := ValidatePayload(invalid); err == nil {
+		t.Fatal("expected payload validation error, got nil")
 	}
 }
 
@@ -390,6 +397,8 @@ func TestEventTypes(t *testing.T) {
 		{GraphPersistenceFailed, "graph.persistence_failed"},
 		{ConfigReloaded, "config.reloaded"},
 		{ConfigReloadFailed, "config.reload_failed"},
+		{RememberedPathAdded, "remembered_path.added"},
+		{RememberedPathUpdated, "remembered_path.updated"},
 		{RememberedPathRemoved, "remembered_path.removed"},
 	}
 
@@ -414,10 +423,7 @@ func TestRememberedPathRemovedEvent(t *testing.T) {
 	defer unsubscribe()
 
 	// Publish a RememberedPathRemoved event
-	event := NewEvent(RememberedPathRemoved, RememberedPathRemovedEvent{
-		Path:   "/old/deleted/path",
-		Reason: "not_found",
-	})
+	event := NewRememberedPathRemoved("/old/deleted/path", "not_found", false)
 
 	err := bus.Publish(context.Background(), event)
 	if err != nil {
@@ -430,7 +436,7 @@ func TestRememberedPathRemovedEvent(t *testing.T) {
 		if receivedEvent.Type != RememberedPathRemoved {
 			t.Errorf("expected event type %s, got %s", RememberedPathRemoved, receivedEvent.Type)
 		}
-		payload, ok := receivedEvent.Payload.(RememberedPathRemovedEvent)
+		payload, ok := receivedEvent.Payload.(*RememberedPathRemovedEvent)
 		if !ok {
 			t.Fatal("expected RememberedPathRemovedEvent payload")
 		}
@@ -439,6 +445,9 @@ func TestRememberedPathRemovedEvent(t *testing.T) {
 		}
 		if payload.Reason != "not_found" {
 			t.Errorf("expected reason 'not_found', got %s", payload.Reason)
+		}
+		if payload.KeepData {
+			t.Error("expected keep_data to be false")
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Error("expected event to be received")

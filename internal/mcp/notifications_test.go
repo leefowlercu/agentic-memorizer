@@ -87,12 +87,7 @@ func TestHandleAnalysisCompleteEvent(t *testing.T) {
 	}
 
 	// Publish an analysis complete event
-	event := events.NewEvent(events.AnalysisComplete, events.AnalysisEvent{
-		Path:         "/test/file.go",
-		ContentHash:  "abc123",
-		AnalysisType: events.AnalysisFull,
-		Duration:     100 * time.Millisecond,
-	})
+	event := events.NewAnalysisComplete("/test/file.go", "abc123", events.AnalysisFull, 100*time.Millisecond)
 
 	if err := bus.Publish(ctx, event); err != nil {
 		t.Fatalf("Publish failed: %v", err)
@@ -154,12 +149,7 @@ func TestHandleRebuildCompleteEvent(t *testing.T) {
 	s.subs.Subscribe(ResourceURIIndex, subscriber)
 
 	// Publish a RebuildComplete event
-	event := events.NewEvent(events.RebuildComplete, events.RebuildCompleteEvent{
-		FilesQueued:   100,
-		DirsProcessed: 10,
-		Duration:      5 * time.Second,
-		Full:          true,
-	})
+	event := events.NewRebuildComplete(100, 10, 5*time.Second, true)
 
 	if err := bus.Publish(ctx, event); err != nil {
 		t.Fatalf("Publish failed: %v", err)
@@ -183,7 +173,7 @@ func TestHandleInvalidRebuildEventPayload(t *testing.T) {
 	event := events.Event{
 		Type:      events.RebuildComplete,
 		Timestamp: time.Now(),
-		Payload:   "invalid payload type", // Should be events.RebuildCompleteEvent
+		Payload:   "invalid payload type", // Should be *events.RebuildCompleteEvent
 	}
 
 	// Should not panic
@@ -338,7 +328,7 @@ func TestHandleInvalidEventPayload(t *testing.T) {
 	event := events.Event{
 		Type:      events.AnalysisComplete,
 		Timestamp: time.Now(),
-		Payload:   "invalid payload type", // Should be events.AnalysisEvent
+		Payload:   "invalid payload type", // Should be *events.AnalysisEvent
 	}
 
 	// Should not panic
@@ -352,11 +342,7 @@ func TestHandleEmptyPathEvent(t *testing.T) {
 	s := NewServer(g, reg, bus, DefaultConfig())
 
 	// Create event with empty path
-	event := events.NewEvent(events.AnalysisComplete, events.AnalysisEvent{
-		Path:         "",
-		ContentHash:  "abc123",
-		AnalysisType: events.AnalysisFull,
-	})
+	event := events.NewAnalysisComplete("", "abc123", events.AnalysisFull, 0)
 
 	// Should not panic and should exit early
 	s.handleAnalysisCompleteEvent(event)

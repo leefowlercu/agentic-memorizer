@@ -31,6 +31,12 @@ type RebuildResult struct {
 // RebuildFunc is a function that triggers a rebuild operation.
 type RebuildFunc func(ctx context.Context, full bool) (*RebuildResult, error)
 
+// RememberFunc handles remember requests.
+type RememberFunc func(ctx context.Context, req RememberRequest) (*RememberResponse, error)
+
+// ForgetFunc handles forget requests.
+type ForgetFunc func(ctx context.Context, req ForgetRequest) (*ForgetResponse, error)
+
 // Server is the HTTP server for daemon health endpoints.
 // It is safe for concurrent use.
 type Server struct {
@@ -42,6 +48,8 @@ type Server struct {
 	mcpHandler     http.Handler
 	metricsHandler http.Handler
 	rebuildFunc    RebuildFunc
+	rememberFunc   RememberFunc
+	forgetFunc     ForgetFunc
 }
 
 // NewServer creates a new HTTP server with the given health manager and config.
@@ -61,6 +69,8 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/healthz", s.handleHealthz)
 	s.router.Get("/readyz", s.handleReadyz)
 	s.router.Post("/rebuild", s.handleRebuild)
+	s.router.Post("/remember", s.handleRemember)
+	s.router.Post("/forget", s.handleForget)
 
 	// Mount MCP endpoints if handler is set
 	if s.mcpHandler != nil {
@@ -96,6 +106,16 @@ func (s *Server) SetMetricsHandler(handler http.Handler) {
 // SetRebuildFunc sets the function to call when rebuild is requested.
 func (s *Server) SetRebuildFunc(fn RebuildFunc) {
 	s.rebuildFunc = fn
+}
+
+// SetRememberFunc sets the function to call when remember is requested.
+func (s *Server) SetRememberFunc(fn RememberFunc) {
+	s.rememberFunc = fn
+}
+
+// SetForgetFunc sets the function to call when forget is requested.
+func (s *Server) SetForgetFunc(fn ForgetFunc) {
+	s.forgetFunc = fn
 }
 
 // Handler returns the HTTP handler for testing purposes.
@@ -166,6 +186,65 @@ func (s *Server) handleRebuild(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(result)
+}
+
+// handleRemember handles the /remember endpoint.
+func (s *Server) handleRemember(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.rememberFunc == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "remember not available")
+		return
+	}
+
+	var req RememberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := s.rememberFunc(r.Context(), req)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleForget handles the /forget endpoint.
+func (s *Server) handleForget(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.forgetFunc == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "forget not available")
+		return
+	}
+
+	var req ForgetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := s.forgetFunc(r.Context(), req)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func writeJSONError(w http.ResponseWriter, status int, message string) {
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(errorResponse{Error: message})
 }
 
 // Start starts the HTTP server and blocks until it's stopped.

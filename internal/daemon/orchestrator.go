@@ -71,6 +71,9 @@ type Orchestrator struct {
 	busDegraded      bool
 
 	jobComponents map[string]JobComponent
+
+	eventUnsubs []func()
+	runCtx      context.Context
 }
 
 // NewOrchestrator creates a new orchestrator for the daemon.
@@ -120,11 +123,21 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		return o.handleRebuildWithRecord(ctx, full, jobName)
 	})
 
+	if o.registry != nil {
+		rememberService := NewRememberService(o.registry, o.bus, cfg.Defaults, WithLogger(slog.Default().With("component", "remember")))
+		o.daemon.server.SetRememberFunc(rememberService.Remember)
+		o.daemon.server.SetForgetFunc(rememberService.Forget)
+	}
+
+	o.subscribeRememberedPathEvents()
+
 	return nil
 }
 
 // Start starts all orchestrated components.
 func (o *Orchestrator) Start(ctx context.Context) error {
+	o.runCtx = ctx
+
 	// Registry is already initialized and doesn't need a Start call
 
 	// Validate and clean missing remembered paths before starting components
@@ -232,6 +245,12 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 // Stop stops all orchestrated components in reverse order.
 func (o *Orchestrator) Stop(ctx context.Context) error {
 	slog.Info("stopping orchestrated components")
+
+	for _, unsub := range o.eventUnsubs {
+		unsub()
+	}
+	o.eventUnsubs = nil
+	o.runCtx = nil
 
 	// Cancel any component-level contexts
 	for name, cancel := range o.componentCancels {
@@ -383,13 +402,11 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 
 	// Publish rebuild complete event for MCP notifications
 	if o.bus != nil {
-		o.bus.Publish(ctx, events.NewEvent(events.RebuildComplete,
-			events.RebuildCompleteEvent{
-				FilesQueued:   int(stats.FilesDiscovered),
-				DirsProcessed: int(stats.DirsTraversed),
-				Duration:      duration,
-				Full:          full,
-			},
+		o.bus.Publish(ctx, events.NewRebuildComplete(
+			int(stats.FilesDiscovered),
+			int(stats.DirsTraversed),
+			duration,
+			full,
 		))
 	}
 
@@ -662,8 +679,7 @@ func (o *Orchestrator) Cleaner() *cleaner.Cleaner {
 }
 
 // validateRememberedPaths checks all remembered paths and removes those that
-// no longer exist. Returns the list of removed paths. Also cleans up associated
-// data (file_state entries and graph nodes) for removed paths.
+// no longer exist. Returns the list of removed paths.
 func (o *Orchestrator) validateRememberedPaths(ctx context.Context) []string {
 	if o.registry == nil {
 		return nil
@@ -679,28 +695,113 @@ func (o *Orchestrator) validateRememberedPaths(ctx context.Context) []string {
 	for _, path := range removed {
 		slog.Warn("removed missing remembered path", "path", path)
 
-		// Clean up graph nodes (best effort)
-		if o.cleaner != nil {
-			if err := o.cleaner.DeletePath(ctx, path); err != nil {
-				slog.Warn("failed to clean up graph for removed path",
-					"path", path,
-					"error", err,
-				)
-			}
-		}
-
 		// Emit event for observability
 		if o.bus != nil {
-			o.bus.Publish(ctx, events.NewEvent(events.RememberedPathRemoved,
-				events.RememberedPathRemovedEvent{
-					Path:   path,
-					Reason: "not_found",
-				},
-			))
+			o.bus.Publish(ctx, events.NewRememberedPathRemoved(path, "not_found", false))
 		}
 	}
 
 	return removed
+}
+
+func (o *Orchestrator) subscribeRememberedPathEvents() {
+	if o.bus == nil {
+		return
+	}
+
+	o.eventUnsubs = append(o.eventUnsubs,
+		o.bus.Subscribe(events.RememberedPathAdded, o.handleRememberedPathAdded),
+		o.bus.Subscribe(events.RememberedPathUpdated, o.handleRememberedPathUpdated),
+		o.bus.Subscribe(events.RememberedPathRemoved, o.handleRememberedPathRemoved),
+	)
+}
+
+func (o *Orchestrator) handleRememberedPathAdded(event events.Event) {
+	pe, ok := event.Payload.(*events.RememberedPathEvent)
+	if !ok {
+		slog.Warn("invalid remembered path added payload")
+		return
+	}
+	if pe.Path == "" {
+		slog.Warn("remembered path added event missing path")
+		return
+	}
+
+	if o.watcher != nil {
+		if err := o.watcher.Watch(pe.Path); err != nil {
+			slog.Warn("failed to watch remembered path", "path", pe.Path, "error", err)
+		}
+	}
+
+	o.triggerRememberedPathWalk(pe.Path)
+}
+
+func (o *Orchestrator) handleRememberedPathUpdated(event events.Event) {
+	pe, ok := event.Payload.(*events.RememberedPathEvent)
+	if !ok {
+		slog.Warn("invalid remembered path updated payload")
+		return
+	}
+	if pe.Path == "" {
+		slog.Warn("remembered path updated event missing path")
+		return
+	}
+
+	if o.watcher != nil {
+		if err := o.watcher.Unwatch(pe.Path); err != nil {
+			slog.Warn("failed to unwatch remembered path", "path", pe.Path, "error", err)
+		}
+		if err := o.watcher.Watch(pe.Path); err != nil {
+			slog.Warn("failed to rewatch remembered path", "path", pe.Path, "error", err)
+		}
+	}
+
+	o.triggerRememberedPathWalk(pe.Path)
+}
+
+func (o *Orchestrator) handleRememberedPathRemoved(event events.Event) {
+	pe, ok := event.Payload.(*events.RememberedPathRemovedEvent)
+	if !ok {
+		slog.Warn("invalid remembered path removed payload")
+		return
+	}
+	if pe.Path == "" {
+		slog.Warn("remembered path removed event missing path")
+		return
+	}
+
+	if o.watcher != nil {
+		if err := o.watcher.Unwatch(pe.Path); err != nil {
+			slog.Warn("failed to unwatch remembered path", "path", pe.Path, "error", err)
+		}
+	}
+}
+
+func (o *Orchestrator) triggerRememberedPathWalk(path string) {
+	if o.walker == nil {
+		return
+	}
+
+	ctx := o.eventContext()
+	go func() {
+		o.rebuildMu.Lock()
+		defer o.rebuildMu.Unlock()
+
+		if err := o.walker.Walk(ctx, path); err != nil {
+			if ctx.Err() != nil {
+				slog.Debug("remembered path walk canceled", "path", path)
+				return
+			}
+			slog.Warn("remembered path walk failed", "path", path, "error", err)
+		}
+	}()
+}
+
+func (o *Orchestrator) eventContext() context.Context {
+	if o.runCtx != nil {
+		return o.runCtx
+	}
+	return context.Background()
 }
 
 // watchRememberedPaths starts watching all remembered paths.

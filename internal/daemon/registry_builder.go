@@ -77,7 +77,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
 		RestartPolicy: RestartOnFailure,
-		Dependencies:  nil,
+		Dependencies:  []string{"bus"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
 			graphCfg := graph.Config{
 				Host:               cfg.Graph.Host,
@@ -89,10 +89,14 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 				EmbeddingDimension: cfg.Embeddings.Dimensions,
 				WriteQueueSize:     cfg.Graph.WriteQueueSize,
 			}
-			g := graph.NewFalkorDBGraph(
+			opts := []graph.Option{
 				graph.WithConfig(graphCfg),
 				graph.WithLogger(slog.Default().With("component", "graph")),
-			)
+			}
+			if deps.Bus != nil {
+				opts = append(opts, graph.WithBus(deps.Bus))
+			}
+			g := graph.NewFalkorDBGraph(opts...)
 			slog.Info("graph client initialized",
 				"host", graphCfg.Host,
 				"port", graphCfg.Port,

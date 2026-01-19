@@ -103,6 +103,9 @@ type watcher struct {
 
 	// errChan reports fatal errors (fsnotify error channel).
 	errChan chan error
+
+	// previousDegraded tracks if we were degraded on last check for transition detection.
+	previousDegraded bool
 }
 
 // New creates a new Watcher with the given dependencies.
@@ -203,13 +206,41 @@ func (w *watcher) addWatch(path string) error {
 		// Check for watch limit exhaustion
 		if isWatchLimitError(err) {
 			w.mu.Lock()
+			wasDegraded := w.previousDegraded
 			w.stats.DegradedMode = true
+			w.previousDegraded = true
+			watchCount := len(w.watchedPaths)
 			w.mu.Unlock()
-			w.logger.Warn("watch limit reached, entering degraded mode", "path", path)
+
+			// Emit degraded event only on transition
+			if !wasDegraded {
+				w.logger.Warn("watch limit reached, entering degraded mode", "path", path)
+				w.bus.Publish(context.Background(), events.NewWatcherDegraded(
+					"watch_limit_exhausted",
+					watchCount,
+					path,
+				))
+			}
 			return nil
 		}
 		return err
 	}
+
+	// Check for recovery from degraded mode
+	w.mu.Lock()
+	wasDegraded := w.previousDegraded
+	if wasDegraded {
+		w.stats.DegradedMode = false
+		w.previousDegraded = false
+	}
+	watchCount := len(w.watchedPaths)
+	w.mu.Unlock()
+
+	if wasDegraded {
+		w.logger.Info("watcher recovered from degraded mode")
+		w.bus.Publish(context.Background(), events.NewWatcherRecovered(watchCount))
+	}
+
 	return nil
 }
 

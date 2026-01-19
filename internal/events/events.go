@@ -37,6 +37,33 @@ const (
 	// GraphFatal signals a graph fatal error (e.g., connection loss).
 	GraphFatal EventType = "graph.fatal"
 
+	// GraphConnected is published when the graph client connects.
+	GraphConnected EventType = "graph.connected"
+
+	// GraphDisconnected is published when the graph client disconnects.
+	GraphDisconnected EventType = "graph.disconnected"
+
+	// GraphWriteQueueFull is published when the graph write queue is full.
+	GraphWriteQueueFull EventType = "graph.write_queue_full"
+
+	// QueueDegradationChanged is published when queue degradation mode changes.
+	QueueDegradationChanged EventType = "queue.degradation_changed"
+
+	// WatcherDegraded is published when the watcher enters degraded mode.
+	WatcherDegraded EventType = "watcher.degraded"
+
+	// WatcherRecovered is published when the watcher exits degraded mode.
+	WatcherRecovered EventType = "watcher.recovered"
+
+	// AnalysisSkipped is published when analysis is skipped for a file.
+	AnalysisSkipped EventType = "analysis.skipped"
+
+	// AnalysisSemanticComplete is published when semantic analysis completes.
+	AnalysisSemanticComplete EventType = "analysis.semantic_complete"
+
+	// AnalysisEmbeddingsComplete is published when embeddings generation completes.
+	AnalysisEmbeddingsComplete EventType = "analysis.embeddings_complete"
+
 	// ConfigReloaded is published when configuration is successfully reloaded.
 	ConfigReloaded EventType = "config.reloaded"
 
@@ -51,6 +78,9 @@ const (
 
 	// RememberedPathUpdated is published when a remembered path is updated.
 	RememberedPathUpdated EventType = "remembered_path.updated"
+
+	// RebuildStarted is published when a rebuild operation begins.
+	RebuildStarted EventType = "rebuild.started"
 
 	// RebuildComplete is published when a rebuild operation finishes.
 	RebuildComplete EventType = "rebuild.complete"

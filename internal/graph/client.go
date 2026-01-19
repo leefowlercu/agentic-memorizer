@@ -14,6 +14,7 @@ import (
 	"github.com/gomodule/redigo/redis"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
+	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 )
 
@@ -137,6 +138,12 @@ type FalkorDBGraph struct {
 	stopChan   chan struct{}
 
 	errChan chan error
+
+	// bus for publishing connection events (optional).
+	bus events.Bus
+
+	// lastQueueFullEmit tracks when we last emitted a write_queue_full event for rate limiting.
+	lastQueueFullEmit time.Time
 }
 
 // writeOp represents a queued write operation.
@@ -159,6 +166,13 @@ func WithConfig(cfg Config) Option {
 func WithLogger(logger *slog.Logger) Option {
 	return func(g *FalkorDBGraph) {
 		g.logger = logger
+	}
+}
+
+// WithBus sets the event bus for connection events.
+func WithBus(bus events.Bus) Option {
+	return func(g *FalkorDBGraph) {
+		g.bus = bus
 	}
 }
 
@@ -226,10 +240,16 @@ func (g *FalkorDBGraph) Start(ctx context.Context) error {
 	g.wg.Add(1)
 	go g.processWriteQueue()
 
+	endpoint := fmt.Sprintf("%s:%d", g.config.Host, g.config.Port)
 	g.logger.Info("connected to FalkorDB",
 		"host", g.config.Host,
 		"port", g.config.Port,
 		"graph", g.config.GraphName)
+
+	// Publish connected event
+	if g.bus != nil {
+		g.bus.Publish(ctx, events.NewGraphConnected(endpoint))
+	}
 
 	return nil
 }
@@ -271,7 +291,13 @@ func (g *FalkorDBGraph) Stop(ctx context.Context) error {
 	}
 
 	g.connected = false
+	endpoint := fmt.Sprintf("%s:%d", g.config.Host, g.config.Port)
 	g.logger.Info("disconnected from FalkorDB")
+
+	// Publish disconnected event
+	if g.bus != nil {
+		g.bus.Publish(ctx, events.NewGraphDisconnected(endpoint, nil))
+	}
 
 	return nil
 }
@@ -281,6 +307,12 @@ func (g *FalkorDBGraph) signalFatal(err error) {
 	select {
 	case g.errChan <- err:
 	default:
+	}
+
+	// Publish disconnected event on fatal error
+	if g.bus != nil {
+		endpoint := fmt.Sprintf("%s:%d", g.config.Host, g.config.Port)
+		g.bus.Publish(context.Background(), events.NewGraphDisconnected(endpoint, err))
 	}
 }
 
@@ -359,6 +391,7 @@ func (g *FalkorDBGraph) queueWrite(query string) error {
 	case g.writeQueue <- writeOp{query: query}:
 		return nil
 	default:
+		g.emitWriteQueueFull()
 		return fmt.Errorf("write queue full")
 	}
 }
@@ -370,8 +403,28 @@ func (g *FalkorDBGraph) queueWriteSync(query string) error {
 	case g.writeQueue <- writeOp{query: query, result: result}:
 		return <-result
 	default:
+		g.emitWriteQueueFull()
 		return fmt.Errorf("write queue full")
 	}
+}
+
+// emitWriteQueueFull publishes write queue full event with rate limiting (1/sec).
+func (g *FalkorDBGraph) emitWriteQueueFull() {
+	if g.bus == nil {
+		return
+	}
+
+	g.mu.Lock()
+	now := time.Now()
+	if now.Sub(g.lastQueueFullEmit) < time.Second {
+		g.mu.Unlock()
+		return
+	}
+	g.lastQueueFullEmit = now
+	g.mu.Unlock()
+
+	queueDepth := len(g.writeQueue)
+	g.bus.Publish(context.Background(), events.NewGraphWriteQueueFull(queueDepth, g.config.WriteQueueSize))
 }
 
 // UpsertFile creates or updates a file node and its directory relationship.

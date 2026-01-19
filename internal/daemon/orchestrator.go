@@ -130,6 +130,7 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 	}
 
 	o.subscribeRememberedPathEvents()
+	o.subscribeHealthAndMetricsEvents()
 
 	return nil
 }
@@ -356,6 +357,18 @@ func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildRe
 	defer o.rebuildMu.Unlock()
 
 	start := time.Now()
+
+	// Publish rebuild started event
+	pathCount := 0
+	if o.registry != nil {
+		if paths, err := o.registry.ListPaths(ctx); err == nil {
+			pathCount = len(paths)
+		}
+	}
+	trigger := "manual"
+	if o.bus != nil {
+		o.bus.Publish(ctx, events.NewRebuildStarted(full, pathCount, trigger))
+	}
 
 	// Validate and clean missing remembered paths before rebuild
 	removedPaths := o.validateRememberedPaths(ctx)
@@ -795,6 +808,151 @@ func (o *Orchestrator) triggerRememberedPathWalk(path string) {
 			slog.Warn("remembered path walk failed", "path", path, "error", err)
 		}
 	}()
+}
+
+// subscribeHealthAndMetricsEvents subscribes to new events for health updates and metrics.
+func (o *Orchestrator) subscribeHealthAndMetricsEvents() {
+	if o.bus == nil {
+		return
+	}
+
+	o.eventUnsubs = append(o.eventUnsubs,
+		// Queue degradation events
+		o.bus.Subscribe(events.QueueDegradationChanged, o.handleQueueDegradationChanged),
+
+		// Watcher degradation events
+		o.bus.Subscribe(events.WatcherDegraded, o.handleWatcherDegraded),
+		o.bus.Subscribe(events.WatcherRecovered, o.handleWatcherRecovered),
+
+		// Graph connection events
+		o.bus.Subscribe(events.GraphConnected, o.handleGraphConnected),
+		o.bus.Subscribe(events.GraphDisconnected, o.handleGraphDisconnected),
+		o.bus.Subscribe(events.GraphWriteQueueFull, o.handleGraphWriteQueueFull),
+
+		// Analysis events
+		o.bus.Subscribe(events.AnalysisSkipped, o.handleAnalysisSkipped),
+		o.bus.Subscribe(events.AnalysisSemanticComplete, o.handleAnalysisSemanticComplete),
+		o.bus.Subscribe(events.AnalysisEmbeddingsComplete, o.handleAnalysisEmbeddingsComplete),
+
+		// Rebuild events
+		o.bus.Subscribe(events.RebuildStarted, o.handleRebuildStarted),
+	)
+}
+
+func (o *Orchestrator) handleQueueDegradationChanged(event events.Event) {
+	payload, ok := event.Payload.(*events.QueueDegradationEvent)
+	if !ok {
+		return
+	}
+
+	metrics.QueueDegradationTransitionsTotal.WithLabelValues(payload.PreviousMode, payload.CurrentMode).Inc()
+
+	// Update health status based on degradation mode
+	if o.daemon != nil && o.daemon.health != nil {
+		now := time.Now()
+		if payload.CurrentMode == "metadata" {
+			o.daemon.health.UpdateComponent("queue", ComponentHealth{
+				Status:      ComponentStatusDegraded,
+				LastChecked: now,
+				Since:       now,
+			})
+		} else {
+			o.daemon.health.UpdateComponent("queue", ComponentHealth{
+				Status:      ComponentStatusRunning,
+				LastChecked: now,
+				LastSuccess: now,
+			})
+		}
+	}
+}
+
+func (o *Orchestrator) handleWatcherDegraded(event events.Event) {
+	metrics.WatcherDegradedTotal.Inc()
+
+	if o.daemon != nil && o.daemon.health != nil {
+		now := time.Now()
+		o.daemon.health.UpdateComponent("watcher", ComponentHealth{
+			Status:      ComponentStatusDegraded,
+			LastChecked: now,
+			Since:       now,
+		})
+	}
+}
+
+func (o *Orchestrator) handleWatcherRecovered(event events.Event) {
+	metrics.WatcherRecoveredTotal.Inc()
+
+	if o.daemon != nil && o.daemon.health != nil {
+		now := time.Now()
+		o.daemon.health.UpdateComponent("watcher", ComponentHealth{
+			Status:      ComponentStatusRunning,
+			LastChecked: now,
+			LastSuccess: now,
+		})
+	}
+}
+
+func (o *Orchestrator) handleGraphConnected(event events.Event) {
+	metrics.GraphConnectionsTotal.Inc()
+
+	if o.daemon != nil && o.daemon.health != nil {
+		now := time.Now()
+		o.daemon.health.UpdateComponent("graph", ComponentHealth{
+			Status:      ComponentStatusRunning,
+			LastChecked: now,
+			LastSuccess: now,
+		})
+	}
+}
+
+func (o *Orchestrator) handleGraphDisconnected(event events.Event) {
+	metrics.GraphDisconnectionsTotal.Inc()
+
+	if o.daemon != nil && o.daemon.health != nil {
+		now := time.Now()
+		o.daemon.health.UpdateComponent("graph", ComponentHealth{
+			Status:      ComponentStatusDegraded,
+			LastChecked: now,
+			Since:       now,
+		})
+	}
+}
+
+func (o *Orchestrator) handleGraphWriteQueueFull(event events.Event) {
+	metrics.GraphWriteQueueFullTotal.Inc()
+
+	if o.daemon != nil && o.daemon.health != nil {
+		now := time.Now()
+		o.daemon.health.UpdateComponent("graph", ComponentHealth{
+			Status:      ComponentStatusDegraded,
+			LastChecked: now,
+			Since:       now,
+		})
+	}
+}
+
+func (o *Orchestrator) handleAnalysisSkipped(event events.Event) {
+	payload, ok := event.Payload.(*events.IngestDecisionEvent)
+	if !ok {
+		return
+	}
+	metrics.AnalysisSkippedTotal.WithLabelValues(payload.Decision, payload.Reason).Inc()
+}
+
+func (o *Orchestrator) handleAnalysisSemanticComplete(event events.Event) {
+	metrics.AnalysisSemanticCompleteTotal.Inc()
+}
+
+func (o *Orchestrator) handleAnalysisEmbeddingsComplete(event events.Event) {
+	metrics.AnalysisEmbeddingsCompleteTotal.Inc()
+}
+
+func (o *Orchestrator) handleRebuildStarted(event events.Event) {
+	payload, ok := event.Payload.(*events.RebuildStartedEvent)
+	if !ok {
+		return
+	}
+	metrics.RebuildStartedTotal.WithLabelValues(payload.Trigger).Inc()
 }
 
 func (o *Orchestrator) eventContext() context.Context {

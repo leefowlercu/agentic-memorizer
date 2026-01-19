@@ -292,6 +292,12 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 
 	if fileResult.IngestMode == ingest.ModeMetadataOnly || fileResult.IngestMode == ingest.ModeSkip {
 		w.updateRegistryForMetadataOnly(ctx, result, fileResult.DegradedMetadata)
+		// Publish skipped event for observability
+		decision := "metadata_only"
+		if fileResult.IngestMode == ingest.ModeSkip {
+			decision = "skipped"
+		}
+		w.queue.publishAnalysisSkipped(item.FilePath, decision, fileResult.IngestReason)
 		return result, nil
 	}
 
@@ -306,8 +312,10 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 
 	var chunkSummaries []string
 	if w.semanticProvider != nil && w.semanticProvider.Available() {
+		semanticStart := time.Now()
 		semanticStage := NewSemanticStage(w.semanticProvider, w.semanticCache, w.registry, w.analysisVersion, w.logger)
 		semanticResult, summaries, semanticErr := semanticStage.Analyze(ctx, item.FilePath, result.ContentHash, chunkResult.Chunks)
+		semanticDuration := time.Since(semanticStart)
 		chunkSummaries = summaries
 		if semanticErr != nil {
 			w.logger.Warn("semantic analysis failed",
@@ -324,6 +332,8 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 			result.References = semanticResult.References
 			result.Complexity = semanticResult.Complexity
 			result.Keywords = semanticResult.Keywords
+			// Publish semantic analysis complete event
+			w.queue.publishAnalysisSemanticComplete(item.FilePath, result.ContentHash, semanticDuration)
 		}
 	}
 
@@ -332,8 +342,10 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	}
 
 	if w.embeddingsProvider != nil && w.embeddingsProvider.Available() {
+		embeddingsStart := time.Now()
 		embeddingsStage := NewEmbeddingsStage(w.embeddingsProvider, w.embeddingsCache, w.registry, w.logger)
 		embeddings, chunkData, embeddingsErr := embeddingsStage.Generate(ctx, item.FilePath, chunkResult.Chunks, chunkSummaries)
+		embeddingsDuration := time.Since(embeddingsStart)
 		if embeddingsErr != nil {
 			w.logger.Warn("embeddings generation failed",
 				"path", item.FilePath,
@@ -342,6 +354,8 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 		} else {
 			result.Embeddings = embeddings
 			result.Chunks = chunkData
+			// Publish embeddings generation complete event
+			w.queue.publishAnalysisEmbeddingsComplete(item.FilePath, result.ContentHash, embeddingsDuration)
 		}
 	}
 

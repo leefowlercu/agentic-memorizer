@@ -49,6 +49,23 @@ var (
 		Name:      "queue_in_progress",
 		Help:      "Number of files currently being analyzed",
 	})
+
+	// QueueDegradationTransitionsTotal is the total number of degradation mode transitions.
+	QueueDegradationTransitionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "queue_degradation_transitions_total",
+		Help:      "Total number of queue degradation mode transitions",
+	}, []string{"from_mode", "to_mode"})
+)
+
+// Rebuild metrics track rebuild operations.
+var (
+	// RebuildStartedTotal is the total number of rebuild operations started.
+	RebuildStartedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "rebuild_started_total",
+		Help:      "Total number of rebuild operations started",
+	}, []string{"trigger"})
 )
 
 // Analysis metrics track file analysis operations.
@@ -66,6 +83,27 @@ var (
 		Name:      "analysis_errors_total",
 		Help:      "Total number of analysis errors",
 	}, []string{"type", "provider"})
+
+	// AnalysisSkippedTotal is the total number of files skipped or with limited analysis.
+	AnalysisSkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "analysis_skipped_total",
+		Help:      "Total number of files skipped or with limited analysis",
+	}, []string{"decision", "reason"})
+
+	// AnalysisSemanticCompleteTotal is the total number of semantic analysis completions.
+	AnalysisSemanticCompleteTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "analysis_semantic_complete_total",
+		Help:      "Total number of successful semantic analyses",
+	})
+
+	// AnalysisEmbeddingsCompleteTotal is the total number of embeddings generation completions.
+	AnalysisEmbeddingsCompleteTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "analysis_embeddings_complete_total",
+		Help:      "Total number of successful embeddings generations",
+	})
 
 	// AnalysisDuration is a histogram of analysis duration in seconds.
 	AnalysisDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
@@ -162,6 +200,20 @@ var (
 		Name:      "watcher_paths_total",
 		Help:      "Total number of paths being watched",
 	})
+
+	// WatcherDegradedTotal is the total number of times the watcher entered degraded mode.
+	WatcherDegradedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "watcher_degraded_total",
+		Help:      "Total number of times watcher entered degraded mode",
+	})
+
+	// WatcherRecoveredTotal is the total number of times the watcher recovered from degraded mode.
+	WatcherRecoveredTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "watcher_recovered_total",
+		Help:      "Total number of times watcher recovered from degraded mode",
+	})
 )
 
 // Event bus metrics track internal event delivery.
@@ -197,6 +249,27 @@ var (
 		Name:      "graph_operation_errors_total",
 		Help:      "Total number of graph operation errors",
 	}, []string{"operation"})
+
+	// GraphConnectionsTotal is the total number of graph connections.
+	GraphConnectionsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "graph_connections_total",
+		Help:      "Total number of graph connections",
+	})
+
+	// GraphDisconnectionsTotal is the total number of graph disconnections.
+	GraphDisconnectionsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "graph_disconnections_total",
+		Help:      "Total number of graph disconnections",
+	})
+
+	// GraphWriteQueueFullTotal is the total number of write queue full events.
+	GraphWriteQueueFullTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "graph_write_queue_full_total",
+		Help:      "Total number of write queue full events",
+	})
 )
 
 // Walker metrics track directory scanning.

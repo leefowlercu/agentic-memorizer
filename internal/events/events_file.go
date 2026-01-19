@@ -38,6 +38,18 @@ type RememberedPathEvent struct {
 	Path string
 }
 
+// WatcherDegradedEvent contains data for watcher degradation events.
+type WatcherDegradedEvent struct {
+	// Reason describes why the watcher entered degraded mode.
+	Reason string
+
+	// WatchCount is the number of active watches at the time of degradation.
+	WatchCount int
+
+	// AffectedPath is the path that triggered the degradation (if applicable).
+	AffectedPath string
+}
+
 // NewFileDiscovered creates a FileDiscovered event.
 func NewFileDiscovered(path, contentHash string, size int64, modTime time.Time, isNew bool) Event {
 	return NewEvent(FileDiscovered, &FileEvent{
@@ -87,5 +99,22 @@ func NewRememberedPathAdded(path string) Event {
 func NewRememberedPathUpdated(path string) Event {
 	return NewEvent(RememberedPathUpdated, &RememberedPathEvent{
 		Path: path,
+	})
+}
+
+// NewWatcherDegraded creates a WatcherDegraded event.
+func NewWatcherDegraded(reason string, watchCount int, affectedPath string) Event {
+	return NewEvent(WatcherDegraded, &WatcherDegradedEvent{
+		Reason:       reason,
+		WatchCount:   watchCount,
+		AffectedPath: affectedPath,
+	})
+}
+
+// NewWatcherRecovered creates a WatcherRecovered event.
+func NewWatcherRecovered(watchCount int) Event {
+	return NewEvent(WatcherRecovered, &WatcherDegradedEvent{
+		Reason:     "recovered",
+		WatchCount: watchCount,
 	})
 }

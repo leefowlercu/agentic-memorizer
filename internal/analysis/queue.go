@@ -80,6 +80,9 @@ type Queue struct {
 
 	// errChan surfaces fatal worker errors for supervisor restart.
 	errChan chan error
+
+	// lastDegradationMode tracks the previous degradation mode for transition detection.
+	lastDegradationMode DegradationMode
 }
 
 // QueueOption configures the analysis queue.
@@ -302,6 +305,7 @@ func (q *Queue) Stats() QueueStats {
 	q.mu.RLock()
 	state := q.state
 	workerCount := q.workerCount
+	lastMode := q.lastDegradationMode
 	q.mu.RUnlock()
 
 	pending := len(q.workChan)
@@ -317,6 +321,18 @@ func (q *Queue) Stats() QueueStats {
 
 	capacity := float64(pending) / float64(q.queueCapacity)
 	mode := q.getDegradationMode(capacity)
+
+	// Detect degradation mode transitions and publish event
+	if mode != lastMode && state == QueueStateRunning {
+		q.mu.Lock()
+		if q.lastDegradationMode != mode {
+			q.lastDegradationMode = mode
+			q.mu.Unlock()
+			q.publishDegradationChanged(lastMode, mode, pending)
+		} else {
+			q.mu.Unlock()
+		}
+	}
 
 	return QueueStats{
 		State:               state,
@@ -524,6 +540,49 @@ func (q *Queue) publishSemanticAnalysisFailed(path string, err error) {
 func (q *Queue) publishEmbeddingsGenerationFailed(path string, err error) {
 	metrics.EmbeddingsGenerationFailures.Inc()
 	q.bus.Publish(q.ctx, events.NewEmbeddingsGenerationFailed(path, err))
+}
+
+// publishDegradationChanged publishes a queue degradation mode change event.
+func (q *Queue) publishDegradationChanged(previous, current DegradationMode, queueDepth int) {
+	q.bus.Publish(q.ctx, events.NewQueueDegradationChanged(
+		degradationModeString(previous),
+		degradationModeString(current),
+		"queue_backlog",
+		queueDepth,
+	))
+	q.logger.Info("queue degradation mode changed",
+		"previous", degradationModeString(previous),
+		"current", degradationModeString(current),
+		"queue_depth", queueDepth)
+}
+
+// publishAnalysisSkipped publishes an event when analysis is skipped or limited.
+func (q *Queue) publishAnalysisSkipped(path, decision, reason string) {
+	q.bus.Publish(q.ctx, events.NewAnalysisSkipped(path, decision, reason))
+}
+
+// publishAnalysisSemanticComplete publishes an event when semantic analysis completes.
+func (q *Queue) publishAnalysisSemanticComplete(path, contentHash string, duration time.Duration) {
+	q.bus.Publish(q.ctx, events.NewAnalysisSemanticComplete(path, contentHash, duration))
+}
+
+// publishAnalysisEmbeddingsComplete publishes an event when embeddings generation completes.
+func (q *Queue) publishAnalysisEmbeddingsComplete(path, contentHash string, duration time.Duration) {
+	q.bus.Publish(q.ctx, events.NewAnalysisEmbeddingsComplete(path, contentHash, duration))
+}
+
+// degradationModeString converts DegradationMode to string.
+func degradationModeString(mode DegradationMode) string {
+	switch mode {
+	case DegradationFull:
+		return "full"
+	case DegradationNoEmbed:
+		return "no_embed"
+	case DegradationMetadata:
+		return "metadata"
+	default:
+		return "unknown"
+	}
 }
 
 // CollectMetrics implements metrics.MetricsProvider.

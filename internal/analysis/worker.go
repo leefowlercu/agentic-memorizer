@@ -310,6 +310,10 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	result.ChunkerUsed = chunkResult.ChunkerUsed
 	result.ChunksProcessed = chunkResult.TotalChunks
 
+	// Build analyzed chunks immediately after chunking.
+	// This decouples chunk persistence from embeddings generation.
+	analyzedChunks := BuildAnalyzedChunks(chunkResult.Chunks)
+
 	var chunkSummaries []string
 	if w.semanticProvider != nil && w.semanticProvider.Available() {
 		semanticStart := time.Now()
@@ -337,6 +341,13 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 		}
 	}
 
+	// Enhance chunks with semantic summaries if available.
+	EnhanceChunksWithSummaries(analyzedChunks, chunkSummaries)
+
+	// Always populate result.Chunks regardless of embeddings mode.
+	// This ensures chunks are persisted even when embeddings are skipped.
+	result.Chunks = analyzedChunks
+
 	if mode == DegradationNoEmbed {
 		return result, nil
 	}
@@ -344,7 +355,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	if w.embeddingsProvider != nil && w.embeddingsProvider.Available() {
 		embeddingsStart := time.Now()
 		embeddingsStage := NewEmbeddingsStage(w.embeddingsProvider, w.embeddingsCache, w.registry, w.logger)
-		embeddings, chunkData, embeddingsErr := embeddingsStage.Generate(ctx, item.FilePath, chunkResult.Chunks, chunkSummaries)
+		embeddings, embeddingsErr := embeddingsStage.Generate(ctx, item.FilePath, result.Chunks)
 		embeddingsDuration := time.Since(embeddingsStart)
 		if embeddingsErr != nil {
 			w.logger.Warn("embeddings generation failed",
@@ -353,7 +364,6 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 			w.queue.publishEmbeddingsGenerationFailed(item.FilePath, embeddingsErr)
 		} else {
 			result.Embeddings = embeddings
-			result.Chunks = chunkData
 			// Publish embeddings generation complete event
 			w.queue.publishAnalysisEmbeddingsComplete(item.FilePath, result.ContentHash, embeddingsDuration)
 		}
@@ -453,62 +463,6 @@ func (w *Worker) SetAnalysisVersion(version string) {
 func (w *Worker) SetCaches(semantic *cache.SemanticCache, embeddings *cache.EmbeddingsCache) {
 	w.semanticCache = semantic
 	w.embeddingsCache = embeddings
-}
-
-// convertCachedSemantic converts a cached providers.SemanticResult to the local SemanticResult type.
-func (w *Worker) convertCachedSemantic(cached *providers.SemanticResult) *SemanticResult {
-	entities := make([]Entity, 0, len(cached.Entities))
-	for _, e := range cached.Entities {
-		entities = append(entities, Entity{Name: e.Name, Type: e.Type})
-	}
-
-	refs := make([]Reference, 0, len(cached.References))
-	for _, r := range cached.References {
-		refs = append(refs, Reference{Type: r.Type, Target: r.Target})
-	}
-
-	topics := make([]string, 0, len(cached.Topics))
-	for _, t := range cached.Topics {
-		topics = append(topics, t.Name)
-	}
-
-	return &SemanticResult{
-		Summary:    cached.Summary,
-		Tags:       cached.Tags,
-		Topics:     topics,
-		Entities:   entities,
-		References: refs,
-		Complexity: cached.Complexity,
-		Keywords:   cached.Keywords,
-	}
-}
-
-// convertToProviderSemantic converts the local SemanticResult to providers.SemanticResult for caching.
-func (w *Worker) convertToProviderSemantic(result *SemanticResult) *providers.SemanticResult {
-	entities := make([]providers.Entity, 0, len(result.Entities))
-	for _, e := range result.Entities {
-		entities = append(entities, providers.Entity{Name: e.Name, Type: e.Type})
-	}
-
-	refs := make([]providers.Reference, 0, len(result.References))
-	for _, r := range result.References {
-		refs = append(refs, providers.Reference{Type: r.Type, Target: r.Target})
-	}
-
-	topics := make([]providers.Topic, 0, len(result.Topics))
-	for _, t := range result.Topics {
-		topics = append(topics, providers.Topic{Name: t, Confidence: 1.0})
-	}
-
-	return &providers.SemanticResult{
-		Summary:    result.Summary,
-		Tags:       result.Tags,
-		Topics:     topics,
-		Entities:   entities,
-		References: refs,
-		Complexity: result.Complexity,
-		Keywords:   result.Keywords,
-	}
 }
 
 // Helper functions

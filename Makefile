@@ -82,14 +82,15 @@ test-nocolor:
 	@printf " $(CHECK)\n"
 
 # Run tests with race detector
+# CGO_LDFLAGS suppresses macOS linker warnings about LC_DYSYMTAB
 test-race:
 	@printf "Running tests with race detector..."
-	@go test -race ./... -v
+	@CGO_LDFLAGS="-Wl,-w" go test -race ./... -v
 	@printf " $(GREEN)$(CHECK)$(NC)\n"
 
 test-race-nocolor:
 	@printf "Running tests with race detector..."
-	@go test -race ./... -v
+	@CGO_LDFLAGS="-Wl,-w" go test -race ./... -v
 	@printf " $(CHECK)\n"
 
 # Run golangci-lint

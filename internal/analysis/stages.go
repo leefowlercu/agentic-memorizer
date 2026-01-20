@@ -215,13 +215,14 @@ func NewEmbeddingsStage(provider providers.EmbeddingsProvider, cache *cache.Embe
 }
 
 // Generate runs embeddings generation and updates registry state.
-func (s *EmbeddingsStage) Generate(ctx context.Context, path string, chunks []chunkers.Chunk, chunkSummaries []string) ([]float32, []AnalyzedChunk, error) {
+// It modifies analyzedChunks in place to add embeddings to each chunk.
+func (s *EmbeddingsStage) Generate(ctx context.Context, path string, analyzedChunks []AnalyzedChunk) ([]float32, error) {
 	if s.provider == nil || !s.provider.Available() {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	logger := loggerOrDefault(s.logger)
-	embeddings, chunkData, embeddingsErr := generateEmbeddings(ctx, s.provider, s.cache, logger, chunks, chunkSummaries)
+	fileEmbedding, embeddingsErr := generateEmbeddings(ctx, s.provider, s.cache, logger, analyzedChunks)
 
 	if s.registry != nil {
 		if err := s.registry.UpdateEmbeddingsState(ctx, path, embeddingsErr); err != nil {
@@ -229,7 +230,7 @@ func (s *EmbeddingsStage) Generate(ctx context.Context, path string, chunks []ch
 		}
 	}
 
-	return embeddings, chunkData, embeddingsErr
+	return fileEmbedding, embeddingsErr
 }
 
 // PersistenceStage writes analysis results to the graph.
@@ -363,6 +364,42 @@ func (s *PersistenceStage) Persist(ctx context.Context, result *AnalysisResult) 
 	return nil
 }
 
+// BuildAnalyzedChunks converts raw chunker output to analyzed chunks.
+// This creates the data structure without generating embeddings.
+func BuildAnalyzedChunks(chunks []chunkers.Chunk) []AnalyzedChunk {
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	result := make([]AnalyzedChunk, len(chunks))
+	for i, chunk := range chunks {
+		chunkHash := fsutil.HashBytes([]byte(chunk.Content))
+		result[i] = AnalyzedChunk{
+			Index:       chunk.Index,
+			Content:     chunk.Content,
+			ContentHash: chunkHash,
+			StartOffset: chunk.StartOffset,
+			EndOffset:   chunk.EndOffset,
+			ChunkType:   string(chunk.Metadata.Type),
+			TokenCount:  chunk.Metadata.TokenEstimate,
+			Metadata:    &chunk.Metadata,
+		}
+	}
+	return result
+}
+
+// EnhanceChunksWithSummaries adds semantic summaries to pre-built chunks.
+func EnhanceChunksWithSummaries(chunks []AnalyzedChunk, summaries []string) {
+	if summaries == nil {
+		return
+	}
+	for i := range chunks {
+		if chunks[i].Index < len(summaries) {
+			chunks[i].Summary = summaries[chunks[i].Index]
+		}
+	}
+}
+
 func analyzeSemantics(ctx context.Context, provider providers.SemanticProvider, chunks []chunkers.Chunk, logger *slog.Logger) (*SemanticResult, []string, error) {
 	if len(chunks) == 0 {
 		return &SemanticResult{}, nil, nil
@@ -448,35 +485,23 @@ func analyzeChunk(ctx context.Context, provider providers.SemanticProvider, chun
 	}, nil
 }
 
-func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvider, cache *cache.EmbeddingsCache, logger *slog.Logger, chunks []chunkers.Chunk, chunkSummaries []string) ([]float32, []AnalyzedChunk, error) {
-	if len(chunks) == 0 {
-		return nil, nil, nil
+// generateEmbeddings generates embeddings for pre-built analyzed chunks.
+// It modifies analyzedChunks in place to add embeddings to each chunk.
+// Returns the file-level average embedding and any error.
+func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvider, embCache *cache.EmbeddingsCache, logger *slog.Logger, analyzedChunks []AnalyzedChunk) ([]float32, error) {
+	if len(analyzedChunks) == 0 {
+		return nil, nil
 	}
 
 	logger = loggerOrDefault(logger)
-	chunkResults := make([]AnalyzedChunk, len(chunks))
 	var needsEmbedding []int
 
-	for i, chunk := range chunks {
-		chunkHash := fsutil.HashBytes([]byte(chunk.Content))
-		chunkResults[i] = AnalyzedChunk{
-			Index:       chunk.Index,
-			Content:     chunk.Content,
-			ContentHash: chunkHash,
-			StartOffset: chunk.StartOffset,
-			EndOffset:   chunk.EndOffset,
-			ChunkType:   string(chunk.Metadata.Type),
-			TokenCount:  chunk.Metadata.TokenEstimate,
-			Metadata:    &chunk.Metadata,
-		}
-		if chunkSummaries != nil && chunk.Index < len(chunkSummaries) {
-			chunkResults[i].Summary = chunkSummaries[chunk.Index]
-		}
-
-		if cache != nil {
-			cached, err := cache.Get(chunkHash, chunk.Index)
+	// Check cache for existing embeddings
+	for i := range analyzedChunks {
+		if embCache != nil {
+			cached, err := embCache.Get(analyzedChunks[i].ContentHash, analyzedChunks[i].Index)
 			if err == nil {
-				chunkResults[i].Embedding = cached.Embedding
+				analyzedChunks[i].Embedding = cached.Embedding
 				logger.Debug("embeddings cache hit", "chunk", i)
 				continue
 			}
@@ -486,12 +511,12 @@ func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvid
 
 	if len(needsEmbedding) > 0 {
 		logger.Debug("generating embeddings for cache misses",
-			"total_chunks", len(chunks),
+			"total_chunks", len(analyzedChunks),
 			"cache_misses", len(needsEmbedding))
 
 		texts := make([]string, len(needsEmbedding))
 		for j, idx := range needsEmbedding {
-			texts[j] = chunks[idx].Content
+			texts[j] = analyzedChunks[idx].Content
 		}
 
 		var embeddings []providers.EmbeddingsBatchResult
@@ -501,7 +526,7 @@ func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvid
 			req := providers.EmbeddingsRequest{Content: texts[0]}
 			result, e := provider.Embed(ctx, req)
 			if e != nil {
-				return nil, nil, fmt.Errorf("embedding failed; %w", e)
+				return nil, fmt.Errorf("embedding failed; %w", e)
 			}
 			embeddings = []providers.EmbeddingsBatchResult{{
 				Index:     0,
@@ -510,20 +535,20 @@ func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvid
 		} else {
 			embeddings, err = provider.EmbedBatch(ctx, texts)
 			if err != nil {
-				return nil, nil, fmt.Errorf("batch embeddings failed; %w", err)
+				return nil, fmt.Errorf("batch embeddings failed; %w", err)
 			}
 		}
 
 		for j, emb := range embeddings {
 			idx := needsEmbedding[j]
-			chunkResults[idx].Embedding = emb.Embedding
+			analyzedChunks[idx].Embedding = emb.Embedding
 
-			if cache != nil {
+			if embCache != nil {
 				cacheResult := &providers.EmbeddingsResult{
 					Embedding:  emb.Embedding,
 					Dimensions: len(emb.Embedding),
 				}
-				if err := cache.Set(chunkResults[idx].ContentHash, chunkResults[idx].Index, cacheResult); err != nil {
+				if err := embCache.Set(analyzedChunks[idx].ContentHash, analyzedChunks[idx].Index, cacheResult); err != nil {
 					logger.Warn("embeddings cache write error",
 						"chunk", idx,
 						"error", err)
@@ -533,17 +558,17 @@ func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvid
 	}
 
 	var allEmbeddings []providers.EmbeddingsBatchResult
-	for i, cr := range chunkResults {
-		if cr.Embedding != nil {
+	for i, ac := range analyzedChunks {
+		if ac.Embedding != nil {
 			allEmbeddings = append(allEmbeddings, providers.EmbeddingsBatchResult{
 				Index:     i,
-				Embedding: cr.Embedding,
+				Embedding: ac.Embedding,
 			})
 		}
 	}
 
 	fileEmbedding := averageEmbeddings(allEmbeddings)
-	return fileEmbedding, chunkResults, nil
+	return fileEmbedding, nil
 }
 
 func convertCachedSemantic(cached *providers.SemanticResult) *SemanticResult {

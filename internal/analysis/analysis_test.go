@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -721,6 +722,172 @@ func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32
 	return nil, nil
 }
 
+func TestBuildAnalyzedChunks(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		result := BuildAnalyzedChunks(nil)
+		if result != nil {
+			t.Errorf("Expected nil, got %v", result)
+		}
+
+		result = BuildAnalyzedChunks([]chunkers.Chunk{})
+		if result != nil {
+			t.Errorf("Expected nil for empty slice, got %v", result)
+		}
+	})
+
+	t.Run("SingleChunk", func(t *testing.T) {
+		chunks := []chunkers.Chunk{
+			{
+				Index:       0,
+				Content:     "test content",
+				StartOffset: 0,
+				EndOffset:   12,
+				Metadata: chunkers.ChunkMetadata{
+					Type:          chunkers.ChunkTypeCode,
+					TokenEstimate: 5,
+				},
+			},
+		}
+
+		result := BuildAnalyzedChunks(chunks)
+		if len(result) != 1 {
+			t.Fatalf("Expected 1 chunk, got %d", len(result))
+		}
+
+		if result[0].Index != 0 {
+			t.Errorf("Index = %d, want 0", result[0].Index)
+		}
+		if result[0].Content != "test content" {
+			t.Errorf("Content = %q, want %q", result[0].Content, "test content")
+		}
+		if result[0].ContentHash == "" {
+			t.Error("ContentHash should not be empty")
+		}
+		if result[0].TokenCount != 5 {
+			t.Errorf("TokenCount = %d, want 5", result[0].TokenCount)
+		}
+		if result[0].ChunkType != "code" {
+			t.Errorf("ChunkType = %q, want %q", result[0].ChunkType, "code")
+		}
+	})
+
+	t.Run("MultipleChunks", func(t *testing.T) {
+		chunks := []chunkers.Chunk{
+			{Index: 0, Content: "first", StartOffset: 0, EndOffset: 5},
+			{Index: 1, Content: "second", StartOffset: 6, EndOffset: 12},
+			{Index: 2, Content: "third", StartOffset: 13, EndOffset: 18},
+		}
+
+		result := BuildAnalyzedChunks(chunks)
+		if len(result) != 3 {
+			t.Fatalf("Expected 3 chunks, got %d", len(result))
+		}
+
+		for i, r := range result {
+			if r.Index != i {
+				t.Errorf("result[%d].Index = %d, want %d", i, r.Index, i)
+			}
+		}
+	})
+
+	t.Run("PreservesMetadata", func(t *testing.T) {
+		chunks := []chunkers.Chunk{
+			{
+				Index:       0,
+				Content:     "func TestFunc() {}",
+				StartOffset: 0,
+				EndOffset:   18,
+				Metadata: chunkers.ChunkMetadata{
+					Type:          chunkers.ChunkTypeCode,
+					TokenEstimate: 10,
+					Code: &chunkers.CodeMetadata{
+						Language:     "go",
+						FunctionName: "TestFunc",
+						ClassName:    "TestClass",
+					},
+				},
+			},
+		}
+
+		result := BuildAnalyzedChunks(chunks)
+		if result[0].Metadata == nil {
+			t.Fatal("Expected Metadata to be populated")
+		}
+		if result[0].Metadata.Code == nil {
+			t.Fatal("Expected Metadata.Code to be populated")
+		}
+		if result[0].Metadata.Code.FunctionName != "TestFunc" {
+			t.Errorf("FunctionName = %q, want %q", result[0].Metadata.Code.FunctionName, "TestFunc")
+		}
+		if result[0].Metadata.Code.ClassName != "TestClass" {
+			t.Errorf("ClassName = %q, want %q", result[0].Metadata.Code.ClassName, "TestClass")
+		}
+	})
+}
+
+func TestEnhanceChunksWithSummaries(t *testing.T) {
+	t.Run("NilSummaries", func(t *testing.T) {
+		chunks := []AnalyzedChunk{
+			{Index: 0, Content: "test"},
+			{Index: 1, Content: "test2"},
+		}
+		EnhanceChunksWithSummaries(chunks, nil)
+
+		if chunks[0].Summary != "" {
+			t.Errorf("chunks[0].Summary = %q, want empty", chunks[0].Summary)
+		}
+		if chunks[1].Summary != "" {
+			t.Errorf("chunks[1].Summary = %q, want empty", chunks[1].Summary)
+		}
+	})
+
+	t.Run("FullSummaries", func(t *testing.T) {
+		chunks := []AnalyzedChunk{
+			{Index: 0, Content: "first"},
+			{Index: 1, Content: "second"},
+		}
+		summaries := []string{"Summary 0", "Summary 1"}
+
+		EnhanceChunksWithSummaries(chunks, summaries)
+
+		if chunks[0].Summary != "Summary 0" {
+			t.Errorf("chunks[0].Summary = %q, want %q", chunks[0].Summary, "Summary 0")
+		}
+		if chunks[1].Summary != "Summary 1" {
+			t.Errorf("chunks[1].Summary = %q, want %q", chunks[1].Summary, "Summary 1")
+		}
+	})
+
+	t.Run("PartialSummaries", func(t *testing.T) {
+		chunks := []AnalyzedChunk{
+			{Index: 0, Content: "first"},
+			{Index: 1, Content: "second"},
+			{Index: 2, Content: "third"},
+		}
+		summaries := []string{"Summary 0", "Summary 1"} // Only 2 summaries for 3 chunks
+
+		EnhanceChunksWithSummaries(chunks, summaries)
+
+		if chunks[0].Summary != "Summary 0" {
+			t.Errorf("chunks[0].Summary = %q, want %q", chunks[0].Summary, "Summary 0")
+		}
+		if chunks[1].Summary != "Summary 1" {
+			t.Errorf("chunks[1].Summary = %q, want %q", chunks[1].Summary, "Summary 1")
+		}
+		if chunks[2].Summary != "" {
+			t.Errorf("chunks[2].Summary = %q, want empty (no summary available)", chunks[2].Summary)
+		}
+	})
+
+	t.Run("EmptyChunks", func(t *testing.T) {
+		var chunks []AnalyzedChunk
+		summaries := []string{"Summary 0"}
+
+		// Should not panic
+		EnhanceChunksWithSummaries(chunks, summaries)
+	})
+}
+
 func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 	// Set up mock embeddings provider
 	mockEmbed := &mockEmbeddingsProvider{
@@ -748,16 +915,19 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			},
 		}
 
-		_, results, err := stage.Generate(context.Background(), "/test/file.go", chunks, nil)
+		// Build analyzed chunks first (new pattern)
+		analyzedChunks := BuildAnalyzedChunks(chunks)
+
+		_, err := stage.Generate(context.Background(), "/test/file.go", analyzedChunks)
 		if err != nil {
-			t.Fatalf("generateEmbeddings failed: %v", err)
+			t.Fatalf("Generate failed: %v", err)
 		}
 
-		if len(results) != 1 {
-			t.Fatalf("Expected 1 result, got %d", len(results))
+		if len(analyzedChunks) != 1 {
+			t.Fatalf("Expected 1 result, got %d", len(analyzedChunks))
 		}
 
-		result := results[0]
+		result := analyzedChunks[0]
 		if result.Metadata == nil || result.Metadata.Code == nil {
 			t.Fatal("Expected Metadata.Code to be populated")
 		}
@@ -772,6 +942,10 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 		}
 		if result.ChunkType != "code" {
 			t.Errorf("ChunkType = %q, want %q", result.ChunkType, "code")
+		}
+		// Verify embedding was added
+		if result.Embedding == nil {
+			t.Error("Expected Embedding to be populated")
 		}
 	})
 
@@ -793,16 +967,19 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			},
 		}
 
-		_, results, err := stage.Generate(context.Background(), "/test/file.md", chunks, nil)
+		// Build analyzed chunks first (new pattern)
+		analyzedChunks := BuildAnalyzedChunks(chunks)
+
+		_, err := stage.Generate(context.Background(), "/test/file.md", analyzedChunks)
 		if err != nil {
-			t.Fatalf("generateEmbeddings failed: %v", err)
+			t.Fatalf("Generate failed: %v", err)
 		}
 
-		if len(results) != 1 {
-			t.Fatalf("Expected 1 result, got %d", len(results))
+		if len(analyzedChunks) != 1 {
+			t.Fatalf("Expected 1 result, got %d", len(analyzedChunks))
 		}
 
-		result := results[0]
+		result := analyzedChunks[0]
 		if result.Metadata == nil || result.Metadata.Document == nil {
 			t.Fatal("Expected Metadata.Document to be populated")
 		}
@@ -827,20 +1004,24 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 		}
 		summaries := []string{"Summary for first chunk", "Summary for second chunk"}
 
-		_, results, err := stage.Generate(context.Background(), "/test/file.txt", chunks, summaries)
+		// Build analyzed chunks and enhance with summaries (new pattern)
+		analyzedChunks := BuildAnalyzedChunks(chunks)
+		EnhanceChunksWithSummaries(analyzedChunks, summaries)
+
+		_, err := stage.Generate(context.Background(), "/test/file.txt", analyzedChunks)
 		if err != nil {
-			t.Fatalf("generateEmbeddings failed: %v", err)
+			t.Fatalf("Generate failed: %v", err)
 		}
 
-		if len(results) != 2 {
-			t.Fatalf("Expected 2 results, got %d", len(results))
+		if len(analyzedChunks) != 2 {
+			t.Fatalf("Expected 2 results, got %d", len(analyzedChunks))
 		}
 
-		if results[0].Summary != "Summary for first chunk" {
-			t.Errorf("results[0].Summary = %q, want %q", results[0].Summary, "Summary for first chunk")
+		if analyzedChunks[0].Summary != "Summary for first chunk" {
+			t.Errorf("analyzedChunks[0].Summary = %q, want %q", analyzedChunks[0].Summary, "Summary for first chunk")
 		}
-		if results[1].Summary != "Summary for second chunk" {
-			t.Errorf("results[1].Summary = %q, want %q", results[1].Summary, "Summary for second chunk")
+		if analyzedChunks[1].Summary != "Summary for second chunk" {
+			t.Errorf("analyzedChunks[1].Summary = %q, want %q", analyzedChunks[1].Summary, "Summary for second chunk")
 		}
 	})
 
@@ -849,13 +1030,44 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			{Index: 0, Content: "Test chunk"},
 		}
 
-		_, results, err := stage.Generate(context.Background(), "/test/file.txt", chunks, nil)
+		// Build analyzed chunks without summaries (new pattern)
+		analyzedChunks := BuildAnalyzedChunks(chunks)
+
+		_, err := stage.Generate(context.Background(), "/test/file.txt", analyzedChunks)
 		if err != nil {
-			t.Fatalf("generateEmbeddings failed: %v", err)
+			t.Fatalf("Generate failed: %v", err)
 		}
 
-		if results[0].Summary != "" {
-			t.Errorf("Summary should be empty when no summaries provided, got %q", results[0].Summary)
+		if analyzedChunks[0].Summary != "" {
+			t.Errorf("Summary should be empty when no summaries provided, got %q", analyzedChunks[0].Summary)
+		}
+	})
+
+	t.Run("AddsEmbeddingsInPlace", func(t *testing.T) {
+		chunks := []chunkers.Chunk{
+			{Index: 0, Content: "Test chunk 1"},
+			{Index: 1, Content: "Test chunk 2"},
+		}
+
+		analyzedChunks := BuildAnalyzedChunks(chunks)
+
+		// Verify no embeddings before Generate
+		for i, ac := range analyzedChunks {
+			if ac.Embedding != nil {
+				t.Errorf("analyzedChunks[%d].Embedding should be nil before Generate", i)
+			}
+		}
+
+		_, err := stage.Generate(context.Background(), "/test/file.txt", analyzedChunks)
+		if err != nil {
+			t.Fatalf("Generate failed: %v", err)
+		}
+
+		// Verify embeddings added after Generate
+		for i, ac := range analyzedChunks {
+			if ac.Embedding == nil {
+				t.Errorf("analyzedChunks[%d].Embedding should be populated after Generate", i)
+			}
 		}
 	})
 }
@@ -1054,6 +1266,243 @@ func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 			t.Fatalf("DeleteFile path = %q, want %q", mockG.deleteFileFor[0], result.FilePath)
 		}
 	})
+}
+
+func TestWorkerAnalyze_DegradationNoEmbed_ChunksPopulated(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, filepath.Join(t.TempDir(), "registry.db"))
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+	defer reg.Close()
+
+	// Create queue with small capacity to easily trigger degradation mode.
+	// DegradationNoEmbed is triggered when capacity >= 0.80 and < 0.95.
+	// Using capacity 10, we need 8-9 items to hit this range.
+	queue := NewQueue(bus)
+	queue.queueCapacity = 10
+	queue.workChan = make(chan WorkItem, 10)
+
+	// Fill queue to 90% capacity (9 items) to trigger DegradationNoEmbed
+	for i := 0; i < 9; i++ {
+		queue.workChan <- WorkItem{FilePath: fmt.Sprintf("/fake/path%d", i)}
+	}
+
+	worker := NewWorker(0, queue)
+	worker.SetRegistry(reg)
+
+	// Set up mock providers
+	mockEmbed := &mockEmbeddingsProvider{
+		available: true,
+		embedding: []float32{0.1, 0.2, 0.3},
+	}
+	worker.SetEmbeddingsProvider(mockEmbed)
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	if err := os.WriteFile(filePath, []byte("package main\nfunc main() {}"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("failed to stat test file: %v", err)
+	}
+
+	result, err := worker.analyze(ctx, WorkItem{
+		FilePath:  filePath,
+		FileSize:  info.Size(),
+		ModTime:   info.ModTime(),
+		EventType: WorkItemNew,
+	})
+	if err != nil {
+		t.Fatalf("analyze failed: %v", err)
+	}
+
+	// Key assertion: chunks should be populated even in DegradationNoEmbed mode
+	if result.Chunks == nil {
+		t.Fatal("expected Chunks to be populated in DegradationNoEmbed mode")
+	}
+	if len(result.Chunks) == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+
+	// Verify embeddings are NOT populated (because we're in DegradationNoEmbed mode)
+	if result.Embeddings != nil {
+		t.Error("expected Embeddings to be nil in DegradationNoEmbed mode")
+	}
+
+	// Verify chunk data is correct
+	for i, chunk := range result.Chunks {
+		if chunk.Content == "" {
+			t.Errorf("chunk[%d].Content is empty", i)
+		}
+		if chunk.ContentHash == "" {
+			t.Errorf("chunk[%d].ContentHash is empty", i)
+		}
+		// Embeddings should NOT be on chunks in degradation mode
+		if chunk.Embedding != nil {
+			t.Errorf("chunk[%d].Embedding should be nil in DegradationNoEmbed mode", i)
+		}
+	}
+}
+
+func TestWorkerAnalyze_EmbeddingsFailure_ChunksStillPopulated(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, filepath.Join(t.TempDir(), "registry.db"))
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+	defer reg.Close()
+
+	// Use larger capacity to stay in DegradationFull mode (capacity < 0.80)
+	queue := NewQueue(bus)
+	queue.queueCapacity = 100
+	queue.workChan = make(chan WorkItem, 100)
+
+	worker := NewWorker(0, queue)
+	worker.SetRegistry(reg)
+
+	// Set up a failing embeddings provider
+	failingEmbed := &failingEmbeddingsProvider{
+		available: true,
+	}
+	worker.SetEmbeddingsProvider(failingEmbed)
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	if err := os.WriteFile(filePath, []byte("package main\nfunc main() {}"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("failed to stat test file: %v", err)
+	}
+
+	result, err := worker.analyze(ctx, WorkItem{
+		FilePath:  filePath,
+		FileSize:  info.Size(),
+		ModTime:   info.ModTime(),
+		EventType: WorkItemNew,
+	})
+	if err != nil {
+		t.Fatalf("analyze failed: %v", err)
+	}
+
+	// Key assertion: chunks should be populated even when embeddings fail
+	if result.Chunks == nil {
+		t.Fatal("expected Chunks to be populated even when embeddings fail")
+	}
+	if len(result.Chunks) == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+
+	// Verify file-level embeddings are NOT populated (because provider failed)
+	if result.Embeddings != nil {
+		t.Error("expected Embeddings to be nil when embeddings generation fails")
+	}
+
+	// Verify chunk data is correct
+	for i, chunk := range result.Chunks {
+		if chunk.Content == "" {
+			t.Errorf("chunk[%d].Content is empty", i)
+		}
+		if chunk.ContentHash == "" {
+			t.Errorf("chunk[%d].ContentHash is empty", i)
+		}
+	}
+}
+
+func TestWorkerAnalyze_NoEmbeddingsProvider_ChunksStillPopulated(t *testing.T) {
+	bus := events.NewBus()
+	defer bus.Close()
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, filepath.Join(t.TempDir(), "registry.db"))
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+	defer reg.Close()
+
+	// Use larger capacity to stay in DegradationFull mode (capacity < 0.80)
+	queue := NewQueue(bus)
+	queue.queueCapacity = 100
+	queue.workChan = make(chan WorkItem, 100)
+
+	worker := NewWorker(0, queue)
+	worker.SetRegistry(reg)
+	// Explicitly NOT setting embeddings provider
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	if err := os.WriteFile(filePath, []byte("package main\nfunc main() {}"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("failed to stat test file: %v", err)
+	}
+
+	result, err := worker.analyze(ctx, WorkItem{
+		FilePath:  filePath,
+		FileSize:  info.Size(),
+		ModTime:   info.ModTime(),
+		EventType: WorkItemNew,
+	})
+	if err != nil {
+		t.Fatalf("analyze failed: %v", err)
+	}
+
+	// Key assertion: chunks should be populated even without embeddings provider
+	if result.Chunks == nil {
+		t.Fatal("expected Chunks to be populated even without embeddings provider")
+	}
+	if len(result.Chunks) == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+
+	// Verify embeddings are NOT populated
+	if result.Embeddings != nil {
+		t.Error("expected Embeddings to be nil without embeddings provider")
+	}
+
+	// Verify chunk data is correct
+	for i, chunk := range result.Chunks {
+		if chunk.Content == "" {
+			t.Errorf("chunk[%d].Content is empty", i)
+		}
+		if chunk.ContentHash == "" {
+			t.Errorf("chunk[%d].ContentHash is empty", i)
+		}
+		// No embeddings on chunks without provider
+		if chunk.Embedding != nil {
+			t.Errorf("chunk[%d].Embedding should be nil without embeddings provider", i)
+		}
+	}
+}
+
+// failingEmbeddingsProvider always returns an error when embedding.
+type failingEmbeddingsProvider struct {
+	available bool
+}
+
+func (f *failingEmbeddingsProvider) Name() string                         { return "failing-embeddings" }
+func (f *failingEmbeddingsProvider) Type() providers.ProviderType         { return providers.ProviderTypeEmbeddings }
+func (f *failingEmbeddingsProvider) Available() bool                      { return f.available }
+func (f *failingEmbeddingsProvider) RateLimit() providers.RateLimitConfig { return providers.RateLimitConfig{} }
+func (f *failingEmbeddingsProvider) ModelName() string                    { return "failing-model" }
+func (f *failingEmbeddingsProvider) Dimensions() int                      { return 0 }
+func (f *failingEmbeddingsProvider) MaxTokens() int                       { return 8192 }
+func (f *failingEmbeddingsProvider) Embed(ctx context.Context, req providers.EmbeddingsRequest) (*providers.EmbeddingsResult, error) {
+	return nil, fmt.Errorf("simulated embeddings failure")
+}
+func (f *failingEmbeddingsProvider) EmbedBatch(ctx context.Context, texts []string) ([]providers.EmbeddingsBatchResult, error) {
+	return nil, fmt.Errorf("simulated batch embeddings failure")
 }
 
 func TestAnalyzedChunkContainsAllFields(t *testing.T) {

@@ -114,7 +114,10 @@ type Worker struct {
 	stopChan chan struct{}
 	stopOnce sync.Once
 
-	// Providers (injected or looked up)
+	// Pipeline for analysis (when set, takes precedence over individual stages)
+	pipeline *Pipeline
+
+	// Providers (injected or looked up) - used when pipeline is not set
 	semanticProvider   providers.SemanticProvider
 	embeddingsProvider providers.EmbeddingsProvider
 	chunkerRegistry    *chunkers.Registry
@@ -268,6 +271,11 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	stats := w.queue.Stats()
 	mode := stats.DegradationMode
 
+	// Use pipeline if available
+	if w.pipeline != nil {
+		return w.analyzeWithPipeline(ctx, item, mode)
+	}
+
 	fileReader := NewFileReader(w.registry)
 	fileResult, err := fileReader.Read(ctx, item, mode)
 	if err != nil {
@@ -411,6 +419,52 @@ func (w *Worker) updateRegistryForMetadataOnly(ctx context.Context, result *Anal
 	}
 }
 
+// analyzeWithPipeline delegates analysis to the configured pipeline.
+func (w *Worker) analyzeWithPipeline(ctx context.Context, item WorkItem, mode DegradationMode) (*AnalysisResult, error) {
+	pctx := NewPipelineContext(item, mode, w.logger)
+
+	if err := w.pipeline.Execute(ctx, pctx); err != nil {
+		return nil, err
+	}
+
+	// Publish stage-specific events for observability
+	w.publishPipelineEvents(ctx, pctx)
+
+	return pctx.AnalysisResult, nil
+}
+
+// publishPipelineEvents publishes events based on pipeline execution results.
+func (w *Worker) publishPipelineEvents(_ context.Context, pctx *PipelineContext) {
+	if pctx.FileResult == nil {
+		return
+	}
+
+	// Publish skip event for metadata-only or skipped files
+	if pctx.IsMetadataOnly() || pctx.ShouldSkip() {
+		decision := "metadata_only"
+		if pctx.ShouldSkip() {
+			decision = "skipped"
+		}
+		w.queue.publishAnalysisSkipped(pctx.WorkItem.FilePath, decision, pctx.FileResult.IngestReason)
+		return
+	}
+
+	result := pctx.AnalysisResult
+	if result == nil {
+		return
+	}
+
+	// Publish semantic completion event if semantic analysis was performed
+	if pctx.SemanticResult != nil {
+		w.queue.publishAnalysisSemanticComplete(pctx.WorkItem.FilePath, result.ContentHash, 0)
+	}
+
+	// Publish embeddings completion event if embeddings were generated
+	if pctx.Embeddings != nil {
+		w.queue.publishAnalysisEmbeddingsComplete(pctx.WorkItem.FilePath, result.ContentHash, 0)
+	}
+}
+
 // averageEmbeddings computes the element-wise average of multiple embeddings.
 func averageEmbeddings(results []providers.EmbeddingsBatchResult) []float32 {
 	if len(results) == 0 {
@@ -463,6 +517,13 @@ func (w *Worker) SetAnalysisVersion(version string) {
 func (w *Worker) SetCaches(semantic *cache.SemanticCache, embeddings *cache.EmbeddingsCache) {
 	w.semanticCache = semantic
 	w.embeddingsCache = embeddings
+}
+
+// SetPipeline sets the analysis pipeline.
+// When a pipeline is set, the worker delegates analysis to it instead of
+// using individual stages directly.
+func (w *Worker) SetPipeline(p *Pipeline) {
+	w.pipeline = p
 }
 
 // Helper functions

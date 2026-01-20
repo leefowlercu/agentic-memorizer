@@ -11,6 +11,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/analysis"
 	"github.com/leefowlercu/agentic-memorizer/internal/cache"
+	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/cleaner"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
@@ -330,15 +331,34 @@ func (b *ComponentBuilder) registerDefinitions() {
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
 		RestartPolicy: RestartOnFailure,
-		Dependencies:  []string{"bus"},
+		Dependencies:  []string{"bus", "registry", "graph", "semantic_provider", "embeddings_provider", "semantic_cache", "embeddings_cache"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
 			workerCount := min(max(runtime.NumCPU(), 2), 8)
+			logger := slog.Default().With("component", "analysis-queue")
+
+			// Build PipelineConfig from available dependencies
+			pipelineCfg := &analysis.PipelineConfig{
+				Registry:           deps.Registry,
+				ChunkerRegistry:    chunkers.DefaultRegistry(),
+				SemanticProvider:   deps.Providers.Semantic,
+				SemanticCache:      deps.Caches.Semantic,
+				EmbeddingsProvider: deps.Providers.Embed,
+				EmbeddingsCache:    deps.Caches.Embeddings,
+				Graph:              deps.Graph,
+				AnalysisVersion:    "1.0.0",
+				Logger:             logger,
+			}
+
 			q := analysis.NewQueue(deps.Bus,
 				analysis.WithWorkerCount(workerCount),
 				analysis.WithQueueCapacity(1000),
-				analysis.WithLogger(slog.Default().With("component", "analysis-queue")),
+				analysis.WithLogger(logger),
+				analysis.WithPipelineConfig(pipelineCfg),
 			)
-			slog.Info("analysis queue initialized", "workers", workerCount)
+			slog.Info("analysis queue initialized",
+				"workers", workerCount,
+				"pipeline", true,
+			)
 			return q, nil
 		},
 		FatalChan: func(component any) <-chan error {

@@ -62,6 +62,9 @@ type Queue struct {
 	queueCapacity int
 	registry      registry.Registry
 
+	// Pipeline configuration for workers
+	pipelineConfig *PipelineConfig
+
 	state    QueueState
 	workChan chan WorkItem
 	workers  []*Worker
@@ -138,6 +141,14 @@ func WithRegistry(reg registry.Registry) QueueOption {
 	}
 }
 
+// WithPipelineConfig sets the pipeline configuration for workers.
+// When set, workers will use the Pipeline for analysis instead of direct stage invocation.
+func WithPipelineConfig(cfg *PipelineConfig) QueueOption {
+	return func(q *Queue) {
+		q.pipelineConfig = cfg
+	}
+}
+
 // NewQueue creates a new analysis queue.
 func NewQueue(bus events.Bus, opts ...QueueOption) *Queue {
 	q := &Queue{
@@ -186,6 +197,9 @@ func (q *Queue) Start(ctx context.Context) error {
 	for i := 0; i < q.workerCount; i++ {
 		worker := NewWorker(i, q)
 		worker.SetRegistry(q.registry)
+		if q.pipelineConfig != nil {
+			worker.SetPipeline(NewPipeline(*q.pipelineConfig))
+		}
 		q.workers[i] = worker
 		q.wg.Add(1)
 		go func(w *Worker) {
@@ -384,6 +398,9 @@ func (q *Queue) SetWorkerCount(n int) {
 		for i := current; i < n; i++ {
 			worker := NewWorker(i, q)
 			worker.SetRegistry(q.registry)
+			if q.pipelineConfig != nil {
+				worker.SetPipeline(NewPipeline(*q.pipelineConfig))
+			}
 			q.workers = append(q.workers, worker)
 			q.wg.Add(1)
 			go func(w *Worker) {

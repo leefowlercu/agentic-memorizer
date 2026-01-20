@@ -9,15 +9,15 @@ const (
 	DefaultLogFile  = "~/.config/memorizer/memorizer.log"
 
 	// Daemon configuration defaults.
-	DefaultDaemonHTTPPort        = 7600
-	DefaultDaemonHTTPBind        = "127.0.0.1"
-	DefaultDaemonShutdownTimeout = 30 // seconds
-	DefaultDaemonPIDFile         = "~/.config/memorizer/daemon.pid"
-	DefaultDaemonRegistryPath    = "~/.config/memorizer/registry.db"
-	DefaultDaemonRebuildInterval = 3600 // 1 hour in seconds, 0 = disabled
-	DefaultDaemonMetricsInterval = 15   // seconds
-	DefaultDaemonEventBusBufferSize = 100
-	DefaultDaemonEventBusCriticalQueuePath = "~/.config/memorizer/critqueue.db"
+	DefaultDaemonHTTPPort                      = 7600
+	DefaultDaemonHTTPBind                      = "127.0.0.1"
+	DefaultDaemonShutdownTimeout               = 30 // seconds
+	DefaultDaemonPIDFile                       = "~/.config/memorizer/daemon.pid"
+	DefaultDaemonRegistryPath                  = "~/.config/memorizer/registry.db"
+	DefaultDaemonRebuildInterval               = 3600 // 1 hour in seconds, 0 = disabled
+	DefaultDaemonMetricsInterval               = 15   // seconds
+	DefaultDaemonEventBusBufferSize            = 100
+	DefaultDaemonEventBusCriticalQueuePath     = "~/.config/memorizer/critqueue.db"
 	DefaultDaemonEventBusCriticalQueueCapacity = 1000
 
 	// Graph configuration defaults.

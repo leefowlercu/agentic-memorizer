@@ -122,7 +122,7 @@ func (c *StructuredChunker) chunkJSONArray(ctx context.Context, arr []json.RawMe
 	currentSize := 2 // "[]"
 	offset := 0
 
-	for i, record := range arr {
+	for _, record := range arr {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -140,11 +140,6 @@ func (c *StructuredChunker) chunkJSONArray(ctx context.Context, arr []json.RawMe
 
 		currentRecords = append(currentRecords, record)
 		currentSize += recordSize + 1 // +1 for comma
-
-		// Store record index in metadata
-		if len(chunks) == 0 && i == 0 {
-			// First chunk starts at record 0
-		}
 	}
 
 	// Finalize remaining records

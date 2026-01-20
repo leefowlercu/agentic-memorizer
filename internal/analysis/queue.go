@@ -274,7 +274,7 @@ func (q *Queue) subscribeToEvents() {
 	// Subscribe to file discovery events
 	q.unsubFns = append(q.unsubFns, q.bus.Subscribe(events.FileDiscovered, func(e events.Event) {
 		if fe, ok := e.Payload.(*events.FileEvent); ok {
-			q.Enqueue(WorkItem{
+			_ = q.Enqueue(WorkItem{
 				FilePath:  fe.Path,
 				FileSize:  fe.Size,
 				ModTime:   fe.ModTime,
@@ -286,7 +286,7 @@ func (q *Queue) subscribeToEvents() {
 	// Subscribe to file change events
 	q.unsubFns = append(q.unsubFns, q.bus.Subscribe(events.FileChanged, func(e events.Event) {
 		if fe, ok := e.Payload.(*events.FileEvent); ok {
-			q.Enqueue(WorkItem{
+			_ = q.Enqueue(WorkItem{
 				FilePath:  fe.Path,
 				FileSize:  fe.Size,
 				ModTime:   fe.ModTime,

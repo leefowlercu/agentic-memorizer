@@ -177,7 +177,7 @@ func (m *systemdManager) Status(ctx context.Context) (DaemonStatus, error) {
 	installed, err := m.IsInstalled()
 	if err != nil {
 		status.Error = err
-		return status, nil
+		return status, nil //nolint:nilerr // Return status with error field populated
 	}
 
 	if !installed {
@@ -190,7 +190,7 @@ func (m *systemdManager) Status(ctx context.Context) (DaemonStatus, error) {
 	if err != nil {
 		// Service is installed but systemctl failed
 		status.ServiceState = ServiceStateDisabled
-		return status, nil
+		return status, nil //nolint:nilerr // Not running is a valid state, not an error
 	}
 
 	// Parse systemctl show output

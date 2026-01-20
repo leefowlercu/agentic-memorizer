@@ -179,10 +179,10 @@ func WithBus(bus events.Bus) Option {
 // NewFalkorDBGraph creates a new FalkorDB graph client.
 func NewFalkorDBGraph(opts ...Option) *FalkorDBGraph {
 	g := &FalkorDBGraph{
-		config:     DefaultConfig(),
-		logger:     slog.Default(),
-		stopChan:   make(chan struct{}),
-		errChan:    make(chan error, 1),
+		config:   DefaultConfig(),
+		logger:   slog.Default(),
+		stopChan: make(chan struct{}),
+		errChan:  make(chan error, 1),
 	}
 
 	for _, opt := range opts {
@@ -287,7 +287,7 @@ func (g *FalkorDBGraph) Stop(ctx context.Context) error {
 
 	// Close connection
 	if g.conn != nil {
-		g.conn.Close()
+		_ = g.conn.Close()
 	}
 
 	g.connected = false

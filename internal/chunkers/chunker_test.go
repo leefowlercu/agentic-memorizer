@@ -368,10 +368,10 @@ func TestRegistry(t *testing.T) {
 
 		result, err := registry.Chunk(context.Background(), content, opts)
 		if err != nil {
-			t.Errorf("Chunk returned error: %v", err)
+			t.Fatalf("Chunk returned error: %v", err)
 		}
 		if result == nil {
-			t.Error("Chunk returned nil result")
+			t.Fatal("Chunk returned nil result")
 		}
 		if result.TotalChunks == 0 {
 			t.Error("Expected at least one chunk")
@@ -753,11 +753,9 @@ func TestContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		_, err := chunker.Chunk(ctx, []byte("Hello, world!"), DefaultChunkOptions())
-		if err == nil {
-			// Some chunkers may not check context, which is acceptable
-			// The test just ensures no panic occurs
-		}
+		// Some chunkers may not check context, which is acceptable
+		// The test just ensures no panic occurs
+		_, _ = chunker.Chunk(ctx, []byte("Hello, world!"), DefaultChunkOptions())
 	})
 }
 
@@ -919,11 +917,9 @@ func TestMarkdownChunkerEdgeCases(t *testing.T) {
 			largeContent[i] = 'a'
 		}
 
-		_, err := chunker.Chunk(ctx, largeContent, ChunkOptions{MaxChunkSize: 100})
-		if err == nil {
-			// Context cancellation may or may not be checked depending on content
-			// Just ensure no panic
-		}
+		// Context cancellation may or may not be checked depending on content
+		// Just ensure no panic
+		_, _ = chunker.Chunk(ctx, largeContent, ChunkOptions{MaxChunkSize: 100})
 	})
 
 	t.Run("empty heading text", func(t *testing.T) {
@@ -1274,11 +1270,8 @@ func TestRecursiveChunkerEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Chunk returned error: %v", err)
 		}
-		// With overlap, chunks should share some content
-		if len(result.Chunks) >= 2 {
-			// Check that overlapping content exists
-			// (Implementation detail: chunks may share end/start content)
-		}
+		// With overlap, chunks may share some content - just verify no panic
+		_ = len(result.Chunks) >= 2
 	})
 
 	t.Run("very small maxSize", func(t *testing.T) {
@@ -1360,11 +1353,8 @@ func TestRecursiveChunkerEdgeCases(t *testing.T) {
 		}
 
 		opts := ChunkOptions{MaxChunkSize: 50}
-		result, err := chunker.Chunk(ctx, largeContent, opts)
-		// Should either return partial result or error
-		if err == nil && result != nil {
-			// Partial result is acceptable
-		}
+		// Should either return partial result or error - both acceptable
+		_, _ = chunker.Chunk(ctx, largeContent, opts)
 	})
 }
 
@@ -1644,7 +1634,7 @@ func TestRegistryEdgeCases(t *testing.T) {
 			t.Fatalf("Chunk returned error: %v", err)
 		}
 		// Warnings can be nil or empty slice, both are valid
-		if result.Warnings != nil && len(result.Warnings) > 0 {
+		if len(result.Warnings) > 0 {
 			t.Logf("Unexpected warnings: %v", result.Warnings)
 		}
 	})

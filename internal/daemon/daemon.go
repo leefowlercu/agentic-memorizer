@@ -186,7 +186,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}
 
 	// Ensure PID file is cleaned up on exit (only after successful claim)
-	defer d.pidFile.Remove()
+	defer func() { _ = d.pidFile.Remove() }()
 
 	d.setState(DaemonStateRunning)
 	slog.Info("daemon started",

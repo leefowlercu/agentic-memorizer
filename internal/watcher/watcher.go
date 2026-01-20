@@ -165,7 +165,7 @@ func (w *watcher) Watch(path string) error {
 	// Add recursive watches
 	err = filepath.WalkDir(absPath, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil // Skip directories we can't access
+			return nil //nolint:nilerr // Skip directories we can't access
 		}
 
 		if !d.IsDir() {

@@ -79,7 +79,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		orchestrator.Stop(shutdownCtx)
+		_ = orchestrator.Stop(shutdownCtx)
 	}()
 
 	// Start daemon (blocking)

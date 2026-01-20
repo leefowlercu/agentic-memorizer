@@ -21,7 +21,7 @@ func NewJobRunner(bus *events.EventBus) *JobRunner {
 func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.Context) RunResult) RunResult {
 	started := time.Now()
 	if jr.bus != nil {
-		jr.bus.Publish(ctx, events.NewJobStarted(job.Name(), started))
+		_ = jr.bus.Publish(ctx, events.NewJobStarted(job.Name(), started))
 	}
 
 	result := fn(ctx)
@@ -33,7 +33,7 @@ func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.
 	}
 
 	if jr.bus != nil {
-		jr.bus.Publish(ctx, events.NewJobCompleted(
+		_ = jr.bus.Publish(ctx, events.NewJobCompleted(
 			job.Name(),
 			string(result.Status),
 			result.Error,
@@ -43,7 +43,7 @@ func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.
 			result.FinishedAt,
 		))
 		if result.Status == RunFailed {
-			jr.bus.Publish(ctx, events.NewJobFailed(
+			_ = jr.bus.Publish(ctx, events.NewJobFailed(
 				job.Name(),
 				result.Error,
 				result.Counts,

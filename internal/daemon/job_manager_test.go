@@ -490,7 +490,7 @@ func TestJobManager_StartStopPeriodicRebuild(t *testing.T) {
 	m.StartPeriodicRebuild(ctx, 50*time.Millisecond)
 
 	// Wait for at least one periodic rebuild
-	time.Sleep(80*time.Millisecond)
+	time.Sleep(80 * time.Millisecond)
 
 	m.StopPeriodicRebuild()
 

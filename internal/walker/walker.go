@@ -263,7 +263,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		// Get file info
 		info, err := d.Info()
 		if err != nil {
-			return nil // Skip files we can't stat
+			return nil //nolint:nilerr // Skip files we can't stat
 		}
 
 		// Track discovered path for reconciliation
@@ -278,7 +278,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		if incremental {
 			changed, err := w.hasFileChanged(ctx, filePath, info)
 			if err != nil {
-				return nil // Skip on error
+				return nil //nolint:nilerr // Skip on error
 			}
 			if !changed {
 				w.mu.Lock()
@@ -291,7 +291,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		// Compute content hash
 		contentHash, err := fsutil.HashFile(filePath)
 		if err != nil {
-			return nil // Skip files we can't hash
+			return nil //nolint:nilerr // Skip files we can't hash
 		}
 
 		// Publish file discovered event
@@ -326,7 +326,7 @@ func (w *walker) hasFileChanged(ctx context.Context, path string, info fs.FileIn
 	state, err := w.registry.GetFileState(ctx, path)
 	if err != nil {
 		// File not in registry, treat as changed (new file)
-		return true, nil
+		return true, nil //nolint:nilerr // Not found means new file, not an error
 	}
 
 	// Check mod time and size first (quick check)

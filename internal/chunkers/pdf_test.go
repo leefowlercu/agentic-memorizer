@@ -65,11 +65,11 @@ func TestPDFChunker(t *testing.T) {
 		content := createMinimalPDF()
 		result, err := chunker.Chunk(context.Background(), content, DefaultChunkOptions())
 		if err != nil {
-			t.Errorf("Chunk returned error: %v", err)
+			t.Fatalf("Chunk returned error: %v", err)
 		}
 		// Minimal PDF might not have text, but should parse successfully
 		if result == nil {
-			t.Error("Expected non-nil result")
+			t.Fatal("Expected non-nil result")
 		}
 		if result.ChunkerUsed != "pdf" {
 			t.Errorf("ChunkerUsed = %q, want %q", result.ChunkerUsed, "pdf")

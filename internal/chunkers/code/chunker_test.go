@@ -143,15 +143,8 @@ func (c *Calculator) Calculate(x int) int {
 		for i := range result.Chunks {
 			if strings.Contains(result.Chunks[i].Content, "Calculate") {
 				found = true
-				if result.Chunks[i].Metadata.Code != nil {
-					meta := result.Chunks[i].Metadata.Code
-					// ClassName extraction depends on AST structure
-					if meta.FunctionName == "Calculate" && meta.ClassName == "Calculator" {
-						// Perfect match
-					} else if meta.FunctionName == "Calculate" {
-						// Function found, receiver parsing may vary
-					}
-				}
+				// ClassName extraction depends on AST structure - just verify no panic
+				_ = result.Chunks[i].Metadata.Code
 				break
 			}
 		}

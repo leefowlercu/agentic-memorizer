@@ -36,6 +36,7 @@ go.work.sum
 /specs
 SPEC.md
 PLAN.md
+TODO.md
 
-# Bug tracking (local development only)
-BUGS.md
+# Generated docs
+docs/refactors

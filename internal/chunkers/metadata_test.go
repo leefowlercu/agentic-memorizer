@@ -2,7 +2,6 @@ package chunkers
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 )
@@ -170,15 +169,9 @@ func TestCodeMetadataJSONSerialization(t *testing.T) {
 
 	t.Run("nil array vs empty array", func(t *testing.T) {
 		data, _ := json.Marshal(meta)
-		jsonStr := string(data)
 
-		// Empty slice should serialize to []
-		if !strings.Contains(jsonStr, `"decorators":[]`) && !strings.Contains(jsonStr, `"decorators": []`) {
-			// empty slice may be omitted with omitempty, check if present
-		}
-
-		// nil slice should be omitted (or null)
-		// Just verify it can round-trip
+		// Empty slice may serialize to [] or be omitted with omitempty
+		// Just verify it can round-trip without error
 		var decoded CodeMetadata
 		if err := json.Unmarshal(data, &decoded); err != nil {
 			t.Fatalf("Unmarshal failed: %v", err)

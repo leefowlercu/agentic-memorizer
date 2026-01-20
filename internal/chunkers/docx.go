@@ -368,11 +368,9 @@ func (c *DOCXChunker) extractSections(doc *docxDocument, styles map[string]int) 
 			}
 			offset += len(text) + 2
 		} else if strings.TrimSpace(text) != "" {
-			// Regular paragraph
-			if currentSection != nil {
-				currentSection.text += text + "\n\n"
-				offset += len(text) + 2
-			}
+			// Regular paragraph - currentSection is always non-nil after initialization
+			currentSection.text += text + "\n\n"
+			offset += len(text) + 2
 		}
 	}
 
@@ -380,10 +378,9 @@ func (c *DOCXChunker) extractSections(doc *docxDocument, styles map[string]int) 
 	for _, table := range doc.Body.Tables {
 		tableText := c.tableToCSV(table)
 		if strings.TrimSpace(tableText) != "" {
-			if currentSection != nil {
-				currentSection.text += tableText + "\n\n"
-				offset += len(tableText) + 2
-			}
+			// currentSection is always non-nil after initialization
+			currentSection.text += tableText + "\n\n"
+			offset += len(tableText) + 2
 		}
 	}
 

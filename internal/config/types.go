@@ -15,13 +15,13 @@ type Config struct {
 
 // DaemonConfig holds daemon-related configuration.
 type DaemonConfig struct {
-	HTTPPort        int           `yaml:"http_port" mapstructure:"http_port"`
-	HTTPBind        string        `yaml:"http_bind" mapstructure:"http_bind"`
-	ShutdownTimeout int           `yaml:"shutdown_timeout" mapstructure:"shutdown_timeout"`
-	PIDFile         string        `yaml:"pid_file" mapstructure:"pid_file"`
-	RegistryPath    string        `yaml:"registry_path" mapstructure:"registry_path"`
-	RebuildInterval int           `yaml:"rebuild_interval" mapstructure:"rebuild_interval"` // seconds, 0 = disabled
-	Metrics         MetricsConfig `yaml:"metrics" mapstructure:"metrics"`
+	HTTPPort        int            `yaml:"http_port" mapstructure:"http_port"`
+	HTTPBind        string         `yaml:"http_bind" mapstructure:"http_bind"`
+	ShutdownTimeout int            `yaml:"shutdown_timeout" mapstructure:"shutdown_timeout"`
+	PIDFile         string         `yaml:"pid_file" mapstructure:"pid_file"`
+	RegistryPath    string         `yaml:"registry_path" mapstructure:"registry_path"`
+	RebuildInterval int            `yaml:"rebuild_interval" mapstructure:"rebuild_interval"` // seconds, 0 = disabled
+	Metrics         MetricsConfig  `yaml:"metrics" mapstructure:"metrics"`
 	EventBus        EventBusConfig `yaml:"event_bus" mapstructure:"event_bus"`
 }
 

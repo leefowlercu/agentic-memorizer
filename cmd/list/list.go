@@ -61,7 +61,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open registry; %w", err)
 	}
-	defer reg.Close()
+	defer func() { _ = reg.Close() }()
 
 	// Get all remembered paths
 	paths, err := reg.ListPaths(ctx)

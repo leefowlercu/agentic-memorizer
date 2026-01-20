@@ -106,11 +106,6 @@ func (r *Registry) Chunk(ctx context.Context, content []byte, opts ChunkOptions)
 	if r.fallback != nil {
 		result, err := r.fallback.Chunk(ctx, content, opts)
 		if err != nil {
-			aggregatedWarnings = append(aggregatedWarnings, ChunkWarning{
-				Offset:  0,
-				Message: fmt.Sprintf("fallback chunker failed: %v", err),
-				Code:    "FALLBACK_FAILED",
-			})
 			return nil, fmt.Errorf("all chunkers failed; last error: %w", err)
 		}
 

@@ -199,14 +199,10 @@ func TestCoalescer_Stop(t *testing.T) {
 		Timestamp: time.Now(),
 	})
 
-	// Events channel should be closed
+	// Events channel should be closed - may receive pending events which is fine
 	select {
-	case _, ok := <-c.Events():
-		if ok {
-			// May receive pending event, that's fine
-		}
+	case <-c.Events():
 	case <-time.After(100 * time.Millisecond):
-		// Also fine if channel is drained
 	}
 }
 

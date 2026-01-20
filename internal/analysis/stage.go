@@ -38,9 +38,9 @@ type PersistenceStageInterface interface {
 
 // Compile-time interface assertions for existing stage implementations.
 var (
-	_ FileReaderStage        = (*FileReader)(nil)
-	_ ChunkerStageInterface  = (*ChunkerStage)(nil)
-	_ SemanticStageInterface = (*SemanticStage)(nil)
-	_ EmbeddingsStageInterface = (*EmbeddingsStage)(nil)
+	_ FileReaderStage           = (*FileReader)(nil)
+	_ ChunkerStageInterface     = (*ChunkerStage)(nil)
+	_ SemanticStageInterface    = (*SemanticStage)(nil)
+	_ EmbeddingsStageInterface  = (*EmbeddingsStage)(nil)
 	_ PersistenceStageInterface = (*PersistenceStage)(nil)
 )

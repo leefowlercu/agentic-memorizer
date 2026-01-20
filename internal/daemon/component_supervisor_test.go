@@ -38,12 +38,6 @@ func (m *mockHealthUpdater) getStatus(name string) (ComponentHealth, bool) {
 	return h, ok
 }
 
-func (m *mockHealthUpdater) updateCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.updates)
-}
-
 func TestNewComponentSupervisor(t *testing.T) {
 	health := newMockHealthUpdater()
 	supervisor := NewComponentSupervisor(health)

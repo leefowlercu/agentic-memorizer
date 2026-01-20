@@ -328,9 +328,6 @@ func (c *LaTeXChunker) splitPreservingMath(content string) []string {
 		for _, m := range beginMatches {
 			envName := m[1]
 			envStack = append(envStack, envName)
-			if mathEnvs[envName] {
-				inMathEnv = true
-			}
 		}
 
 		endMatches := latexEndEnvRegex.FindAllStringSubmatch(line, -1)

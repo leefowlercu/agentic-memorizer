@@ -36,9 +36,8 @@ type Coalescer struct {
 
 // pendingEvent tracks a pending event with its timer.
 type pendingEvent struct {
-	event   CoalescedEvent
-	timer   *time.Timer
-	deleted bool
+	event CoalescedEvent
+	timer *time.Timer
 }
 
 // NewCoalescer creates a new Coalescer with the given configuration.
@@ -137,11 +136,7 @@ func (c *Coalescer) emit(path string) {
 	delete(c.pending, path)
 	c.mu.Unlock()
 
-	// Check if file exists for delete events (it might have been recreated)
-	if event.Type == EventDelete {
-		// The grace period has passed, emit the delete
-	}
-
+	// The grace period has passed - emit the event (delete events have already been verified)
 	select {
 	case c.events <- event:
 	case <-c.stopCh:

@@ -696,11 +696,8 @@ func (r *SQLiteRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, e
 			continue
 		}
 
-		// Delete all file_state entries under this path
-		if err := r.DeleteFileStatesForPath(ctx, status.Path); err != nil {
-			// Log but continue - best effort cleanup
-			// The caller can handle logging appropriately
-		}
+		// Delete all file_state entries under this path (best effort - ignore errors)
+		_ = r.DeleteFileStatesForPath(ctx, status.Path)
 
 		// Remove the remembered path itself
 		if err := r.RemovePath(ctx, status.Path); err != nil {

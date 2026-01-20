@@ -163,7 +163,7 @@ func (c *SemanticCache) Stats() CacheStats {
 
 	_ = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // Skip files we can't access
 		}
 		if !info.IsDir() {
 			stats.EntryCount++

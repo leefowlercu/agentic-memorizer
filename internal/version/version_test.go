@@ -124,7 +124,7 @@ func TestGetGitCommitFormat(t *testing.T) {
 
 	// Should be hex characters only
 	for _, c := range commit {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("getGitCommit() = %q, contains non-hex character %q", got, c)
 			return
 		}
@@ -255,7 +255,7 @@ func TestReadBuildInfo(t *testing.T) {
 	if revision != "" {
 		// Should be hex characters only (7 chars after shortening)
 		for _, c := range revision {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				t.Errorf("readBuildInfo() revision = %q, contains non-hex character", revision)
 				return
 			}

@@ -30,10 +30,42 @@ linters:
     errcheck:
       check-type-assertions: true
       check-blank: false
+      exclude-functions:
+        # fmt print functions - errors only occur if writer fails
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+        - fmt.Scanln
+        # Common defer close patterns - errors rarely actionable
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*bufio.Writer).Flush
+        - (net.Conn).Close
+        - (*net/http.Response).Body.Close
+        # Database - defer close/rollback patterns
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*database/sql.DB).Close
+        # OS operations - often best-effort
+        - os.Setenv
+        - os.Remove
+        # Writer flush - errors surfaced on prior writes
+        - (*text/tabwriter.Writer).Flush
+        # JSON encoder to response writers
+        - (*encoding/json.Encoder).Encode
+        # Application event bus - fire-and-forget publishing
+        - (github.com/leefowlercu/agentic-memorizer/internal/events.Bus).Publish
+        # Provider registry - errors logged internally
+        - (*github.com/leefowlercu/agentic-memorizer/internal/providers.Registry).RegisterSemantic
+        - (*github.com/leefowlercu/agentic-memorizer/internal/providers.Registry).RegisterEmbeddings
     govet:
       enable-all: true
       disable:
         - fieldalignment  # Too noisy for most projects
+        - shadow          # Shadowing err is idiomatic Go
     misspell:
       locale: US
   exclusions:
@@ -43,6 +75,7 @@ linters:
         linters:
           - errcheck
           - bodyclose
+          - govet
       # Exclude testdata directories
       - path: testdata/
         linters:

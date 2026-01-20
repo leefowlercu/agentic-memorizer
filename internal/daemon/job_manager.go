@@ -81,7 +81,7 @@ func (m *JobManager) Rebuild(ctx context.Context, full bool) (*RebuildResult, er
 	}
 	trigger := "manual"
 	if m.bus != nil {
-		m.bus.Publish(ctx, events.NewRebuildStarted(full, pathCount, trigger))
+		_ = m.bus.Publish(ctx, events.NewRebuildStarted(full, pathCount, trigger))
 	}
 
 	// Validate and clean missing remembered paths before rebuild
@@ -129,7 +129,7 @@ func (m *JobManager) Rebuild(ctx context.Context, full bool) (*RebuildResult, er
 
 	// Publish rebuild complete event for MCP notifications
 	if m.bus != nil {
-		m.bus.Publish(ctx, events.NewRebuildComplete(
+		_ = m.bus.Publish(ctx, events.NewRebuildComplete(
 			int(stats.FilesDiscovered),
 			int(stats.DirsTraversed),
 			duration,
@@ -277,7 +277,7 @@ func (m *JobManager) ValidateAndCleanPaths(ctx context.Context) []string {
 
 		// Emit event for observability
 		if m.bus != nil {
-			m.bus.Publish(ctx, events.NewRememberedPathRemoved(path, "not_found", false))
+			_ = m.bus.Publish(ctx, events.NewRememberedPathRemoved(path, "not_found", false))
 		}
 	}
 

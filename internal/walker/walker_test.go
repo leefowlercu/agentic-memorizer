@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func (r *mockRegistry) FindContainingPath(ctx context.Context, path string) (*re
 
 	// Simple implementation: check if path starts with any remembered path
 	for _, rp := range r.paths {
-		if path == rp.Path || filepath.HasPrefix(path, rp.Path+string(filepath.Separator)) {
+		if path == rp.Path || strings.HasPrefix(path, rp.Path+string(filepath.Separator)) {
 			return rp, nil
 		}
 	}
@@ -134,7 +135,7 @@ func (r *mockRegistry) ListFileStates(ctx context.Context, basePath string) ([]r
 	defer r.mu.RUnlock()
 	var result []registry.FileState
 	for path, fs := range r.fileStates {
-		if filepath.HasPrefix(path, basePath) {
+		if strings.HasPrefix(path, basePath) {
 			result = append(result, *fs)
 		}
 	}
@@ -145,7 +146,7 @@ func (r *mockRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath s
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for path := range r.fileStates {
-		if filepath.HasPrefix(path, parentPath) {
+		if strings.HasPrefix(path, parentPath) {
 			delete(r.fileStates, path)
 		}
 	}

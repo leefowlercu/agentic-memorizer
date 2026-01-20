@@ -84,11 +84,7 @@ func (q *SQLiteCriticalQueue) Enqueue(event Event) error {
 		}
 	}
 
-	payload, err := json.Marshal(queuedEvent{
-		Type:      event.Type,
-		Timestamp: event.Timestamp,
-		Payload:   event.Payload,
-	})
+	payload, err := json.Marshal(queuedEvent(event))
 	if err != nil {
 		return err
 	}
@@ -131,11 +127,7 @@ func (q *SQLiteCriticalQueue) Dequeue(ctx context.Context) (Event, error) {
 		if err := json.Unmarshal(payload, &qe); err != nil {
 			return Event{}, err
 		}
-		return Event{
-			Type:      qe.Type,
-			Timestamp: qe.Timestamp,
-			Payload:   qe.Payload,
-		}, nil
+		return Event(qe), nil
 	}
 }
 

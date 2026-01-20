@@ -403,11 +403,9 @@ func (c *ODTChunker) extractSections(elements []odtElement) []odtSection {
 			}
 			offset += len(elem.text) + 2
 		} else if elem.text != "" {
-			// Regular paragraph
-			if currentSection != nil {
-				currentSection.text += elem.text + "\n\n"
-				offset += len(elem.text) + 2
-			}
+			// Regular paragraph - currentSection is always non-nil after initialization
+			currentSection.text += elem.text + "\n\n"
+			offset += len(elem.text) + 2
 		}
 	}
 

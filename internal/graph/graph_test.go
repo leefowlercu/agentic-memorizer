@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -53,11 +54,11 @@ func TestNewFalkorDBGraph(t *testing.T) {
 
 func TestNewFalkorDBGraphWithOptions(t *testing.T) {
 	customConfig := Config{
-		Host:       "custom-host",
-		Port:       6380,
-		GraphName:  "custom-graph",
-		MaxRetries: 5,
-		RetryDelay: 2 * time.Second,
+		Host:           "custom-host",
+		Port:           6380,
+		GraphName:      "custom-graph",
+		MaxRetries:     5,
+		RetryDelay:     2 * time.Second,
 		WriteQueueSize: 42,
 	}
 
@@ -430,49 +431,49 @@ func TestOperationsWithoutConnection(t *testing.T) {
 	g := NewFalkorDBGraph()
 
 	t.Run("UpsertFile", func(t *testing.T) {
-		err := g.UpsertFile(nil, &FileNode{Path: "/test"})
+		err := g.UpsertFile(context.TODO(), &FileNode{Path: "/test"})
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}
 	})
 
 	t.Run("DeleteFile", func(t *testing.T) {
-		err := g.DeleteFile(nil, "/test")
+		err := g.DeleteFile(context.TODO(), "/test")
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}
 	})
 
 	t.Run("GetFile", func(t *testing.T) {
-		_, err := g.GetFile(nil, "/test")
+		_, err := g.GetFile(context.TODO(), "/test")
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}
 	})
 
 	t.Run("Query", func(t *testing.T) {
-		_, err := g.Query(nil, "MATCH (n) RETURN n")
+		_, err := g.Query(context.TODO(), "MATCH (n) RETURN n")
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}
 	})
 
 	t.Run("ExportSnapshot", func(t *testing.T) {
-		_, err := g.ExportSnapshot(nil)
+		_, err := g.ExportSnapshot(context.TODO())
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}
 	})
 
 	t.Run("DeleteFilesUnderPath", func(t *testing.T) {
-		err := g.DeleteFilesUnderPath(nil, "/test")
+		err := g.DeleteFilesUnderPath(context.TODO(), "/test")
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}
 	})
 
 	t.Run("DeleteDirectoriesUnderPath", func(t *testing.T) {
-		err := g.DeleteDirectoriesUnderPath(nil, "/test")
+		err := g.DeleteDirectoriesUnderPath(context.TODO(), "/test")
 		if err == nil {
 			t.Error("Expected error when not connected")
 		}

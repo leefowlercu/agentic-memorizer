@@ -1491,13 +1491,17 @@ type failingEmbeddingsProvider struct {
 	available bool
 }
 
-func (f *failingEmbeddingsProvider) Name() string                         { return "failing-embeddings" }
-func (f *failingEmbeddingsProvider) Type() providers.ProviderType         { return providers.ProviderTypeEmbeddings }
-func (f *failingEmbeddingsProvider) Available() bool                      { return f.available }
-func (f *failingEmbeddingsProvider) RateLimit() providers.RateLimitConfig { return providers.RateLimitConfig{} }
-func (f *failingEmbeddingsProvider) ModelName() string                    { return "failing-model" }
-func (f *failingEmbeddingsProvider) Dimensions() int                      { return 0 }
-func (f *failingEmbeddingsProvider) MaxTokens() int                       { return 8192 }
+func (f *failingEmbeddingsProvider) Name() string { return "failing-embeddings" }
+func (f *failingEmbeddingsProvider) Type() providers.ProviderType {
+	return providers.ProviderTypeEmbeddings
+}
+func (f *failingEmbeddingsProvider) Available() bool { return f.available }
+func (f *failingEmbeddingsProvider) RateLimit() providers.RateLimitConfig {
+	return providers.RateLimitConfig{}
+}
+func (f *failingEmbeddingsProvider) ModelName() string { return "failing-model" }
+func (f *failingEmbeddingsProvider) Dimensions() int   { return 0 }
+func (f *failingEmbeddingsProvider) MaxTokens() int    { return 8192 }
 func (f *failingEmbeddingsProvider) Embed(ctx context.Context, req providers.EmbeddingsRequest) (*providers.EmbeddingsResult, error) {
 	return nil, fmt.Errorf("simulated embeddings failure")
 }

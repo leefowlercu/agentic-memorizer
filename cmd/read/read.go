@@ -102,7 +102,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 	if err := g.Start(ctx); err != nil {
 		return fmt.Errorf("failed to connect to graph database; %w", err)
 	}
-	defer g.Stop(ctx)
+	defer func() { _ = g.Stop(ctx) }()
 
 	// Create exporter
 	exporter := export.NewExporter(g)

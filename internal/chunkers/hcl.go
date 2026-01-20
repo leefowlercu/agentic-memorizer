@@ -210,19 +210,8 @@ func (c *HCLChunker) extractBlocks(file *hcl.File, content []byte) []hclBlock {
 
 		// Get the block content from source
 		startByte := block.DefRange.Start.Byte
-		endByte := block.DefRange.End.Byte
-
-		// Try to get the actual end of the block (including body)
-		if block.Body != nil {
-			// Get the range of the body
-			bodyRange := block.Body.MissingItemRange()
-			if bodyRange.End.Byte > endByte {
-				endByte = bodyRange.End.Byte
-			}
-		}
-
 		// Find the actual end of the block by looking for the closing brace
-		endByte = c.findBlockEnd(content, startByte)
+		endByte := c.findBlockEnd(content, startByte)
 
 		blockContent := string(content[startByte:endByte])
 

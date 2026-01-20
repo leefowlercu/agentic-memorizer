@@ -312,12 +312,12 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 		switch name {
 		case "metrics_collector":
 			if o.metricsCollector != nil {
-				o.metricsCollector.Stop(ctx)
+				_ = o.metricsCollector.Stop(ctx)
 				slog.Debug("metrics collector stopped")
 			}
 		case "mcp":
 			if o.mcpServer != nil {
-				o.mcpServer.Stop(ctx)
+				_ = o.mcpServer.Stop(ctx)
 				slog.Debug("MCP server stopped")
 			}
 		case "watcher":
@@ -363,7 +363,7 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 			}
 		case "registry":
 			if o.registry != nil {
-				o.registry.Close()
+				_ = o.registry.Close()
 				slog.Debug("registry closed")
 			}
 		}

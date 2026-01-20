@@ -35,7 +35,7 @@ The resulting knowledge graph is exposed to AI coding assistants through multipl
 
 Key capabilities:
 
-- **Intelligent Chunking** - 20+ format-specific chunkers with language-aware semantic splitting using Tree-sitter AST parsing for code and structure-preserving chunking for documents
+- **Intelligent Chunking** - 22 format-specific chunkers with language-aware semantic splitting using Tree-sitter AST parsing for code (8 languages) and structure-preserving chunking for documents
 - **Semantic Analysis** - Pluggable providers (Anthropic, OpenAI, Google) extract topics, entities, and summaries from content
 - **Vector Embeddings** - OpenAI, Voyage AI, and Google providers generate embeddings for semantic similarity search
 - **Knowledge Graph** - FalkorDB (Redis Graph) backend stores files, chunks, metadata, and relationships
@@ -88,29 +88,41 @@ Key capabilities:
 │  └──────────────┘  └──────────────┘  └──────────────┘               │
 └──────────────────┬──────────────────────────────────────────────────┘
                    │
-        ┌──────────┴──────────┬──────────────┬──────────────┐
-        │                     │              │              │
-┌───────▼────────┐  ┌─────────▼─────┐ ┌──────▼──────┐ ┌─────▼────────┐
-│  Filesystem    │  │   Analysis    │ │   Semantic  │ │ Embeddings   │
-│  Watcher       │  │   Pipeline    │ │   Providers │ │   Providers  │
-└────────────────┘  └───────┬───────┘ └─────────────┘ └──────────────┘
-                            │
-                    ┌───────▼───────┐
-                    │  Knowledge    │
-                    │  Graph        │
-                    │  (FalkorDB)   │
-                    └───────────────┘
+┌──────────────────▼──────────────────────────────────────────────────┐
+│                        Event Bus                                    │
+│                  Async pub/sub backbone                             │
+└───┬────────────────────────┬────────────────────────┬───────────────┘
+    │                        │                        │
+┌───▼───────────┐   ┌────────▼────────┐   ┌───────────▼──────────┐
+│  Filesystem   │   │    Analysis     │   │      Cleaner         │
+│  Watcher      │   │    Pipeline     │   │  (stale removal)     │
+└───────────────┘   └────────┬────────┘   └──────────────────────┘
+                             │
+           ┌─────────────────┼─────────────────┐
+           │                 │                 │
+    ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
+    │  Chunkers   │   │  Semantic   │   │ Embeddings  │
+    │    (22)     │   │  Providers  │   │  Providers  │
+    └─────────────┘   └─────────────┘   └─────────────┘
+                             │
+                     ┌───────▼───────┐
+                     │  Knowledge    │
+                     │  Graph        │
+                     │  (FalkorDB)   │
+                     └───────────────┘
 ```
 
 **Data Flow:**
 
 1. Filesystem watcher detects changes in registered directories
-2. Events are debounced and queued for analysis
-3. Format-specific chunkers split files and extract metadata
-4. Semantic providers analyze content for topics, entities, and summaries
-5. Embeddings providers generate vector representations
-6. Results are stored in the FalkorDB knowledge graph
-7. CLI and MCP server provide query interfaces
+2. Events are published to the Event Bus (async pub/sub)
+3. Analysis Pipeline subscribes and processes queued events
+4. Format-specific chunkers split files and extract metadata
+5. Semantic providers analyze content for topics, entities, and summaries
+6. Embeddings providers generate vector representations
+7. Results are stored in the FalkorDB knowledge graph
+8. Cleaner subscribes to deletion events to remove stale graph entries
+9. CLI and MCP server provide query interfaces
 
 ## CLI Commands
 
@@ -139,7 +151,7 @@ Key capabilities:
 
 ## Configuration
 
-Configuration is stored at `~/.config/memorizer/config.yaml` with environment variable overrides using the `MEMORIZER_` prefix.
+Configuration is stored at `~/.config/memorizer/config.yaml` with environment variable overrides using the `MEMORIZER_` prefix. See [config.yaml.example](config.yaml.example) for the complete reference with detailed comments.
 
 ```yaml
 log_level: info
@@ -150,18 +162,47 @@ daemon:
   http_bind: 127.0.0.1
   shutdown_timeout: 30
   pid_file: ~/.config/memorizer/daemon.pid
+  registry_path: ~/.config/memorizer/registry.db
+  rebuild_interval: 3600
+  metrics:
+    collection_interval: 15
+  event_bus:
+    buffer_size: 100
+    critical_queue_path: ~/.config/memorizer/critqueue.db
+    critical_queue_capacity: 1000
 
 graph:
   host: localhost
   port: 6379
+  name: memorizer
+  password_env: MEMORIZER_GRAPH_PASSWORD
+  max_retries: 3
+  retry_delay_ms: 1000
+  write_queue_size: 1000
 
 semantic:
   provider: anthropic
+  model: claude-sonnet-4-5-20250929
   rate_limit: 10
+  api_key_env: ANTHROPIC_API_KEY
 
 embeddings:
   enabled: true
   provider: openai
+  model: text-embedding-3-large
+  dimensions: 3072
+  api_key_env: OPENAI_API_KEY
+
+defaults:
+  skip:
+    extensions: [".exe", ".dll", ".so", ".dylib", ".bin", ...]
+    directories: [".git", "node_modules", "__pycache__", "dist", ...]
+    files: [".DS_Store", "package-lock.json", "*.min.js", ...]
+    hidden: true
+  include:
+    extensions: []
+    directories: []
+    files: []
 ```
 
 Environment variable examples:

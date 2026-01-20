@@ -112,6 +112,7 @@ type RestartConfig struct {
 }
 
 // ComponentContext provides access to previously built components.
+// Used during the build phase to pass dependencies to component Build functions.
 type ComponentContext struct {
 	Bus              *events.EventBus
 	Registry         registry.Registry
@@ -130,6 +131,36 @@ type ComponentContext struct {
 		Semantic   *cache.SemanticCache
 		Embeddings *cache.EmbeddingsCache
 	}
+}
+
+// ComponentBag holds all built components for runtime use.
+// This is the output of the component build phase.
+type ComponentBag struct {
+	Bus              *events.EventBus
+	Registry         registry.Registry
+	Graph            graph.Graph
+	SemanticProvider providers.SemanticProvider
+	EmbedProvider    providers.EmbeddingsProvider
+	SemanticCache    *cache.SemanticCache
+	EmbeddingsCache  *cache.EmbeddingsCache
+	Queue            *analysis.Queue
+	Walker           walker.Walker
+	Watcher          watcher.Watcher
+	Cleaner          *cleaner.Cleaner
+	MCPServer        *mcp.Server
+	MetricsCollector *metrics.Collector
+
+	// GraphDegraded indicates graph connection failed during build.
+	GraphDegraded bool
+
+	// MCPDegraded indicates MCP server startup failed.
+	MCPDegraded bool
+}
+
+// HealthUpdater abstracts health status updates.
+// Implemented by Daemon to allow supervisor to update health without direct coupling.
+type HealthUpdater interface {
+	UpdateComponentHealth(statuses map[string]ComponentHealth)
 }
 
 // ComponentRegistry stores component definitions.

@@ -23,12 +23,135 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 )
 
-// registerComponentDefinitions populates the component registry with definitions.
-func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
-	r := NewComponentRegistry()
+// ComponentBuilder constructs daemon components in dependency order.
+type ComponentBuilder struct {
+	registry *ComponentRegistry
+	cfg      *config.Config
+	logger   *slog.Logger
+}
+
+// BuilderOption configures ComponentBuilder.
+type BuilderOption func(*ComponentBuilder)
+
+// WithBuilderLogger sets the logger for build operations.
+func WithBuilderLogger(l *slog.Logger) BuilderOption {
+	return func(b *ComponentBuilder) {
+		b.logger = l
+	}
+}
+
+// NewComponentBuilder creates a builder with registered component definitions.
+func NewComponentBuilder(cfg *config.Config, opts ...BuilderOption) *ComponentBuilder {
+	b := &ComponentBuilder{
+		registry: NewComponentRegistry(),
+		cfg:      cfg,
+		logger:   slog.Default(),
+	}
+
+	for _, opt := range opts {
+		opt(b)
+	}
+
+	b.registerDefinitions()
+	return b
+}
+
+// Registry returns the underlying ComponentRegistry for ordering queries.
+func (b *ComponentBuilder) Registry() *ComponentRegistry {
+	return b.registry
+}
+
+// Build constructs all components in topological order, returning a ComponentBag.
+// Fatal components that fail cause Build to return an error.
+// Degradable components that fail are logged and skipped.
+func (b *ComponentBuilder) Build(ctx context.Context) (*ComponentBag, error) {
+	order, err := b.registry.TopologicalOrder()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine build order; %w", err)
+	}
+
+	bag := &ComponentBag{}
+	compCtx := ComponentContext{}
+
+	for _, name := range order {
+		def := b.registry.defs[name]
+		obj, err := def.Build(ctx, compCtx)
+		if err != nil {
+			if def.Criticality == CriticalityFatal {
+				return nil, fmt.Errorf("failed to build component %s; %w", name, err)
+			}
+			b.logger.Warn("component build failed; continuing in degraded mode",
+				"component", name,
+				"error", err,
+			)
+			continue
+		}
+		if obj == nil {
+			continue
+		}
+
+		b.assignComponent(name, obj, bag, &compCtx)
+	}
+
+	logProviderStatus(bag.SemanticProvider, bag.EmbedProvider)
+
+	return bag, nil
+}
+
+// assignComponent assigns the built object to the appropriate bag and context fields.
+func (b *ComponentBuilder) assignComponent(name string, obj any, bag *ComponentBag, ctx *ComponentContext) {
+	switch c := obj.(type) {
+	case *events.EventBus:
+		bag.Bus = c
+		ctx.Bus = c
+		config.SetEventBus(c)
+	case registry.Registry:
+		bag.Registry = c
+		ctx.Registry = c
+	case graph.Graph:
+		bag.Graph = c
+		ctx.Graph = c
+	case *cache.SemanticCache:
+		bag.SemanticCache = c
+		ctx.Caches.Semantic = c
+	case *cache.EmbeddingsCache:
+		bag.EmbeddingsCache = c
+		ctx.Caches.Embeddings = c
+	case providers.SemanticProvider:
+		bag.SemanticProvider = c
+		ctx.Providers.Semantic = c
+	case providers.EmbeddingsProvider:
+		bag.EmbedProvider = c
+		ctx.Providers.Embed = c
+	case *analysis.Queue:
+		bag.Queue = c
+		ctx.Queue = c
+	case walker.Walker:
+		bag.Walker = c
+		ctx.Walker = c
+	case watcher.Watcher:
+		bag.Watcher = c
+		ctx.Watcher = c
+	case *cleaner.Cleaner:
+		bag.Cleaner = c
+		ctx.Cleaner = c
+	case *mcp.Server:
+		bag.MCPServer = c
+		ctx.MCP = c
+	case *metrics.Collector:
+		bag.MetricsCollector = c
+		ctx.MetricsCollector = c
+	default:
+		b.logger.Warn("unknown component type returned; ignoring", "component", name)
+	}
+}
+
+// registerDefinitions populates the component registry with definitions.
+func (b *ComponentBuilder) registerDefinitions() {
+	cfg := b.cfg
 
 	// Event bus
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "bus",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
@@ -54,7 +177,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Registry (SQLite)
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "registry",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
@@ -72,7 +195,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Graph client
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "graph",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -113,7 +236,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Caches
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "semantic_cache",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -137,7 +260,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 		},
 	})
 
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "embeddings_cache",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -169,7 +292,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Providers
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "semantic_provider",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -185,7 +308,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 		},
 	})
 
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "embeddings_provider",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -202,20 +325,14 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Queue
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "queue",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
 		RestartPolicy: RestartOnFailure,
 		Dependencies:  []string{"bus"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			workerCount := runtime.NumCPU()
-			if workerCount < 2 {
-				workerCount = 2
-			}
-			if workerCount > 8 {
-				workerCount = 8
-			}
+			workerCount := min(max(runtime.NumCPU(), 2), 8)
 			q := analysis.NewQueue(deps.Bus,
 				analysis.WithWorkerCount(workerCount),
 				analysis.WithQueueCapacity(1000),
@@ -233,7 +350,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Walker
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "walker",
 		Kind:          ComponentKindJob,
 		Criticality:   CriticalityDegradable,
@@ -245,9 +362,9 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 			return w, nil
 		},
 	})
+
 	// Job components registration (logical jobs)
-	// These wrap existing capabilities; we register names for health/events.
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "job.initial_walk",
 		Kind:          ComponentKindJob,
 		Criticality:   CriticalityDegradable,
@@ -257,7 +374,8 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 			return &logicalJob{name: "job.initial_walk", mode: "full"}, nil
 		},
 	})
-	r.Register(ComponentDefinition{
+
+	b.registry.Register(ComponentDefinition{
 		Name:          "job.rebuild_full",
 		Kind:          ComponentKindJob,
 		Criticality:   CriticalityDegradable,
@@ -267,7 +385,8 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 			return &logicalJob{name: "job.rebuild_full", mode: "full"}, nil
 		},
 	})
-	r.Register(ComponentDefinition{
+
+	b.registry.Register(ComponentDefinition{
 		Name:          "job.rebuild_incremental",
 		Kind:          ComponentKindJob,
 		Criticality:   CriticalityDegradable,
@@ -279,7 +398,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Watcher
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "watcher",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -298,7 +417,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Cleaner
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "cleaner",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -317,7 +436,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// MCP
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "mcp",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -339,7 +458,7 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 	})
 
 	// Metrics collector
-	r.Register(ComponentDefinition{
+	b.registry.Register(ComponentDefinition{
 		Name:          "metrics_collector",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
@@ -369,81 +488,4 @@ func (o *Orchestrator) registerComponentDefinitions(cfg *config.Config) {
 			return nil
 		},
 	})
-
-	o.components = r
-}
-
-// buildComponents constructs components in dependency order.
-func (o *Orchestrator) buildComponents(ctx context.Context, cfg *config.Config) error {
-	order, err := o.components.TopologicalOrder()
-	if err != nil {
-		return err
-	}
-
-	bag := ComponentContext{}
-
-	for _, name := range order {
-		def := o.components.defs[name]
-		obj, err := def.Build(ctx, bag)
-		if err != nil {
-			if def.Criticality == CriticalityFatal {
-				return fmt.Errorf("failed to build component %s; %w", name, err)
-			}
-			slog.Warn("component build failed; continuing in degraded mode", "component", name, "error", err)
-			continue
-		}
-		if obj == nil {
-			continue
-		}
-
-		switch c := obj.(type) {
-		case *events.EventBus:
-			o.bus = c
-			bag.Bus = c
-			config.SetEventBus(c)
-		case registry.Registry:
-			o.registry = c
-			bag.Registry = c
-		case graph.Graph:
-			o.graph = c
-			bag.Graph = c
-		case *cache.SemanticCache:
-			o.semanticCache = c
-			bag.Caches.Semantic = c
-		case *cache.EmbeddingsCache:
-			o.embeddingsCache = c
-			bag.Caches.Embeddings = c
-		case providers.SemanticProvider:
-			o.semanticProvider = c
-			bag.Providers.Semantic = c
-		case providers.EmbeddingsProvider:
-			o.embedProvider = c
-			bag.Providers.Embed = c
-		case *analysis.Queue:
-			o.queue = c
-			bag.Queue = c
-		case walker.Walker:
-			o.walker = c
-			bag.Walker = c
-		case watcher.Watcher:
-			o.watcher = c
-			bag.Watcher = c
-		case *cleaner.Cleaner:
-			o.cleaner = c
-			bag.Cleaner = c
-		case *mcp.Server:
-			o.mcpServer = c
-			bag.MCP = c
-		case *metrics.Collector:
-			o.metricsCollector = c
-			bag.MetricsCollector = c
-		default:
-			slog.Warn("unknown component type returned; ignoring", "component", name)
-		}
-	}
-
-	// Log provider status after build
-	logProviderStatus(o.semanticProvider, o.embedProvider)
-
-	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/analysis"
@@ -29,9 +28,17 @@ const (
 
 // Orchestrator manages the initialization and wiring of all daemon components.
 type Orchestrator struct {
-	daemon           *Daemon
-	components       *ComponentRegistry
-	jobRunner        *JobRunner
+	daemon          *Daemon
+	builder         *ComponentBuilder
+	supervisor      *ComponentSupervisor
+	healthCollector *ComponentHealthCollector
+	jobManager      *JobManager
+	bag             *ComponentBag
+
+	// components is the registry of component definitions (from builder)
+	components *ComponentRegistry
+
+	// Direct component references (populated from bag for convenience)
 	bus              *events.EventBus
 	registry         registry.Registry
 	graph            graph.Graph
@@ -54,21 +61,8 @@ type Orchestrator struct {
 	// mcpDegraded tracks if MCP server failed during startup
 	mcpDegraded bool
 
-	// rebuildStopChan signals the periodic rebuild goroutine to stop
-	rebuildStopChan chan struct{}
-
 	// healthStopChan stops the health updater goroutine
 	healthStopChan chan struct{}
-
-	// rebuildMu serializes rebuild operations to prevent concurrent map corruption
-	rebuildMu sync.Mutex
-
-	// jobResults tracks last run results for jobs (initial_walk, rebuilds)
-	jobResults map[string]RunResult
-	jobMu      sync.Mutex
-
-	componentCancels map[string]context.CancelFunc
-	busDegraded      bool
 
 	jobComponents map[string]JobComponent
 
@@ -79,11 +73,9 @@ type Orchestrator struct {
 // NewOrchestrator creates a new orchestrator for the daemon.
 func NewOrchestrator(d *Daemon) *Orchestrator {
 	return &Orchestrator{
-		daemon:           d,
-		jobResults:       make(map[string]RunResult),
-		components:       NewComponentRegistry(),
-		componentCancels: make(map[string]context.CancelFunc),
-		jobComponents:    make(map[string]JobComponent),
+		daemon:        d,
+		components:    NewComponentRegistry(),
+		jobComponents: make(map[string]JobComponent),
 	}
 }
 
@@ -92,11 +84,31 @@ func NewOrchestrator(d *Daemon) *Orchestrator {
 func (o *Orchestrator) Initialize(ctx context.Context) error {
 	cfg := config.Get()
 
-	o.registerComponentDefinitions(cfg)
-
-	if err := o.buildComponents(ctx, cfg); err != nil {
+	// Build components using the ComponentBuilder
+	o.builder = NewComponentBuilder(cfg, WithBuilderLogger(slog.Default()))
+	bag, err := o.builder.Build(ctx)
+	if err != nil {
 		return err
 	}
+	o.bag = bag
+	o.components = o.builder.Registry()
+
+	// Populate direct references from bag for convenience
+	o.bus = bag.Bus
+	o.registry = bag.Registry
+	o.graph = bag.Graph
+	o.semanticProvider = bag.SemanticProvider
+	o.embedProvider = bag.EmbedProvider
+	o.semanticCache = bag.SemanticCache
+	o.embeddingsCache = bag.EmbeddingsCache
+	o.queue = bag.Queue
+	o.walker = bag.Walker
+	o.watcher = bag.Watcher
+	o.cleaner = bag.Cleaner
+	o.mcpServer = bag.MCPServer
+	o.metricsCollector = bag.MetricsCollector
+	o.graphDegraded = bag.GraphDegraded
+	o.mcpDegraded = bag.MCPDegraded
 
 	if o.queue != nil && o.registry != nil {
 		o.queue.SetRegistry(o.registry)
@@ -106,28 +118,41 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		o.daemon.server.SetMetricsHandler(metrics.Handler())
 	}
 
-	// Set up job runner
-	o.jobRunner = NewJobRunner(o.bus)
-
 	// Wire MCP handler to HTTP server
 	if o.mcpServer != nil {
 		o.daemon.server.SetMCPHandler(o.mcpServer.Handler())
 	}
-
-	// Set rebuild function on daemon server
-	o.daemon.server.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
-		jobName := "job.rebuild_incremental"
-		if full {
-			jobName = "job.rebuild_full"
-		}
-		return o.handleRebuildWithRecord(ctx, full, jobName)
-	})
 
 	if o.registry != nil {
 		rememberService := NewRememberService(o.registry, o.bus, cfg.Defaults, WithLogger(slog.Default().With("component", "remember")))
 		o.daemon.server.SetRememberFunc(rememberService.Remember)
 		o.daemon.server.SetForgetFunc(rememberService.Forget)
 	}
+
+	// Create supervisor for component lifecycle management
+	o.supervisor = NewComponentSupervisor(o.daemon, WithSupervisorLogger(slog.Default()))
+
+	// Create health collector for status aggregation
+	o.healthCollector = NewComponentHealthCollector(o.bag, WithHealthCollectorLogger(slog.Default()))
+
+	// Create job manager for rebuild/walk operations
+	o.jobManager = NewJobManager(
+		o.bus,
+		o.walker,
+		o.cleaner,
+		o.registry,
+		o.healthCollector,
+		WithJobManagerLogger(slog.Default()),
+	)
+
+	// Set rebuild function on daemon server (delegates to job manager)
+	o.daemon.server.SetRebuildFunc(func(ctx context.Context, full bool) (*RebuildResult, error) {
+		jobName := "job.rebuild_incremental"
+		if full {
+			jobName = "job.rebuild_full"
+		}
+		return o.jobManager.RebuildWithRecord(ctx, full, jobName)
+	})
 
 	o.subscribeRememberedPathEvents()
 	o.subscribeHealthAndMetricsEvents()
@@ -142,7 +167,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	// Registry is already initialized and doesn't need a Start call
 
 	// Validate and clean missing remembered paths before starting components
-	removedPaths := o.validateRememberedPaths(ctx)
+	removedPaths := o.jobManager.ValidateAndCleanPaths(ctx)
 	if len(removedPaths) > 0 {
 		// Print summary to stdout for visibility
 		fmt.Printf("Removed %d missing remembered paths:\n", len(removedPaths))
@@ -165,7 +190,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		switch name {
 		case "graph":
 			if o.graph != nil {
-				o.runSupervisor(ctx, name, def, func(c context.Context) error {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
 					if err := o.graph.Start(c); err != nil {
 						o.graphDegraded = true
 						return err
@@ -177,7 +202,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 			}
 		case "queue":
 			if o.queue != nil {
-				o.runSupervisor(ctx, name, def, func(c context.Context) error {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
 					if err := o.queue.Start(c); err != nil {
 						return err
 					}
@@ -191,7 +216,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 			}
 		case "watcher":
 			if o.watcher != nil {
-				o.runSupervisor(ctx, name, def, func(c context.Context) error {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
 					if err := o.watcher.Start(c); err != nil {
 						return err
 					}
@@ -201,13 +226,13 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 			}
 		case "cleaner":
 			if o.cleaner != nil {
-				o.runSupervisor(ctx, name, def, func(c context.Context) error {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
 					return o.cleaner.Start(c)
 				}, nil)
 			}
 		case "mcp":
 			if o.mcpServer != nil {
-				o.runSupervisor(ctx, name, def, func(c context.Context) error {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
 					if err := o.mcpServer.Start(c); err != nil {
 						o.mcpDegraded = true
 						return err
@@ -219,16 +244,18 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 			}
 		case "metrics_collector":
 			if o.metricsCollector != nil {
-				o.runSupervisor(ctx, name, def, func(c context.Context) error {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
 					return o.metricsCollector.Start(c)
 				}, fatalChan(def, o.metricsCollector))
 			}
 		}
 	}
 
-	// Trigger initial walk (async)
+	// Trigger initial walk (async via job manager)
 	if o.walker != nil {
-		go o.walkRememberedPaths(ctx)
+		go func() {
+			_, _ = o.jobManager.InitialWalk(ctx)
+		}()
 	}
 
 	// Start health updater
@@ -237,7 +264,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	// Start periodic rebuild (if configured)
 	cfg := config.Get()
 	if cfg.Daemon.RebuildInterval > 0 {
-		o.startPeriodicRebuild(ctx, time.Duration(cfg.Daemon.RebuildInterval)*time.Second)
+		o.jobManager.StartPeriodicRebuild(ctx, time.Duration(cfg.Daemon.RebuildInterval)*time.Second)
 	}
 
 	return nil
@@ -253,12 +280,10 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 	o.eventUnsubs = nil
 	o.runCtx = nil
 
-	// Cancel any component-level contexts
-	for name, cancel := range o.componentCancels {
-		slog.Debug("canceling component", "component", name)
-		cancel()
+	// Cancel any component-level contexts via supervisor
+	if o.supervisor != nil {
+		o.supervisor.CancelAll()
 	}
-	o.componentCancels = make(map[string]context.CancelFunc)
 
 	// Stop health updater
 	if o.healthStopChan != nil {
@@ -266,11 +291,9 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 		o.healthStopChan = nil
 	}
 
-	// Stop periodic rebuild
-	if o.rebuildStopChan != nil {
-		close(o.rebuildStopChan)
-		o.rebuildStopChan = nil
-		slog.Debug("periodic rebuild stopped")
+	// Stop periodic rebuild via job manager
+	if o.jobManager != nil {
+		o.jobManager.StopPeriodicRebuild()
 	}
 
 	// Stop components in reverse topological order
@@ -348,249 +371,6 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 
 	slog.Info("all components stopped")
 	return nil
-}
-
-// handleRebuild handles all rebuild operations (daemon start, periodic, manual).
-// Uses mutex to prevent concurrent rebuilds from corrupting discoveredPaths map.
-func (o *Orchestrator) handleRebuild(ctx context.Context, full bool) (*RebuildResult, error) {
-	o.rebuildMu.Lock()
-	defer o.rebuildMu.Unlock()
-
-	start := time.Now()
-
-	// Publish rebuild started event
-	pathCount := 0
-	if o.registry != nil {
-		if paths, err := o.registry.ListPaths(ctx); err == nil {
-			pathCount = len(paths)
-		}
-	}
-	trigger := "manual"
-	if o.bus != nil {
-		o.bus.Publish(ctx, events.NewRebuildStarted(full, pathCount, trigger))
-	}
-
-	// Validate and clean missing remembered paths before rebuild
-	removedPaths := o.validateRememberedPaths(ctx)
-
-	if o.walker == nil {
-		return nil, fmt.Errorf("walker not initialized")
-	}
-
-	var err error
-	if full {
-		err = o.walker.WalkAll(ctx)
-	} else {
-		err = o.walker.WalkAllIncremental(ctx)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("rebuild walk failed; %w", err)
-	}
-
-	// Run reconciliation after walk completes to clean up stale entries
-	discoveredPaths := o.walker.DrainDiscoveredPaths()
-	if discoveredPaths != nil && o.cleaner != nil {
-		// Get remembered paths to reconcile against
-		rememberedPaths, listErr := o.registry.ListPaths(ctx)
-		if listErr != nil {
-			slog.Warn("failed to list paths for reconciliation", "error", listErr)
-		} else {
-			for _, rp := range rememberedPaths {
-				result, reconcileErr := o.cleaner.Reconcile(ctx, rp.Path, discoveredPaths)
-				if reconcileErr != nil {
-					slog.Warn("reconciliation failed", "path", rp.Path, "error", reconcileErr)
-				} else if result.StaleRemoved > 0 {
-					slog.Info("reconciliation complete",
-						"path", rp.Path,
-						"stale_removed", result.StaleRemoved,
-						"duration", result.Duration)
-				}
-			}
-		}
-	}
-
-	stats := o.walker.Stats()
-	duration := time.Since(start)
-
-	// Publish rebuild complete event for MCP notifications
-	if o.bus != nil {
-		o.bus.Publish(ctx, events.NewRebuildComplete(
-			int(stats.FilesDiscovered),
-			int(stats.DirsTraversed),
-			duration,
-			full,
-		))
-	}
-
-	return &RebuildResult{
-		Status:        "completed",
-		FilesQueued:   int(stats.FilesDiscovered),
-		DirsProcessed: int(stats.DirsTraversed),
-		Duration:      duration.Round(time.Millisecond).String(),
-		RemovedPaths:  removedPaths,
-	}, nil
-}
-
-// handleRebuildWithRecord wraps handleRebuild to record job results for health/status.
-func (o *Orchestrator) handleRebuildWithRecord(ctx context.Context, full bool, jobName string) (*RebuildResult, error) {
-	if o.jobRunner == nil {
-		o.jobRunner = NewJobRunner(o.bus)
-	}
-
-	mode := "incremental"
-	if full {
-		mode = "full"
-	}
-
-	var rebuildResult *RebuildResult
-	var runErr error
-
-	runResult := o.jobRunner.Run(ctx, &logicalJob{name: jobName, mode: mode}, func(runCtx context.Context) RunResult {
-		result := RunResult{
-			Status:     RunFailed,
-			StartedAt:  time.Now(),
-			Counts:     map[string]int{"files_queued": 0, "dirs_processed": 0},
-			Details:    map[string]any{"full": full, "walk_mode": mode, "duration": "", "removed": 0},
-			FinishedAt: time.Now(),
-		}
-
-		var err error
-		rebuildResult, err = o.handleRebuild(runCtx, full)
-		runErr = err
-		result.FinishedAt = time.Now()
-
-		if rebuildResult != nil {
-			result.Counts["files_queued"] = rebuildResult.FilesQueued
-			result.Counts["dirs_processed"] = rebuildResult.DirsProcessed
-			result.Details["duration"] = rebuildResult.Duration
-			result.Details["removed"] = len(rebuildResult.RemovedPaths)
-		}
-
-		if err != nil {
-			result.Error = err.Error()
-			result.Status = RunFailed
-			return result
-		}
-
-		result.Status = RunSuccess
-		return result
-	})
-
-	o.recordJobResult(jobName, runResult)
-
-	return rebuildResult, runErr
-}
-
-// startPeriodicRebuild starts a goroutine that triggers incremental rebuilds at the configured interval.
-func (o *Orchestrator) startPeriodicRebuild(ctx context.Context, interval time.Duration) {
-	o.rebuildStopChan = make(chan struct{})
-
-	slog.Info("periodic rebuild enabled", "interval", interval, "mode", "incremental")
-
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-o.rebuildStopChan:
-				return
-			case <-ticker.C:
-				slog.Info("starting periodic rebuild", "mode", "incremental")
-				result, err := o.handleRebuildWithRecord(ctx, false, "job.rebuild_incremental") // Always incremental
-				if err != nil {
-					slog.Error("periodic rebuild failed", "error", err)
-					continue
-				}
-				slog.Info("periodic rebuild complete",
-					"files_queued", result.FilesQueued,
-					"dirs_processed", result.DirsProcessed,
-					"duration", result.Duration)
-			}
-		}
-	}()
-}
-
-// recordJobResult stores the latest RunResult for a job.
-func (o *Orchestrator) recordJobResult(name string, result RunResult) {
-	o.jobMu.Lock()
-	defer o.jobMu.Unlock()
-	o.jobResults[name] = result
-}
-
-// runSupervisor runs startFn with backoff until context cancellation, updating health.
-// If fatalCh is non-nil, runtime fatal errors can be signaled for restart.
-func (o *Orchestrator) runSupervisor(ctx context.Context, name string, def ComponentDefinition, startFn func(context.Context) error, fatalCh <-chan error) {
-	startCtx, cancel := context.WithCancel(ctx)
-	o.componentCancels[name] = cancel
-
-	backoff := time.Second
-	maxBackoff := 30 * time.Second
-
-	go func() {
-		for {
-			err := startFn(startCtx)
-			now := time.Now()
-			if err != nil {
-				slog.Warn("component start/run failed", "component", name, "error", err)
-				o.daemon.UpdateComponentHealth(map[string]ComponentHealth{
-					name: {
-						Status:      ComponentStatusFailed,
-						Error:       err.Error(),
-						LastChecked: now,
-					},
-				})
-
-				if def.RestartPolicy == RestartNever {
-					if def.Criticality == CriticalityFatal {
-						slog.Error("fatal component failed and will not restart", "component", name, "error", err)
-					}
-					return
-				}
-			} else {
-				o.daemon.UpdateComponentHealth(map[string]ComponentHealth{
-					name: {
-						Status:      ComponentStatusRunning,
-						LastChecked: now,
-						LastSuccess: now,
-					},
-				})
-				if def.RestartPolicy == RestartNever {
-					return
-				}
-
-				// Wait for fatal error or cancellation before restart
-				if fatalCh != nil {
-					select {
-					case <-startCtx.Done():
-						return
-					case fatalErr := <-fatalCh:
-						if fatalErr != nil {
-							slog.Warn("component runtime error; restarting", "component", name, "error", fatalErr)
-							err = fatalErr
-						}
-					}
-				} else {
-					// No fatal channel; stay running until context cancel
-					<-startCtx.Done()
-					return
-				}
-			}
-
-			select {
-			case <-startCtx.Done():
-				return
-			case <-time.After(backoff):
-			}
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
-		}
-	}()
 }
 
 func busBacklogHigh(stats events.BusStats) bool {
@@ -691,32 +471,6 @@ func (o *Orchestrator) Cleaner() *cleaner.Cleaner {
 	return o.cleaner
 }
 
-// validateRememberedPaths checks all remembered paths and removes those that
-// no longer exist. Returns the list of removed paths.
-func (o *Orchestrator) validateRememberedPaths(ctx context.Context) []string {
-	if o.registry == nil {
-		return nil
-	}
-
-	removed, err := o.registry.ValidateAndCleanPaths(ctx)
-	if err != nil {
-		slog.Warn("failed to validate remembered paths", "error", err)
-		return nil
-	}
-
-	// For each removed path, clean up graph nodes and emit events
-	for _, path := range removed {
-		slog.Warn("removed missing remembered path", "path", path)
-
-		// Emit event for observability
-		if o.bus != nil {
-			o.bus.Publish(ctx, events.NewRememberedPathRemoved(path, "not_found", false))
-		}
-	}
-
-	return removed
-}
-
 func (o *Orchestrator) subscribeRememberedPathEvents() {
 	if o.bus == nil {
 		return
@@ -791,16 +545,13 @@ func (o *Orchestrator) handleRememberedPathRemoved(event events.Event) {
 }
 
 func (o *Orchestrator) triggerRememberedPathWalk(path string) {
-	if o.walker == nil {
+	if o.jobManager == nil {
 		return
 	}
 
 	ctx := o.eventContext()
 	go func() {
-		o.rebuildMu.Lock()
-		defer o.rebuildMu.Unlock()
-
-		if err := o.walker.Walk(ctx, path); err != nil {
+		if err := o.jobManager.WalkPath(ctx, path); err != nil {
 			if ctx.Err() != nil {
 				slog.Debug("remembered path walk canceled", "path", path)
 				return
@@ -984,285 +735,10 @@ func (o *Orchestrator) watchRememberedPaths(ctx context.Context) {
 	slog.Info("watching remembered paths", "count", len(paths))
 }
 
-// walkRememberedPaths performs an initial full walk of all remembered paths.
-// Uses full rebuild on daemon start to ensure schema version changes are applied.
-func (o *Orchestrator) walkRememberedPaths(ctx context.Context) {
-	slog.Info("starting initial walk of remembered paths", "mode", "full")
-
-	result, err := o.handleRebuildWithRecord(ctx, true, "job.initial_walk") // Full rebuild on daemon start
-	if err != nil {
-		if ctx.Err() != nil {
-			slog.Debug("initial walk canceled")
-			return
-		}
-		slog.Warn("initial walk failed", "error", err)
-		return
-	}
-
-	slog.Info("initial walk complete",
-		"files_queued", result.FilesQueued,
-		"dirs_processed", result.DirsProcessed,
-		"duration", result.Duration,
-	)
-}
-
 // ComponentStatuses returns the health status of all orchestrated components.
 func (o *Orchestrator) ComponentStatuses() map[string]ComponentHealth {
-	statuses := make(map[string]ComponentHealth)
-
-	// Event bus status
-	if o.bus != nil {
-		busStats := o.bus.Stats()
-		if o.busDegraded {
-			if busStats.DropRatePerSec < busDropRecoverThreshold && !busBacklogHigh(busStats) {
-				o.busDegraded = false
-			}
-		} else if busStats.DropRatePerSec > busDropDegradeThreshold || busBacklogHigh(busStats) {
-			o.busDegraded = true
-		}
-
-		busDegraded := o.busDegraded
-		status := ComponentStatusRunning
-		var errMsg string
-		if busDegraded {
-			status = ComponentStatusDegraded
-			errMsg = "bus degraded (drops/backlog)"
-		}
-		statuses["bus"] = ComponentHealth{
-			Status:      status,
-			Error:       errMsg,
-			LastChecked: time.Now(),
-			Details: map[string]any{
-				"subscriber_count":    busStats.SubscriberCount,
-				"dropped_events":      busStats.Dropped,
-				"drop_rate_per_sec":   busStats.DropRatePerSec,
-				"is_closed":           busStats.IsClosed,
-				"critical_len":        busStats.CriticalLen,
-				"critical_cap":        busStats.CriticalCap,
-				"rebuild_recommended": busDegraded,
-			},
-		}
+	if o.healthCollector == nil {
+		return make(map[string]ComponentHealth)
 	}
-
-	// Registry status - always ok if we got here
-	if o.registry != nil {
-		statuses["registry"] = ComponentHealth{
-			Status:      ComponentStatusRunning,
-			LastChecked: time.Now(),
-		}
-	}
-
-	// Graph status
-	if o.graph != nil {
-		if o.graphDegraded {
-			statuses["graph"] = ComponentHealth{
-				Status:      ComponentStatusDegraded,
-				Error:       "connection failed",
-				LastChecked: time.Now(),
-			}
-		} else {
-			statuses["graph"] = ComponentHealth{
-				Status:      ComponentStatusRunning,
-				LastChecked: time.Now(),
-			}
-		}
-	}
-
-	// Walker status
-	if o.walker != nil {
-		stats := o.walker.Stats()
-		status := ComponentStatusRunning
-		if stats.IsWalking {
-			status = ComponentStatusRunning
-		}
-		statuses["walker"] = ComponentHealth{
-			Status:      status,
-			LastChecked: time.Now(),
-		}
-	}
-
-	// Watcher status
-	if o.watcher != nil {
-		stats := o.watcher.Stats()
-		status := ComponentStatusStopped
-		if stats.IsRunning {
-			status = ComponentStatusRunning
-		}
-		if stats.DegradedMode {
-			statuses["watcher"] = ComponentHealth{
-				Status:      ComponentStatusDegraded,
-				Error:       "degraded mode (watch limit reached)",
-				LastChecked: time.Now(),
-				Details: map[string]any{
-					"watched_paths":    stats.WatchedPaths,
-					"events_received":  stats.EventsReceived,
-					"events_published": stats.EventsPublished,
-					"events_coalesced": stats.EventsCoalesced,
-					"errors":           stats.Errors,
-					"degraded_mode":    stats.DegradedMode,
-				},
-			}
-		} else {
-			statuses["watcher"] = ComponentHealth{
-				Status:      status,
-				LastChecked: time.Now(),
-				Details: map[string]any{
-					"watched_paths":    stats.WatchedPaths,
-					"events_received":  stats.EventsReceived,
-					"events_published": stats.EventsPublished,
-					"events_coalesced": stats.EventsCoalesced,
-					"errors":           stats.Errors,
-					"degraded_mode":    stats.DegradedMode,
-				},
-			}
-		}
-	}
-
-	// Queue status
-	if o.queue != nil {
-		stats := o.queue.Stats()
-		var status ComponentStatus
-		switch stats.State {
-		case analysis.QueueStateRunning:
-			status = ComponentStatusRunning
-		case analysis.QueueStateStopped:
-			status = ComponentStatusStopped
-		default:
-			status = ComponentStatusStopped
-		}
-		if stats.DegradationMode != analysis.DegradationFull && status == ComponentStatusRunning {
-			status = ComponentStatusDegraded
-		}
-		statuses["queue"] = ComponentHealth{
-			Status:      status,
-			LastChecked: time.Now(),
-			Details: map[string]any{
-				"pending":              stats.PendingItems,
-				"in_progress":          stats.ActiveWorkers,
-				"processed":            stats.ProcessedItems,
-				"analysis_failures":    stats.AnalysisFailures,
-				"persistence_failures": stats.PersistenceFailures,
-				"degradation_mode":     stats.DegradationMode,
-			},
-		}
-	}
-
-	// MCP server status
-	if o.mcpServer != nil {
-		if o.mcpDegraded {
-			statuses["mcp"] = ComponentHealth{
-				Status:      ComponentStatusDegraded,
-				Error:       "startup failed",
-				LastChecked: time.Now(),
-			}
-		} else {
-			statuses["mcp"] = ComponentHealth{
-				Status:      ComponentStatusRunning,
-				LastChecked: time.Now(),
-			}
-		}
-	}
-
-	// Semantic provider status
-	if o.semanticProvider != nil {
-		if o.semanticProvider.Available() {
-			statuses["semantic_provider"] = ComponentHealth{
-				Status:      ComponentStatusRunning,
-				LastChecked: time.Now(),
-				Details: map[string]any{
-					"provider": o.semanticProvider.Name(),
-				},
-			}
-		} else {
-			statuses["semantic_provider"] = ComponentHealth{
-				Status:      ComponentStatusFailed,
-				Error:       "not available (missing API key)",
-				LastChecked: time.Now(),
-				Details: map[string]any{
-					"provider": o.semanticProvider.Name(),
-				},
-			}
-		}
-	}
-
-	// Embeddings provider status
-	if o.embedProvider != nil {
-		if o.embedProvider.Available() {
-			statuses["embeddings_provider"] = ComponentHealth{
-				Status:      ComponentStatusRunning,
-				LastChecked: time.Now(),
-				Details: map[string]any{
-					"provider":   o.embedProvider.Name(),
-					"model":      o.embedProvider.ModelName(),
-					"dimensions": o.embedProvider.Dimensions(),
-				},
-			}
-		} else {
-			statuses["embeddings_provider"] = ComponentHealth{
-				Status:      ComponentStatusFailed,
-				Error:       "not available (missing API key)",
-				LastChecked: time.Now(),
-				Details: map[string]any{
-					"provider":   o.embedProvider.Name(),
-					"model":      o.embedProvider.ModelName(),
-					"dimensions": o.embedProvider.Dimensions(),
-				},
-			}
-		}
-	}
-
-	// Caches status
-	if o.semanticCache != nil {
-		statuses["semantic_cache"] = ComponentHealth{
-			Status:      ComponentStatusRunning,
-			LastChecked: time.Now(),
-			Details: map[string]any{
-				"enabled": true,
-			},
-		}
-	}
-	if o.embeddingsCache != nil {
-		statuses["embeddings_cache"] = ComponentHealth{
-			Status:      ComponentStatusRunning,
-			LastChecked: time.Now(),
-			Details: map[string]any{
-				"enabled": true,
-			},
-		}
-	}
-
-	// Metrics collector
-	if o.metricsCollector != nil {
-		statuses["metrics_collector"] = ComponentHealth{
-			Status:      ComponentStatusRunning,
-			LastChecked: time.Now(),
-		}
-	}
-
-	// Job results (synthetic components)
-	o.jobMu.Lock()
-	for name, jr := range o.jobResults {
-		componentName := name
-		state := ComponentStatusRunning
-		if jr.Status == RunFailed {
-			state = ComponentStatusFailed
-		} else if jr.Status == RunPartial {
-			state = ComponentStatusDegraded
-		}
-
-		statuses[componentName] = ComponentHealth{
-			Status:      state,
-			LastChecked: time.Now(),
-			Details: map[string]any{
-				"last_run_at": jr.FinishedAt,
-				"started_at":  jr.StartedAt,
-				"counts":      jr.Counts,
-				"details":     jr.Details,
-			},
-			Error: jr.Error,
-		}
-	}
-	o.jobMu.Unlock()
-
-	return statuses
+	return o.healthCollector.Collect()
 }

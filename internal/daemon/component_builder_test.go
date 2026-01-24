@@ -58,12 +58,16 @@ func TestComponentBuilder_TopologicalOrder(t *testing.T) {
 		t.Fatalf("TopologicalOrder() error = %v", err)
 	}
 
-	// Verify bus comes before components that depend on it
+	// Verify component ordering respects dependencies
+	storageIndex := indexOf(order, "storage")
 	busIndex := indexOf(order, "bus")
 	registryIndex := indexOf(order, "registry")
 	graphIndex := indexOf(order, "graph")
 	queueIndex := indexOf(order, "queue")
 
+	if storageIndex == -1 {
+		t.Fatal("storage not in order")
+	}
 	if busIndex == -1 {
 		t.Fatal("bus not in order")
 	}
@@ -74,15 +78,24 @@ func TestComponentBuilder_TopologicalOrder(t *testing.T) {
 		t.Fatal("graph not in order")
 	}
 
-	// bus should come before components that depend on it
-	if registryIndex < busIndex {
-		t.Error("registry should come after bus")
+	// storage should come before bus (bus depends on storage)
+	if busIndex < storageIndex {
+		t.Error("bus should come after storage")
 	}
+	// storage should come before registry (registry depends on storage)
+	if registryIndex < storageIndex {
+		t.Error("registry should come after storage")
+	}
+	// bus should come before graph (graph depends on bus)
 	if graphIndex < busIndex {
 		t.Error("graph should come after bus")
 	}
+	// queue should come after bus and registry
 	if queueIndex < busIndex {
 		t.Error("queue should come after bus")
+	}
+	if queueIndex < registryIndex {
+		t.Error("queue should come after registry")
 	}
 }
 

@@ -39,10 +39,6 @@ daemon:
   # and for service management commands (stop, status).
   pid_file: ~/.config/memorizer/daemon.pid
 
-  # Path to the SQLite registry database.
-  # Stores remembered paths, file states, and path-specific configurations.
-  registry_path: ~/.config/memorizer/registry.db
-
   # Interval in seconds for periodic knowledge graph rebuilds.
   # Set to 0 to disable periodic rebuilds.
   rebuild_interval: 3600

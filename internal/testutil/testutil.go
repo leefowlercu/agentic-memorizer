@@ -32,7 +32,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	// Use t.Setenv for automatic cleanup - this is test-scoped
 	// These env vars override viper settings via AutomaticEnv()
 	t.Setenv("MEMORIZER_CONFIG_DIR", configDir)
-	t.Setenv("MEMORIZER_DAEMON_REGISTRY_PATH", filepath.Join(configDir, "registry.db"))
+	t.Setenv("MEMORIZER_STORAGE_DATABASE_PATH", filepath.Join(configDir, "memorizer.db"))
 	t.Setenv("MEMORIZER_LOG_FILE", filepath.Join(configDir, "memorizer.log"))
 	t.Setenv("MEMORIZER_DAEMON_PID_FILE", filepath.Join(configDir, "daemon.pid"))
 	t.Setenv("MEMORIZER_CACHE_BASE_DIR", filepath.Join(configDir, "cache"))
@@ -59,9 +59,10 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	return env
 }
 
-// RegistryPath returns the path where the test registry database will be created.
+// RegistryPath returns the path to the consolidated storage database.
+// Registry tables are stored in memorizer.db alongside other storage tables.
 func (e *TestEnv) RegistryPath() string {
-	return filepath.Join(e.ConfigDir, "registry.db")
+	return filepath.Join(e.ConfigDir, "memorizer.db")
 }
 
 // CreateTestDir creates a test directory within the test environment's temp space.

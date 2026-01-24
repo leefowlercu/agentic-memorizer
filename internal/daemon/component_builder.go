@@ -222,20 +222,19 @@ func (b *ComponentBuilder) registerDefinitions() {
 		},
 	})
 
-	// Registry (SQLite)
+	// Registry (uses consolidated storage)
 	b.registry.Register(ComponentDefinition{
 		Name:          "registry",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
 		RestartPolicy: RestartNever,
-		Dependencies:  []string{"bus"},
+		Dependencies:  []string{"storage"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			registryPath := config.ExpandPath(cfg.Daemon.RegistryPath)
-			reg, err := registry.Open(ctx, registryPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to open registry; %w", err)
+			if deps.Storage == nil {
+				return nil, fmt.Errorf("storage not available; registry requires storage")
 			}
-			slog.Info("registry initialized", "path", registryPath)
+			reg := registry.NewFromStorage(deps.Storage)
+			slog.Info("registry initialized using consolidated storage")
 			return reg, nil
 		},
 	})

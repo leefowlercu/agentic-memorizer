@@ -28,9 +28,6 @@ func TestNewDefaultConfig(t *testing.T) {
 	if cfg.Daemon.PIDFile != DefaultDaemonPIDFile {
 		t.Errorf("Daemon.PIDFile = %q, want %q", cfg.Daemon.PIDFile, DefaultDaemonPIDFile)
 	}
-	if cfg.Daemon.RegistryPath != DefaultDaemonRegistryPath {
-		t.Errorf("Daemon.RegistryPath = %q, want %q", cfg.Daemon.RegistryPath, DefaultDaemonRegistryPath)
-	}
 	if cfg.Daemon.Metrics.CollectionInterval != DefaultDaemonMetricsInterval {
 		t.Errorf("Daemon.Metrics.CollectionInterval = %d, want %d", cfg.Daemon.Metrics.CollectionInterval, DefaultDaemonMetricsInterval)
 	}

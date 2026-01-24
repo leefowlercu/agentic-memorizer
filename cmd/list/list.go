@@ -52,12 +52,12 @@ func runList(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	out := cmd.OutOrStdout()
 
-	// Open registry
-	registryPath, err := cmdutil.ResolvePath(config.Get().Daemon.RegistryPath)
+	// Open registry (uses consolidated storage)
+	storagePath, err := cmdutil.ResolvePath(config.Get().Storage.DatabasePath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve registry path; %w", err)
+		return fmt.Errorf("failed to resolve storage path; %w", err)
 	}
-	reg, err := registry.Open(ctx, registryPath)
+	reg, err := registry.Open(ctx, storagePath)
 	if err != nil {
 		return fmt.Errorf("failed to open registry; %w", err)
 	}

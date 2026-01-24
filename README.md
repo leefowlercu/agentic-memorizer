@@ -162,14 +162,15 @@ daemon:
   http_bind: 127.0.0.1
   shutdown_timeout: 30
   pid_file: ~/.config/memorizer/daemon.pid
-  registry_path: ~/.config/memorizer/registry.db
   rebuild_interval: 3600
   metrics:
     collection_interval: 15
   event_bus:
     buffer_size: 100
-    critical_queue_path: ~/.config/memorizer/critqueue.db
     critical_queue_capacity: 1000
+
+storage:
+  database_path: ~/.config/memorizer/memorizer.db
 
 graph:
   host: localhost

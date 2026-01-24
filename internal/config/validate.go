@@ -86,13 +86,6 @@ func Validate(cfg *Config) error {
 		})
 	}
 
-	if cfg.Daemon.RegistryPath == "" {
-		errs = append(errs, ValidationError{
-			Field:   "daemon.registry_path",
-			Message: "must not be empty",
-		})
-	}
-
 	if cfg.Daemon.Metrics.CollectionInterval < 1 {
 		errs = append(errs, ValidationError{
 			Field:   "daemon.metrics.collection_interval",

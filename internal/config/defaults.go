@@ -11,10 +11,9 @@ const (
 	// Daemon configuration defaults.
 	DefaultDaemonHTTPPort                      = 7600
 	DefaultDaemonHTTPBind                      = "127.0.0.1"
-	DefaultDaemonShutdownTimeout               = 30 // seconds
-	DefaultDaemonPIDFile                       = "~/.config/memorizer/daemon.pid"
-	DefaultDaemonRegistryPath                  = "~/.config/memorizer/registry.db"
-	DefaultDaemonRebuildInterval               = 3600 // 1 hour in seconds, 0 = disabled
+	DefaultDaemonShutdownTimeout = 30 // seconds
+	DefaultDaemonPIDFile         = "~/.config/memorizer/daemon.pid"
+	DefaultDaemonRebuildInterval = 3600 // 1 hour in seconds, 0 = disabled
 	DefaultDaemonMetricsInterval               = 15   // seconds
 	DefaultDaemonEventBusBufferSize            = 100
 	DefaultDaemonEventBusCriticalQueueCapacity = 1000
@@ -125,7 +124,6 @@ func NewDefaultConfig() Config {
 			HTTPBind:        DefaultDaemonHTTPBind,
 			ShutdownTimeout: DefaultDaemonShutdownTimeout,
 			PIDFile:         DefaultDaemonPIDFile,
-			RegistryPath:    DefaultDaemonRegistryPath,
 			RebuildInterval: DefaultDaemonRebuildInterval,
 			Metrics: MetricsConfig{
 				CollectionInterval: DefaultDaemonMetricsInterval,
@@ -186,7 +184,6 @@ func setDefaults() {
 	viper.SetDefault("daemon.http_bind", DefaultDaemonHTTPBind)
 	viper.SetDefault("daemon.shutdown_timeout", DefaultDaemonShutdownTimeout)
 	viper.SetDefault("daemon.pid_file", DefaultDaemonPIDFile)
-	viper.SetDefault("daemon.registry_path", DefaultDaemonRegistryPath)
 	viper.SetDefault("daemon.rebuild_interval", DefaultDaemonRebuildInterval)
 	viper.SetDefault("daemon.metrics.collection_interval", DefaultDaemonMetricsInterval)
 	viper.SetDefault("daemon.event_bus.buffer_size", DefaultDaemonEventBusBufferSize)

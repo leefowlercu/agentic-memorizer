@@ -365,6 +365,35 @@ func TestDaemon_UpdateComponentHealth_MultipleComponents(t *testing.T) {
 	}
 }
 
+func TestDaemon_UpdateJobHealth(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DaemonConfig{
+		HTTPPort:        0,
+		HTTPBind:        "127.0.0.1",
+		ShutdownTimeout: 5 * time.Second,
+		PIDFile:         filepath.Join(tmpDir, "test-daemon.pid"),
+	}
+
+	d := NewDaemon(cfg)
+
+	statuses := map[string]JobHealth{
+		"job.test": {
+			Status:     JobStatusSuccess,
+			StartedAt:  time.Now().Add(-time.Second),
+			FinishedAt: time.Now(),
+		},
+	}
+	d.UpdateJobHealth(statuses)
+
+	health := d.Health()
+	if len(health.Jobs) != 1 {
+		t.Errorf("Daemon.Health().Jobs has %d entries, want 1", len(health.Jobs))
+	}
+	if health.Jobs["job.test"].Status != JobStatusSuccess {
+		t.Errorf("Daemon.Health().Jobs[job.test].Status = %v, want %v", health.Jobs["job.test"].Status, JobStatusSuccess)
+	}
+}
+
 func TestDaemon_MultipleReloadCallbacks(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := DaemonConfig{

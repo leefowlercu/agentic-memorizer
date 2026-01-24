@@ -15,6 +15,7 @@ type ComponentHealthCollector struct {
 	bag         *ComponentBag
 	busDegraded bool
 	jobResults  map[string]RunResult
+	jobRunning  map[string]time.Time
 	jobMu       sync.Mutex
 	logger      *slog.Logger
 }
@@ -34,6 +35,7 @@ func NewComponentHealthCollector(bag *ComponentBag, opts ...HealthCollectorOptio
 	c := &ComponentHealthCollector{
 		bag:        bag,
 		jobResults: make(map[string]RunResult),
+		jobRunning: make(map[string]time.Time),
 		logger:     slog.Default(),
 	}
 
@@ -44,8 +46,8 @@ func NewComponentHealthCollector(bag *ComponentBag, opts ...HealthCollectorOptio
 	return c
 }
 
-// Collect gathers health status from all components and returns a status map.
-func (c *ComponentHealthCollector) Collect() map[string]ComponentHealth {
+// CollectComponents gathers health status from all components and returns a status map.
+func (c *ComponentHealthCollector) CollectComponents() map[string]ComponentHealth {
 	statuses := make(map[string]ComponentHealth)
 
 	// Event bus status
@@ -312,33 +314,47 @@ func (c *ComponentHealthCollector) Collect() map[string]ComponentHealth {
 		}
 	}
 
-	// Job results (synthetic components)
-	c.jobMu.Lock()
-	for name, jr := range c.jobResults {
-		componentName := name
-		state := ComponentStatusRunning
-		switch jr.Status {
-		case RunFailed:
-			state = ComponentStatusFailed
-		case RunPartial:
-			state = ComponentStatusDegraded
-		}
+	return statuses
+}
 
-		statuses[componentName] = ComponentHealth{
-			Status:      state,
-			LastChecked: time.Now(),
-			Details: map[string]any{
-				"last_run_at": jr.FinishedAt,
-				"started_at":  jr.StartedAt,
-				"counts":      jr.Counts,
-				"details":     jr.Details,
-			},
-			Error: jr.Error,
+// CollectJobs gathers job status for reporting.
+func (c *ComponentHealthCollector) CollectJobs() map[string]JobHealth {
+	jobs := make(map[string]JobHealth)
+
+	c.jobMu.Lock()
+	defer c.jobMu.Unlock()
+
+	for name, startedAt := range c.jobRunning {
+		jobs[name] = JobHealth{
+			Status:    JobStatusRunning,
+			StartedAt: startedAt,
 		}
 	}
-	c.jobMu.Unlock()
 
-	return statuses
+	for name, jr := range c.jobResults {
+		if _, running := c.jobRunning[name]; running {
+			continue
+		}
+
+		status := JobStatusSuccess
+		switch jr.Status {
+		case RunFailed:
+			status = JobStatusFailed
+		case RunPartial:
+			status = JobStatusPartial
+		}
+
+		jobs[name] = JobHealth{
+			Status:     status,
+			Error:      jr.Error,
+			StartedAt:  jr.StartedAt,
+			FinishedAt: jr.FinishedAt,
+			Counts:     jr.Counts,
+			Details:    jr.Details,
+		}
+	}
+
+	return jobs
 }
 
 // RecordJobResult stores the latest RunResult for a job.
@@ -346,6 +362,14 @@ func (c *ComponentHealthCollector) RecordJobResult(name string, result RunResult
 	c.jobMu.Lock()
 	defer c.jobMu.Unlock()
 	c.jobResults[name] = result
+	delete(c.jobRunning, name)
+}
+
+// RecordJobStart records that a job has started running.
+func (c *ComponentHealthCollector) RecordJobStart(name string, startedAt time.Time) {
+	c.jobMu.Lock()
+	defer c.jobMu.Unlock()
+	c.jobRunning[name] = startedAt
 }
 
 // GetJobResult retrieves the last result for a job (for testing/inspection).

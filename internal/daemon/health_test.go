@@ -109,6 +109,9 @@ func TestHealthManager_Status_NoComponents(t *testing.T) {
 	if len(status.Components) != 0 {
 		t.Errorf("HealthManager.Status().Components has %d entries, want 0", len(status.Components))
 	}
+	if len(status.Jobs) != 0 {
+		t.Errorf("HealthManager.Status().Jobs has %d entries, want 0", len(status.Jobs))
+	}
 }
 
 func TestHealthManager_Status_AllHealthy(t *testing.T) {
@@ -132,6 +135,9 @@ func TestHealthManager_Status_AllHealthy(t *testing.T) {
 
 	if len(status.Components) != 1 {
 		t.Errorf("HealthManager.Status().Components has %d entries, want 1", len(status.Components))
+	}
+	if len(status.Jobs) != 0 {
+		t.Errorf("HealthManager.Status().Jobs has %d entries, want 0", len(status.Jobs))
 	}
 }
 
@@ -189,6 +195,40 @@ func TestHealthManager_RemoveComponent(t *testing.T) {
 	status = hm.Status()
 	if len(status.Components) != 0 {
 		t.Errorf("Expected 0 components after removal, got %d", len(status.Components))
+	}
+}
+
+func TestHealthManager_UpdateJob(t *testing.T) {
+	hm := NewHealthManager()
+
+	hm.UpdateJob("job.test", JobHealth{
+		Status:     JobStatusSuccess,
+		StartedAt:  time.Now().Add(-time.Minute),
+		FinishedAt: time.Now(),
+	})
+
+	status := hm.Status()
+	if len(status.Jobs) != 1 {
+		t.Errorf("Expected 1 job, got %d", len(status.Jobs))
+	}
+	if status.Jobs["job.test"].Status != JobStatusSuccess {
+		t.Errorf("Job status = %v, want %v", status.Jobs["job.test"].Status, JobStatusSuccess)
+	}
+}
+
+func TestHealthManager_Status_DegradedOnJobFailure(t *testing.T) {
+	hm := NewHealthManager()
+
+	hm.UpdateJob("job.failed", JobHealth{
+		Status:     JobStatusFailed,
+		Error:      "job failed",
+		StartedAt:  time.Now().Add(-time.Minute),
+		FinishedAt: time.Now(),
+	})
+
+	status := hm.Status()
+	if status.Status != "degraded" {
+		t.Errorf("HealthManager.Status().Status = %q, want %q", status.Status, "degraded")
 	}
 }
 
@@ -299,6 +339,11 @@ func TestHealthManager_ComponentsAreCopied(t *testing.T) {
 		Status:      ComponentStatusRunning,
 		LastChecked: time.Now(),
 	})
+	hm.UpdateJob("job.test", JobHealth{
+		Status:     JobStatusSuccess,
+		StartedAt:  time.Now().Add(-time.Minute),
+		FinishedAt: time.Now(),
+	})
 
 	// Get status
 	status := hm.Status()
@@ -309,11 +354,18 @@ func TestHealthManager_ComponentsAreCopied(t *testing.T) {
 		Error:       "modified",
 		LastChecked: time.Now(),
 	}
+	status.Jobs["job.test"] = JobHealth{
+		Status: JobStatusFailed,
+		Error:  "modified",
+	}
 
 	// Original should be unchanged
 	status2 := hm.Status()
 	if status2.Components["test"].Status != ComponentStatusRunning {
 		t.Error("Modifying returned components map affected internal state")
+	}
+	if status2.Jobs["job.test"].Status != JobStatusSuccess {
+		t.Error("Modifying returned jobs map affected internal state")
 	}
 }
 

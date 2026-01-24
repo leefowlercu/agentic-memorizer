@@ -434,6 +434,7 @@ func (o *Orchestrator) startHealthUpdater(ctx context.Context, interval time.Dur
 			case <-ticker.C:
 				if o.daemon != nil {
 					o.daemon.UpdateComponentHealth(o.ComponentStatuses())
+					o.daemon.UpdateJobHealth(o.JobStatuses())
 				}
 			}
 		}
@@ -774,5 +775,13 @@ func (o *Orchestrator) ComponentStatuses() map[string]ComponentHealth {
 	if o.healthCollector == nil {
 		return make(map[string]ComponentHealth)
 	}
-	return o.healthCollector.Collect()
+	return o.healthCollector.CollectComponents()
+}
+
+// JobStatuses returns the status of recent job runs.
+func (o *Orchestrator) JobStatuses() map[string]JobHealth {
+	if o.healthCollector == nil {
+		return make(map[string]JobHealth)
+	}
+	return o.healthCollector.CollectJobs()
 }

@@ -19,18 +19,29 @@ func TestNewComponentHealthCollector(t *testing.T) {
 	if collector.jobResults == nil {
 		t.Error("expected jobResults to be initialized")
 	}
+	if collector.jobRunning == nil {
+		t.Error("expected jobRunning to be initialized")
+	}
 }
 
 func TestComponentHealthCollector_Collect_EmptyBag(t *testing.T) {
 	bag := &ComponentBag{}
 	collector := NewComponentHealthCollector(bag)
 
-	statuses := collector.Collect()
+	statuses := collector.CollectComponents()
 	if statuses == nil {
-		t.Fatal("expected non-nil statuses")
+		t.Fatal("expected non-nil component statuses")
 	}
 	if len(statuses) != 0 {
-		t.Errorf("expected empty statuses for empty bag, got %d", len(statuses))
+		t.Errorf("expected empty component statuses for empty bag, got %d", len(statuses))
+	}
+
+	jobs := collector.CollectJobs()
+	if jobs == nil {
+		t.Fatal("expected non-nil job statuses")
+	}
+	if len(jobs) != 0 {
+		t.Errorf("expected empty job statuses for empty bag, got %d", len(jobs))
 	}
 }
 
@@ -42,7 +53,7 @@ func TestComponentHealthCollector_Collect_GraphDegraded(t *testing.T) {
 
 	// Mock graph by setting GraphDegraded but no actual graph
 	// When graph is nil but GraphDegraded is true, nothing is added
-	statuses := collector.Collect()
+	statuses := collector.CollectComponents()
 	if _, ok := statuses["graph"]; ok {
 		t.Error("expected no graph status when graph is nil")
 	}
@@ -74,6 +85,26 @@ func TestComponentHealthCollector_RecordJobResult(t *testing.T) {
 	}
 }
 
+func TestComponentHealthCollector_RecordJobStart(t *testing.T) {
+	bag := &ComponentBag{}
+	collector := NewComponentHealthCollector(bag)
+
+	startedAt := time.Now().Add(-time.Second)
+	collector.RecordJobStart("job.running", startedAt)
+
+	jobs := collector.CollectJobs()
+	job, ok := jobs["job.running"]
+	if !ok {
+		t.Fatal("expected job.running in job statuses")
+	}
+	if job.Status != JobStatusRunning {
+		t.Errorf("job status = %v, want %v", job.Status, JobStatusRunning)
+	}
+	if !job.StartedAt.Equal(startedAt) {
+		t.Errorf("job started_at = %v, want %v", job.StartedAt, startedAt)
+	}
+}
+
 func TestComponentHealthCollector_Collect_WithJobResults(t *testing.T) {
 	bag := &ComponentBag{}
 	collector := NewComponentHealthCollector(bag)
@@ -82,25 +113,25 @@ func TestComponentHealthCollector_Collect_WithJobResults(t *testing.T) {
 		name           string
 		jobName        string
 		status         RunStatus
-		expectedHealth ComponentStatus
+		expectedStatus JobStatus
 	}{
 		{
 			name:           "success job",
 			jobName:        "job.success",
 			status:         RunSuccess,
-			expectedHealth: ComponentStatusRunning,
+			expectedStatus: JobStatusSuccess,
 		},
 		{
 			name:           "failed job",
 			jobName:        "job.failed",
 			status:         RunFailed,
-			expectedHealth: ComponentStatusFailed,
+			expectedStatus: JobStatusFailed,
 		},
 		{
 			name:           "partial job",
 			jobName:        "job.partial",
 			status:         RunPartial,
-			expectedHealth: ComponentStatusDegraded,
+			expectedStatus: JobStatusPartial,
 		},
 	}
 
@@ -112,13 +143,13 @@ func TestComponentHealthCollector_Collect_WithJobResults(t *testing.T) {
 				FinishedAt: time.Now(),
 			})
 
-			statuses := collector.Collect()
+			statuses := collector.CollectJobs()
 			status, ok := statuses[tt.jobName]
 			if !ok {
-				t.Fatalf("expected job %s in statuses", tt.jobName)
+				t.Fatalf("expected job %s in job statuses", tt.jobName)
 			}
-			if status.Status != tt.expectedHealth {
-				t.Errorf("expected health %v, got %v", tt.expectedHealth, status.Status)
+			if status.Status != tt.expectedStatus {
+				t.Errorf("expected job status %v, got %v", tt.expectedStatus, status.Status)
 			}
 		})
 	}

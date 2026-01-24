@@ -156,6 +156,10 @@ func (m *JobManager) RebuildWithRecord(ctx context.Context, full bool, jobName s
 	var rebuildResult *RebuildResult
 	var runErr error
 
+	if m.healthCollector != nil {
+		m.healthCollector.RecordJobStart(jobName, time.Now())
+	}
+
 	runResult := m.jobRunner.Run(ctx, jobName, func(runCtx context.Context) RunResult {
 		result := RunResult{
 			Status:     RunFailed,

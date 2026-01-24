@@ -129,6 +129,16 @@ func formatStatus(status *DaemonStatus) string {
 				}
 			}
 		}
+
+		if len(status.Health.Jobs) > 0 {
+			sb.WriteString("\nJobs:")
+			for name, health := range status.Health.Jobs {
+				sb.WriteString(fmt.Sprintf("\n  - %s: %s", name, health.Status))
+				if health.Error != "" {
+					sb.WriteString(fmt.Sprintf(" (%s)", health.Error))
+				}
+			}
+		}
 	}
 
 	return sb.String()

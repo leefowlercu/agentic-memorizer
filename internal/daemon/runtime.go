@@ -53,6 +53,16 @@ const (
 	RunFailed  RunStatus = "failed"
 )
 
+// JobStatus describes the current state of a job.
+type JobStatus string
+
+const (
+	JobStatusRunning JobStatus = "running"
+	JobStatusSuccess JobStatus = "success"
+	JobStatusPartial JobStatus = "partial"
+	JobStatusFailed  JobStatus = "failed"
+)
+
 // RunResult captures the outcome of a job run.
 type RunResult struct {
 	Status     RunStatus

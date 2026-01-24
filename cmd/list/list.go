@@ -10,8 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/leefowlercu/agentic-memorizer/internal/cmdutil"
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemonclient"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
@@ -25,8 +26,9 @@ var ListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all remembered directories",
 	Long: "List all directories that are currently being tracked by memorizer.\n\n" +
-		"Use --verbose to display detailed configuration information for each directory, " +
-		"including skip/include rules and other settings.",
+		"This command queries the running daemon. Use --verbose to display detailed " +
+		"configuration information for each directory, including skip/include rules " +
+		"and other settings.",
 	Example: `  # List remembered directories
   memorizer list
 
@@ -52,47 +54,28 @@ func runList(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	out := cmd.OutOrStdout()
 
-	// Open registry (uses consolidated storage)
-	storagePath, err := cmdutil.ResolvePath(config.Get().Storage.DatabasePath)
+	client, err := daemonclient.NewFromConfig(config.Get())
 	if err != nil {
-		return fmt.Errorf("failed to resolve storage path; %w", err)
-	}
-	reg, err := registry.Open(ctx, storagePath)
-	if err != nil {
-		return fmt.Errorf("failed to open registry; %w", err)
-	}
-	defer func() { _ = reg.Close() }()
-
-	// Get all remembered paths
-	paths, err := reg.ListPaths(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list paths; %w", err)
+		return fmt.Errorf("failed to initialize daemon client; %w", err)
 	}
 
+	result, err := client.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list request failed; %w", err)
+	}
+
+	paths := result.Paths
 	if len(paths) == 0 {
 		fmt.Fprintln(out, "No directories remembered.")
 		fmt.Fprintln(out, "\nUse 'memorizer remember <path>' to start tracking a directory.")
 		return nil
 	}
 
-	// Get health status for all paths
-	statuses, err := reg.CheckPathHealth(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to check path health; %w", err)
-	}
-
-	// Build status lookup map
-	statusMap := make(map[string]string)
-	for _, s := range statuses {
-		statusMap[s.Path] = s.Status
-	}
-
 	fmt.Fprintf(out, "Remembered directories (%d):\n\n", len(paths))
 
 	if listVerbose {
 		for _, p := range paths {
-			status := statusMap[p.Path]
-			printVerbosePath(ctx, out, reg, &p, status)
+			printVerbosePath(out, &p)
 		}
 	} else {
 		// Print table header
@@ -100,15 +83,14 @@ func runList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", strings.Repeat("-", 40), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 19))
 
 		for _, p := range paths {
-			status := statusMap[p.Path]
-			printTableRow(ctx, out, reg, &p, status)
+			printTableRow(out, &p)
 		}
 	}
 
 	return nil
 }
 
-func printTableRow(ctx context.Context, out io.Writer, reg *registry.SQLiteRegistry, p *registry.RememberedPath, status string) {
+func printTableRow(out io.Writer, p *daemon.ListEntry) {
 	// Truncate path if too long
 	path := p.Path
 	if len(path) > 40 {
@@ -117,25 +99,22 @@ func printTableRow(ctx context.Context, out io.Writer, reg *registry.SQLiteRegis
 
 	// Get file count (show "-" if path is inaccessible)
 	filesStr := "-"
-	if status == registry.PathStatusOK {
-		fileStates, err := reg.ListFileStates(ctx, p.Path)
-		if err == nil {
-			filesStr = fmt.Sprintf("%d", len(fileStates))
-		}
+	if p.FileCount != nil {
+		filesStr = fmt.Sprintf("%d", *p.FileCount)
 	}
 
 	// Format last walk time (show "-" if never walked or inaccessible)
 	lastWalkStr := "-"
-	if status == registry.PathStatusOK && p.LastWalkAt != nil {
+	if p.LastWalkAt != nil {
 		lastWalkStr = p.LastWalkAt.Format("2006-01-02 15:04:05")
 	}
 
-	fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", path, status, filesStr, lastWalkStr)
+	fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", path, p.Status, filesStr, lastWalkStr)
 }
 
-func printVerbosePath(ctx context.Context, out io.Writer, reg *registry.SQLiteRegistry, p *registry.RememberedPath, status string) {
+func printVerbosePath(out io.Writer, p *daemon.ListEntry) {
 	fmt.Fprintf(out, "  Path: %s\n", p.Path)
-	fmt.Fprintf(out, "    Status: %s\n", status)
+	fmt.Fprintf(out, "    Status: %s\n", p.Status)
 
 	// Print timestamps
 	fmt.Fprintf(out, "    Added: %s\n", p.CreatedAt.Format("2006-01-02 15:04:05"))
@@ -146,11 +125,8 @@ func printVerbosePath(ctx context.Context, out io.Writer, reg *registry.SQLiteRe
 	}
 
 	// Count files (only if path is accessible)
-	if status == registry.PathStatusOK {
-		fileStates, err := reg.ListFileStates(ctx, p.Path)
-		if err == nil {
-			fmt.Fprintf(out, "    Files Tracked: %d\n", len(fileStates))
-		}
+	if p.FileCount != nil {
+		fmt.Fprintf(out, "    Files Tracked: %d\n", *p.FileCount)
 	} else {
 		fmt.Fprintf(out, "    Files Tracked: -\n")
 	}

@@ -18,6 +18,7 @@ const (
 	DefaultTimeout = 5 * time.Second
 	RebuildTimeout = 5 * time.Minute
 	RewalkTimeout  = 30 * time.Second
+	ReadTimeout    = 5 * time.Minute
 )
 
 // Client provides a shared HTTP client for daemon endpoints.
@@ -115,6 +116,24 @@ func (c *Client) Remember(ctx context.Context, req daemon.RememberRequest) (*dae
 func (c *Client) Forget(ctx context.Context, req daemon.ForgetRequest) (*daemon.ForgetResponse, error) {
 	var result daemon.ForgetResponse
 	if err := c.doJSON(ctx, http.MethodPost, "/forget", req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// List fetches remembered paths from the daemon.
+func (c *Client) List(ctx context.Context) (*daemon.ListResponse, error) {
+	var result daemon.ListResponse
+	if err := c.doJSON(ctx, http.MethodGet, "/list", nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// Read exports the knowledge graph via the daemon.
+func (c *Client) Read(ctx context.Context, req daemon.ReadRequest) (*daemon.ReadResponse, error) {
+	var result daemon.ReadResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/read", req, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

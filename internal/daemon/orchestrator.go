@@ -131,6 +131,14 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 		rememberService := NewRememberService(o.registry, o.bus, cfg.Defaults, WithLogger(slog.Default().With("component", "remember")))
 		o.daemon.server.SetRememberFunc(rememberService.Remember)
 		o.daemon.server.SetForgetFunc(rememberService.Forget)
+
+		listService := NewListService(o.registry)
+		o.daemon.server.SetListFunc(listService.List)
+	}
+
+	if o.graph != nil {
+		readService := NewReadService(o.graph)
+		o.daemon.server.SetReadFunc(readService.Read)
 	}
 
 	// Create supervisor for component lifecycle management

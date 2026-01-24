@@ -3,16 +3,14 @@ package read
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
-	"github.com/leefowlercu/agentic-memorizer/internal/export"
-	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemonclient"
 )
 
 // Flag variables
@@ -31,7 +29,7 @@ var ReadCmd = &cobra.Command{
 	Long: `Export the knowledge graph in various formats.
 
 The read command exports the memorizer knowledge graph to stdout or a file.
-It connects directly to FalkorDB and does not require the daemon to be running.
+It requests the export from the running daemon.
 
 Available formats:
   xml   - Structured XML format (default)
@@ -84,61 +82,41 @@ func validateRead(cmd *cobra.Command, args []string) error {
 
 func runRead(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
-	cfg := config.Get()
-
-	// Create graph client with typed config (read-only, skip schema init)
-	graphCfg := graph.Config{
-		Host:               cfg.Graph.Host,
-		Port:               cfg.Graph.Port,
-		GraphName:          cfg.Graph.Name,
-		PasswordEnv:        cfg.Graph.PasswordEnv,
-		MaxRetries:         cfg.Graph.MaxRetries,
-		RetryDelay:         time.Duration(cfg.Graph.RetryDelayMs) * time.Millisecond,
-		EmbeddingDimension: cfg.Embeddings.Dimensions,
-		WriteQueueSize:     cfg.Graph.WriteQueueSize,
-		SkipSchemaInit:     true,
+	out := cmd.OutOrStdout()
+	errOut := cmd.ErrOrStderr()
+	client, err := daemonclient.NewFromConfig(config.Get(),
+		daemonclient.WithTimeout(daemonclient.ReadTimeout),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize daemon client; %w", err)
 	}
 
-	// Use discarding logger for CLI commands (no log output)
-	silentLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	g := graph.NewFalkorDBGraph(graph.WithConfig(graphCfg), graph.WithLogger(silentLogger))
-
-	// Connect to graph
-	if err := g.Start(ctx); err != nil {
-		return fmt.Errorf("failed to connect to graph database; %w", err)
-	}
-	defer func() { _ = g.Stop(ctx) }()
-
-	// Create exporter
-	exporter := export.NewExporter(g)
-
-	// Build export options
-	opts := export.ExportOptions{
+	result, err := client.Read(ctx, daemon.ReadRequest{
 		Format:   readFormat,
 		Envelope: readEnvelope,
 		MaxFiles: readMaxFiles,
-	}
-
-	// Perform export
-	output, stats, err := exporter.Export(ctx, opts)
+	})
 	if err != nil {
-		return fmt.Errorf("export failed; %w", err)
+		return fmt.Errorf("read request failed; %w", err)
+	}
+	if result.Stats == nil {
+		return fmt.Errorf("read response missing stats")
 	}
 
 	// Write output
 	if readOutput != "" {
-		if err := os.WriteFile(readOutput, output, 0644); err != nil {
+		if err := os.WriteFile(readOutput, []byte(result.Output), 0644); err != nil {
 			return fmt.Errorf("failed to write output file; %w", err)
 		}
 		if !readQuiet {
-			fmt.Fprintf(os.Stderr, "Exported %d files, %d directories to %s (%d bytes)\n",
-				stats.FileCount, stats.DirectoryCount, readOutput, stats.OutputSize)
+			fmt.Fprintf(errOut, "Exported %d files, %d directories to %s (%d bytes)\n",
+				result.Stats.FileCount, result.Stats.DirectoryCount, readOutput, result.Stats.OutputSize)
 		}
 	} else {
-		fmt.Print(string(output))
+		fmt.Fprint(out, result.Output)
 		if !readQuiet {
-			fmt.Fprintf(os.Stderr, "\n# Exported %d files, %d directories (%d bytes) in %v\n",
-				stats.FileCount, stats.DirectoryCount, stats.OutputSize, stats.Duration.Round(time.Millisecond))
+			fmt.Fprintf(errOut, "\n# Exported %d files, %d directories (%d bytes) in %v\n",
+				result.Stats.FileCount, result.Stats.DirectoryCount, result.Stats.OutputSize, result.Stats.Duration.Round(time.Millisecond))
 		}
 	}
 

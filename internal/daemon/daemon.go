@@ -145,6 +145,13 @@ func (d *Daemon) UpdateComponentHealth(statuses map[string]ComponentHealth) {
 	}
 }
 
+// UpdateJobHealth updates health status for multiple jobs.
+func (d *Daemon) UpdateJobHealth(statuses map[string]JobHealth) {
+	for name, health := range statuses {
+		d.health.UpdateJob(name, health)
+	}
+}
+
 // TriggerConfigReload invokes all registered config reload callbacks.
 // Errors are logged and aggregated, but all callbacks are attempted.
 // Returns an error if any callbacks failed.

@@ -37,6 +37,7 @@ go.work.sum
 SPEC.md
 PLAN.md
 TODO.md
+ANALYSIS.md
 
 # Generated docs
 docs/refactors

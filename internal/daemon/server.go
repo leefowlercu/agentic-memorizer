@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"sync"
@@ -50,6 +52,8 @@ type Server struct {
 	rebuildFunc    RebuildFunc
 	rememberFunc   RememberFunc
 	forgetFunc     ForgetFunc
+	listFunc       ListFunc
+	readFunc       ReadFunc
 }
 
 // NewServer creates a new HTTP server with the given health manager and config.
@@ -71,6 +75,8 @@ func (s *Server) setupRoutes() {
 	s.router.Post("/rebuild", s.handleRebuild)
 	s.router.Post("/remember", s.handleRemember)
 	s.router.Post("/forget", s.handleForget)
+	s.router.Get("/list", s.handleList)
+	s.router.Post("/read", s.handleRead)
 
 	// Mount MCP endpoints if handler is set
 	if s.mcpHandler != nil {
@@ -116,6 +122,16 @@ func (s *Server) SetRememberFunc(fn RememberFunc) {
 // SetForgetFunc sets the function to call when forget is requested.
 func (s *Server) SetForgetFunc(fn ForgetFunc) {
 	s.forgetFunc = fn
+}
+
+// SetListFunc sets the function to call when list is requested.
+func (s *Server) SetListFunc(fn ListFunc) {
+	s.listFunc = fn
+}
+
+// SetReadFunc sets the function to call when read is requested.
+func (s *Server) SetReadFunc(fn ReadFunc) {
+	s.readFunc = fn
 }
 
 // Handler returns the HTTP handler for testing purposes.
@@ -230,6 +246,55 @@ func (s *Server) handleForget(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.forgetFunc(r.Context(), req)
 	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleList handles the /list endpoint.
+func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.listFunc == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "list not available")
+		return
+	}
+
+	result, err := s.listFunc(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleRead handles the /read endpoint.
+func (s *Server) handleRead(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.readFunc == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "read not available")
+		return
+	}
+
+	var req ReadRequest
+	decErr := json.NewDecoder(r.Body).Decode(&req)
+	if decErr != nil && !errors.Is(decErr, io.EOF) {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := s.readFunc(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrReadUnavailable) {
+			writeJSONError(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}

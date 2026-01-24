@@ -136,8 +136,8 @@ Key capabilities:
 | `daemon rebuild` | Rebuild the knowledge graph |
 | `remember <path>` | Register a directory for tracking |
 | `forget <path>` | Unregister a directory |
-| `list` | List all remembered directories |
-| `read` | Export the knowledge graph |
+| `list` | List all remembered directories (requires daemon) |
+| `read` | Export the knowledge graph (requires daemon) |
 | `integrations list` | List available integrations |
 | `integrations setup <name>` | Configure an integration |
 | `integrations status` | Show integration status |
@@ -148,6 +148,8 @@ Key capabilities:
 | `config edit` | Open configuration in editor |
 | `config validate` | Validate configuration file |
 | `config reset` | Reset to default configuration |
+
+Note: `list` and `read` query the running daemon. Start it with `memorizer daemon start` first.
 
 ## Configuration
 

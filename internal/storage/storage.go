@@ -36,7 +36,15 @@ func Open(ctx context.Context, dbPath string) (*Storage, error) {
 		return nil, fmt.Errorf("failed to open database; %w", err)
 	}
 
-	// Enable foreign keys and WAL mode for better concurrency
+	// Serialize access to avoid SQLite write contention.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	// Configure busy timeout and enable foreign keys/WAL mode for better concurrency
+	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to set busy timeout; %w", err)
+	}
 	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to enable foreign keys; %w", err)

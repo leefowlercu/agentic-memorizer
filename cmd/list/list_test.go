@@ -3,19 +3,24 @@ package list
 import (
 	"bytes"
 	"context"
+	"net"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/leefowlercu/agentic-memorizer/internal/config"
+	"github.com/leefowlercu/agentic-memorizer/internal/daemon"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 	"github.com/leefowlercu/agentic-memorizer/internal/testutil"
 )
 
 func TestListCmd_Empty(t *testing.T) {
-	env := testutil.NewTestEnv(t)
-	_ = env // ensures config is isolated
+	setupListServer(t)
 
 	cmd := createTestCommand()
 
@@ -34,15 +39,13 @@ func TestListCmd_Empty(t *testing.T) {
 }
 
 func TestListCmd_WithPaths(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Add some paths
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/projects/app1", nil)
-	reg.AddPath(ctx, "/projects/app2", nil)
-	reg.AddPath(ctx, "/documents", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, "/projects/app1", nil)
+	srv.reg.AddPath(ctx, "/projects/app2", nil)
+	srv.reg.AddPath(ctx, "/documents", nil)
 
 	cmd := createTestCommand()
 
@@ -70,13 +73,11 @@ func TestListCmd_WithPaths(t *testing.T) {
 }
 
 func TestListCmd_TableHeader(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Add a path so we get table output
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/test/path", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, "/test/path", nil)
 
 	cmd := createTestCommand()
 
@@ -106,14 +107,12 @@ func TestListCmd_TableHeader(t *testing.T) {
 }
 
 func TestListCmd_MissingPathStatus(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Add paths that don't exist on filesystem
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/nonexistent/path1", nil)
-	reg.AddPath(ctx, "/nonexistent/path2", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, "/nonexistent/path1", nil)
+	srv.reg.AddPath(ctx, "/nonexistent/path2", nil)
 
 	cmd := createTestCommand()
 
@@ -134,15 +133,13 @@ func TestListCmd_MissingPathStatus(t *testing.T) {
 }
 
 func TestListCmd_ExistingPathStatus(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Create a real temp directory
 	existingDir := t.TempDir()
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, existingDir, nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, existingDir, nil)
 
 	cmd := createTestCommand()
 
@@ -163,16 +160,14 @@ func TestListCmd_ExistingPathStatus(t *testing.T) {
 }
 
 func TestListCmd_MixedPathStatus(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Create one real directory and one fake path
 	existingDir := t.TempDir()
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, existingDir, nil)
-	reg.AddPath(ctx, "/nonexistent/path", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, existingDir, nil)
+	srv.reg.AddPath(ctx, "/nonexistent/path", nil)
 
 	cmd := createTestCommand()
 
@@ -196,13 +191,11 @@ func TestListCmd_MixedPathStatus(t *testing.T) {
 }
 
 func TestListCmd_InaccessiblePathShowsDash(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Add a path that doesn't exist
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/nonexistent/inaccessible", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, "/nonexistent/inaccessible", nil)
 
 	cmd := createTestCommand()
 
@@ -239,25 +232,23 @@ func TestListCmd_InaccessiblePathShowsDash(t *testing.T) {
 }
 
 func TestListCmd_Verbose(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Add path with config
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/projects/myapp", &registry.PathConfig{
+	srv.reg.AddPath(ctx, "/projects/myapp", &registry.PathConfig{
 		SkipExtensions:  []string{".log", ".tmp"},
 		SkipDirectories: []string{"node_modules"},
 		SkipHidden:      true,
 	})
 	// Add a file state
-	reg.UpdateFileState(ctx, &registry.FileState{
+	srv.reg.UpdateFileState(ctx, &registry.FileState{
 		Path:         "/projects/myapp/main.go",
 		ContentHash:  "hash",
 		MetadataHash: "meta",
 		Size:         100,
 		ModTime:      time.Now(),
 	})
-	reg.Close()
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{"--verbose"})
@@ -293,16 +284,14 @@ func TestListCmd_Verbose(t *testing.T) {
 }
 
 func TestListCmd_VerboseWithStatus(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	// Create a real directory and a fake path
 	existingDir := t.TempDir()
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, existingDir, nil)
-	reg.AddPath(ctx, "/nonexistent/path", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, existingDir, nil)
+	srv.reg.AddPath(ctx, "/nonexistent/path", nil)
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{"--verbose"})
@@ -331,14 +320,12 @@ func TestListCmd_VerboseWithStatus(t *testing.T) {
 }
 
 func TestListCmd_VerboseWithLastWalk(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/projects/myapp", nil)
+	srv.reg.AddPath(ctx, "/projects/myapp", nil)
 	walkTime := time.Now().Add(-time.Hour)
-	reg.UpdatePathLastWalk(ctx, "/projects/myapp", walkTime)
-	reg.Close()
+	srv.reg.UpdatePathLastWalk(ctx, "/projects/myapp", walkTime)
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{"--verbose"})
@@ -362,12 +349,10 @@ func TestListCmd_VerboseWithLastWalk(t *testing.T) {
 }
 
 func TestListCmd_VerboseNeverWalked(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/projects/myapp", nil)
-	reg.Close()
+	srv.reg.AddPath(ctx, "/projects/myapp", nil)
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{"--verbose"})
@@ -387,15 +372,13 @@ func TestListCmd_VerboseNeverWalked(t *testing.T) {
 }
 
 func TestListCmd_VerboseWithUseVision(t *testing.T) {
-	env := testutil.NewTestEnv(t)
+	srv := setupListServer(t)
 
 	useVision := false
 	ctx := context.Background()
-	reg, _ := registry.Open(ctx, env.RegistryPath())
-	reg.AddPath(ctx, "/projects/myapp", &registry.PathConfig{
+	srv.reg.AddPath(ctx, "/projects/myapp", &registry.PathConfig{
 		UseVision: &useVision,
 	})
-	reg.Close()
 
 	cmd := createTestCommand()
 	cmd.SetArgs([]string{"--verbose"})
@@ -437,6 +420,63 @@ func TestFormatConfigJSON_Nil(t *testing.T) {
 }
 
 // Helper functions
+
+type listTestServer struct {
+	env *testutil.TestEnv
+	reg *registry.SQLiteRegistry
+}
+
+func setupListServer(t *testing.T) *listTestServer {
+	t.Helper()
+
+	env := testutil.NewTestEnv(t)
+
+	ctx := context.Background()
+	reg, err := registry.Open(ctx, env.RegistryPath())
+	if err != nil {
+		t.Fatalf("failed to open registry: %v", err)
+	}
+
+	service := daemon.NewListService(reg)
+	server := daemon.NewServer(daemon.NewHealthManager(), daemon.ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+	server.SetListFunc(service.List)
+
+	httpServer := httptest.NewServer(server.Handler())
+	setDaemonConfigForTest(t, httpServer.URL)
+
+	t.Cleanup(func() {
+		httpServer.Close()
+		_ = reg.Close()
+	})
+
+	return &listTestServer{env: env, reg: reg}
+}
+
+func setDaemonConfigForTest(t *testing.T, baseURL string) {
+	t.Helper()
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("failed to parse server url: %v", err)
+	}
+
+	host, portStr, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		t.Fatalf("failed to parse server host: %v", err)
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("failed to parse server port: %v", err)
+	}
+
+	cfg := config.Get()
+	cfg.Daemon.HTTPBind = host
+	cfg.Daemon.HTTPPort = port
+}
 
 func createTestCommand() *cobra.Command {
 	// Reset flag variables

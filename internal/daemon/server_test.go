@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/export"
 )
 
 // T020: Tests for HTTP server /healthz endpoint
@@ -247,6 +249,205 @@ func TestServer_Remember_Success(t *testing.T) {
 	}
 	if response.Path != "/tmp/test" {
 		t.Errorf("response path = %q, want %q", response.Path, "/tmp/test")
+	}
+}
+
+func TestServer_List_NoHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/list", nil)
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("GET /list without handler status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Error != "list not available" {
+		t.Errorf("response error = %q, want %q", response.Error, "list not available")
+	}
+}
+
+func TestServer_List_Success(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	count := 3
+	now := time.Now().UTC()
+	srv.SetListFunc(func(ctx context.Context) (*ListResponse, error) {
+		return &ListResponse{
+			Paths: []ListEntry{
+				{
+					Path:       "/projects/app",
+					Status:     "ok",
+					FileCount:  &count,
+					LastWalkAt: &now,
+					CreatedAt:  now,
+					UpdatedAt:  now,
+				},
+			},
+		}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/list", nil)
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /list status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var response ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(response.Paths) != 1 {
+		t.Fatalf("response paths = %d, want 1", len(response.Paths))
+	}
+	if response.Paths[0].Path != "/projects/app" {
+		t.Errorf("response path = %q, want %q", response.Paths[0].Path, "/projects/app")
+	}
+	if response.Paths[0].Status != "ok" {
+		t.Errorf("response status = %q, want %q", response.Paths[0].Status, "ok")
+	}
+	if response.Paths[0].FileCount == nil || *response.Paths[0].FileCount != count {
+		t.Errorf("response file count = %v, want %d", response.Paths[0].FileCount, count)
+	}
+}
+
+func TestServer_Read_NoHandler(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/read", nil)
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /read without handler status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Error != "read not available" {
+		t.Errorf("response error = %q, want %q", response.Error, "read not available")
+	}
+}
+
+func TestServer_Read_InvalidBody(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetReadFunc(func(ctx context.Context, req ReadRequest) (*ReadResponse, error) {
+		return &ReadResponse{}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/read", bytes.NewBufferString("{bad"))
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("POST /read invalid body status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Error != "invalid request body" {
+		t.Errorf("response error = %q, want %q", response.Error, "invalid request body")
+	}
+}
+
+func TestServer_Read_Unavailable(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetReadFunc(func(ctx context.Context, req ReadRequest) (*ReadResponse, error) {
+		return nil, ErrReadUnavailable
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/read", nil)
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /read unavailable status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Error != ErrReadUnavailable.Error() {
+		t.Errorf("response error = %q, want %q", response.Error, ErrReadUnavailable.Error())
+	}
+}
+
+func TestServer_Read_Success(t *testing.T) {
+	hm := NewHealthManager()
+	srv := NewServer(hm, ServerConfig{
+		Port: 0,
+		Bind: "127.0.0.1",
+	})
+
+	srv.SetReadFunc(func(ctx context.Context, req ReadRequest) (*ReadResponse, error) {
+		return &ReadResponse{
+			Output: "<graph/>",
+			Stats: &export.ExportStats{
+				FileCount:      1,
+				DirectoryCount: 2,
+				OutputSize:     8,
+				Duration:       250 * time.Millisecond,
+			},
+		}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/read", nil)
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("POST /read status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var response ReadResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if response.Output != "<graph/>" {
+		t.Errorf("response output = %q, want %q", response.Output, "<graph/>")
+	}
+	if response.Stats == nil || response.Stats.FileCount != 1 || response.Stats.DirectoryCount != 2 {
+		t.Errorf("response stats = %+v, want file_count=1 directory_count=2", response.Stats)
 	}
 }
 

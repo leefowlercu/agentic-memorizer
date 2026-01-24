@@ -275,6 +275,7 @@ func (s *FalkorDBStep) View() string {
 		b.WriteString(s.viewCustomEntry())
 	case phaseComplete:
 		b.WriteString(FormatSuccess("FalkorDB is ready"))
+		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")

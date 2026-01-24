@@ -212,6 +212,17 @@ func (g *FalkorDBGraph) Start(ctx context.Context) error {
 		return nil
 	}
 
+	// Drain any stale errors from previous connection failures
+	for {
+		select {
+		case <-g.errChan:
+			// Discard stale error
+		default:
+			goto drained
+		}
+	}
+drained:
+
 	// Get password from environment
 	password := os.Getenv(g.config.PasswordEnv)
 

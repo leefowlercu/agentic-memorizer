@@ -15,20 +15,31 @@ import (
 
 const defaultHTTPPort = 7600
 
+// PortChecker is a function type for checking if a port is in use.
+type PortChecker func(port int) bool
+
 // HTTPPortStep handles HTTP API port configuration.
 type HTTPPortStep struct {
 	BaseStep
 
-	portInput components.TextInput
-	err       error
+	portInput   components.TextInput
+	err         error
+	warning     string
+	portChecker PortChecker
 }
 
 // NewHTTPPortStep creates a new HTTP port configuration step.
 func NewHTTPPortStep() *HTTPPortStep {
 	return &HTTPPortStep{
-		BaseStep:  NewBaseStep("HTTP Port"),
-		portInput: components.NewTextInput("Port:", strconv.Itoa(defaultHTTPPort)),
+		BaseStep:    NewBaseStep("HTTP Port"),
+		portInput:   components.NewTextInput("Port:", strconv.Itoa(defaultHTTPPort)),
+		portChecker: CheckPortInUse,
 	}
+}
+
+// SetPortChecker sets a custom port checker (for testing).
+func (s *HTTPPortStep) SetPortChecker(checker PortChecker) {
+	s.portChecker = checker
 }
 
 // Init initializes the step.
@@ -40,6 +51,10 @@ func (s *HTTPPortStep) Init(cfg *config.Config) tea.Cmd {
 
 	s.portInput.Focus()
 	s.err = nil
+	s.warning = ""
+
+	// Check if initial port is in use
+	s.checkPortAvailability()
 
 	return nil
 }
@@ -65,9 +80,25 @@ func (s *HTTPPortStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 
 	default:
 		s.portInput, _ = s.portInput.Update(msg)
-		// Clear error on input change
+		// Clear error on input change and recheck port availability
 		s.err = nil
+		s.checkPortAvailability()
 		return nil, StepContinue
+	}
+}
+
+// checkPortAvailability checks if the current port is in use and sets a warning.
+func (s *HTTPPortStep) checkPortAvailability() {
+	s.warning = ""
+
+	portStr := strings.TrimSpace(s.portInput.Value())
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return
+	}
+
+	if s.portChecker != nil && s.portChecker(port) {
+		s.warning = "Port " + portStr + " is currently in use. The daemon may fail to start if the port is not freed."
 	}
 }
 
@@ -91,6 +122,12 @@ func (s *HTTPPortStep) View() string {
 	b.WriteString("\n\n")
 
 	b.WriteString(mutedStyle.Render("Default: 7600. The daemon listens on this port for API requests."))
+
+	// Show warning if port is in use
+	if s.warning != "" {
+		b.WriteString("\n\n")
+		b.WriteString(FormatWarning(s.warning))
+	}
 
 	// Show error if any
 	if s.err != nil {

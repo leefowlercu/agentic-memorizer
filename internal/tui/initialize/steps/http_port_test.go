@@ -170,3 +170,114 @@ func TestHTTPPortStep_Update_EnterWithInvalidPort(t *testing.T) {
 		t.Errorf("expected StepContinue with invalid port, got %v", result)
 	}
 }
+
+func TestHTTPPortStep_PortInUse_Warning(t *testing.T) {
+	step := NewHTTPPortStep()
+	// Mock port checker that always returns port in use
+	step.SetPortChecker(func(port int) bool {
+		return true
+	})
+
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
+
+	view := step.View()
+	if !containsString(view, "currently in use") {
+		t.Error("expected warning about port in use in view")
+	}
+}
+
+func TestHTTPPortStep_PortNotInUse_NoWarning(t *testing.T) {
+	step := NewHTTPPortStep()
+	// Mock port checker that always returns port not in use
+	step.SetPortChecker(func(port int) bool {
+		return false
+	})
+
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
+
+	view := step.View()
+	if containsString(view, "currently in use") {
+		t.Error("expected no warning about port in use in view")
+	}
+}
+
+func TestHTTPPortStep_PortInUse_UpdateOnInputChange(t *testing.T) {
+	step := NewHTTPPortStep()
+	// Mock port checker that returns in use for port 7600, not in use for others
+	step.SetPortChecker(func(port int) bool {
+		return port == 7600
+	})
+
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
+
+	// Initial port 7600 should show warning
+	view := step.View()
+	if !containsString(view, "currently in use") {
+		t.Error("expected warning for port 7600")
+	}
+
+	// Change to port 8080 (simulate typing)
+	step.portInput.SetValue("8080")
+	step.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+
+	view = step.View()
+	if containsString(view, "currently in use") {
+		t.Error("expected no warning for port 8080")
+	}
+}
+
+func TestHTTPPortStep_PortInUse_StillAllowsAdvance(t *testing.T) {
+	step := NewHTTPPortStep()
+	// Mock port checker that always returns port in use
+	step.SetPortChecker(func(port int) bool {
+		return true
+	})
+
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
+
+	// Even with port in use warning, Enter should still advance
+	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if result != StepNext {
+		t.Errorf("expected StepNext even with port in use warning, got %v", result)
+	}
+}
+
+func TestHTTPPortStep_InvalidPort_NoPortCheck(t *testing.T) {
+	step := NewHTTPPortStep()
+	step.SetPortChecker(func(port int) bool {
+		return true
+	})
+
+	cfg := config.NewDefaultConfig()
+	step.Init(&cfg)
+
+	// Set an invalid port value
+	step.portInput.SetValue("invalid")
+	step.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+
+	// Port checker should not be called for invalid port
+	// (The check happens but returns early due to parse error)
+	view := step.View()
+	if containsString(view, "currently in use") {
+		t.Error("expected no port-in-use warning for invalid port")
+	}
+}
+
+// containsString is a helper to check if a string contains a substring.
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

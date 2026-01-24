@@ -2,7 +2,10 @@ package steps
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -93,4 +96,16 @@ func FormatWarning(msg string) string {
 	warningStyle := lipgloss.NewStyle().
 		Foreground(styles.Warning)
 	return warningStyle.Render(fmt.Sprintf("⚠ %s", msg))
+}
+
+// CheckPortInUse checks if a TCP port is currently in use.
+// Returns true if the port is in use, false otherwise.
+func CheckPortInUse(port int) bool {
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

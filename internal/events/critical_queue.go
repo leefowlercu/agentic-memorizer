@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -137,11 +138,17 @@ func (q *SQLiteCriticalQueue) Dequeue(ctx context.Context) (Event, error) {
 		if err != nil {
 			return Event{}, err
 		}
-		return Event{
+		event := Event{
 			Type:      EventType(storageEvent.Type),
 			Timestamp: storageEvent.Timestamp,
 			Payload:   storageEvent.Payload,
-		}, nil
+		}
+		// Reconstruct typed payload if possible
+		if err := reconstructPayload(&event); err != nil {
+			// Log but don't fail - event will have map[string]interface{} payload
+			// which subscribers should handle gracefully
+		}
+		return event, nil
 	}
 
 	// Legacy standalone database path
@@ -173,7 +180,12 @@ func (q *SQLiteCriticalQueue) Dequeue(ctx context.Context) (Event, error) {
 		if err := json.Unmarshal(payload, &qe); err != nil {
 			return Event{}, err
 		}
-		return Event(qe), nil
+		event := Event(qe)
+		// Reconstruct typed payload if possible
+		if err := reconstructPayload(&event); err != nil {
+			// Log but don't fail - event will have map[string]interface{} payload
+		}
+		return event, nil
 	}
 }
 
@@ -208,5 +220,39 @@ func (q *SQLiteCriticalQueue) Close() error {
 	if q.ownsDB && q.db != nil {
 		return q.db.Close()
 	}
+	return nil
+}
+
+// reconstructPayload converts a map[string]interface{} payload back to its typed struct.
+// This is needed because JSON deserialization loses type information.
+func reconstructPayload(event *Event) error {
+	if event.Payload == nil {
+		return nil
+	}
+
+	// Check if payload is already the correct type
+	expectedType, ok := PayloadType(event.Type)
+	if !ok {
+		return nil // No type mapping, leave as-is
+	}
+
+	if reflect.TypeOf(event.Payload) == expectedType {
+		return nil // Already correct type
+	}
+
+	// Payload is likely map[string]interface{} from JSON deserialization
+	// Re-marshal and unmarshal into the correct type
+	jsonBytes, err := json.Marshal(event.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload; %w", err)
+	}
+
+	// Create new instance of the expected type
+	newPayload := reflect.New(expectedType.Elem()).Interface()
+	if err := json.Unmarshal(jsonBytes, newPayload); err != nil {
+		return fmt.Errorf("failed to unmarshal payload to %s; %w", expectedType, err)
+	}
+
+	event.Payload = newPayload
 	return nil
 }

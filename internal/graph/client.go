@@ -329,6 +329,12 @@ func (g *FalkorDBGraph) signalFatal(err error) {
 		_ = g.conn.Close()
 		g.conn = nil
 	}
+	// Close stopChan to stop the old processWriteQueue goroutine
+	// Use recover in case it's already closed
+	func() {
+		defer func() { recover() }()
+		close(g.stopChan)
+	}()
 	g.mu.Unlock()
 
 	select {

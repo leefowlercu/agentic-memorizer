@@ -232,6 +232,9 @@ func (g *FalkorDBGraph) Start(ctx context.Context) error {
 	g.graph = redisgraph.GraphNew(g.config.GraphName, conn)
 	g.connected = true
 
+	// Recreate stopChan for write queue (may have been closed on previous Stop/fatal)
+	g.stopChan = make(chan struct{})
+
 	// Create schema indexes and constraints (skip for read-only clients)
 	if !g.config.SkipSchemaInit {
 		if err := g.initSchema(ctx); err != nil {
@@ -306,7 +309,17 @@ func (g *FalkorDBGraph) Stop(ctx context.Context) error {
 }
 
 // signalFatal sends a fatal error to errChan without blocking.
+// It also marks the connection as disconnected so that Start() will reconnect.
 func (g *FalkorDBGraph) signalFatal(err error) {
+	// Mark as disconnected so Start() will reconnect
+	g.mu.Lock()
+	g.connected = false
+	if g.conn != nil {
+		_ = g.conn.Close()
+		g.conn = nil
+	}
+	g.mu.Unlock()
+
 	select {
 	case g.errChan <- err:
 	default:

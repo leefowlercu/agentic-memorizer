@@ -127,7 +127,7 @@ func validateInitialize(cmd *cobra.Command, args []string) error {
 
 	// Check if config already exists
 	if !initializeForce && config.ConfigExists() {
-		slog.Info("configuration already exists", "path", configPath)
+		slog.Debug("configuration already exists", "path", configPath)
 		return fmt.Errorf("configuration already exists at %s; use --force to reinitialize", configPath)
 	}
 
@@ -143,11 +143,11 @@ func validateInitialize(cmd *cobra.Command, args []string) error {
 }
 
 func runInitialize(cmd *cobra.Command, args []string) error {
-	slog.Info("starting initialization wizard", "unattended", initializeUnattended)
+	slog.Debug("starting initialization wizard", "unattended", initializeUnattended)
 
 	// Create config directory if needed
 	if err := config.EnsureConfigDir(); err != nil {
-		slog.Error("failed to create config directory", "error", err)
+		slog.Debug("failed to create config directory", "error", err)
 		return fmt.Errorf("failed to create config directory; %w", err)
 	}
 
@@ -177,26 +177,26 @@ func runInteractive(cfg *config.Config, stepList []initialize.Step) error {
 	slog.Debug("starting interactive wizard")
 	result, err := initialize.RunWizard(cfg, stepList)
 	if err != nil {
-		slog.Error("wizard failed", "error", err)
+		slog.Debug("wizard failed", "error", err)
 		return fmt.Errorf("wizard failed; %w", err)
 	}
 
 	if result.Canceled {
-		slog.Info("wizard canceled by user")
+		slog.Debug("wizard canceled by user")
 		return nil
 	}
 
 	if result.Err != nil {
-		slog.Error("wizard completed with error", "error", result.Err)
+		slog.Debug("wizard completed with error", "error", result.Err)
 		return result.Err
 	}
 
 	if !result.Confirmed {
-		slog.Info("wizard completed without confirmation")
+		slog.Debug("wizard completed without confirmation")
 		return nil
 	}
 
-	slog.Info("wizard completed successfully")
+	slog.Debug("wizard completed successfully")
 
 	// Configuration is written by ServiceInstallStep.Apply()
 	// Daemon start is handled by ServiceInstallStep if user opted in
@@ -212,14 +212,14 @@ func runUnattended(cmd *cobra.Command, cfg *config.Config) error {
 
 	// FR-006: Validate required API keys are present
 	if err := validateRequiredAPIKeys(resolved); err != nil {
-		slog.Error("validation failed", "error", err)
+		slog.Debug("validation failed", "error", err)
 		return err
 	}
 
 	// Apply resolved values to config
 	applyResolvedConfig(cfg, resolved)
 
-	slog.Info("unattended initialization completed, writing configuration")
+	slog.Debug("unattended initialization completed, writing configuration")
 
 	// Write configuration
 	if err := writeConfig(cfg); err != nil {
@@ -273,10 +273,10 @@ func writeConfig(cfg *config.Config) error {
 	slog.Debug("writing configuration file", "path", configPath)
 
 	if err := config.Write(cfg, configPath); err != nil {
-		slog.Error("failed to write config", "path", configPath, "error", err)
+		slog.Debug("failed to write config", "path", configPath, "error", err)
 		return fmt.Errorf("failed to write config; %w", err)
 	}
 
-	slog.Info("configuration written successfully", "path", configPath)
+	slog.Debug("configuration written successfully", "path", configPath)
 	return nil
 }

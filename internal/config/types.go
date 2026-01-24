@@ -59,9 +59,8 @@ type PersistenceQueueConfig struct {
 
 // EventBusConfig holds event bus configuration.
 type EventBusConfig struct {
-	BufferSize            int    `yaml:"buffer_size" mapstructure:"buffer_size"`
-	CriticalQueuePath     string `yaml:"critical_queue_path" mapstructure:"critical_queue_path"`
-	CriticalQueueCapacity int    `yaml:"critical_queue_capacity" mapstructure:"critical_queue_capacity"`
+	BufferSize            int `yaml:"buffer_size" mapstructure:"buffer_size"`
+	CriticalQueueCapacity int `yaml:"critical_queue_capacity" mapstructure:"critical_queue_capacity"`
 }
 
 // GraphConfig holds FalkorDB/graph database configuration.

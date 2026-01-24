@@ -81,16 +81,6 @@ func TestValidate_InvalidEventBusBufferSize_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestValidate_EmptyEventBusCriticalQueuePath_ReturnsError(t *testing.T) {
-	cfg := NewDefaultConfig()
-	cfg.Daemon.EventBus.CriticalQueuePath = ""
-
-	err := Validate(&cfg)
-	if err == nil {
-		t.Error("Validate() expected error for empty event_bus critical_queue_path")
-	}
-}
-
 func TestValidate_InvalidEventBusCriticalQueueCapacity_ReturnsError(t *testing.T) {
 	cfg := NewDefaultConfig()
 	cfg.Daemon.EventBus.CriticalQueueCapacity = 0

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -164,39 +162,13 @@ func (b *ComponentBuilder) assignComponent(name string, obj any, bag *ComponentB
 func (b *ComponentBuilder) registerDefinitions() {
 	cfg := b.cfg
 
-	// Event bus
-	b.registry.Register(ComponentDefinition{
-		Name:          "bus",
-		Kind:          ComponentKindPersistent,
-		Criticality:   CriticalityFatal,
-		RestartPolicy: RestartNever,
-		Dependencies:  nil,
-		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			criticalQueuePath := config.ExpandPath(cfg.Daemon.EventBus.CriticalQueuePath)
-			if err := os.MkdirAll(filepath.Dir(criticalQueuePath), 0o755); err != nil {
-				slog.Warn("failed to ensure critical queue directory", "error", err)
-			}
-			cq, err := events.NewSQLiteCriticalQueue(criticalQueuePath, cfg.Daemon.EventBus.CriticalQueueCapacity)
-			if err != nil {
-				slog.Warn("failed to initialize critical queue; continuing without persistence", "error", err)
-				cq = nil
-			}
-
-			busOpts := []events.BusOption{events.WithBufferSize(cfg.Daemon.EventBus.BufferSize)}
-			if cq != nil {
-				busOpts = append(busOpts, events.WithCriticalQueue(cq, []events.EventType{events.PathDeleted, events.FileDiscovered}))
-			}
-			return events.NewBus(busOpts...), nil
-		},
-	})
-
-	// Consolidated storage (SQLite)
+	// Consolidated storage (SQLite) - must be built before bus for critical queue
 	b.registry.Register(ComponentDefinition{
 		Name:          "storage",
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
 		RestartPolicy: RestartNever,
-		Dependencies:  []string{"bus"},
+		Dependencies:  nil,
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
 			dbPath := config.ExpandPath(cfg.Storage.DatabasePath)
 			s, err := storage.Open(ctx, dbPath)
@@ -205,6 +177,30 @@ func (b *ComponentBuilder) registerDefinitions() {
 			}
 			slog.Info("storage initialized", "path", dbPath)
 			return s, nil
+		},
+	})
+
+	// Event bus - depends on storage for consolidated critical queue
+	b.registry.Register(ComponentDefinition{
+		Name:          "bus",
+		Kind:          ComponentKindPersistent,
+		Criticality:   CriticalityFatal,
+		RestartPolicy: RestartNever,
+		Dependencies:  []string{"storage"},
+		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
+			var cq events.CriticalQueue
+			if deps.Storage != nil {
+				cq = events.NewCriticalQueueFromStorage(deps.Storage, cfg.Daemon.EventBus.CriticalQueueCapacity)
+				slog.Info("critical queue using consolidated storage")
+			} else {
+				slog.Warn("storage not available; continuing without critical queue persistence")
+			}
+
+			busOpts := []events.BusOption{events.WithBufferSize(cfg.Daemon.EventBus.BufferSize)}
+			if cq != nil {
+				busOpts = append(busOpts, events.WithCriticalQueue(cq, []events.EventType{events.PathDeleted, events.FileDiscovered}))
+			}
+			return events.NewBus(busOpts...), nil
 		},
 	})
 

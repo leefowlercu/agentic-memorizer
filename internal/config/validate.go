@@ -107,13 +107,6 @@ func Validate(cfg *Config) error {
 		})
 	}
 
-	if cfg.Daemon.EventBus.CriticalQueuePath == "" {
-		errs = append(errs, ValidationError{
-			Field:   "daemon.event_bus.critical_queue_path",
-			Message: "must not be empty",
-		})
-	}
-
 	if cfg.Daemon.EventBus.CriticalQueueCapacity < 1 {
 		errs = append(errs, ValidationError{
 			Field:   "daemon.event_bus.critical_queue_capacity",

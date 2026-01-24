@@ -37,9 +37,6 @@ func TestNewDefaultConfig(t *testing.T) {
 	if cfg.Daemon.EventBus.BufferSize != DefaultDaemonEventBusBufferSize {
 		t.Errorf("Daemon.EventBus.BufferSize = %d, want %d", cfg.Daemon.EventBus.BufferSize, DefaultDaemonEventBusBufferSize)
 	}
-	if cfg.Daemon.EventBus.CriticalQueuePath != DefaultDaemonEventBusCriticalQueuePath {
-		t.Errorf("Daemon.EventBus.CriticalQueuePath = %q, want %q", cfg.Daemon.EventBus.CriticalQueuePath, DefaultDaemonEventBusCriticalQueuePath)
-	}
 	if cfg.Daemon.EventBus.CriticalQueueCapacity != DefaultDaemonEventBusCriticalQueueCapacity {
 		t.Errorf("Daemon.EventBus.CriticalQueueCapacity = %d, want %d", cfg.Daemon.EventBus.CriticalQueueCapacity, DefaultDaemonEventBusCriticalQueueCapacity)
 	}

@@ -17,7 +17,6 @@ const (
 	DefaultDaemonRebuildInterval               = 3600 // 1 hour in seconds, 0 = disabled
 	DefaultDaemonMetricsInterval               = 15   // seconds
 	DefaultDaemonEventBusBufferSize            = 100
-	DefaultDaemonEventBusCriticalQueuePath     = "~/.config/memorizer/critqueue.db"
 	DefaultDaemonEventBusCriticalQueueCapacity = 1000
 
 	// Storage configuration defaults.
@@ -133,7 +132,6 @@ func NewDefaultConfig() Config {
 			},
 			EventBus: EventBusConfig{
 				BufferSize:            DefaultDaemonEventBusBufferSize,
-				CriticalQueuePath:     DefaultDaemonEventBusCriticalQueuePath,
 				CriticalQueueCapacity: DefaultDaemonEventBusCriticalQueueCapacity,
 			},
 		},
@@ -192,7 +190,6 @@ func setDefaults() {
 	viper.SetDefault("daemon.rebuild_interval", DefaultDaemonRebuildInterval)
 	viper.SetDefault("daemon.metrics.collection_interval", DefaultDaemonMetricsInterval)
 	viper.SetDefault("daemon.event_bus.buffer_size", DefaultDaemonEventBusBufferSize)
-	viper.SetDefault("daemon.event_bus.critical_queue_path", DefaultDaemonEventBusCriticalQueuePath)
 	viper.SetDefault("daemon.event_bus.critical_queue_capacity", DefaultDaemonEventBusCriticalQueueCapacity)
 
 	// Storage defaults

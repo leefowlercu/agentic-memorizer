@@ -59,10 +59,8 @@ daemon:
     # Larger values reduce drops but use more memory per subscriber.
     buffer_size: 100
 
-    # Path to the SQLite database used for the critical event queue.
-    critical_queue_path: ~/.config/memorizer/critqueue.db
-
     # Maximum number of critical events retained in the queue.
+    # Critical events are persisted to the consolidated storage database.
     critical_queue_capacity: 1000
 
 # ------------------------------------------------------------------------------

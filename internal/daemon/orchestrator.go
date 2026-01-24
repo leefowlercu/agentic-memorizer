@@ -519,6 +519,7 @@ func (o *Orchestrator) subscribeRememberedPathEvents() {
 }
 
 func (o *Orchestrator) handleRememberedPathAdded(event events.Event) {
+	slog.Info("received remembered path added event", "event_type", event.Type)
 	pe, ok := event.Payload.(*events.RememberedPathEvent)
 	if !ok {
 		slog.Warn("invalid remembered path added payload")
@@ -529,6 +530,7 @@ func (o *Orchestrator) handleRememberedPathAdded(event events.Event) {
 		return
 	}
 
+	slog.Info("processing remembered path", "path", pe.Path)
 	if o.watcher != nil {
 		if err := o.watcher.Watch(pe.Path); err != nil {
 			slog.Warn("failed to watch remembered path", "path", pe.Path, "error", err)
@@ -581,9 +583,11 @@ func (o *Orchestrator) handleRememberedPathRemoved(event events.Event) {
 
 func (o *Orchestrator) triggerRememberedPathWalk(path string) {
 	if o.jobManager == nil {
+		slog.Warn("jobManager is nil, cannot trigger walk")
 		return
 	}
 
+	slog.Info("triggering remembered path walk", "path", path)
 	ctx := o.eventContext()
 	go func() {
 		if err := o.jobManager.WalkPath(ctx, path); err != nil {
@@ -593,6 +597,7 @@ func (o *Orchestrator) triggerRememberedPathWalk(path string) {
 			}
 			slog.Warn("remembered path walk failed", "path", path, "error", err)
 		}
+		slog.Info("remembered path walk completed", "path", path)
 	}()
 }
 

@@ -146,9 +146,11 @@ func (s *RememberService) Forget(ctx context.Context, req ForgetRequest) (*Forge
 
 func (s *RememberService) publishRememberedPathEvent(ctx context.Context, event events.Event) {
 	if s.bus == nil {
+		s.logger.Warn("bus is nil, cannot publish event", "event_type", event.Type)
 		return
 	}
 
+	s.logger.Info("publishing remembered path event", "event_type", event.Type, "path", eventPayloadPath(event))
 	if err := s.bus.Publish(ctx, event); err != nil {
 		s.logger.Warn("failed to publish remembered path event",
 			"event_type", event.Type,

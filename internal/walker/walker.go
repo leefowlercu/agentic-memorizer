@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -172,6 +173,8 @@ func (w *walker) DrainDiscoveredPaths() map[string]struct{} {
 
 // walkPath performs the actual directory walk.
 func (w *walker) walkPath(ctx context.Context, path string, incremental bool) error {
+	slog.Info("walker: starting walk", "path", path, "incremental", incremental)
+
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -190,8 +193,11 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 	// Get the remembered path and its config
 	rp, err := w.registry.FindContainingPath(ctx, absPath)
 	if err != nil {
+		slog.Warn("walker: path not found in registry", "path", absPath, "error", err)
 		return fmt.Errorf("path not remembered; %w", err)
 	}
+
+	slog.Debug("walker: found remembered path", "path", rp.Path, "skip_hidden", rp.Config.SkipHidden)
 
 	// Create filter from config
 	filter := NewFilter(rp.Config)
@@ -240,6 +246,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 			}
 
 			if !filter.ShouldProcessDir(filePath) {
+				slog.Debug("walker: skipping directory", "path", filePath)
 				w.mu.Lock()
 				w.stats.FilesSkipped++
 				w.mu.Unlock()
@@ -254,6 +261,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 
 		// Check if file should be processed
 		if !filter.ShouldProcessFile(filePath) {
+			slog.Debug("walker: skipping file", "path", filePath)
 			w.mu.Lock()
 			w.stats.FilesSkipped++
 			w.mu.Unlock()
@@ -295,6 +303,7 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 		}
 
 		// Publish file discovered event
+		slog.Debug("walker: discovered file", "path", filePath, "size", info.Size())
 		event := events.NewFileDiscovered(filePath, contentHash, info.Size(), info.ModTime(), !incremental)
 		if err := w.bus.Publish(ctx, event); err != nil {
 			return fmt.Errorf("failed to publish event; %w", err)

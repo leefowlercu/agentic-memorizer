@@ -85,7 +85,7 @@ func stopDaemon(pidPath string) error {
 		return ErrStalePIDFile
 	}
 
-	slog.Info("sending SIGTERM to daemon", "pid", pid)
+	slog.Debug("sending SIGTERM to daemon", "pid", pid)
 
 	// Send SIGTERM
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
@@ -101,7 +101,7 @@ func stopDaemon(pidPath string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	slog.Warn("daemon did not stop within timeout", "pid", pid, "timeout", stopTimeout)
+	slog.Debug("daemon did not stop within timeout", "pid", pid, "timeout", stopTimeout)
 	return nil
 }
 

@@ -7,7 +7,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 )
 
-// JobRunner executes JobComponents and updates health/events.
+// JobRunner executes jobs and emits health/events.
 type JobRunner struct {
 	bus *events.EventBus
 }
@@ -18,10 +18,10 @@ func NewJobRunner(bus *events.EventBus) *JobRunner {
 }
 
 // Run executes a job and emits start/complete/failed events.
-func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.Context) RunResult) RunResult {
+func (jr *JobRunner) Run(ctx context.Context, jobName string, fn func(context.Context) RunResult) RunResult {
 	started := time.Now()
 	if jr.bus != nil {
-		_ = jr.bus.Publish(ctx, events.NewJobStarted(job.Name(), started))
+		_ = jr.bus.Publish(ctx, events.NewJobStarted(jobName, started))
 	}
 
 	result := fn(ctx)
@@ -34,7 +34,7 @@ func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.
 
 	if jr.bus != nil {
 		_ = jr.bus.Publish(ctx, events.NewJobCompleted(
-			job.Name(),
+			jobName,
 			string(result.Status),
 			result.Error,
 			result.Counts,
@@ -44,7 +44,7 @@ func (jr *JobRunner) Run(ctx context.Context, job JobComponent, fn func(context.
 		))
 		if result.Status == RunFailed {
 			_ = jr.bus.Publish(ctx, events.NewJobFailed(
-				job.Name(),
+				jobName,
 				result.Error,
 				result.Counts,
 				result.Details,

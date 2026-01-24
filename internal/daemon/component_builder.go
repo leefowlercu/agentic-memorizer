@@ -470,7 +470,9 @@ func (b *ComponentBuilder) registerDefinitions() {
 		},
 	})
 
-	// Job components registration (logical jobs)
+	// Job components exist solely for topological dependency ordering.
+	// They ensure walker, queue, and cleaner are built before jobs can run.
+	// The orchestrator executes jobs directly; these don't produce runtime objects.
 	b.registry.Register(ComponentDefinition{
 		Name:          "job.initial_walk",
 		Kind:          ComponentKindJob,
@@ -478,7 +480,8 @@ func (b *ComponentBuilder) registerDefinitions() {
 		RestartPolicy: RestartNever,
 		Dependencies:  []string{"walker", "queue", "cleaner"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			return &logicalJob{name: "job.initial_walk", mode: "full"}, nil
+			// Dependency placeholder only; orchestrator runs jobs directly
+			return nil, nil
 		},
 	})
 
@@ -489,7 +492,8 @@ func (b *ComponentBuilder) registerDefinitions() {
 		RestartPolicy: RestartNever,
 		Dependencies:  []string{"walker", "queue", "cleaner"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			return &logicalJob{name: "job.rebuild_full", mode: "full"}, nil
+			// Dependency placeholder only; orchestrator runs jobs directly
+			return nil, nil
 		},
 	})
 
@@ -500,7 +504,8 @@ func (b *ComponentBuilder) registerDefinitions() {
 		RestartPolicy: RestartNever,
 		Dependencies:  []string{"walker", "queue", "cleaner"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			return &logicalJob{name: "job.rebuild_incremental", mode: "incremental"}, nil
+			// Dependency placeholder only; orchestrator runs jobs directly
+			return nil, nil
 		},
 	})
 

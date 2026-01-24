@@ -75,14 +75,6 @@ type ManagedComponent interface {
 	Health() ComponentHealth // lightweight snapshot
 }
 
-// JobComponent describes a discrete job.
-type JobComponent interface {
-	Name() string
-	Kind() ComponentKind // expect ComponentKindJob
-	Dependencies() []string
-	Run(ctx context.Context) RunResult
-}
-
 // JobRunEvent is emitted on job start/completion.
 type JobRunEvent struct {
 	Name       string

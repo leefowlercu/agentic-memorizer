@@ -68,8 +68,6 @@ type Orchestrator struct {
 	// healthStopChan stops the health updater goroutine
 	healthStopChan chan struct{}
 
-	jobComponents map[string]JobComponent
-
 	eventUnsubs []func()
 	runCtx      context.Context
 }
@@ -77,9 +75,8 @@ type Orchestrator struct {
 // NewOrchestrator creates a new orchestrator for the daemon.
 func NewOrchestrator(d *Daemon) *Orchestrator {
 	return &Orchestrator{
-		daemon:        d,
-		components:    NewComponentRegistry(),
-		jobComponents: make(map[string]JobComponent),
+		daemon:     d,
+		components: NewComponentRegistry(),
 	}
 }
 

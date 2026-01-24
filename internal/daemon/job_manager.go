@@ -156,7 +156,7 @@ func (m *JobManager) RebuildWithRecord(ctx context.Context, full bool, jobName s
 	var rebuildResult *RebuildResult
 	var runErr error
 
-	runResult := m.jobRunner.Run(ctx, &logicalJob{name: jobName, mode: mode}, func(runCtx context.Context) RunResult {
+	runResult := m.jobRunner.Run(ctx, jobName, func(runCtx context.Context) RunResult {
 		result := RunResult{
 			Status:     RunFailed,
 			StartedAt:  time.Now(),

@@ -16,6 +16,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
+	"github.com/leefowlercu/agentic-memorizer/internal/storage"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 )
@@ -41,10 +42,13 @@ type Orchestrator struct {
 	// Direct component references (populated from bag for convenience)
 	bus              *events.EventBus
 	registry         registry.Registry
+	storage          *storage.Storage
+	persistenceQueue storage.DurablePersistenceQueue
 	graph            graph.Graph
 	semanticProvider providers.SemanticProvider
 	embedProvider    providers.EmbeddingsProvider
 	queue            *analysis.Queue
+	drainWorker      *analysis.DrainWorker
 	walker           walker.Walker
 	watcher          watcher.Watcher
 	cleaner          *cleaner.Cleaner
@@ -96,12 +100,15 @@ func (o *Orchestrator) Initialize(ctx context.Context) error {
 	// Populate direct references from bag for convenience
 	o.bus = bag.Bus
 	o.registry = bag.Registry
+	o.storage = bag.Storage
+	o.persistenceQueue = bag.PersistenceQueue
 	o.graph = bag.Graph
 	o.semanticProvider = bag.SemanticProvider
 	o.embedProvider = bag.EmbedProvider
 	o.semanticCache = bag.SemanticCache
 	o.embeddingsCache = bag.EmbeddingsCache
 	o.queue = bag.Queue
+	o.drainWorker = bag.DrainWorker
 	o.walker = bag.Walker
 	o.watcher = bag.Watcher
 	o.cleaner = bag.Cleaner
@@ -248,6 +255,12 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 					return o.metricsCollector.Start(c)
 				}, fatalChan(def, o.metricsCollector))
 			}
+		case "drain_worker":
+			if o.drainWorker != nil {
+				o.supervisor.Supervise(ctx, name, def, func(c context.Context) error {
+					return o.drainWorker.Start(c)
+				}, nil)
+			}
 		}
 	}
 
@@ -365,6 +378,22 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 			if o.registry != nil {
 				_ = o.registry.Close()
 				slog.Debug("registry closed")
+			}
+		case "drain_worker":
+			if o.drainWorker != nil {
+				if err := o.drainWorker.Stop(ctx); err != nil {
+					slog.Warn("drain worker stop error", "error", err)
+				} else {
+					slog.Debug("drain worker stopped")
+				}
+			}
+		case "storage":
+			if o.storage != nil {
+				if err := o.storage.Close(); err != nil {
+					slog.Warn("storage close error", "error", err)
+				} else {
+					slog.Debug("storage closed")
+				}
 			}
 		}
 	}

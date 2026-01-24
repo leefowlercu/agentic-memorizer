@@ -20,6 +20,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
+	"github.com/leefowlercu/agentic-memorizer/internal/storage"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 )
@@ -100,13 +101,22 @@ func (b *ComponentBuilder) Build(ctx context.Context) (*ComponentBag, error) {
 }
 
 // assignComponent assigns the built object to the appropriate bag and context fields.
+// Note: Concrete types must appear before interface types in the switch to avoid
+// unreachable cases when a concrete type implements an interface.
 func (b *ComponentBuilder) assignComponent(name string, obj any, bag *ComponentBag, ctx *ComponentContext) {
 	switch c := obj.(type) {
 	case *events.EventBus:
 		bag.Bus = c
 		ctx.Bus = c
 		config.SetEventBus(c)
+	case *storage.Storage:
+		bag.Storage = c
+		ctx.Storage = c
+	case *storage.PersistenceQueue:
+		bag.PersistenceQueue = c
+		ctx.PersistenceQueue = c
 	case registry.Registry:
+		// Must come after *storage.Storage since Storage implements Registry
 		bag.Registry = c
 		ctx.Registry = c
 	case graph.Graph:
@@ -127,6 +137,9 @@ func (b *ComponentBuilder) assignComponent(name string, obj any, bag *ComponentB
 	case *analysis.Queue:
 		bag.Queue = c
 		ctx.Queue = c
+	case *analysis.DrainWorker:
+		bag.DrainWorker = c
+		ctx.DrainWorker = c
 	case walker.Walker:
 		bag.Walker = c
 		ctx.Walker = c
@@ -174,6 +187,42 @@ func (b *ComponentBuilder) registerDefinitions() {
 				busOpts = append(busOpts, events.WithCriticalQueue(cq, []events.EventType{events.PathDeleted, events.FileDiscovered}))
 			}
 			return events.NewBus(busOpts...), nil
+		},
+	})
+
+	// Consolidated storage (SQLite)
+	b.registry.Register(ComponentDefinition{
+		Name:          "storage",
+		Kind:          ComponentKindPersistent,
+		Criticality:   CriticalityFatal,
+		RestartPolicy: RestartNever,
+		Dependencies:  []string{"bus"},
+		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
+			dbPath := config.ExpandPath(cfg.Storage.DatabasePath)
+			s, err := storage.Open(ctx, dbPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open storage; %w", err)
+			}
+			slog.Info("storage initialized", "path", dbPath)
+			return s, nil
+		},
+	})
+
+	// Persistence queue (uses storage)
+	b.registry.Register(ComponentDefinition{
+		Name:          "persistence_queue",
+		Kind:          ComponentKindPersistent,
+		Criticality:   CriticalityDegradable,
+		RestartPolicy: RestartNever,
+		Dependencies:  []string{"storage"},
+		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
+			if deps.Storage == nil {
+				slog.Warn("storage not available; persistence queue disabled")
+				return nil, nil
+			}
+			pq := deps.Storage.PersistenceQueue()
+			slog.Info("persistence queue initialized")
+			return pq, nil
 		},
 	})
 
@@ -331,7 +380,7 @@ func (b *ComponentBuilder) registerDefinitions() {
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityFatal,
 		RestartPolicy: RestartOnFailure,
-		Dependencies:  []string{"bus", "registry", "graph", "semantic_provider", "embeddings_provider", "semantic_cache", "embeddings_cache"},
+		Dependencies:  []string{"bus", "registry", "graph", "persistence_queue", "semantic_provider", "embeddings_provider", "semantic_cache", "embeddings_cache"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
 			workerCount := min(max(runtime.NumCPU(), 2), 8)
 			logger := slog.Default().With("component", "analysis-queue")
@@ -345,6 +394,7 @@ func (b *ComponentBuilder) registerDefinitions() {
 				EmbeddingsProvider: deps.Providers.Embed,
 				EmbeddingsCache:    deps.Caches.Embeddings,
 				Graph:              deps.Graph,
+				PersistenceQueue:   deps.PersistenceQueue,
 				AnalysisVersion:    "1.0.0",
 				Logger:             logger,
 			}
@@ -358,6 +408,7 @@ func (b *ComponentBuilder) registerDefinitions() {
 			slog.Info("analysis queue initialized",
 				"workers", workerCount,
 				"pipeline", true,
+				"persistence_queue", deps.PersistenceQueue != nil,
 			)
 			return q, nil
 		},
@@ -366,6 +417,47 @@ func (b *ComponentBuilder) registerDefinitions() {
 				return q.Errors()
 			}
 			return nil
+		},
+	})
+
+	// Drain worker (drains persistence queue when graph becomes available)
+	b.registry.Register(ComponentDefinition{
+		Name:          "drain_worker",
+		Kind:          ComponentKindPersistent,
+		Criticality:   CriticalityDegradable,
+		RestartPolicy: RestartOnFailure,
+		Dependencies:  []string{"bus", "graph", "persistence_queue"},
+		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
+			if deps.PersistenceQueue == nil {
+				slog.Debug("persistence queue not available; drain worker disabled")
+				return nil, nil
+			}
+			if deps.Graph == nil {
+				slog.Debug("graph not available; drain worker disabled")
+				return nil, nil
+			}
+
+			// Build drain config from application config
+			drainCfg := analysis.DrainConfig{
+				BatchSize:          cfg.PersistenceQueue.DrainBatchSize,
+				MaxRetries:         cfg.PersistenceQueue.MaxRetries,
+				RetryBackoff:       time.Duration(cfg.PersistenceQueue.RetryBackoffMs) * time.Millisecond,
+				CompletedRetention: time.Duration(cfg.PersistenceQueue.CompletedRetentionMin) * time.Minute,
+				FailedRetention:    time.Duration(cfg.PersistenceQueue.FailedRetentionDays) * 24 * time.Hour,
+			}
+
+			dw := analysis.NewDrainWorker(
+				deps.PersistenceQueue,
+				deps.Graph,
+				deps.Bus,
+				analysis.WithDrainConfig(drainCfg),
+				analysis.WithDrainLogger(slog.Default().With("component", "drain_worker")),
+			)
+			slog.Info("drain worker initialized",
+				"batch_size", drainCfg.BatchSize,
+				"max_retries", drainCfg.MaxRetries,
+			)
+			return dw, nil
 		},
 	})
 

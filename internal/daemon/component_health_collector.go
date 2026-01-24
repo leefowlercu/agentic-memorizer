@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -174,6 +175,48 @@ func (c *ComponentHealthCollector) Collect() map[string]ComponentHealth {
 				"persistence_failures": stats.PersistenceFailures,
 				"degradation_mode":     stats.DegradationMode,
 			},
+		}
+	}
+
+	// Persistence queue status
+	if c.bag.PersistenceQueue != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		queueStats, err := c.bag.PersistenceQueue.Stats(ctx)
+		cancel()
+
+		if err != nil {
+			statuses["persistence_queue"] = ComponentHealth{
+				Status:      ComponentStatusDegraded,
+				Error:       err.Error(),
+				LastChecked: time.Now(),
+			}
+		} else {
+			status := ComponentStatusRunning
+			var errMsg string
+
+			// Warn if items are pending (graph was/is unavailable)
+			if queueStats.Pending > 0 || queueStats.Inflight > 0 {
+				status = ComponentStatusDegraded
+				errMsg = "items pending graph persistence"
+			}
+
+			// Failed items indicate a more serious issue
+			if queueStats.Failed > 0 {
+				status = ComponentStatusDegraded
+				errMsg = "items failed after max retries"
+			}
+
+			statuses["persistence_queue"] = ComponentHealth{
+				Status:      status,
+				Error:       errMsg,
+				LastChecked: time.Now(),
+				Details: map[string]any{
+					"pending":   queueStats.Pending,
+					"inflight":  queueStats.Inflight,
+					"completed": queueStats.Completed,
+					"failed":    queueStats.Failed,
+				},
+			}
 		}
 	}
 

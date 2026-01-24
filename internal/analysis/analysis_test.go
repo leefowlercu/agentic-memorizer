@@ -1153,7 +1153,7 @@ func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
 func TestPersistToGraphSetsAllChunkFields(t *testing.T) {
 	// Set up mock graph
 	mockG := &mockGraph{}
-	stage := NewPersistenceStage(mockG, nil)
+	stage := NewPersistenceStage(mockG)
 
 	t.Run("PersistsAllChunkMetadata", func(t *testing.T) {
 		result := &AnalysisResult{

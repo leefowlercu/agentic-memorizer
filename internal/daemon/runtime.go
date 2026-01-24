@@ -14,6 +14,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/metrics"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
+	"github.com/leefowlercu/agentic-memorizer/internal/storage"
 	"github.com/leefowlercu/agentic-memorizer/internal/walker"
 	"github.com/leefowlercu/agentic-memorizer/internal/watcher"
 )
@@ -116,9 +117,12 @@ type RestartConfig struct {
 type ComponentContext struct {
 	Bus              *events.EventBus
 	Registry         registry.Registry
+	Storage          *storage.Storage
+	PersistenceQueue storage.DurablePersistenceQueue
 	Graph            graph.Graph
 	Cleaner          *cleaner.Cleaner
 	Queue            *analysis.Queue
+	DrainWorker      *analysis.DrainWorker
 	Walker           walker.Walker
 	Watcher          watcher.Watcher
 	MCP              *mcp.Server
@@ -138,12 +142,15 @@ type ComponentContext struct {
 type ComponentBag struct {
 	Bus              *events.EventBus
 	Registry         registry.Registry
+	Storage          *storage.Storage
 	Graph            graph.Graph
 	SemanticProvider providers.SemanticProvider
 	EmbedProvider    providers.EmbeddingsProvider
 	SemanticCache    *cache.SemanticCache
 	EmbeddingsCache  *cache.EmbeddingsCache
 	Queue            *analysis.Queue
+	PersistenceQueue storage.DurablePersistenceQueue
+	DrainWorker      *analysis.DrainWorker
 	Walker           walker.Walker
 	Watcher          watcher.Watcher
 	Cleaner          *cleaner.Cleaner

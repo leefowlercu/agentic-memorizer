@@ -123,9 +123,34 @@ func formatStatus(status *DaemonStatus) string {
 				if health.Error != "" {
 					sb.WriteString(fmt.Sprintf(" (%s)", health.Error))
 				}
+				// Special formatting for persistence_queue
+				if name == "persistence_queue" && health.Details != nil {
+					sb.WriteString(formatPersistenceQueueDetails(health.Details))
+				}
 			}
 		}
 	}
 
 	return sb.String()
+}
+
+// formatPersistenceQueueDetails formats persistence queue stats for display.
+func formatPersistenceQueueDetails(details map[string]any) string {
+	var parts []string
+
+	if pending, ok := details["pending"].(int64); ok && pending > 0 {
+		parts = append(parts, fmt.Sprintf("%d pending", pending))
+	}
+	if inflight, ok := details["inflight"].(int64); ok && inflight > 0 {
+		parts = append(parts, fmt.Sprintf("%d inflight", inflight))
+	}
+	if failed, ok := details["failed"].(int64); ok && failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", failed))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf(" [%s]", strings.Join(parts, ", "))
 }

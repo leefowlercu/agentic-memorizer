@@ -8,29 +8,108 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
 	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
+	"github.com/leefowlercu/agentic-memorizer/internal/storage"
 )
 
 // PersistenceStage writes analysis results to the graph.
 type PersistenceStage struct {
 	graph  graph.Graph
+	queue  storage.DurablePersistenceQueue
 	logger *slog.Logger
 }
 
-// NewPersistenceStage creates a persistence stage.
-func NewPersistenceStage(g graph.Graph, logger *slog.Logger) *PersistenceStage {
-	return &PersistenceStage{
-		graph:  g,
-		logger: logger,
+// PersistenceStageOption configures a PersistenceStage.
+type PersistenceStageOption func(*PersistenceStage)
+
+// WithPersistenceQueue sets the durable queue for fallback when graph is unavailable.
+func WithPersistenceQueue(q storage.DurablePersistenceQueue) PersistenceStageOption {
+	return func(s *PersistenceStage) {
+		s.queue = q
 	}
 }
 
-// Persist writes analysis results to the graph.
+// WithPersistenceLogger sets the logger for the persistence stage.
+func WithPersistenceLogger(logger *slog.Logger) PersistenceStageOption {
+	return func(s *PersistenceStage) {
+		s.logger = logger
+	}
+}
+
+// NewPersistenceStage creates a persistence stage.
+func NewPersistenceStage(g graph.Graph, opts ...PersistenceStageOption) *PersistenceStage {
+	s := &PersistenceStage{
+		graph:  g,
+		logger: slog.Default(),
+	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
+}
+
+// Persist writes analysis results to the graph. If the graph is unavailable or
+// persistence fails, the result is queued for later retry (if a queue is configured).
 func (s *PersistenceStage) Persist(ctx context.Context, result *AnalysisResult) error {
-	if s.graph == nil {
+	logger := loggerOrDefault(s.logger)
+
+	// If no graph configured and no queue, nothing to do
+	if s.graph == nil && s.queue == nil {
 		return nil
 	}
 
+	// Check if graph is available and connected
+	graphAvailable := s.graph != nil && s.graph.IsConnected()
+
+	// If graph not available, queue the result if possible
+	if !graphAvailable {
+		if s.queue != nil {
+			logger.Info("graph unavailable; queuing for later persistence",
+				"path", result.FilePath,
+				"content_hash", result.ContentHash)
+			return s.enqueueResult(ctx, result)
+		}
+		// No queue configured, nothing we can do
+		return nil
+	}
+
+	// Graph is available, attempt direct persistence
+	if err := s.persistToGraph(ctx, result); err != nil {
+		// Persistence failed, try to queue for retry
+		if s.queue != nil {
+			logger.Warn("graph persistence failed; queuing for retry",
+				"path", result.FilePath,
+				"error", err)
+			if qErr := s.enqueueResult(ctx, result); qErr != nil {
+				return fmt.Errorf("persistence failed and queuing failed; persistence error: %w; queue error: %v", err, qErr)
+			}
+			return nil // Queued successfully, don't return the persistence error
+		}
+		return err
+	}
+
+	return nil
+}
+
+// enqueueResult serializes and enqueues an analysis result.
+func (s *PersistenceStage) enqueueResult(ctx context.Context, result *AnalysisResult) error {
+	resultJSON, err := storage.MarshalAnalysisResult(result)
+	if err != nil {
+		return fmt.Errorf("failed to marshal result for queue; %w", err)
+	}
+
+	if err := s.queue.Enqueue(ctx, result.FilePath, result.ContentHash, resultJSON); err != nil {
+		return fmt.Errorf("failed to enqueue result; %w", err)
+	}
+
+	return nil
+}
+
+// persistToGraph performs the actual persistence to the graph.
+func (s *PersistenceStage) persistToGraph(ctx context.Context, result *AnalysisResult) error {
 	logger := loggerOrDefault(s.logger)
+
 	if result.IngestMode == ingest.ModeSkip {
 		if err := s.graph.DeleteFile(ctx, result.FilePath); err != nil {
 			return fmt.Errorf("failed to delete skipped file; %w", err)

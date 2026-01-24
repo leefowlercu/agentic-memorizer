@@ -12,6 +12,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
+	"github.com/leefowlercu/agentic-memorizer/internal/storage"
 )
 
 // Pipeline orchestrates the analysis stages in sequence.
@@ -41,6 +42,7 @@ type PipelineConfig struct {
 	EmbeddingsProvider providers.EmbeddingsProvider
 	EmbeddingsCache    *cache.EmbeddingsCache
 	Graph              graph.Graph
+	PersistenceQueue   storage.DurablePersistenceQueue
 	AnalysisVersion    string
 	Logger             *slog.Logger
 }
@@ -98,12 +100,18 @@ func NewPipeline(cfg PipelineConfig, opts ...PipelineOption) *Pipeline {
 		logger = slog.Default()
 	}
 
+	// Build persistence stage with optional queue for fallback
+	persistenceOpts := []PersistenceStageOption{WithPersistenceLogger(logger)}
+	if cfg.PersistenceQueue != nil {
+		persistenceOpts = append(persistenceOpts, WithPersistenceQueue(cfg.PersistenceQueue))
+	}
+
 	p := &Pipeline{
 		fileReader:      NewFileReader(cfg.Registry),
 		chunker:         NewChunkerStage(cfg.ChunkerRegistry),
 		semantic:        NewSemanticStage(cfg.SemanticProvider, cfg.SemanticCache, cfg.Registry, cfg.AnalysisVersion, logger),
 		embeddings:      NewEmbeddingsStage(cfg.EmbeddingsProvider, cfg.EmbeddingsCache, cfg.Registry, logger),
-		persistence:     NewPersistenceStage(cfg.Graph, logger),
+		persistence:     NewPersistenceStage(cfg.Graph, persistenceOpts...),
 		logger:          logger,
 		registry:        cfg.Registry,
 		analysisVersion: cfg.AnalysisVersion,

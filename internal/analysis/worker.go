@@ -222,7 +222,7 @@ func (w *Worker) processItem(ctx context.Context, item WorkItem) error {
 	duration := time.Since(start)
 	result.ProcessingTime = duration
 
-	persistenceStage := NewPersistenceStage(w.graph, w.logger)
+	persistenceStage := NewPersistenceStage(w.graph, WithPersistenceLogger(w.logger))
 	if err := persistenceStage.Persist(ctx, result); err != nil {
 		if item.Retries < w.queue.maxRetries {
 			item.Retries++

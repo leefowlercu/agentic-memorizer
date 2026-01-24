@@ -20,6 +20,16 @@ const (
 	DefaultDaemonEventBusCriticalQueuePath     = "~/.config/memorizer/critqueue.db"
 	DefaultDaemonEventBusCriticalQueueCapacity = 1000
 
+	// Storage configuration defaults.
+	DefaultStorageDatabasePath = "~/.config/memorizer/memorizer.db"
+
+	// Persistence queue configuration defaults.
+	DefaultPersistenceQueueMaxRetries            = 3
+	DefaultPersistenceQueueRetryBackoffMs        = 1000 // 1 second
+	DefaultPersistenceQueueDrainBatchSize        = 10
+	DefaultPersistenceQueueCompletedRetentionMin = 60 // 1 hour
+	DefaultPersistenceQueueFailedRetentionDays   = 7  // 1 week
+
 	// Graph configuration defaults.
 	DefaultGraphHost           = "localhost"
 	DefaultGraphPort           = 6379
@@ -101,6 +111,16 @@ func NewDefaultConfig() Config {
 	return Config{
 		LogLevel: DefaultLogLevel,
 		LogFile:  DefaultLogFile,
+		Storage: StorageConfig{
+			DatabasePath: DefaultStorageDatabasePath,
+		},
+		PersistenceQueue: PersistenceQueueConfig{
+			MaxRetries:            DefaultPersistenceQueueMaxRetries,
+			RetryBackoffMs:        DefaultPersistenceQueueRetryBackoffMs,
+			DrainBatchSize:        DefaultPersistenceQueueDrainBatchSize,
+			CompletedRetentionMin: DefaultPersistenceQueueCompletedRetentionMin,
+			FailedRetentionDays:   DefaultPersistenceQueueFailedRetentionDays,
+		},
 		Daemon: DaemonConfig{
 			HTTPPort:        DefaultDaemonHTTPPort,
 			HTTPBind:        DefaultDaemonHTTPBind,
@@ -174,6 +194,16 @@ func setDefaults() {
 	viper.SetDefault("daemon.event_bus.buffer_size", DefaultDaemonEventBusBufferSize)
 	viper.SetDefault("daemon.event_bus.critical_queue_path", DefaultDaemonEventBusCriticalQueuePath)
 	viper.SetDefault("daemon.event_bus.critical_queue_capacity", DefaultDaemonEventBusCriticalQueueCapacity)
+
+	// Storage defaults
+	viper.SetDefault("storage.database_path", DefaultStorageDatabasePath)
+
+	// Persistence queue defaults
+	viper.SetDefault("persistence_queue.max_retries", DefaultPersistenceQueueMaxRetries)
+	viper.SetDefault("persistence_queue.retry_backoff_ms", DefaultPersistenceQueueRetryBackoffMs)
+	viper.SetDefault("persistence_queue.drain_batch_size", DefaultPersistenceQueueDrainBatchSize)
+	viper.SetDefault("persistence_queue.completed_retention_min", DefaultPersistenceQueueCompletedRetentionMin)
+	viper.SetDefault("persistence_queue.failed_retention_days", DefaultPersistenceQueueFailedRetentionDays)
 
 	// Graph defaults
 	viper.SetDefault("graph.host", DefaultGraphHost)

@@ -66,6 +66,45 @@ daemon:
     critical_queue_capacity: 1000
 
 # ------------------------------------------------------------------------------
+# Storage Configuration
+# ------------------------------------------------------------------------------
+# Settings for the consolidated SQLite database that stores remembered paths,
+# file state, critical events, and the persistence queue.
+
+storage:
+  # Path to the consolidated SQLite database file.
+  # Supports ~ for home directory expansion.
+  database_path: ~/.config/memorizer/memorizer.db
+
+# ------------------------------------------------------------------------------
+# Persistence Queue Configuration
+# ------------------------------------------------------------------------------
+# Settings for the durable persistence queue that stores analysis results
+# when the graph database is unavailable. Results are automatically persisted
+# to the graph when connectivity is restored.
+
+persistence_queue:
+  # Maximum number of persistence attempts before marking an item as failed.
+  # Failed items are retained for inspection but not automatically retried.
+  max_retries: 3
+
+  # Base delay in milliseconds between retry attempts.
+  # Actual delay may include exponential backoff.
+  retry_backoff_ms: 1000
+
+  # Number of items to process in each drain batch.
+  # Larger values improve throughput but use more memory.
+  drain_batch_size: 10
+
+  # How long to keep completed items (in minutes) before purging.
+  # Completed items are purged after each drain cycle.
+  completed_retention_min: 60
+
+  # How long to keep failed items (in days) before purging.
+  # Failed items are retained longer for debugging purposes.
+  failed_retention_days: 7
+
+# ------------------------------------------------------------------------------
 # Graph Database Configuration
 # ------------------------------------------------------------------------------
 # Connection settings for FalkorDB (Redis Graph), which stores the

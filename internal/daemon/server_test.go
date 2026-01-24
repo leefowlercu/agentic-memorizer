@@ -290,12 +290,13 @@ func TestServer_List_Success(t *testing.T) {
 		return &ListResponse{
 			Paths: []ListEntry{
 				{
-					Path:       "/projects/app",
-					Status:     "ok",
-					FileCount:  &count,
-					LastWalkAt: &now,
-					CreatedAt:  now,
-					UpdatedAt:  now,
+					Path:            "/projects/app",
+					Status:          "ok",
+					DiscoveredCount: &count,
+					AnalyzedCount:   &count,
+					LastWalkAt:      &now,
+					CreatedAt:       now,
+					UpdatedAt:       now,
 				},
 			},
 		}, nil
@@ -323,8 +324,8 @@ func TestServer_List_Success(t *testing.T) {
 	if response.Paths[0].Status != "ok" {
 		t.Errorf("response status = %q, want %q", response.Paths[0].Status, "ok")
 	}
-	if response.Paths[0].FileCount == nil || *response.Paths[0].FileCount != count {
-		t.Errorf("response file count = %v, want %d", response.Paths[0].FileCount, count)
+	if response.Paths[0].DiscoveredCount == nil || *response.Paths[0].DiscoveredCount != count {
+		t.Errorf("response discovered count = %v, want %d", response.Paths[0].DiscoveredCount, count)
 	}
 }
 

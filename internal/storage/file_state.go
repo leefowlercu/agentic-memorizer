@@ -140,6 +140,42 @@ func (s *Storage) DeleteFileStatesForPath(ctx context.Context, parentPath string
 	return nil
 }
 
+// CountFileStates returns the count of discovered files under a parent path.
+func (s *Storage) CountFileStates(ctx context.Context, parentPath string) (int, error) {
+	parentPath = filepath.Clean(parentPath)
+	prefix := parentPath + string(filepath.Separator)
+
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM file_state WHERE path LIKE ? OR path = ?`,
+		prefix+"%", parentPath,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count file states; %w", err)
+	}
+
+	return count, nil
+}
+
+// CountAnalyzedFiles returns the count of files with completed semantic analysis under a parent path.
+func (s *Storage) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
+	parentPath = filepath.Clean(parentPath)
+	prefix := parentPath + string(filepath.Separator)
+
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM file_state
+		 WHERE (path LIKE ? OR path = ?)
+		   AND semantic_analyzed_at IS NOT NULL`,
+		prefix+"%", parentPath,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count analyzed files; %w", err)
+	}
+
+	return count, nil
+}
+
 // UpdateMetadataState updates the metadata tracking fields for a file.
 // This is called after computing content hash and file metadata.
 func (s *Storage) UpdateMetadataState(ctx context.Context, path string, contentHash string, metadataHash string, size int64, modTime time.Time) error {

@@ -153,6 +153,24 @@ func (m *mockRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, err
 	return nil, nil
 }
 
+func (m *mockRegistry) CountFileStates(ctx context.Context, parentPath string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.fileStates), nil
+}
+
+func (m *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, state := range m.fileStates {
+		if state.SemanticAnalyzedAt != nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // mockGraph implements graph.Graph for testing.
 type mockGraph struct {
 	mu                     sync.Mutex

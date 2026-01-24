@@ -33,6 +33,8 @@ type Registry interface {
 	DeleteFileState(ctx context.Context, path string) error
 	ListFileStates(ctx context.Context, parentPath string) ([]FileState, error)
 	DeleteFileStatesForPath(ctx context.Context, parentPath string) error
+	CountFileStates(ctx context.Context, parentPath string) (int, error)
+	CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error)
 
 	// Granular analysis state updates
 	UpdateMetadataState(ctx context.Context, path string, contentHash string, metadataHash string, size int64, modTime time.Time) error
@@ -148,6 +150,16 @@ func (r *SQLiteRegistry) ListFileStates(ctx context.Context, parentPath string) 
 // DeleteFileStatesForPath removes all file states under a given parent path.
 func (r *SQLiteRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath string) error {
 	return r.storage.DeleteFileStatesForPath(ctx, parentPath)
+}
+
+// CountFileStates returns the count of discovered files under a parent path.
+func (r *SQLiteRegistry) CountFileStates(ctx context.Context, parentPath string) (int, error) {
+	return r.storage.CountFileStates(ctx, parentPath)
+}
+
+// CountAnalyzedFiles returns the count of files with completed semantic analysis under a parent path.
+func (r *SQLiteRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
+	return r.storage.CountAnalyzedFiles(ctx, parentPath)
 }
 
 // UpdateMetadataState updates the metadata tracking fields for a file.

@@ -187,6 +187,14 @@ func (m *mockRegistry) Close() error {
 	return nil
 }
 
+func (m *mockRegistry) CountFileStates(ctx context.Context, parentPath string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
+	return 0, nil
+}
+
 func TestNewJobManager(t *testing.T) {
 	w := newMockWalker()
 	r := newMockRegistry()

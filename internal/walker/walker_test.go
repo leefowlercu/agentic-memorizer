@@ -193,6 +193,30 @@ func (r *mockRegistry) ValidateAndCleanPaths(ctx context.Context) ([]string, err
 	return nil, nil
 }
 
+func (r *mockRegistry) CountFileStates(ctx context.Context, parentPath string) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for path := range r.fileStates {
+		if strings.HasPrefix(path, parentPath) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (r *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for path, fs := range r.fileStates {
+		if strings.HasPrefix(path, parentPath) && fs.SemanticAnalyzedAt != nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // mockBus implements events.Bus for testing.
 type mockBus struct {
 	events []events.Event

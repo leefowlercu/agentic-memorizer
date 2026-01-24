@@ -188,6 +188,14 @@ func (r *mockRegistry) Close() error {
 	return nil
 }
 
+func (r *mockRegistry) CountFileStates(ctx context.Context, parentPath string) (int, error) {
+	return 0, nil
+}
+
+func (r *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
+	return 0, nil
+}
+
 func TestWatcher_Watch(t *testing.T) {
 	tmpDir := t.TempDir()
 

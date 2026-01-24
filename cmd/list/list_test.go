@@ -98,8 +98,11 @@ func TestListCmd_TableHeader(t *testing.T) {
 	if !strings.Contains(output, "STATUS") {
 		t.Error("expected STATUS column header")
 	}
-	if !strings.Contains(output, "FILES") {
-		t.Error("expected FILES column header")
+	if !strings.Contains(output, "DISCOVERED") {
+		t.Error("expected DISCOVERED column header")
+	}
+	if !strings.Contains(output, "ANALYZED") {
+		t.Error("expected ANALYZED column header")
 	}
 	if !strings.Contains(output, "LAST WALK") {
 		t.Error("expected LAST WALK column header")
@@ -269,8 +272,11 @@ func TestListCmd_Verbose(t *testing.T) {
 	if !strings.Contains(output, "Added:") {
 		t.Error("expected Added: in verbose output")
 	}
-	if !strings.Contains(output, "Files Tracked:") {
-		t.Error("expected Files Tracked: in verbose output")
+	if !strings.Contains(output, "Files Discovered:") {
+		t.Error("expected Files Discovered: in verbose output")
+	}
+	if !strings.Contains(output, "Files Analyzed:") {
+		t.Error("expected Files Analyzed: in verbose output")
 	}
 	if !strings.Contains(output, "Configuration:") {
 		t.Error("expected Configuration: in verbose output")

@@ -79,8 +79,8 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		// Print table header
-		fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", "PATH", "STATUS", "FILES", "LAST WALK")
-		fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", strings.Repeat("-", 40), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 19))
+		fmt.Fprintf(out, "%-40s %-10s %-10s %-8s %s\n", "PATH", "STATUS", "DISCOVERED", "ANALYZED", "LAST WALK")
+		fmt.Fprintf(out, "%-40s %-10s %-10s %-8s %s\n", strings.Repeat("-", 40), strings.Repeat("-", 10), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 19))
 
 		for _, p := range paths {
 			printTableRow(out, &p)
@@ -97,10 +97,16 @@ func printTableRow(out io.Writer, p *daemon.ListEntry) {
 		path = "..." + path[len(path)-37:]
 	}
 
-	// Get file count (show "-" if path is inaccessible)
-	filesStr := "-"
-	if p.FileCount != nil {
-		filesStr = fmt.Sprintf("%d", *p.FileCount)
+	// Get discovered count (show "-" if path is inaccessible)
+	discoveredStr := "-"
+	if p.DiscoveredCount != nil {
+		discoveredStr = fmt.Sprintf("%d", *p.DiscoveredCount)
+	}
+
+	// Get analyzed count (show "-" if path is inaccessible)
+	analyzedStr := "-"
+	if p.AnalyzedCount != nil {
+		analyzedStr = fmt.Sprintf("%d", *p.AnalyzedCount)
 	}
 
 	// Format last walk time (show "-" if never walked or inaccessible)
@@ -109,7 +115,7 @@ func printTableRow(out io.Writer, p *daemon.ListEntry) {
 		lastWalkStr = p.LastWalkAt.Format("2006-01-02 15:04:05")
 	}
 
-	fmt.Fprintf(out, "%-40s %-10s %-8s %s\n", path, p.Status, filesStr, lastWalkStr)
+	fmt.Fprintf(out, "%-40s %-10s %-10s %-8s %s\n", path, p.Status, discoveredStr, analyzedStr, lastWalkStr)
 }
 
 func printVerbosePath(out io.Writer, p *daemon.ListEntry) {
@@ -125,10 +131,15 @@ func printVerbosePath(out io.Writer, p *daemon.ListEntry) {
 	}
 
 	// Count files (only if path is accessible)
-	if p.FileCount != nil {
-		fmt.Fprintf(out, "    Files Tracked: %d\n", *p.FileCount)
+	if p.DiscoveredCount != nil {
+		fmt.Fprintf(out, "    Files Discovered: %d\n", *p.DiscoveredCount)
 	} else {
-		fmt.Fprintf(out, "    Files Tracked: -\n")
+		fmt.Fprintf(out, "    Files Discovered: -\n")
+	}
+	if p.AnalyzedCount != nil {
+		fmt.Fprintf(out, "    Files Analyzed: %d\n", *p.AnalyzedCount)
+	} else {
+		fmt.Fprintf(out, "    Files Analyzed: -\n")
 	}
 
 	// Print configuration if present

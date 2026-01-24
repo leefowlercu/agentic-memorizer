@@ -7,15 +7,16 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/registry"
 )
 
-// ListEntry represents a remembered path with status and optional file count.
+// ListEntry represents a remembered path with status and file counts.
 type ListEntry struct {
-	Path       string               `json:"path"`
-	Status     string               `json:"status"`
-	FileCount  *int                 `json:"file_count,omitempty"`
-	LastWalkAt *time.Time           `json:"last_walk_at,omitempty"`
-	CreatedAt  time.Time            `json:"created_at"`
-	UpdatedAt  time.Time            `json:"updated_at"`
-	Config     *registry.PathConfig `json:"config,omitempty"`
+	Path           string               `json:"path"`
+	Status         string               `json:"status"`
+	DiscoveredCount *int                `json:"discovered_count,omitempty"`
+	AnalyzedCount   *int                `json:"analyzed_count,omitempty"`
+	LastWalkAt     *time.Time           `json:"last_walk_at,omitempty"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
+	Config         *registry.PathConfig `json:"config,omitempty"`
 }
 
 // ListResponse is the response payload for /list.
@@ -74,10 +75,13 @@ func (s *ListService) List(ctx context.Context) (*ListResponse, error) {
 		}
 
 		if status == registry.PathStatusOK {
-			states, err := s.registry.ListFileStates(ctx, p.Path)
+			discoveredCount, err := s.registry.CountFileStates(ctx, p.Path)
 			if err == nil {
-				count := len(states)
-				entry.FileCount = &count
+				entry.DiscoveredCount = &discoveredCount
+			}
+			analyzedCount, err := s.registry.CountAnalyzedFiles(ctx, p.Path)
+			if err == nil {
+				entry.AnalyzedCount = &analyzedCount
 			}
 		}
 

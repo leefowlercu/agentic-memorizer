@@ -64,17 +64,23 @@ func generateEmbeddings(ctx context.Context, provider providers.EmbeddingsProvid
 			cached, err := embCache.Get(analyzedChunks[i].ContentHash, analyzedChunks[i].Index)
 			if err == nil {
 				analyzedChunks[i].Embedding = cached.Embedding
-				logger.Debug("embeddings cache hit", "chunk", i)
 				continue
 			}
 		}
 		needsEmbedding = append(needsEmbedding, i)
 	}
 
+	cacheHits := len(analyzedChunks) - len(needsEmbedding)
+	if cacheHits > 0 {
+		logger.Debug("embeddings cache hits",
+			"hits", cacheHits,
+			"total", len(analyzedChunks))
+	}
+
 	if len(needsEmbedding) > 0 {
-		logger.Debug("generating embeddings for cache misses",
-			"total_chunks", len(analyzedChunks),
-			"cache_misses", len(needsEmbedding))
+		logger.Debug("generating embeddings",
+			"to_generate", len(needsEmbedding),
+			"from_cache", cacheHits)
 
 		texts := make([]string, len(needsEmbedding))
 		for j, idx := range needsEmbedding {

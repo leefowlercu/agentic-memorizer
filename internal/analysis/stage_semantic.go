@@ -48,7 +48,7 @@ func (s *SemanticStage) Analyze(ctx context.Context, path, contentHash string, c
 		if err == nil {
 			semanticResult = convertCachedSemantic(cachedResult)
 			cacheHit = true
-			logger.Debug("semantic cache hit", "path", path)
+			logger.Debug("semantic cache hit", "path", path, "content_hash", contentHash[:12])
 		} else if !errors.Is(err, cache.ErrCacheMiss) {
 			logger.Warn("semantic cache read error", "path", path, "error", err)
 		}

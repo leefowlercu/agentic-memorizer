@@ -3,6 +3,8 @@ package read
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -84,7 +86,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	cfg := config.Get()
 
-	// Create graph client with typed config
+	// Create graph client with typed config (read-only, skip schema init)
 	graphCfg := graph.Config{
 		Host:               cfg.Graph.Host,
 		Port:               cfg.Graph.Port,
@@ -94,9 +96,12 @@ func runRead(cmd *cobra.Command, args []string) error {
 		RetryDelay:         time.Duration(cfg.Graph.RetryDelayMs) * time.Millisecond,
 		EmbeddingDimension: cfg.Embeddings.Dimensions,
 		WriteQueueSize:     cfg.Graph.WriteQueueSize,
+		SkipSchemaInit:     true,
 	}
 
-	g := graph.NewFalkorDBGraph(graph.WithConfig(graphCfg))
+	// Use discarding logger for CLI commands (no log output)
+	silentLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	g := graph.NewFalkorDBGraph(graph.WithConfig(graphCfg), graph.WithLogger(silentLogger))
 
 	// Connect to graph
 	if err := g.Start(ctx); err != nil {

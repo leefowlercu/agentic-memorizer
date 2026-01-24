@@ -105,8 +105,9 @@ type Config struct {
 	PasswordEnv        string
 	MaxRetries         int
 	RetryDelay         time.Duration
-	EmbeddingDimension int // Vector embedding dimensions for index creation
-	WriteQueueSize     int // Write queue buffer size
+	EmbeddingDimension int  // Vector embedding dimensions for index creation
+	WriteQueueSize     int  // Write queue buffer size
+	SkipSchemaInit     bool // Skip schema initialization (for read-only clients)
 }
 
 // DefaultConfig returns sensible defaults.
@@ -231,9 +232,11 @@ func (g *FalkorDBGraph) Start(ctx context.Context) error {
 	g.graph = redisgraph.GraphNew(g.config.GraphName, conn)
 	g.connected = true
 
-	// Create schema indexes and constraints
-	if err := g.initSchema(ctx); err != nil {
-		g.logger.Warn("failed to create schema constraints", "error", err)
+	// Create schema indexes and constraints (skip for read-only clients)
+	if !g.config.SkipSchemaInit {
+		if err := g.initSchema(ctx); err != nil {
+			g.logger.Warn("failed to create schema constraints", "error", err)
+		}
 	}
 
 	// Start write queue processor

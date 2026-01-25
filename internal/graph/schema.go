@@ -65,7 +65,7 @@ var metadataIndexes = []string{
 func (g *FalkorDBGraph) initSchema(ctx context.Context) error {
 	// Create core indexes
 	for _, query := range coreIndexes {
-		if _, err := g.graph.Query(query); err != nil {
+		if _, err := g.query(query); err != nil {
 			// Ignore errors for existing indexes
 			g.logger.Debug("schema query", "query", query, "error", err)
 		}
@@ -73,7 +73,7 @@ func (g *FalkorDBGraph) initSchema(ctx context.Context) error {
 
 	// Create metadata indexes
 	for _, query := range metadataIndexes {
-		if _, err := g.graph.Query(query); err != nil {
+		if _, err := g.query(query); err != nil {
 			// Ignore errors for existing indexes
 			g.logger.Debug("schema query", "query", query, "error", err)
 		}
@@ -104,12 +104,12 @@ func (g *FalkorDBGraph) initVectorIndex(ctx context.Context) error {
 		}
 	`, dim)
 
-	if _, err := g.graph.Query(query); err != nil {
+	if _, err := g.query(query); err != nil {
 		// Try alternative syntax for older FalkorDB versions
 		altQuery := fmt.Sprintf(`
 			CALL db.idx.vector.createNodeIndex('ChunkEmbedding', 'embedding', %d, 'cosine')
 		`, dim)
-		if _, altErr := g.graph.Query(altQuery); altErr != nil {
+		if _, altErr := g.query(altQuery); altErr != nil {
 			g.logger.Debug("vector index creation failed",
 				"primary_error", err,
 				"alt_error", altErr)

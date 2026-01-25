@@ -2,8 +2,11 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,6 +130,7 @@ func DefaultConfig() Config {
 // FalkorDBGraph implements Graph using FalkorDB/RedisGraph.
 type FalkorDBGraph struct {
 	mu        sync.RWMutex
+	queryMu   sync.Mutex
 	config    Config
 	logger    *slog.Logger
 	conn      redis.Conn
@@ -395,16 +399,32 @@ func (g *FalkorDBGraph) processWriteQueue() {
 	}
 }
 
+// query executes a Cypher query with serialized access to the underlying connection.
+func (g *FalkorDBGraph) query(cypher string) (*redisgraph.QueryResult, error) {
+	g.queryMu.Lock()
+	defer g.queryMu.Unlock()
+
+	result, err := g.graph.Query(cypher)
+	if err != nil && isFatalGraphError(err) {
+		g.signalFatal(err)
+	}
+	return result, err
+}
+
 // executeWrite executes a write operation with retry.
 func (g *FalkorDBGraph) executeWrite(op writeOp) {
 	var err error
 	for i := 0; i <= g.config.MaxRetries; i++ {
-		_, err = g.graph.Query(op.query)
+		_, err = g.query(op.query)
 		if err == nil {
 			if op.result != nil {
 				op.result <- nil
 			}
 			return
+		}
+
+		if isFatalGraphError(err) {
+			break
 		}
 
 		if i < g.config.MaxRetries {
@@ -563,7 +583,7 @@ func (g *FalkorDBGraph) GetFile(ctx context.Context, path string) (*FileNode, er
 			   f.summary, f.complexity, f.analyzed_at, f.analysis_version
 	`, escapeString(path))
 
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query failed; %w", err)
 	}
@@ -1216,7 +1236,7 @@ func (g *FalkorDBGraph) Query(ctx context.Context, cypher string) (*QueryResult,
 		return nil, fmt.Errorf("not connected to graph database")
 	}
 
-	result, err := g.graph.Query(cypher)
+	result, err := g.query(cypher)
 	if err != nil {
 		return nil, fmt.Errorf("query failed; %w", err)
 	}
@@ -1236,7 +1256,7 @@ func (g *FalkorDBGraph) HasEmbedding(ctx context.Context, contentHash string, ve
 		RETURN count(c)
 	`, escapeString(contentHash), version)
 
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return false, fmt.Errorf("query failed; %w", err)
 	}
@@ -1333,7 +1353,7 @@ func (g *FalkorDBGraph) GetFileWithRelations(ctx context.Context, path string) (
 		MATCH (f:File {path: '%s'})-[:HAS_TAG]->(t:Tag)
 		RETURN t.name
 	`, escapeString(path))
-	tagResult, err := g.graph.Query(tagQuery)
+	tagResult, err := g.query(tagQuery)
 	if err == nil {
 		for tagResult.Next() {
 			record := tagResult.Record()
@@ -1348,7 +1368,7 @@ func (g *FalkorDBGraph) GetFileWithRelations(ctx context.Context, path string) (
 		MATCH (f:File {path: '%s'})-[r:COVERS_TOPIC]->(t:Topic)
 		RETURN t.name, r.confidence
 	`, escapeString(path))
-	topicResult, err := g.graph.Query(topicQuery)
+	topicResult, err := g.query(topicQuery)
 	if err == nil {
 		for topicResult.Next() {
 			record := topicResult.Record()
@@ -1365,7 +1385,7 @@ func (g *FalkorDBGraph) GetFileWithRelations(ctx context.Context, path string) (
 		MATCH (f:File {path: '%s'})-[:MENTIONS]->(e:Entity)
 		RETURN e.name, e.type
 	`, escapeString(path))
-	entityResult, err := g.graph.Query(entityQuery)
+	entityResult, err := g.query(entityQuery)
 	if err == nil {
 		for entityResult.Next() {
 			record := entityResult.Record()
@@ -1382,7 +1402,7 @@ func (g *FalkorDBGraph) GetFileWithRelations(ctx context.Context, path string) (
 		MATCH (f:File {path: '%s'})-[:HAS_CHUNK]->(c:Chunk)
 		RETURN count(c)
 	`, escapeString(path))
-	countResult, err := g.graph.Query(countQuery)
+	countResult, err := g.query(countQuery)
 	if err == nil && countResult.Next() {
 		result.ChunkCount = getIntFromRecord(countResult.Record(), 0)
 	}
@@ -1419,7 +1439,7 @@ func (g *FalkorDBGraph) SearchSimilarChunks(ctx context.Context, embedding []flo
 		LIMIT %d
 	`, k, embeddingStr, k)
 
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, fmt.Errorf("vector search failed; %w", err)
 	}
@@ -1453,7 +1473,7 @@ func (g *FalkorDBGraph) exportFiles(ctx context.Context) ([]FileNode, error) {
 			   f.size, f.mod_time, f.content_hash, f.metadata_hash,
 			   f.summary, f.complexity, f.analyzed_at, f.analysis_version
 	`
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -1475,7 +1495,7 @@ func (g *FalkorDBGraph) exportDirectories(ctx context.Context) ([]DirectoryNode,
 		MATCH (d:Directory)
 		RETURN d.path, d.name, d.is_remembered, d.file_count
 	`
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -1499,7 +1519,7 @@ func (g *FalkorDBGraph) exportTags(ctx context.Context) ([]TagNode, error) {
 		MATCH (t:Tag)
 		RETURN t.name, t.normalized_name, t.usage_count
 	`
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -1522,7 +1542,7 @@ func (g *FalkorDBGraph) exportTopics(ctx context.Context) ([]TopicNode, error) {
 		MATCH (t:Topic)
 		RETURN t.name, t.normalized_name, t.usage_count
 	`
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -1545,7 +1565,7 @@ func (g *FalkorDBGraph) exportEntities(ctx context.Context) ([]EntityNode, error
 		MATCH (e:Entity)
 		RETURN e.name, e.type, e.normalized_name, e.usage_count
 	`
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -1566,7 +1586,7 @@ func (g *FalkorDBGraph) exportEntities(ctx context.Context) ([]EntityNode, error
 
 func (g *FalkorDBGraph) countNodes(ctx context.Context, label string) (int, error) {
 	query := fmt.Sprintf("MATCH (n:%s) RETURN count(n)", label)
-	result, err := g.graph.Query(query)
+	result, err := g.query(query)
 	if err != nil {
 		g.signalFatal(err)
 		return 0, err
@@ -1580,7 +1600,7 @@ func (g *FalkorDBGraph) countNodes(ctx context.Context, label string) (int, erro
 }
 
 func (g *FalkorDBGraph) countRelationships(ctx context.Context) (int, error) {
-	result, err := g.graph.Query("MATCH ()-[r]->() RETURN count(r)")
+	result, err := g.query("MATCH ()-[r]->() RETURN count(r)")
 	if err != nil {
 		return 0, err
 	}
@@ -1590,6 +1610,37 @@ func (g *FalkorDBGraph) countRelationships(ctx context.Context) (int, error) {
 	}
 
 	return 0, nil
+}
+
+func isFatalGraphError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+
+	msg := err.Error()
+	for _, fragment := range []string{
+		"use of closed network connection",
+		"connection reset by peer",
+		"broken pipe",
+		"read tcp",
+		"write tcp",
+		"unexpected response line",
+		"i/o timeout",
+		"EOF",
+	} {
+		if strings.Contains(msg, fragment) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // convertQueryResult converts RedisGraph result to our QueryResult type.

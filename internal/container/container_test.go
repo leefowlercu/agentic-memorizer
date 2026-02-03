@@ -1,6 +1,8 @@
 package container
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -80,6 +82,52 @@ func TestStartOptions_Defaults(t *testing.T) {
 
 	if opts.Detach != false {
 		t.Error("expected Detach to be false by default")
+	}
+}
+
+func TestEnsureDataDir_DefaultsToConfigDir(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+
+	opts, err := ensureDataDir(StartOptions{})
+	if err != nil {
+		t.Fatalf("ensureDataDir() error = %v", err)
+	}
+
+	expected := filepath.Join(tempHome, ".config", "memorizer", "falkordb")
+	if opts.DataDir != expected {
+		t.Errorf("ensureDataDir() DataDir = %q, want %q", opts.DataDir, expected)
+	}
+
+	info, err := os.Stat(expected)
+	if err != nil {
+		t.Fatalf("expected data dir to exist; %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected data dir to be a directory")
+	}
+}
+
+func TestEnsureDataDir_UsesProvidedDir(t *testing.T) {
+	tempDir := t.TempDir()
+	custom := filepath.Join(tempDir, "custom-data")
+
+	opts, err := ensureDataDir(StartOptions{DataDir: custom})
+	if err != nil {
+		t.Fatalf("ensureDataDir() error = %v", err)
+	}
+
+	if opts.DataDir != custom {
+		t.Errorf("ensureDataDir() DataDir = %q, want %q", opts.DataDir, custom)
+	}
+
+	info, err := os.Stat(custom)
+	if err != nil {
+		t.Fatalf("expected custom data dir to exist; %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected custom data dir to be a directory")
 	}
 }
 

@@ -31,6 +31,7 @@ type Mode string
 const (
 	ModeChunk        Mode = "chunk"
 	ModeMetadataOnly Mode = "metadata_only"
+	ModeSemanticOnly Mode = "semantic_only"
 	ModeSkip         Mode = "skip"
 )
 
@@ -103,7 +104,7 @@ func Decide(kind Kind, cfg *registry.PathConfig, size int64) (Mode, string) {
 		if cfg != nil && cfg.UseVision != nil && !*cfg.UseVision {
 			return ModeMetadataOnly, ReasonVisionDisabled
 		}
-		return ModeMetadataOnly, ReasonImage
+		return ModeSemanticOnly, ReasonImage
 	case KindArchive:
 		return ModeMetadataOnly, ReasonArchive
 	case KindMedia:

@@ -83,8 +83,12 @@ func printSemanticProvider(p providers.SemanticProvider, verbose bool) {
 	if verbose {
 		fmt.Printf("  %s:\n", p.Name())
 		fmt.Printf("    Status: %s\n", status)
-		fmt.Printf("    Supports Vision: %v\n", p.SupportsVision())
-		fmt.Printf("    Max Content Size: %d bytes\n", p.MaxContentSize())
+		caps := p.Capabilities()
+		fmt.Printf("    Model: %s\n", p.ModelName())
+		fmt.Printf("    Supports Images: %v\n", caps.SupportsImages)
+		fmt.Printf("    Supports PDF: %v\n", caps.SupportsPDF)
+		fmt.Printf("    Max Input Tokens: %d\n", caps.MaxInputTokens)
+		fmt.Printf("    Max Request Size: %d bytes\n", caps.MaxRequestBytes)
 		rateLimit := p.RateLimit()
 		fmt.Printf("    Rate Limit: %d req/min, %d tokens/min\n",
 			rateLimit.RequestsPerMinute, rateLimit.TokensPerMinute)

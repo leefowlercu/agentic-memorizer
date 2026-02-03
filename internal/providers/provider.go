@@ -35,45 +35,68 @@ type RateLimitConfig struct {
 	BurstSize         int
 }
 
-// SemanticProvider analyzes content and extracts semantic information.
-type SemanticProvider interface {
-	Provider
+// SemanticInputType represents the type of semantic input.
+type SemanticInputType string
 
-	// Analyze performs semantic analysis on the given content.
-	Analyze(ctx context.Context, req SemanticRequest) (*SemanticResult, error)
+const (
+	SemanticInputText  SemanticInputType = "text"
+	SemanticInputPDF   SemanticInputType = "pdf"
+	SemanticInputImage SemanticInputType = "image"
+)
 
-	// SupportedMIMETypes returns the MIME types this provider can analyze.
-	SupportedMIMETypes() []string
-
-	// MaxContentSize returns the maximum content size in bytes.
-	MaxContentSize() int64
-
-	// SupportsVision returns true if the provider supports vision/image analysis.
-	SupportsVision() bool
-}
-
-// SemanticRequest represents a request for semantic analysis.
-type SemanticRequest struct {
+// SemanticInput represents a file-level semantic analysis input.
+type SemanticInput struct {
 	// Path is the file path being analyzed.
 	Path string
-
-	// Content is the text content to analyze.
-	Content string
 
 	// MIMEType is the MIME type of the content.
 	MIMEType string
 
-	// ImageData contains base64-encoded image data for vision analysis.
-	ImageData string
+	// Type indicates the input type (text/pdf/image).
+	Type SemanticInputType
 
-	// ChunkIndex is the index of this chunk (for chunked content).
-	ChunkIndex int
+	// Text contains the text content to analyze (for text inputs).
+	Text string
 
-	// TotalChunks is the total number of chunks.
-	TotalChunks int
+	// FileBytes contains raw file bytes (for PDF inputs).
+	FileBytes []byte
 
-	// Metadata contains additional context about the file.
-	Metadata map[string]any
+	// ImageBytes contains raw image bytes (for vision inputs).
+	ImageBytes []byte
+
+	// TokenEstimate is the estimated token count for text inputs.
+	TokenEstimate int
+
+	// Truncated indicates whether the input was truncated or condensed.
+	Truncated bool
+
+	// Meta contains additional context about the file.
+	Meta map[string]any
+}
+
+// SemanticCapabilities describes model-specific input limits and supported modalities.
+type SemanticCapabilities struct {
+	MaxInputTokens  int
+	MaxRequestBytes int64
+	MaxPDFPages     int
+	MaxImages       int
+	SupportsPDF     bool
+	SupportsImages  bool
+	Model           string
+}
+
+// SemanticProvider analyzes content and extracts semantic information.
+type SemanticProvider interface {
+	Provider
+
+	// Analyze performs semantic analysis on the given file-level input.
+	Analyze(ctx context.Context, input SemanticInput) (*SemanticResult, error)
+
+	// Capabilities returns model-specific input limits and supported modalities.
+	Capabilities() SemanticCapabilities
+
+	// ModelName returns the model identifier used by this provider.
+	ModelName() string
 }
 
 // SemanticResult contains the results of semantic analysis.

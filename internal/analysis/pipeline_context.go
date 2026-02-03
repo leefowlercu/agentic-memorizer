@@ -21,7 +21,6 @@ type PipelineContext struct {
 	ChunkResult    *chunkers.ChunkResult
 	AnalyzedChunks []AnalyzedChunk
 	SemanticResult *SemanticResult
-	ChunkSummaries []string
 	Embeddings     []float32
 	AnalysisResult *AnalysisResult
 
@@ -104,6 +103,14 @@ func (p *PipelineContext) ShouldSkip() bool {
 		return false
 	}
 	return p.FileResult.IngestMode == ingest.ModeSkip
+}
+
+// IsSemanticOnly returns true if the file should receive semantic analysis without chunking.
+func (p *PipelineContext) IsSemanticOnly() bool {
+	if p.FileResult == nil {
+		return false
+	}
+	return p.FileResult.IngestMode == ingest.ModeSemanticOnly
 }
 
 // ShouldChunk returns true if the file should be chunked and fully analyzed.

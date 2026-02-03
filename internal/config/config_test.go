@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"testing"
 )
@@ -535,11 +536,16 @@ func TestExpandHome_NoHome(t *testing.T) {
 
 	_ = os.Unsetenv("HOME")
 
-	// With HOME unset, tilde paths should remain unchanged
 	input := "~/.config/memorizer"
 	got := expandHome(input)
-	if got != input {
-		t.Errorf("expandHome(%q) with no HOME = %q, want %q (unchanged)", input, got, input)
+
+	expected := input
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		expected = filepath.Join(u.HomeDir, ".config/memorizer")
+	}
+
+	if got != expected {
+		t.Errorf("expandHome(%q) with no HOME = %q, want %q", input, got, expected)
 	}
 }
 

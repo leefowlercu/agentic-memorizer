@@ -121,6 +121,20 @@ func (c *Cleaner) Stop() error {
 // Handles both file and directory deletions by attempting cleanup for both types.
 // All operations are best-effort; errors are logged but don't fail the operation.
 func (c *Cleaner) DeletePath(ctx context.Context, path string) error {
+	// 0. Delete discovery state from registry
+	if err := c.registry.DeleteDiscoveryState(ctx, path); err != nil {
+		if errors.Is(err, registry.ErrPathNotFound) {
+			c.logger.Debug("registry delete: path not in discovery", "path", path)
+		} else {
+			c.logger.Warn("registry discovery delete failed", "path", path, "error", err)
+		}
+	}
+
+	// 0b. Bulk delete child discovery records (if path was a directory)
+	if err := c.registry.DeleteDiscoveryStatesForPath(ctx, path); err != nil {
+		c.logger.Warn("registry discovery bulk delete failed", "path", path, "error", err)
+	}
+
 	// 1. Delete file state from registry (if path was a file)
 	if err := c.registry.DeleteFileState(ctx, path); err != nil {
 		if errors.Is(err, registry.ErrPathNotFound) {
@@ -176,20 +190,29 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 		return nil, fmt.Errorf("failed to list file states; %w", err)
 	}
 
+	// Get all discovery entries under this parent path
+	discoveryStates, err := c.registry.ListDiscoveryStates(ctx, parentPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list discovery states; %w", err)
+	}
+
 	result.FilesChecked = len(states)
 
 	// Safeguard: if discoveredPaths is empty but we have file_state entries,
 	// something might be wrong (filter misconfiguration, permissions issue).
 	// Skip reconciliation to prevent accidental mass deletion.
-	if len(discoveredPaths) == 0 && len(states) > 0 {
+	if len(discoveredPaths) == 0 && (len(states) > 0 || len(discoveryStates) > 0) {
 		c.logger.Warn("reconciliation skipped: no files discovered but file_state has entries",
 			"parent_path", parentPath,
 			"file_state_count", len(states),
+			"discovery_count", len(discoveryStates),
 		)
 		result.Skipped = true
 		result.Duration = time.Since(start)
 		return result, nil
 	}
+
+	staleFileStates := make(map[string]struct{})
 
 	// Find stale entries (in file_state but not in discovered)
 	for i, state := range states {
@@ -203,6 +226,7 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 		}
 
 		if _, exists := discoveredPaths[state.Path]; !exists {
+			staleFileStates[state.Path] = struct{}{}
 			result.StaleFound++
 
 			// Clean up stale entry
@@ -215,6 +239,36 @@ func (c *Cleaner) Reconcile(ctx context.Context, parentPath string, discoveredPa
 				c.logger.Debug("cleaned up stale file", "path", state.Path)
 				result.StaleRemoved++
 			}
+		}
+	}
+
+	// Clean up stale discovery-only entries (no file_state)
+	for i, state := range discoveryStates {
+		if i%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				c.logger.Debug("reconciliation canceled", "processed", i, "total", len(discoveryStates))
+				result.Duration = time.Since(start)
+				return result, err
+			}
+		}
+
+		if _, exists := discoveredPaths[state.Path]; exists {
+			continue
+		}
+		if _, alreadyHandled := staleFileStates[state.Path]; alreadyHandled {
+			continue
+		}
+
+		if err := c.registry.DeleteDiscoveryState(ctx, state.Path); err != nil {
+			if errors.Is(err, registry.ErrPathNotFound) {
+				continue
+			}
+			c.logger.Warn("failed to clean up stale discovery state",
+				"path", state.Path,
+				"error", err)
+			result.Errors++
+		} else {
+			c.logger.Debug("cleaned up stale discovery state", "path", state.Path)
 		}
 	}
 

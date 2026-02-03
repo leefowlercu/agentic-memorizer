@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
+	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
 // FileReaderStage defines the interface for the file reading stage.
@@ -19,9 +20,9 @@ type ChunkerStageInterface interface {
 }
 
 // SemanticStageInterface defines the interface for the semantic analysis stage.
-// It analyzes chunks using AI providers to extract summaries, topics, entities, etc.
+// It analyzes file-level inputs using AI providers to extract summaries, topics, entities, etc.
 type SemanticStageInterface interface {
-	Analyze(ctx context.Context, path, contentHash string, chunks []chunkers.Chunk) (*SemanticResult, []string, error)
+	Analyze(ctx context.Context, input providers.SemanticInput, contentHash string) (*SemanticResult, error)
 }
 
 // EmbeddingsStageInterface defines the interface for the embeddings generation stage.

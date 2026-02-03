@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -51,7 +52,7 @@ func Init() error {
 	}
 
 	// T016: Add default config path (~/.config/memorizer/)
-	if home := os.Getenv("HOME"); home != "" {
+	if home := resolveHomeDir(); home != "" {
 		viper.AddConfigPath(filepath.Join(home, ".config", "memorizer"))
 	}
 
@@ -184,8 +185,8 @@ func expandHome(path string) string {
 		return path
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
+	home := resolveHomeDir()
+	if home == "" {
 		return path
 	}
 
@@ -194,6 +195,19 @@ func expandHome(path string) string {
 	}
 
 	return filepath.Join(home, path[2:])
+}
+
+func resolveHomeDir() string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home
+	}
+
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+
+	return u.HomeDir
 }
 
 // GetConfigPath returns the path where the config file should be located.
@@ -207,7 +221,10 @@ func GetConfigPath() string {
 		return path
 	}
 	// Return default path
-	home, _ := os.UserHomeDir()
+	home := resolveHomeDir()
+	if home == "" {
+		return filepath.Join(".config", "memorizer", "config.yaml")
+	}
 	return filepath.Join(home, ".config", "memorizer", "config.yaml")
 }
 

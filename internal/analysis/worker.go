@@ -90,7 +90,7 @@ type AnalyzedChunk struct {
 	// TokenCount is the estimated token count.
 	TokenCount int
 
-	// Summary is the per-chunk semantic summary.
+	// Summary is an optional per-chunk summary (unused in per-file semantics).
 	Summary string
 }
 
@@ -309,6 +309,44 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 		return result, nil
 	}
 
+	if fileResult.IngestMode == ingest.ModeSemanticOnly {
+		if w.semanticProvider != nil && w.semanticProvider.Available() {
+			semanticStart := time.Now()
+			semanticStage := NewSemanticStage(w.semanticProvider, w.semanticCache, w.registry, w.analysisVersion, w.logger)
+			input, buildErr := BuildSemanticInput(item.FilePath, fileResult, nil, w.semanticProvider)
+			if buildErr != nil {
+				w.logger.Warn("semantic input build failed", "path", item.FilePath, "error", buildErr)
+			} else {
+				semanticResult, semanticErr := semanticStage.Analyze(ctx, input, result.ContentHash)
+				semanticDuration := time.Since(semanticStart)
+				if semanticErr != nil {
+					w.logger.Warn("semantic analysis failed",
+						"path", item.FilePath,
+						"error", semanticErr)
+					w.queue.publishSemanticAnalysisFailed(item.FilePath, semanticErr)
+				}
+
+				if semanticResult != nil {
+					result.Summary = semanticResult.Summary
+					result.Tags = semanticResult.Tags
+					result.Topics = semanticResult.Topics
+					result.Entities = semanticResult.Entities
+					result.References = semanticResult.References
+					result.Complexity = semanticResult.Complexity
+					result.Keywords = semanticResult.Keywords
+					// Publish semantic analysis complete event
+					w.queue.publishAnalysisSemanticComplete(item.FilePath, result.ContentHash, semanticDuration)
+				}
+			}
+		}
+		if w.registry != nil {
+			if err := w.registry.UpdateEmbeddingsState(ctx, result.FilePath, nil); err != nil {
+				w.logger.Warn("failed to update embeddings state", "path", result.FilePath, "error", err)
+			}
+		}
+		return result, nil
+	}
+
 	chunkerStage := NewChunkerStage(w.chunkerRegistry)
 	chunkResult, err := chunkerStage.Chunk(ctx, fileResult.Content, fileResult.MIMEType, fileResult.Language)
 	if err != nil {
@@ -322,35 +360,35 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	// This decouples chunk persistence from embeddings generation.
 	analyzedChunks := BuildAnalyzedChunks(chunkResult.Chunks)
 
-	var chunkSummaries []string
 	if w.semanticProvider != nil && w.semanticProvider.Available() {
 		semanticStart := time.Now()
 		semanticStage := NewSemanticStage(w.semanticProvider, w.semanticCache, w.registry, w.analysisVersion, w.logger)
-		semanticResult, summaries, semanticErr := semanticStage.Analyze(ctx, item.FilePath, result.ContentHash, chunkResult.Chunks)
-		semanticDuration := time.Since(semanticStart)
-		chunkSummaries = summaries
-		if semanticErr != nil {
-			w.logger.Warn("semantic analysis failed",
-				"path", item.FilePath,
-				"error", semanticErr)
-			w.queue.publishSemanticAnalysisFailed(item.FilePath, semanticErr)
-		}
+		input, buildErr := BuildSemanticInput(item.FilePath, fileResult, chunkResult, w.semanticProvider)
+		if buildErr != nil {
+			w.logger.Warn("semantic input build failed", "path", item.FilePath, "error", buildErr)
+		} else {
+			semanticResult, semanticErr := semanticStage.Analyze(ctx, input, result.ContentHash)
+			semanticDuration := time.Since(semanticStart)
+			if semanticErr != nil {
+				w.logger.Warn("semantic analysis failed",
+					"path", item.FilePath,
+					"error", semanticErr)
+				w.queue.publishSemanticAnalysisFailed(item.FilePath, semanticErr)
+			}
 
-		if semanticResult != nil {
-			result.Summary = semanticResult.Summary
-			result.Tags = semanticResult.Tags
-			result.Topics = semanticResult.Topics
-			result.Entities = semanticResult.Entities
-			result.References = semanticResult.References
-			result.Complexity = semanticResult.Complexity
-			result.Keywords = semanticResult.Keywords
-			// Publish semantic analysis complete event
-			w.queue.publishAnalysisSemanticComplete(item.FilePath, result.ContentHash, semanticDuration)
+			if semanticResult != nil {
+				result.Summary = semanticResult.Summary
+				result.Tags = semanticResult.Tags
+				result.Topics = semanticResult.Topics
+				result.Entities = semanticResult.Entities
+				result.References = semanticResult.References
+				result.Complexity = semanticResult.Complexity
+				result.Keywords = semanticResult.Keywords
+				// Publish semantic analysis complete event
+				w.queue.publishAnalysisSemanticComplete(item.FilePath, result.ContentHash, semanticDuration)
+			}
 		}
 	}
-
-	// Enhance chunks with semantic summaries if available.
-	EnhanceChunksWithSummaries(analyzedChunks, chunkSummaries)
 
 	// Always populate result.Chunks regardless of embeddings mode.
 	// This ensures chunks are persisted even when embeddings are skipped.

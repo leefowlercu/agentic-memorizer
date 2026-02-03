@@ -156,7 +156,7 @@ func TestDecide(t *testing.T) {
 			kind:       KindImage,
 			cfg:        &registry.PathConfig{UseVision: &visionOn},
 			size:       1024,
-			wantMode:   ModeMetadataOnly,
+			wantMode:   ModeSemanticOnly,
 			wantReason: ReasonImage,
 		},
 		{
@@ -164,7 +164,7 @@ func TestDecide(t *testing.T) {
 			kind:       KindImage,
 			cfg:        &registry.PathConfig{UseVision: nil},
 			size:       1024,
-			wantMode:   ModeMetadataOnly,
+			wantMode:   ModeSemanticOnly,
 			wantReason: ReasonImage,
 		},
 		{

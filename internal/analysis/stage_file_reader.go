@@ -42,14 +42,14 @@ func (r *FileReader) Read(ctx context.Context, item WorkItem, mode DegradationMo
 
 	ingestMode, ingestReason := ingest.Decide(kind, pathConfig, info.Size())
 	degradedMetadata := false
-	if mode == DegradationMetadata && ingestMode == ingest.ModeChunk {
+	if mode == DegradationMetadata && (ingestMode == ingest.ModeChunk || ingestMode == ingest.ModeSemanticOnly) {
 		ingestMode = ingest.ModeMetadataOnly
 		degradedMetadata = true
 	}
 
 	var content []byte
 	var contentHash string
-	if ingestMode == ingest.ModeChunk {
+	if ingestMode == ingest.ModeChunk || ingestMode == ingest.ModeSemanticOnly {
 		content, err = os.ReadFile(item.FilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read file; %w", err)

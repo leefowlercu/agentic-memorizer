@@ -100,11 +100,33 @@ func (w *walker) Walk(ctx context.Context, path string) error {
 }
 
 // WalkAll walks all remembered paths.
-func (w *walker) WalkAll(ctx context.Context) error {
+func (w *walker) WalkAll(ctx context.Context) (err error) {
+	startTime := time.Now()
+	w.mu.Lock()
+	startStats := w.stats
+	w.mu.Unlock()
+	var rememberedPaths int
+	defer func() {
+		endTime := time.Now()
+		w.mu.Lock()
+		endStats := w.stats
+		w.mu.Unlock()
+		slog.Info("walker: walkall summary",
+			"incremental", false,
+			"remembered_paths", rememberedPaths,
+			"duration", endTime.Sub(startTime),
+			"files_discovered", diffInt64(endStats.FilesDiscovered, startStats.FilesDiscovered),
+			"files_skipped", diffInt64(endStats.FilesSkipped, startStats.FilesSkipped),
+			"files_unchanged", diffInt64(endStats.FilesUnchanged, startStats.FilesUnchanged),
+			"dirs_traversed", diffInt64(endStats.DirsTraversed, startStats.DirsTraversed),
+		)
+	}()
+
 	paths, err := w.registry.ListPaths(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list remembered paths; %w", err)
 	}
+	rememberedPaths = len(paths)
 
 	// Initialize discovered paths map for reconciliation
 	w.mu.Lock()
@@ -125,11 +147,33 @@ func (w *walker) WalkAll(ctx context.Context) error {
 }
 
 // WalkAllIncremental walks all remembered paths incrementally.
-func (w *walker) WalkAllIncremental(ctx context.Context) error {
+func (w *walker) WalkAllIncremental(ctx context.Context) (err error) {
+	startTime := time.Now()
+	w.mu.Lock()
+	startStats := w.stats
+	w.mu.Unlock()
+	var rememberedPaths int
+	defer func() {
+		endTime := time.Now()
+		w.mu.Lock()
+		endStats := w.stats
+		w.mu.Unlock()
+		slog.Info("walker: walkall summary",
+			"incremental", true,
+			"remembered_paths", rememberedPaths,
+			"duration", endTime.Sub(startTime),
+			"files_discovered", diffInt64(endStats.FilesDiscovered, startStats.FilesDiscovered),
+			"files_skipped", diffInt64(endStats.FilesSkipped, startStats.FilesSkipped),
+			"files_unchanged", diffInt64(endStats.FilesUnchanged, startStats.FilesUnchanged),
+			"dirs_traversed", diffInt64(endStats.DirsTraversed, startStats.DirsTraversed),
+		)
+	}()
+
 	paths, err := w.registry.ListPaths(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list remembered paths; %w", err)
 	}
+	rememberedPaths = len(paths)
 
 	// Initialize discovered paths map for reconciliation
 	w.mu.Lock()
@@ -174,6 +218,7 @@ func (w *walker) DrainDiscoveredPaths() map[string]struct{} {
 // walkPath performs the actual directory walk.
 func (w *walker) walkPath(ctx context.Context, path string, incremental bool) error {
 	slog.Info("walker: starting walk", "path", path, "incremental", incremental)
+	startTime := time.Now()
 
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(path)
@@ -204,18 +249,31 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 
 	// Update stats
 	w.mu.Lock()
+	startStats := w.stats
 	w.stats.IsWalking = true
 	w.stats.LastWalkPath = absPath
 	w.mu.Unlock()
 
 	defer func() {
+		endTime := time.Now()
 		w.mu.Lock()
 		w.stats.IsWalking = false
-		w.stats.LastWalkAt = time.Now()
+		w.stats.LastWalkAt = endTime
+		endStats := w.stats
 		w.mu.Unlock()
 
 		// Update last_walk_at in registry
-		_ = w.registry.UpdatePathLastWalk(ctx, rp.Path, time.Now())
+		_ = w.registry.UpdatePathLastWalk(ctx, rp.Path, endTime)
+
+		slog.Info("walker: walk summary",
+			"path", absPath,
+			"incremental", incremental,
+			"duration", endTime.Sub(startTime),
+			"files_discovered", diffInt64(endStats.FilesDiscovered, startStats.FilesDiscovered),
+			"files_skipped", diffInt64(endStats.FilesSkipped, startStats.FilesSkipped),
+			"files_unchanged", diffInt64(endStats.FilesUnchanged, startStats.FilesUnchanged),
+			"dirs_traversed", diffInt64(endStats.DirsTraversed, startStats.DirsTraversed),
+		)
 	}()
 
 	var filesInBatch int
@@ -302,6 +360,12 @@ func (w *walker) walkPath(ctx context.Context, path string, incremental bool) er
 			return nil //nolint:nilerr // Skip files we can't hash
 		}
 
+		if w.registry != nil {
+			if err := w.registry.UpdateDiscoveryState(ctx, filePath, contentHash, info.Size(), info.ModTime()); err != nil {
+				slog.Warn("walker: failed to update discovery state", "path", filePath, "error", err)
+			}
+		}
+
 		// Publish file discovered event
 		slog.Debug("walker: discovered file", "path", filePath, "size", info.Size())
 		event := events.NewFileDiscovered(filePath, contentHash, info.Size(), info.ModTime(), !incremental)
@@ -345,6 +409,13 @@ func (w *walker) hasFileChanged(ctx context.Context, path string, info fs.FileIn
 
 	// File metadata changed, likely content changed too
 	return true, nil
+}
+
+func diffInt64(a, b int64) int64 {
+	if a < b {
+		return 0
+	}
+	return a - b
 }
 
 // computeFileHash computes the SHA-256 hash of a file's contents.

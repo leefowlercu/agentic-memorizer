@@ -562,6 +562,7 @@ func TestPipelineContext(t *testing.T) {
 			want       bool
 		}{
 			{"Chunk mode", ingest.ModeChunk, true},
+			{"Semantic only", ingest.ModeSemanticOnly, false},
 			{"Metadata only", ingest.ModeMetadataOnly, false},
 			{"Skip", ingest.ModeSkip, false},
 		}
@@ -590,6 +591,7 @@ func TestPipelineContext(t *testing.T) {
 			{"Full mode, chunk", ingest.ModeChunk, DegradationFull, true},
 			{"NoEmbed mode, chunk", ingest.ModeChunk, DegradationNoEmbed, false},
 			{"Metadata mode, chunk", ingest.ModeChunk, DegradationMetadata, false},
+			{"Full mode, semantic only", ingest.ModeSemanticOnly, DegradationFull, false},
 			{"Full mode, metadata only", ingest.ModeMetadataOnly, DegradationFull, false},
 		}
 

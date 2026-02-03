@@ -59,7 +59,7 @@ func BuildAnalyzedChunks(chunks []chunkers.Chunk) []AnalyzedChunk {
 	return result
 }
 
-// EnhanceChunksWithSummaries adds semantic summaries to pre-built chunks.
+// EnhanceChunksWithSummaries adds semantic summaries to pre-built chunks (legacy).
 func EnhanceChunksWithSummaries(chunks []AnalyzedChunk, summaries []string) {
 	if summaries == nil {
 		return

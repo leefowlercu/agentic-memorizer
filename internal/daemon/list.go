@@ -75,7 +75,7 @@ func (s *ListService) List(ctx context.Context) (*ListResponse, error) {
 		}
 
 		if status == registry.PathStatusOK {
-			discoveredCount, err := s.registry.CountFileStates(ctx, p.Path)
+			discoveredCount, err := s.registry.CountDiscoveredFiles(ctx, p.Path)
 			if err == nil {
 				entry.DiscoveredCount = &discoveredCount
 			}

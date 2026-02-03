@@ -18,15 +18,17 @@ var errFileStateNotFound = errors.New("file state not found")
 
 // mockRegistry implements registry.Registry for testing.
 type mockRegistry struct {
-	paths      map[string]*registry.RememberedPath
-	fileStates map[string]*registry.FileState
-	mu         sync.RWMutex
+	paths           map[string]*registry.RememberedPath
+	fileStates      map[string]*registry.FileState
+	discoveryStates map[string]registry.FileDiscovery
+	mu              sync.RWMutex
 }
 
 func newMockRegistry() *mockRegistry {
 	return &mockRegistry{
-		paths:      make(map[string]*registry.RememberedPath),
-		fileStates: make(map[string]*registry.FileState),
+		paths:           make(map[string]*registry.RememberedPath),
+		fileStates:      make(map[string]*registry.FileState),
+		discoveryStates: make(map[string]registry.FileDiscovery),
 	}
 }
 
@@ -140,6 +142,63 @@ func (r *mockRegistry) ListFileStates(ctx context.Context, basePath string) ([]r
 		}
 	}
 	return result, nil
+}
+
+func (r *mockRegistry) UpdateDiscoveryState(ctx context.Context, path string, contentHash string, size int64, modTime time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.discoveryStates[path] = registry.FileDiscovery{
+		Path:        path,
+		ContentHash: contentHash,
+		Size:        size,
+		ModTime:     modTime,
+	}
+	return nil
+}
+
+func (r *mockRegistry) DeleteDiscoveryState(ctx context.Context, path string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.discoveryStates[path]; !ok {
+		return registry.ErrPathNotFound
+	}
+	delete(r.discoveryStates, path)
+	return nil
+}
+
+func (r *mockRegistry) DeleteDiscoveryStatesForPath(ctx context.Context, parentPath string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for path := range r.discoveryStates {
+		if strings.HasPrefix(path, parentPath) {
+			delete(r.discoveryStates, path)
+		}
+	}
+	return nil
+}
+
+func (r *mockRegistry) ListDiscoveryStates(ctx context.Context, parentPath string) ([]registry.FileDiscovery, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var result []registry.FileDiscovery
+	for path, state := range r.discoveryStates {
+		if strings.HasPrefix(path, parentPath) {
+			result = append(result, state)
+		}
+	}
+	return result, nil
+}
+
+func (r *mockRegistry) CountDiscoveredFiles(ctx context.Context, parentPath string) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for path := range r.discoveryStates {
+		if strings.HasPrefix(path, parentPath) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (r *mockRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath string) error {

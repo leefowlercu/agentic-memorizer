@@ -12,8 +12,8 @@ func DefaultConfigPath() string {
 
 // ConfigDir returns the default config directory path.
 func ConfigDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	home := resolveHomeDir()
+	if home == "" {
 		return ""
 	}
 	return filepath.Join(home, ".config", "memorizer")

@@ -114,6 +114,8 @@ func (s *ServiceInstallStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 		switch keyMsg.Type {
 		case tea.KeyEnter:
 			if s.radio.Selected() == optionYes {
+				s.state = stateInstalling
+				s.progressMsg = "Installing service..."
 				// Start installation
 				return s.startInstallation(), StepContinue
 			}

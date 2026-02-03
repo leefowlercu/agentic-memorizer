@@ -254,4 +254,22 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_persistence_queue_enqueued_at ON persistence_queue(enqueued_at);
 		`,
 	},
+	{
+		Version:     5,
+		Description: "Create file_discovery table",
+		Up: `
+			CREATE TABLE IF NOT EXISTS file_discovery (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				path TEXT UNIQUE NOT NULL,
+				content_hash TEXT,
+				size INTEGER NOT NULL,
+				mod_time TIMESTAMP NOT NULL,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_file_discovery_path ON file_discovery(path);
+			CREATE INDEX IF NOT EXISTS idx_file_discovery_content_hash ON file_discovery(content_hash);
+		`,
+	},
 }

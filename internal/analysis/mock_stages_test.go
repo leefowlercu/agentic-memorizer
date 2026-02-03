@@ -7,6 +7,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/chunkers"
 	"github.com/leefowlercu/agentic-memorizer/internal/ingest"
+	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
 // mockFileReaderStage is a mock implementation of FileReaderStage for testing.
@@ -72,28 +73,23 @@ func (m *mockChunkerStage) Chunk(ctx context.Context, content []byte, mimeType, 
 
 // mockSemanticStage is a mock implementation of SemanticStageInterface for testing.
 type mockSemanticStage struct {
-	result    *SemanticResult
-	summaries []string
-	err       error
+	result *SemanticResult
+	err    error
 }
 
-func (m *mockSemanticStage) Analyze(ctx context.Context, path, contentHash string, chunks []chunkers.Chunk) (*SemanticResult, []string, error) {
+func (m *mockSemanticStage) Analyze(ctx context.Context, input providers.SemanticInput, contentHash string) (*SemanticResult, error) {
 	if m.err != nil {
-		return nil, nil, m.err
+		return nil, m.err
 	}
 	if m.result != nil {
-		return m.result, m.summaries, nil
-	}
-	summaries := make([]string, len(chunks))
-	for i := range chunks {
-		summaries[i] = "Mock summary for chunk"
+		return m.result, nil
 	}
 	return &SemanticResult{
 		Summary:    "Mock file summary",
 		Tags:       []string{"mock", "test"},
 		Topics:     []string{"testing"},
 		Complexity: 3,
-	}, summaries, nil
+	}, nil
 }
 
 // mockEmbeddingsStage is a mock implementation of EmbeddingsStageInterface for testing.

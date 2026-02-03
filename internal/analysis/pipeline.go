@@ -25,6 +25,8 @@ type Pipeline struct {
 	persistence PersistenceStageInterface
 	logger      *slog.Logger
 
+	semanticProvider providers.SemanticProvider
+
 	// Registry for tracking file state
 	registry registry.Registry
 
@@ -107,14 +109,15 @@ func NewPipeline(cfg PipelineConfig, opts ...PipelineOption) *Pipeline {
 	}
 
 	p := &Pipeline{
-		fileReader:      NewFileReader(cfg.Registry),
-		chunker:         NewChunkerStage(cfg.ChunkerRegistry),
-		semantic:        NewSemanticStage(cfg.SemanticProvider, cfg.SemanticCache, cfg.Registry, cfg.AnalysisVersion, logger),
-		embeddings:      NewEmbeddingsStage(cfg.EmbeddingsProvider, cfg.EmbeddingsCache, cfg.Registry, logger),
-		persistence:     NewPersistenceStage(cfg.Graph, persistenceOpts...),
-		logger:          logger,
-		registry:        cfg.Registry,
-		analysisVersion: cfg.AnalysisVersion,
+		fileReader:       NewFileReader(cfg.Registry),
+		chunker:          NewChunkerStage(cfg.ChunkerRegistry),
+		semantic:         NewSemanticStage(cfg.SemanticProvider, cfg.SemanticCache, cfg.Registry, cfg.AnalysisVersion, logger),
+		embeddings:       NewEmbeddingsStage(cfg.EmbeddingsProvider, cfg.EmbeddingsCache, cfg.Registry, logger),
+		persistence:      NewPersistenceStage(cfg.Graph, persistenceOpts...),
+		logger:           logger,
+		semanticProvider: cfg.SemanticProvider,
+		registry:         cfg.Registry,
+		analysisVersion:  cfg.AnalysisVersion,
 	}
 
 	for _, opt := range opts {
@@ -146,6 +149,31 @@ func (p *Pipeline) Execute(ctx context.Context, pctx *PipelineContext) error {
 		return nil
 	}
 
+	// Semantic-only files skip chunking/embeddings
+	if pctx.IsSemanticOnly() {
+		if p.semantic != nil {
+			semanticStart := time.Now()
+			input, buildErr := BuildSemanticInput(pctx.WorkItem.FilePath, pctx.FileResult, nil, p.semanticProvider)
+			if buildErr != nil {
+				p.logger.Warn("semantic input build failed",
+					"path", pctx.WorkItem.FilePath,
+					"error", buildErr)
+			} else {
+				semanticResult, semanticErr := p.semantic.Analyze(ctx, input, fileResult.ContentHash)
+				if semanticErr != nil {
+					p.logger.Warn("semantic analysis failed",
+						"path", pctx.WorkItem.FilePath,
+						"error", semanticErr,
+						"duration", time.Since(semanticStart))
+				}
+				pctx.SemanticResult = semanticResult
+			}
+		}
+		p.updateRegistryForSemanticOnly(ctx, pctx)
+		pctx.AnalysisResult = pctx.BuildAnalysisResult()
+		return nil
+	}
+
 	// Stage 2: Chunk content
 	chunkResult, err := p.chunker.Chunk(ctx, fileResult.Content, fileResult.MIMEType, fileResult.Language)
 	if err != nil {
@@ -159,19 +187,22 @@ func (p *Pipeline) Execute(ctx context.Context, pctx *PipelineContext) error {
 	// Stage 3: Semantic analysis (optional)
 	if p.semantic != nil {
 		semanticStart := time.Now()
-		semanticResult, summaries, semanticErr := p.semantic.Analyze(ctx, pctx.WorkItem.FilePath, fileResult.ContentHash, chunkResult.Chunks)
-		if semanticErr != nil {
-			p.logger.Warn("semantic analysis failed",
+		input, buildErr := BuildSemanticInput(pctx.WorkItem.FilePath, pctx.FileResult, chunkResult, p.semanticProvider)
+		if buildErr != nil {
+			p.logger.Warn("semantic input build failed",
 				"path", pctx.WorkItem.FilePath,
-				"error", semanticErr,
-				"duration", time.Since(semanticStart))
-			// Continue pipeline - semantic failures are non-fatal
+				"error", buildErr)
+		} else {
+			semanticResult, semanticErr := p.semantic.Analyze(ctx, input, fileResult.ContentHash)
+			if semanticErr != nil {
+				p.logger.Warn("semantic analysis failed",
+					"path", pctx.WorkItem.FilePath,
+					"error", semanticErr,
+					"duration", time.Since(semanticStart))
+				// Continue pipeline - semantic failures are non-fatal
+			}
+			pctx.SemanticResult = semanticResult
 		}
-		pctx.SemanticResult = semanticResult
-		pctx.ChunkSummaries = summaries
-
-		// Enhance chunks with semantic summaries
-		EnhanceChunksWithSummaries(pctx.AnalyzedChunks, summaries)
 	}
 
 	// Stage 4: Embeddings generation (conditional)
@@ -251,6 +282,17 @@ func (p *Pipeline) updateRegistryForMetadataOnly(ctx context.Context, pctx *Pipe
 	}
 	if err := p.registry.UpdateEmbeddingsState(ctx, result.FilePath, nil); err != nil {
 		p.logger.Warn("failed to update embeddings state", "path", result.FilePath, "error", err)
+	}
+}
+
+// updateRegistryForSemanticOnly marks embeddings as completed for semantic-only files.
+func (p *Pipeline) updateRegistryForSemanticOnly(ctx context.Context, pctx *PipelineContext) {
+	if p.registry == nil || pctx.AnalysisResult == nil {
+		return
+	}
+
+	if err := p.registry.UpdateEmbeddingsState(ctx, pctx.AnalysisResult.FilePath, nil); err != nil {
+		p.logger.Warn("failed to update embeddings state", "path", pctx.AnalysisResult.FilePath, "error", err)
 	}
 }
 

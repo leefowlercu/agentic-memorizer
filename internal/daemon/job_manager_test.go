@@ -137,6 +137,26 @@ func (m *mockRegistry) ListFileStates(ctx context.Context, parentPath string) ([
 	return nil, nil
 }
 
+func (m *mockRegistry) UpdateDiscoveryState(ctx context.Context, path string, contentHash string, size int64, modTime time.Time) error {
+	return nil
+}
+
+func (m *mockRegistry) DeleteDiscoveryState(ctx context.Context, path string) error {
+	return nil
+}
+
+func (m *mockRegistry) DeleteDiscoveryStatesForPath(ctx context.Context, parentPath string) error {
+	return nil
+}
+
+func (m *mockRegistry) ListDiscoveryStates(ctx context.Context, parentPath string) ([]registry.FileDiscovery, error) {
+	return nil, nil
+}
+
+func (m *mockRegistry) CountDiscoveredFiles(ctx context.Context, parentPath string) (int, error) {
+	return 0, nil
+}
+
 func (m *mockRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath string) error {
 	return nil
 }

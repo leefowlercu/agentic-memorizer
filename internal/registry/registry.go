@@ -36,6 +36,13 @@ type Registry interface {
 	CountFileStates(ctx context.Context, parentPath string) (int, error)
 	CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error)
 
+	// Discovery state management
+	UpdateDiscoveryState(ctx context.Context, path string, contentHash string, size int64, modTime time.Time) error
+	DeleteDiscoveryState(ctx context.Context, path string) error
+	DeleteDiscoveryStatesForPath(ctx context.Context, parentPath string) error
+	ListDiscoveryStates(ctx context.Context, parentPath string) ([]FileDiscovery, error)
+	CountDiscoveredFiles(ctx context.Context, parentPath string) (int, error)
+
 	// Granular analysis state updates
 	UpdateMetadataState(ctx context.Context, path string, contentHash string, metadataHash string, size int64, modTime time.Time) error
 	UpdateSemanticState(ctx context.Context, path string, analysisVersion string, err error) error
@@ -157,6 +164,11 @@ func (r *SQLiteRegistry) CountFileStates(ctx context.Context, parentPath string)
 	return r.storage.CountFileStates(ctx, parentPath)
 }
 
+// CountDiscoveredFiles returns the count of discovered files under a parent path.
+func (r *SQLiteRegistry) CountDiscoveredFiles(ctx context.Context, parentPath string) (int, error) {
+	return r.storage.CountDiscoveredFiles(ctx, parentPath)
+}
+
 // CountAnalyzedFiles returns the count of files with completed semantic analysis under a parent path.
 func (r *SQLiteRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
 	return r.storage.CountAnalyzedFiles(ctx, parentPath)
@@ -175,6 +187,26 @@ func (r *SQLiteRegistry) UpdateSemanticState(ctx context.Context, path string, a
 // UpdateEmbeddingsState updates the embeddings generation tracking fields for a file.
 func (r *SQLiteRegistry) UpdateEmbeddingsState(ctx context.Context, path string, err error) error {
 	return r.storage.UpdateEmbeddingsState(ctx, path, err)
+}
+
+// UpdateDiscoveryState updates the discovery state for a file.
+func (r *SQLiteRegistry) UpdateDiscoveryState(ctx context.Context, path string, contentHash string, size int64, modTime time.Time) error {
+	return r.storage.UpdateDiscoveryState(ctx, path, contentHash, size, modTime)
+}
+
+// DeleteDiscoveryState removes a discovery record for a path.
+func (r *SQLiteRegistry) DeleteDiscoveryState(ctx context.Context, path string) error {
+	return r.storage.DeleteDiscoveryState(ctx, path)
+}
+
+// DeleteDiscoveryStatesForPath removes discovery records under a parent path.
+func (r *SQLiteRegistry) DeleteDiscoveryStatesForPath(ctx context.Context, parentPath string) error {
+	return r.storage.DeleteDiscoveryStatesForPath(ctx, parentPath)
+}
+
+// ListDiscoveryStates returns discovery records under a parent path.
+func (r *SQLiteRegistry) ListDiscoveryStates(ctx context.Context, parentPath string) ([]FileDiscovery, error) {
+	return r.storage.ListDiscoveryStates(ctx, parentPath)
 }
 
 // ClearAnalysisState clears all analysis state for a file, forcing reanalysis.

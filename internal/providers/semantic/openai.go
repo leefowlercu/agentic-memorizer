@@ -3,19 +3,24 @@ package semantic
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 )
 
 const (
-	openaiAPIURL       = "https://api.openai.com/v1/chat/completions"
-	openaiDefaultModel = "gpt-5.2"
+	openaiResponsesURL   = "https://api.openai.com/v1/responses"
+	openaiFilesURL       = "https://api.openai.com/v1/files"
+	openaiDefaultModel   = "gpt-5.2"
+	openaiMaxOutputToken = 4096
 )
 
 // OpenAISemanticProvider implements SemanticProvider using OpenAI's API.
@@ -99,66 +104,65 @@ func (p *OpenAISemanticProvider) RateLimit() providers.RateLimitConfig {
 	}
 }
 
-// SupportedMIMETypes returns the MIME types this provider can analyze.
-func (p *OpenAISemanticProvider) SupportedMIMETypes() []string {
-	return []string{
-		"text/plain",
-		"text/markdown",
-		"text/x-go",
-		"text/x-python",
-		"text/x-java",
-		"text/javascript",
-		"application/json",
-		"application/xml",
-		"image/jpeg",
-		"image/png",
-		"image/gif",
-		"image/webp",
+// ModelName returns the configured model name.
+func (p *OpenAISemanticProvider) ModelName() string {
+	return p.model
+}
+
+// Capabilities returns model-specific input limits and supported modalities.
+func (p *OpenAISemanticProvider) Capabilities() providers.SemanticCapabilities {
+	caps := providers.SemanticCapabilities{
+		MaxInputTokens:  128000,
+		MaxRequestBytes: 50 * 1024 * 1024,
+		MaxPDFPages:     1000,
+		MaxImages:       500,
+		SupportsPDF:     true,
+		SupportsImages:  true,
+		Model:           p.model,
 	}
+
+	switch p.model {
+	case "gpt-5.2", "gpt-5.2-pro":
+		caps.MaxInputTokens = 400000
+	case "gpt-5-mini":
+		caps.MaxInputTokens = 128000
+	}
+
+	return caps
 }
 
-// MaxContentSize returns the maximum content size in bytes.
-func (p *OpenAISemanticProvider) MaxContentSize() int64 {
-	return 100 * 1024 // 100KB for text content
-}
-
-// SupportsVision returns true if the provider supports vision/image analysis.
-func (p *OpenAISemanticProvider) SupportsVision() bool {
-	return true
-}
-
-// Analyze performs semantic analysis on the given content.
-func (p *OpenAISemanticProvider) Analyze(ctx context.Context, req providers.SemanticRequest) (*providers.SemanticResult, error) {
+// Analyze performs semantic analysis on the given file-level input.
+func (p *OpenAISemanticProvider) Analyze(ctx context.Context, input providers.SemanticInput) (*providers.SemanticResult, error) {
 	if !p.Available() {
 		return nil, fmt.Errorf("openai provider not available; OPENAI_API_KEY not set")
 	}
 
-	// Wait for rate limit
 	if err := p.rateLimiter.Wait(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit wait failed; %w", err)
 	}
 
-	// Build messages
-	messages := []map[string]any{
-		{
-			"role":    "system",
-			"content": buildSystemPrompt(),
-		},
+	systemPrompt := buildSystemPrompt()
+	userContent, err := p.buildUserContent(ctx, input)
+	if err != nil {
+		return nil, err
 	}
 
-	// Build user message
-	userContent := buildOpenAIUserContent(req)
-	messages = append(messages, map[string]any{
-		"role":    "user",
-		"content": userContent,
-	})
-
-	// Build request body
 	requestBody := map[string]any{
-		"model":                 p.model,
-		"messages":              messages,
-		"max_completion_tokens": 4096,
-		"temperature":           0.1,
+		"model": p.model,
+		"input": []map[string]any{
+			{
+				"role": "system",
+				"content": []map[string]any{
+					{"type": "input_text", "text": systemPrompt},
+				},
+			},
+			{
+				"role":    "user",
+				"content": userContent,
+			},
+		},
+		"max_output_tokens": openaiMaxOutputToken,
+		"temperature":       0.1,
 	}
 
 	jsonBody, err := json.Marshal(requestBody)
@@ -166,8 +170,7 @@ func (p *OpenAISemanticProvider) Analyze(ctx context.Context, req providers.Sema
 		return nil, fmt.Errorf("failed to marshal request; %w", err)
 	}
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", openaiAPIURL, bytes.NewReader(jsonBody))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", openaiResponsesURL, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request; %w", err)
 	}
@@ -175,14 +178,12 @@ func (p *OpenAISemanticProvider) Analyze(ctx context.Context, req providers.Sema
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 
-	// Execute request
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("API request failed; %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response; %w", err)
@@ -192,18 +193,12 @@ func (p *OpenAISemanticProvider) Analyze(ctx context.Context, req providers.Sema
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
-	var apiResp openaiResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
+	text, tokens, err := parseOpenAIResponse(body)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse response; %w", err)
 	}
 
-	if len(apiResp.Choices) == 0 {
-		return nil, fmt.Errorf("no response choices returned")
-	}
-
-	// Parse the structured response
-	result, err := parseAnalysisResponse(apiResp.Choices[0].Message.Content)
+	result, err := parseAnalysisResponse(text)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse analysis; %w", err)
 	}
@@ -211,50 +206,142 @@ func (p *OpenAISemanticProvider) Analyze(ctx context.Context, req providers.Sema
 	result.ProviderName = p.Name()
 	result.ModelName = p.model
 	result.AnalyzedAt = time.Now()
-	result.TokensUsed = apiResp.Usage.TotalTokens
+	result.TokensUsed = tokens
 	result.Version = analysisVersion
 
 	return result, nil
 }
 
-// openaiResponse represents the OpenAI API response structure.
-type openaiResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// buildOpenAIUserContent creates the user message content for OpenAI.
-func buildOpenAIUserContent(req providers.SemanticRequest) any {
-	if req.ImageData != "" {
-		// Vision request
+func (p *OpenAISemanticProvider) buildUserContent(ctx context.Context, input providers.SemanticInput) ([]map[string]any, error) {
+	switch input.Type {
+	case providers.SemanticInputImage:
+		if len(input.ImageBytes) == 0 {
+			return nil, fmt.Errorf("image input missing bytes")
+		}
+		encoded := base64.StdEncoding.EncodeToString(input.ImageBytes)
 		return []map[string]any{
 			{
-				"type": "image_url",
-				"image_url": map[string]string{
-					"url": fmt.Sprintf("data:%s;base64,%s", req.MIMEType, req.ImageData),
-				},
+				"type":      "input_image",
+				"image_url": fmt.Sprintf("data:%s;base64,%s", input.MIMEType, encoded),
 			},
 			{
-				"type": "text",
-				"text": fmt.Sprintf("Analyze this image from file: %s", req.Path),
+				"type": "input_text",
+				"text": fmt.Sprintf("Analyze this image from file: %s", input.Path),
 			},
+		}, nil
+	case providers.SemanticInputPDF:
+		if len(input.FileBytes) == 0 {
+			return nil, fmt.Errorf("pdf input missing bytes")
+		}
+		fileID, err := p.uploadFile(ctx, input.FileBytes, input.Path, "application/pdf")
+		if err != nil {
+			return nil, err
+		}
+		return []map[string]any{
+			{
+				"type":    "input_file",
+				"file_id": fileID,
+			},
+			{
+				"type": "input_text",
+				"text": fmt.Sprintf("Analyze this PDF from file: %s", input.Path),
+			},
+		}, nil
+	default:
+		context := buildTextContext(input)
+		return []map[string]any{{"type": "input_text", "text": context}}, nil
+	}
+}
+
+func buildTextContext(input providers.SemanticInput) string {
+	context := fmt.Sprintf("File: %s\nMIME Type: %s\n", input.Path, input.MIMEType)
+	if input.Truncated {
+		context += "Content was truncated to fit model limits.\n"
+	}
+	context += "\nContent:\n" + input.Text
+	return context
+}
+
+func (p *OpenAISemanticProvider) uploadFile(ctx context.Context, data []byte, path string, mimeType string) (string, error) {
+	filename := filepath.Base(path)
+	if filename == "." || filename == string(filepath.Separator) || filename == "" {
+		filename = "document.pdf"
+	}
+
+	buf := &bytes.Buffer{}
+	writer := multipart.NewWriter(buf)
+	fileWriter, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to create form file; %w", err)
+	}
+	if _, err := fileWriter.Write(data); err != nil {
+		return "", fmt.Errorf("failed to write file data; %w", err)
+	}
+	if err := writer.WriteField("purpose", "assistants"); err != nil {
+		return "", fmt.Errorf("failed to set purpose; %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("failed to finalize multipart; %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", openaiFilesURL, buf)
+	if err != nil {
+		return "", fmt.Errorf("failed to create file request; %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("file upload failed; %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file response; %w", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("file upload error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var fileResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &fileResp); err != nil {
+		return "", fmt.Errorf("failed to parse file upload response; %w", err)
+	}
+	if fileResp.ID == "" {
+		return "", fmt.Errorf("file upload did not return file id")
+	}
+
+	return fileResp.ID, nil
+}
+
+func parseOpenAIResponse(body []byte) (string, int, error) {
+	var resp struct {
+		Output []struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+		Usage struct {
+			TotalTokens int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", 0, err
+	}
+
+	for _, item := range resp.Output {
+		for _, content := range item.Content {
+			if content.Text != "" {
+				return content.Text, resp.Usage.TotalTokens, nil
+			}
 		}
 	}
 
-	// Text request
-	context := fmt.Sprintf("File: %s\nMIME Type: %s\n", req.Path, req.MIMEType)
-	if req.TotalChunks > 1 {
-		context += fmt.Sprintf("Chunk %d of %d\n", req.ChunkIndex+1, req.TotalChunks)
-	}
-	context += "\nContent:\n" + req.Content
-
-	return context
+	return "", resp.Usage.TotalTokens, fmt.Errorf("no output text in response")
 }

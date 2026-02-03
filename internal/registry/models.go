@@ -19,6 +19,9 @@ type PathConfig = storage.PathConfig
 // FileState tracks the state of a file for incremental processing.
 type FileState = storage.FileState
 
+// FileDiscovery tracks files discovered by the walker/watcher.
+type FileDiscovery = storage.FileDiscovery
+
 // PathStatus represents the health status of a remembered path.
 type PathStatus = storage.PathStatus
 

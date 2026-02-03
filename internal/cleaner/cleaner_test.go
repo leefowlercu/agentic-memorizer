@@ -3,6 +3,7 @@ package cleaner
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,18 +17,24 @@ import (
 
 // mockRegistry implements registry.Registry for testing.
 type mockRegistry struct {
-	mu               sync.Mutex
-	fileStates       map[string]registry.FileState
-	deletedPaths     []string
-	bulkDeletedPaths []string
-	deleteError      error
-	bulkDeleteError  error
-	listStatesError  error
+	mu                        sync.Mutex
+	fileStates                map[string]registry.FileState
+	discoveryStates           map[string]registry.FileDiscovery
+	deletedPaths              []string
+	bulkDeletedPaths          []string
+	deletedDiscoveryPaths     []string
+	bulkDeletedDiscoveryPaths []string
+	deleteError               error
+	bulkDeleteError           error
+	discoveryDeleteError      error
+	discoveryBulkDeleteError  error
+	listStatesError           error
 }
 
 func newMockRegistry() *mockRegistry {
 	return &mockRegistry{
-		fileStates: make(map[string]registry.FileState),
+		fileStates:      make(map[string]registry.FileState),
+		discoveryStates: make(map[string]registry.FileDiscovery),
 	}
 }
 
@@ -101,6 +108,71 @@ func (m *mockRegistry) ListFileStates(ctx context.Context, parentPath string) ([
 		states = append(states, state)
 	}
 	return states, nil
+}
+
+func (m *mockRegistry) UpdateDiscoveryState(ctx context.Context, path string, contentHash string, size int64, modTime time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.discoveryStates[path] = registry.FileDiscovery{
+		Path:        path,
+		ContentHash: contentHash,
+		Size:        size,
+		ModTime:     modTime,
+	}
+	return nil
+}
+
+func (m *mockRegistry) DeleteDiscoveryState(ctx context.Context, path string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.discoveryDeleteError != nil {
+		return m.discoveryDeleteError
+	}
+	if _, ok := m.discoveryStates[path]; !ok {
+		return registry.ErrPathNotFound
+	}
+	m.deletedDiscoveryPaths = append(m.deletedDiscoveryPaths, path)
+	delete(m.discoveryStates, path)
+	return nil
+}
+
+func (m *mockRegistry) DeleteDiscoveryStatesForPath(ctx context.Context, parentPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.discoveryBulkDeleteError != nil {
+		return m.discoveryBulkDeleteError
+	}
+	m.bulkDeletedDiscoveryPaths = append(m.bulkDeletedDiscoveryPaths, parentPath)
+	for path := range m.discoveryStates {
+		if strings.HasPrefix(path, parentPath) {
+			delete(m.discoveryStates, path)
+		}
+	}
+	return nil
+}
+
+func (m *mockRegistry) ListDiscoveryStates(ctx context.Context, parentPath string) ([]registry.FileDiscovery, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var states []registry.FileDiscovery
+	for path, state := range m.discoveryStates {
+		if strings.HasPrefix(path, parentPath) {
+			states = append(states, state)
+		}
+	}
+	return states, nil
+}
+
+func (m *mockRegistry) CountDiscoveredFiles(ctx context.Context, parentPath string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for path := range m.discoveryStates {
+		if strings.HasPrefix(path, parentPath) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (m *mockRegistry) DeleteFileStatesForPath(ctx context.Context, parentPath string) error {

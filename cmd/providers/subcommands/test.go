@@ -67,10 +67,11 @@ func testSemanticProvider(p providers.SemanticProvider) error {
 	defer cancel()
 
 	// Send a minimal test request
-	req := providers.SemanticRequest{
+	req := providers.SemanticInput{
 		Path:     "/test/file.txt",
-		Content:  "This is a test file for connectivity verification.",
 		MIMEType: "text/plain",
+		Type:     providers.SemanticInputText,
+		Text:     "This is a test file for connectivity verification.",
 	}
 
 	start := time.Now()

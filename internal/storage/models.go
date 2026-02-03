@@ -167,6 +167,30 @@ type FileState struct {
 	UpdatedAt time.Time
 }
 
+// FileDiscovery tracks files discovered by the walker/watcher.
+type FileDiscovery struct {
+	// ID is the unique identifier for this discovery record.
+	ID int64
+
+	// Path is the absolute path to the file.
+	Path string
+
+	// ContentHash is the hash of the file content (optional).
+	ContentHash string
+
+	// Size is the file size in bytes.
+	Size int64
+
+	// ModTime is the file modification time.
+	ModTime time.Time
+
+	// CreatedAt is when the file was first discovered.
+	CreatedAt time.Time
+
+	// UpdatedAt is when the file was last seen.
+	UpdatedAt time.Time
+}
+
 // IsStale returns true if the file appears to have changed based on size or mod time.
 func (f *FileState) IsStale(size int64, modTime time.Time) bool {
 	return f.Size != size || !f.ModTime.Equal(modTime)

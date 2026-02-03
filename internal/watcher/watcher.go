@@ -486,6 +486,12 @@ func (w *watcher) publishEvent(ctx context.Context, ce CoalescedEvent) {
 		}
 	}
 
+	if ce.Type != EventDelete && w.reg != nil {
+		if err := w.reg.UpdateDiscoveryState(ctx, ce.Path, contentHash, size, modTime); err != nil {
+			w.logger.Warn("failed to update discovery state", "path", ce.Path, "error", err)
+		}
+	}
+
 	// Publish appropriate event
 	var event events.Event
 	switch ce.Type {

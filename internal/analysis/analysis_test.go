@@ -469,101 +469,6 @@ func TestSetWorkerCount(t *testing.T) {
 	}
 }
 
-func TestMergeSemanticResults(t *testing.T) {
-	t.Run("EmptyResults", func(t *testing.T) {
-		result, err := mergeSemanticResults(context.Background(), nil, nil)
-		if err != nil {
-			t.Errorf("mergeSemanticResults failed: %v", err)
-		}
-		if result == nil {
-			t.Error("Expected non-nil result")
-		}
-	})
-
-	t.Run("SingleResult", func(t *testing.T) {
-		input := &SemanticResult{
-			Summary: "Test summary",
-			Tags:    []string{"tag1", "tag2"},
-		}
-
-		result, err := mergeSemanticResults(context.Background(), nil, []*SemanticResult{input})
-		if err != nil {
-			t.Errorf("mergeSemanticResults failed: %v", err)
-		}
-		if result.Summary != "Test summary" {
-			t.Errorf("Summary = %q, want %q", result.Summary, "Test summary")
-		}
-	})
-
-	t.Run("DeduplicateTags", func(t *testing.T) {
-		results := []*SemanticResult{
-			{Tags: []string{"tag1", "tag2"}},
-			{Tags: []string{"tag2", "tag3"}},
-			{Tags: []string{"TAG1", "tag4"}}, // Case-insensitive dedup
-		}
-
-		merged, err := mergeSemanticResults(context.Background(), nil, results)
-		if err != nil {
-			t.Errorf("mergeSemanticResults failed: %v", err)
-		}
-
-		// Should have 4 unique tags (tag1, tag2, tag3, tag4)
-		if len(merged.Tags) != 4 {
-			t.Errorf("Expected 4 unique tags, got %d: %v", len(merged.Tags), merged.Tags)
-		}
-	})
-
-	t.Run("DeduplicateEntities", func(t *testing.T) {
-		results := []*SemanticResult{
-			{Entities: []Entity{{Name: "Go", Type: "language"}}},
-			{Entities: []Entity{{Name: "Go", Type: "language"}}}, // Duplicate
-			{Entities: []Entity{{Name: "Python", Type: "language"}}},
-		}
-
-		merged, err := mergeSemanticResults(context.Background(), nil, results)
-		if err != nil {
-			t.Errorf("mergeSemanticResults failed: %v", err)
-		}
-
-		if len(merged.Entities) != 2 {
-			t.Errorf("Expected 2 unique entities, got %d", len(merged.Entities))
-		}
-	})
-
-	t.Run("MaxComplexity", func(t *testing.T) {
-		results := []*SemanticResult{
-			{Complexity: 3},
-			{Complexity: 7},
-			{Complexity: 5},
-		}
-
-		merged, err := mergeSemanticResults(context.Background(), nil, results)
-		if err != nil {
-			t.Errorf("mergeSemanticResults failed: %v", err)
-		}
-
-		if merged.Complexity != 7 {
-			t.Errorf("Complexity = %d, want 7", merged.Complexity)
-		}
-	})
-
-	t.Run("ConcatenateSummaries", func(t *testing.T) {
-		results := []*SemanticResult{
-			{Summary: "First part."},
-			{Summary: "Second part."},
-		}
-
-		merged, err := mergeSemanticResults(context.Background(), nil, results)
-		if err != nil {
-			t.Errorf("mergeSemanticResults failed: %v", err)
-		}
-
-		if merged.Summary == "" {
-			t.Error("Expected non-empty summary")
-		}
-	})
-}
-
 func TestWorkerBackoff(t *testing.T) {
 	bus := events.NewBus()
 	defer bus.Close()
@@ -632,7 +537,6 @@ func (m *mockEmbeddingsProvider) EmbedBatch(ctx context.Context, texts []string)
 // mockSemanticProvider is a mock implementation for testing.
 type mockSemanticProvider struct {
 	available bool
-	summaries map[int]string // Map chunk index to summary
 }
 
 func (m *mockSemanticProvider) Name() string                 { return "mock-semantic" }
@@ -641,18 +545,13 @@ func (m *mockSemanticProvider) Available() bool              { return m.availabl
 func (m *mockSemanticProvider) RateLimit() providers.RateLimitConfig {
 	return providers.RateLimitConfig{}
 }
-func (m *mockSemanticProvider) SupportedMIMETypes() []string { return []string{"text/plain"} }
-func (m *mockSemanticProvider) MaxContentSize() int64        { return 100000 }
-func (m *mockSemanticProvider) SupportsVision() bool         { return false }
-func (m *mockSemanticProvider) Analyze(ctx context.Context, req providers.SemanticRequest) (*providers.SemanticResult, error) {
-	summary := "Default summary"
-	// Check if this is for a specific chunk (content-based lookup would be ideal, but for testing we use a simple approach)
-	for _, s := range m.summaries {
-		summary = s
-		break
-	}
+func (m *mockSemanticProvider) ModelName() string { return "mock-model" }
+func (m *mockSemanticProvider) Capabilities() providers.SemanticCapabilities {
+	return providers.SemanticCapabilities{MaxInputTokens: 100000}
+}
+func (m *mockSemanticProvider) Analyze(ctx context.Context, input providers.SemanticInput) (*providers.SemanticResult, error) {
 	return &providers.SemanticResult{
-		Summary:    summary,
+		Summary:    "Default summary",
 		Tags:       []string{"test-tag"},
 		Topics:     []providers.Topic{{Name: "test-topic", Confidence: 0.9}},
 		Entities:   []providers.Entity{{Name: "TestEntity", Type: "test"}},
@@ -825,69 +724,6 @@ func TestBuildAnalyzedChunks(t *testing.T) {
 	})
 }
 
-func TestEnhanceChunksWithSummaries(t *testing.T) {
-	t.Run("NilSummaries", func(t *testing.T) {
-		chunks := []AnalyzedChunk{
-			{Index: 0, Content: "test"},
-			{Index: 1, Content: "test2"},
-		}
-		EnhanceChunksWithSummaries(chunks, nil)
-
-		if chunks[0].Summary != "" {
-			t.Errorf("chunks[0].Summary = %q, want empty", chunks[0].Summary)
-		}
-		if chunks[1].Summary != "" {
-			t.Errorf("chunks[1].Summary = %q, want empty", chunks[1].Summary)
-		}
-	})
-
-	t.Run("FullSummaries", func(t *testing.T) {
-		chunks := []AnalyzedChunk{
-			{Index: 0, Content: "first"},
-			{Index: 1, Content: "second"},
-		}
-		summaries := []string{"Summary 0", "Summary 1"}
-
-		EnhanceChunksWithSummaries(chunks, summaries)
-
-		if chunks[0].Summary != "Summary 0" {
-			t.Errorf("chunks[0].Summary = %q, want %q", chunks[0].Summary, "Summary 0")
-		}
-		if chunks[1].Summary != "Summary 1" {
-			t.Errorf("chunks[1].Summary = %q, want %q", chunks[1].Summary, "Summary 1")
-		}
-	})
-
-	t.Run("PartialSummaries", func(t *testing.T) {
-		chunks := []AnalyzedChunk{
-			{Index: 0, Content: "first"},
-			{Index: 1, Content: "second"},
-			{Index: 2, Content: "third"},
-		}
-		summaries := []string{"Summary 0", "Summary 1"} // Only 2 summaries for 3 chunks
-
-		EnhanceChunksWithSummaries(chunks, summaries)
-
-		if chunks[0].Summary != "Summary 0" {
-			t.Errorf("chunks[0].Summary = %q, want %q", chunks[0].Summary, "Summary 0")
-		}
-		if chunks[1].Summary != "Summary 1" {
-			t.Errorf("chunks[1].Summary = %q, want %q", chunks[1].Summary, "Summary 1")
-		}
-		if chunks[2].Summary != "" {
-			t.Errorf("chunks[2].Summary = %q, want empty (no summary available)", chunks[2].Summary)
-		}
-	})
-
-	t.Run("EmptyChunks", func(t *testing.T) {
-		var chunks []AnalyzedChunk
-		summaries := []string{"Summary 0"}
-
-		// Should not panic
-		EnhanceChunksWithSummaries(chunks, summaries)
-	})
-}
-
 func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 	// Set up mock embeddings provider
 	mockEmbed := &mockEmbeddingsProvider{
@@ -997,52 +833,6 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("PreservesPerChunkSummaries", func(t *testing.T) {
-		chunks := []chunkers.Chunk{
-			{Index: 0, Content: "First chunk"},
-			{Index: 1, Content: "Second chunk"},
-		}
-		summaries := []string{"Summary for first chunk", "Summary for second chunk"}
-
-		// Build analyzed chunks and enhance with summaries (new pattern)
-		analyzedChunks := BuildAnalyzedChunks(chunks)
-		EnhanceChunksWithSummaries(analyzedChunks, summaries)
-
-		_, err := stage.Generate(context.Background(), "/test/file.txt", analyzedChunks)
-		if err != nil {
-			t.Fatalf("Generate failed: %v", err)
-		}
-
-		if len(analyzedChunks) != 2 {
-			t.Fatalf("Expected 2 results, got %d", len(analyzedChunks))
-		}
-
-		if analyzedChunks[0].Summary != "Summary for first chunk" {
-			t.Errorf("analyzedChunks[0].Summary = %q, want %q", analyzedChunks[0].Summary, "Summary for first chunk")
-		}
-		if analyzedChunks[1].Summary != "Summary for second chunk" {
-			t.Errorf("analyzedChunks[1].Summary = %q, want %q", analyzedChunks[1].Summary, "Summary for second chunk")
-		}
-	})
-
-	t.Run("HandlesNilSummaries", func(t *testing.T) {
-		chunks := []chunkers.Chunk{
-			{Index: 0, Content: "Test chunk"},
-		}
-
-		// Build analyzed chunks without summaries (new pattern)
-		analyzedChunks := BuildAnalyzedChunks(chunks)
-
-		_, err := stage.Generate(context.Background(), "/test/file.txt", analyzedChunks)
-		if err != nil {
-			t.Fatalf("Generate failed: %v", err)
-		}
-
-		if analyzedChunks[0].Summary != "" {
-			t.Errorf("Summary should be empty when no summaries provided, got %q", analyzedChunks[0].Summary)
-		}
-	})
-
 	t.Run("AddsEmbeddingsInPlace", func(t *testing.T) {
 		chunks := []chunkers.Chunk{
 			{Index: 0, Content: "Test chunk 1"},
@@ -1068,84 +858,6 @@ func TestGenerateEmbeddingsPreservesMetadata(t *testing.T) {
 			if ac.Embedding == nil {
 				t.Errorf("analyzedChunks[%d].Embedding should be populated after Generate", i)
 			}
-		}
-	})
-}
-
-func TestAnalyzeSemanticsReturnsPerChunkSummaries(t *testing.T) {
-	// Set up mock semantic provider
-	mockSemantic := &mockSemanticProvider{
-		available: true,
-		summaries: map[int]string{
-			0: "Chunk 0 summary",
-			1: "Chunk 1 summary",
-		},
-	}
-	stage := NewSemanticStage(mockSemantic, nil, nil, "", nil)
-
-	t.Run("ReturnsSummariesForSingleChunk", func(t *testing.T) {
-		chunks := []chunkers.Chunk{
-			{Index: 0, Content: "Single chunk content"},
-		}
-
-		result, summaries, err := stage.Analyze(context.Background(), "/test/file.txt", "hash", chunks)
-		if err != nil {
-			t.Fatalf("analyzeSemantics failed: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("Expected non-nil result")
-		}
-
-		if len(summaries) != 1 {
-			t.Fatalf("Expected 1 summary, got %d", len(summaries))
-		}
-
-		if summaries[0] == "" {
-			t.Error("Expected non-empty summary for chunk 0")
-		}
-	})
-
-	t.Run("ReturnsSummariesForMultipleChunks", func(t *testing.T) {
-		chunks := []chunkers.Chunk{
-			{Index: 0, Content: "First chunk"},
-			{Index: 1, Content: "Second chunk"},
-		}
-
-		result, summaries, err := stage.Analyze(context.Background(), "/test/file.txt", "hash", chunks)
-		if err != nil {
-			t.Fatalf("analyzeSemantics failed: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("Expected non-nil result")
-		}
-
-		if len(summaries) != 2 {
-			t.Fatalf("Expected 2 summaries, got %d", len(summaries))
-		}
-
-		// Both should have summaries
-		if summaries[0] == "" {
-			t.Error("Expected non-empty summary for chunk 0")
-		}
-		if summaries[1] == "" {
-			t.Error("Expected non-empty summary for chunk 1")
-		}
-	})
-
-	t.Run("ReturnsEmptyForEmptyChunks", func(t *testing.T) {
-		result, summaries, err := stage.Analyze(context.Background(), "/test/file.txt", "hash", []chunkers.Chunk{})
-		if err != nil {
-			t.Fatalf("analyzeSemantics failed: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("Expected non-nil result")
-		}
-
-		if summaries != nil {
-			t.Errorf("Expected nil summaries for empty chunks, got %v", summaries)
 		}
 	})
 }

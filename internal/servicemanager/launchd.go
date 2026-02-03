@@ -31,12 +31,25 @@ const launchdPlistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <dict>
     <key>Label</key>
     <string>{{.Label}}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{{.BinaryPath}}</string>
-        <string>daemon</string>
-        <string>start</string>
-    </array>
+<key>ProgramArguments</key>
+<array>
+    <string>{{.BinaryPath}}</string>
+    <string>daemon</string>
+    <string>start</string>
+</array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>{{.HomeDir}}</string>
+        <key>PATH</key>
+        <string>{{.Path}}</string>
+        <key>MEMORIZER_CONFIG_DIR</key>
+        <string>{{.ConfigDir}}</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{.LogDir}}/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{.LogDir}}/launchd.err.log</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -74,13 +87,30 @@ func getPlistPath() (string, error) {
 // generatePlist generates the launchd plist content.
 func generatePlist() (string, error) {
 	binaryPath := GetBinaryPath()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory; %w", err)
+	}
+	path := os.Getenv("PATH")
+	if path == "" {
+		path = "/usr/bin:/bin:/usr/sbin:/sbin"
+	}
+	configDir := filepath.Join(home, ".config", "memorizer")
 
 	data := struct {
 		Label      string
 		BinaryPath string
+		HomeDir    string
+		Path       string
+		ConfigDir  string
+		LogDir     string
 	}{
 		Label:      launchdServiceLabel,
 		BinaryPath: binaryPath,
+		HomeDir:    home,
+		Path:       path,
+		ConfigDir:  configDir,
+		LogDir:     configDir,
 	}
 
 	tmpl, err := template.New("plist").Parse(launchdPlistTemplate)
@@ -121,9 +151,9 @@ func (m *launchdManager) Install(ctx context.Context) error {
 	}
 
 	// Load the service with launchctl (also enables it)
-	_, err = m.executor.Run(ctx, "launchctl", "load", "-w", plistPath)
+	out, err := m.executor.Run(ctx, "launchctl", "load", "-w", plistPath)
 	if err != nil {
-		return fmt.Errorf("failed to load service with launchctl; %w", err)
+		return fmt.Errorf("failed to load service with launchctl; output=%s; %w", strings.TrimSpace(string(out)), err)
 	}
 
 	return nil
@@ -149,18 +179,18 @@ func (m *launchdManager) Uninstall(ctx context.Context) error {
 
 // StartDaemon starts the daemon via launchctl.
 func (m *launchdManager) StartDaemon(ctx context.Context) error {
-	_, err := m.executor.Run(ctx, "launchctl", "start", launchdServiceLabel)
+	out, err := m.executor.Run(ctx, "launchctl", "start", launchdServiceLabel)
 	if err != nil {
-		return fmt.Errorf("failed to start service; %w", err)
+		return fmt.Errorf("failed to start service; output=%s; %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 // StopDaemon stops the daemon via launchctl.
 func (m *launchdManager) StopDaemon(ctx context.Context) error {
-	_, err := m.executor.Run(ctx, "launchctl", "stop", launchdServiceLabel)
+	out, err := m.executor.Run(ctx, "launchctl", "stop", launchdServiceLabel)
 	if err != nil {
-		return fmt.Errorf("failed to stop service; %w", err)
+		return fmt.Errorf("failed to stop service; output=%s; %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package semantic
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,77 +88,62 @@ func (p *GoogleSemanticProvider) RateLimit() providers.RateLimitConfig {
 	}
 }
 
-// SupportedMIMETypes returns the MIME types this provider can analyze.
-func (p *GoogleSemanticProvider) SupportedMIMETypes() []string {
-	return []string{
-		"text/plain",
-		"text/markdown",
-		"text/x-go",
-		"text/x-python",
-		"application/json",
-		"image/jpeg",
-		"image/png",
+// ModelName returns the configured model name.
+func (p *GoogleSemanticProvider) ModelName() string {
+	return p.model
+}
+
+// Capabilities returns model-specific input limits and supported modalities.
+func (p *GoogleSemanticProvider) Capabilities() providers.SemanticCapabilities {
+	caps := providers.SemanticCapabilities{
+		MaxInputTokens:  1000000,
+		MaxRequestBytes: 50 * 1024 * 1024,
+		MaxPDFPages:     1000,
+		MaxImages:       100,
+		SupportsPDF:     true,
+		SupportsImages:  true,
+		Model:           p.model,
 	}
+
+	switch p.model {
+	case "gemini-2.5-flash":
+		caps.MaxInputTokens = 200000
+	}
+
+	return caps
 }
 
-// MaxContentSize returns the maximum content size in bytes.
-func (p *GoogleSemanticProvider) MaxContentSize() int64 {
-	return 100 * 1024
-}
-
-// SupportsVision returns true if the provider supports vision/image analysis.
-func (p *GoogleSemanticProvider) SupportsVision() bool {
-	return true
-}
-
-// Analyze performs semantic analysis on the given content.
-func (p *GoogleSemanticProvider) Analyze(ctx context.Context, req providers.SemanticRequest) (*providers.SemanticResult, error) {
+// Analyze performs semantic analysis on the given file-level input.
+func (p *GoogleSemanticProvider) Analyze(ctx context.Context, input providers.SemanticInput) (*providers.SemanticResult, error) {
 	if !p.Available() {
 		return nil, fmt.Errorf("google provider not available; GOOGLE_API_KEY not set")
 	}
 
-	// Wait for rate limit
 	if err := p.rateLimiter.Wait(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit wait failed; %w", err)
 	}
 
-	// Build request
 	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", p.model, p.apiKey)
 
-	// Build content parts
-	var parts []map[string]any
-
-	if req.ImageData != "" {
-		parts = append(parts, map[string]any{
-			"inline_data": map[string]string{
-				"mime_type": req.MIMEType,
-				"data":      req.ImageData,
-			},
-		})
-		parts = append(parts, map[string]any{
-			"text": fmt.Sprintf("Analyze this image from file: %s\n\n%s", req.Path, buildSystemPrompt()),
-		})
-	} else {
-		context := fmt.Sprintf("File: %s\nMIME Type: %s\n", req.Path, req.MIMEType)
-		if req.TotalChunks > 1 {
-			context += fmt.Sprintf("Chunk %d of %d\n", req.ChunkIndex+1, req.TotalChunks)
-		}
-		context += "\nContent:\n" + req.Content
-
-		parts = append(parts, map[string]any{
-			"text": buildSystemPrompt() + "\n\n" + context,
-		})
+	parts, err := p.buildParts(input)
+	if err != nil {
+		return nil, err
 	}
 
 	requestBody := map[string]any{
 		"contents": []map[string]any{
 			{
+				"role":  "user",
 				"parts": parts,
 			},
 		},
+		"systemInstruction": map[string]any{
+			"parts": []map[string]any{{"text": buildSystemPrompt()}},
+		},
 		"generationConfig": map[string]any{
-			"temperature":     0.1,
-			"maxOutputTokens": 4096,
+			"temperature":      0.1,
+			"maxOutputTokens":  4096,
+			"responseMimeType": "application/json",
 		},
 	}
 
@@ -188,19 +174,16 @@ func (p *GoogleSemanticProvider) Analyze(ctx context.Context, req providers.Sema
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
 	var apiResp googleResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response; %w", err)
 	}
 
-	if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("no response content returned")
+	textContent := apiResp.FirstText()
+	if textContent == "" {
+		return nil, fmt.Errorf("no text content in response")
 	}
 
-	textContent := apiResp.Candidates[0].Content.Parts[0].Text
-
-	// Parse the structured response
 	result, err := parseAnalysisResponse(textContent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse analysis; %w", err)
@@ -209,13 +192,49 @@ func (p *GoogleSemanticProvider) Analyze(ctx context.Context, req providers.Sema
 	result.ProviderName = p.Name()
 	result.ModelName = p.model
 	result.AnalyzedAt = time.Now()
-	result.TokensUsed = apiResp.UsageMetadata.TotalTokenCount
+	result.TokensUsed = apiResp.Usage.TotalTokens
 	result.Version = analysisVersion
 
 	return result, nil
 }
 
-// googleResponse represents the Google API response structure.
+func (p *GoogleSemanticProvider) buildParts(input providers.SemanticInput) ([]map[string]any, error) {
+	switch input.Type {
+	case providers.SemanticInputImage:
+		if len(input.ImageBytes) == 0 {
+			return nil, fmt.Errorf("image input missing bytes")
+		}
+		encoded := base64.StdEncoding.EncodeToString(input.ImageBytes)
+		return []map[string]any{
+			{
+				"inlineData": map[string]any{
+					"mimeType": input.MIMEType,
+					"data":     encoded,
+				},
+			},
+			{"text": fmt.Sprintf("Analyze this image from file: %s", input.Path)},
+		}, nil
+	case providers.SemanticInputPDF:
+		if len(input.FileBytes) == 0 {
+			return nil, fmt.Errorf("pdf input missing bytes")
+		}
+		encoded := base64.StdEncoding.EncodeToString(input.FileBytes)
+		return []map[string]any{
+			{
+				"inlineData": map[string]any{
+					"mimeType": "application/pdf",
+					"data":     encoded,
+				},
+			},
+			{"text": fmt.Sprintf("Analyze this PDF from file: %s", input.Path)},
+		}, nil
+	default:
+		context := buildTextContext(input)
+		return []map[string]any{{"text": context}}, nil
+	}
+}
+
+// googleResponse represents the API response structure.
 type googleResponse struct {
 	Candidates []struct {
 		Content struct {
@@ -224,9 +243,19 @@ type googleResponse struct {
 			} `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
-	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		TotalTokenCount      int `json:"totalTokenCount"`
+	Usage struct {
+		TotalTokens int `json:"totalTokens"`
 	} `json:"usageMetadata"`
+}
+
+func (r googleResponse) FirstText() string {
+	if len(r.Candidates) == 0 {
+		return ""
+	}
+	for _, part := range r.Candidates[0].Content.Parts {
+		if part.Text != "" {
+			return part.Text
+		}
+	}
+	return ""
 }

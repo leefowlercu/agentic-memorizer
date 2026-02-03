@@ -30,6 +30,7 @@ func TestBuildInitializeResult(t *testing.T) {
 	resolved := &UnattendedConfig{
 		GraphHost:              "test-host",
 		GraphPort:              6380,
+		SemanticEnabled:        true,
 		SemanticProvider:       "openai",
 		SemanticModel:          "gpt-4o",
 		SemanticAPIKey:         "secret-key",
@@ -59,6 +60,9 @@ func TestBuildInitializeResult(t *testing.T) {
 	}
 
 	// Check semantic config
+	if !result.Config.Semantic.Enabled {
+		t.Error("Semantic.Enabled = false, want true")
+	}
 	if result.Config.Semantic.Provider != "openai" {
 		t.Errorf("Semantic.Provider = %q, want %q", result.Config.Semantic.Provider, "openai")
 	}
@@ -98,6 +102,7 @@ func TestBuildInitializeResult_EmbeddingsDisabled(t *testing.T) {
 	resolved := &UnattendedConfig{
 		GraphHost:         "localhost",
 		GraphPort:         6379,
+		SemanticEnabled:   true,
 		SemanticProvider:  "anthropic",
 		SemanticModel:     "claude-sonnet-4-5-20250929",
 		SemanticAPIKey:    "key",
@@ -119,6 +124,7 @@ func TestFormatTextOutput(t *testing.T) {
 	resolved := &UnattendedConfig{
 		GraphHost:              "test-host",
 		GraphPort:              6380,
+		SemanticEnabled:        true,
 		SemanticProvider:       "anthropic",
 		SemanticModel:          "claude-sonnet-4-5-20250929",
 		SemanticAPIKey:         "secret",
@@ -140,7 +146,8 @@ func TestFormatTextOutput(t *testing.T) {
 		"FalkorDB:",
 		"Host: test-host",
 		"Port: 6380",
-		"Semantic Provider:",
+		"Semantic Analysis:",
+		"Enabled: true",
 		"Provider: anthropic",
 		"Model: claude-sonnet-4-5-20250929",
 		"API Key: ********",
@@ -170,6 +177,7 @@ func TestFormatTextOutput_EmbeddingsDisabled(t *testing.T) {
 	resolved := &UnattendedConfig{
 		GraphHost:            "localhost",
 		GraphPort:            6379,
+		SemanticEnabled:      true,
 		SemanticProvider:     "anthropic",
 		SemanticModel:        "claude-sonnet-4-5-20250929",
 		SemanticAPIKey:       "key",
@@ -194,6 +202,7 @@ func TestFormatJSONOutput(t *testing.T) {
 	resolved := &UnattendedConfig{
 		GraphHost:            "localhost",
 		GraphPort:            6379,
+		SemanticEnabled:      true,
 		SemanticProvider:     "anthropic",
 		SemanticModel:        "claude-sonnet-4-5-20250929",
 		SemanticAPIKey:       "secret-key",
@@ -243,6 +252,7 @@ func TestFormatJSONOutput_ValidStructure(t *testing.T) {
 	resolved := &UnattendedConfig{
 		GraphHost:         "localhost",
 		GraphPort:         6379,
+		SemanticEnabled:   true,
 		SemanticProvider:  "anthropic",
 		SemanticModel:     "claude-sonnet-4-5-20250929",
 		SemanticAPIKey:    "key",

@@ -62,6 +62,9 @@ func TestNewDefaultConfig(t *testing.T) {
 	}
 
 	// Test Semantic section
+	if cfg.Semantic.Enabled != DefaultSemanticEnabled {
+		t.Errorf("Semantic.Enabled = %v, want %v", cfg.Semantic.Enabled, DefaultSemanticEnabled)
+	}
 	if cfg.Semantic.Provider != DefaultSemanticProvider {
 		t.Errorf("Semantic.Provider = %q, want %q", cfg.Semantic.Provider, DefaultSemanticProvider)
 	}

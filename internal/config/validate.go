@@ -150,31 +150,33 @@ func Validate(cfg *Config) error {
 		})
 	}
 
-	// Validate semantic config
-	if cfg.Semantic.Provider == "" {
-		errs = append(errs, ValidationError{
-			Field:   "semantic.provider",
-			Message: "must not be empty",
-		})
-	} else if !validSemanticProviders[cfg.Semantic.Provider] {
-		errs = append(errs, ValidationError{
-			Field:   "semantic.provider",
-			Message: fmt.Sprintf("must be one of: anthropic, openai, google; got %q", cfg.Semantic.Provider),
-		})
-	}
+	// Validate semantic config (only if enabled)
+	if cfg.Semantic.Enabled {
+		if cfg.Semantic.Provider == "" {
+			errs = append(errs, ValidationError{
+				Field:   "semantic.provider",
+				Message: "must not be empty",
+			})
+		} else if !validSemanticProviders[cfg.Semantic.Provider] {
+			errs = append(errs, ValidationError{
+				Field:   "semantic.provider",
+				Message: fmt.Sprintf("must be one of: anthropic, openai, google; got %q", cfg.Semantic.Provider),
+			})
+		}
 
-	if cfg.Semantic.Model == "" {
-		errs = append(errs, ValidationError{
-			Field:   "semantic.model",
-			Message: "must not be empty",
-		})
-	}
+		if cfg.Semantic.Model == "" {
+			errs = append(errs, ValidationError{
+				Field:   "semantic.model",
+				Message: "must not be empty",
+			})
+		}
 
-	if cfg.Semantic.RateLimit < 1 {
-		errs = append(errs, ValidationError{
-			Field:   "semantic.rate_limit",
-			Message: fmt.Sprintf("must be at least 1, got %d", cfg.Semantic.RateLimit),
-		})
+		if cfg.Semantic.RateLimit < 1 {
+			errs = append(errs, ValidationError{
+				Field:   "semantic.rate_limit",
+				Message: fmt.Sprintf("must be at least 1, got %d", cfg.Semantic.RateLimit),
+			})
+		}
 	}
 
 	// Validate embeddings config (only if enabled)

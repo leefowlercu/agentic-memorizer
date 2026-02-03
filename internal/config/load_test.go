@@ -34,6 +34,7 @@ graph:
   retry_delay_ms: 2000
   write_queue_size: 500
 semantic:
+  enabled: true
   provider: openai
   model: gpt-4
   rate_limit: 100
@@ -69,6 +70,9 @@ embeddings:
 	}
 	if cfg.Semantic.Provider != "openai" {
 		t.Errorf("Semantic.Provider = %q, want %q", cfg.Semantic.Provider, "openai")
+	}
+	if cfg.Semantic.Enabled != true {
+		t.Errorf("Semantic.Enabled = %v, want true", cfg.Semantic.Enabled)
 	}
 	if cfg.Embeddings.Dimensions != 1536 {
 		t.Errorf("Embeddings.Dimensions = %d, want %d", cfg.Embeddings.Dimensions, 1536)
@@ -132,6 +136,9 @@ func TestLoadWithDefaults_ReturnsDefaultConfig(t *testing.T) {
 	if cfg.Daemon.HTTPPort != DefaultDaemonHTTPPort {
 		t.Errorf("Daemon.HTTPPort = %d, want %d", cfg.Daemon.HTTPPort, DefaultDaemonHTTPPort)
 	}
+	if cfg.Semantic.Enabled != DefaultSemanticEnabled {
+		t.Errorf("Semantic.Enabled = %v, want %v", cfg.Semantic.Enabled, DefaultSemanticEnabled)
+	}
 	if cfg.Semantic.Provider != DefaultSemanticProvider {
 		t.Errorf("Semantic.Provider = %q, want %q", cfg.Semantic.Provider, DefaultSemanticProvider)
 	}
@@ -161,6 +168,9 @@ func TestLoad_UsesViperDefaults_WhenKeysNotInFile(t *testing.T) {
 	// Default values
 	if cfg.Daemon.HTTPPort != DefaultDaemonHTTPPort {
 		t.Errorf("Daemon.HTTPPort = %d, want default %d", cfg.Daemon.HTTPPort, DefaultDaemonHTTPPort)
+	}
+	if cfg.Semantic.Enabled != DefaultSemanticEnabled {
+		t.Errorf("Semantic.Enabled = %v, want default %v", cfg.Semantic.Enabled, DefaultSemanticEnabled)
 	}
 	if cfg.Semantic.Provider != DefaultSemanticProvider {
 		t.Errorf("Semantic.Provider = %q, want default %q", cfg.Semantic.Provider, DefaultSemanticProvider)

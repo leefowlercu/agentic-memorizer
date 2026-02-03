@@ -31,9 +31,10 @@ type MaskedGraphConfig struct {
 
 // MaskedSemanticConfig contains semantic configuration with masked API key.
 type MaskedSemanticConfig struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	APIKey   string `json:"api_key"`
+	Enabled  bool   `json:"enabled"`
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
 }
 
 // MaskedEmbeddingsConfig contains embeddings configuration with masked API key.
@@ -64,13 +65,17 @@ func buildInitializeResult(resolved *UnattendedConfig) *InitializeResult {
 			Port: resolved.GraphPort,
 		},
 		Semantic: MaskedSemanticConfig{
-			Provider: resolved.SemanticProvider,
-			Model:    resolved.SemanticModel,
-			APIKey:   maskAPIKey(resolved.SemanticAPIKey),
+			Enabled: resolved.SemanticEnabled,
 		},
 		Daemon: MaskedDaemonConfig{
 			HTTPPort: resolved.HTTPPort,
 		},
+	}
+
+	if resolved.SemanticEnabled {
+		maskedConfig.Semantic.Provider = resolved.SemanticProvider
+		maskedConfig.Semantic.Model = resolved.SemanticModel
+		maskedConfig.Semantic.APIKey = maskAPIKey(resolved.SemanticAPIKey)
 	}
 
 	if resolved.EmbeddingsEnabled {
@@ -111,13 +116,18 @@ func formatTextOutput(resolved *UnattendedConfig) string {
 	output += fmt.Sprintf("  Port: %d\n", resolved.GraphPort)
 	output += "\n"
 
-	output += "Semantic Provider:\n"
-	output += fmt.Sprintf("  Provider: %s\n", resolved.SemanticProvider)
-	output += fmt.Sprintf("  Model: %s\n", resolved.SemanticModel)
-	if resolved.SemanticAPIKey != "" {
-		output += fmt.Sprintf("  API Key: ******** (from %s)\n", resolved.SemanticAPIKeySource)
+	output += "Semantic Analysis:\n"
+	if resolved.SemanticEnabled {
+		output += "  Enabled: true\n"
+		output += fmt.Sprintf("  Provider: %s\n", resolved.SemanticProvider)
+		output += fmt.Sprintf("  Model: %s\n", resolved.SemanticModel)
+		if resolved.SemanticAPIKey != "" {
+			output += fmt.Sprintf("  API Key: ******** (from %s)\n", resolved.SemanticAPIKeySource)
+		} else {
+			output += "  API Key: (not set)\n"
+		}
 	} else {
-		output += "  API Key: (not set)\n"
+		output += "  Enabled: false\n"
 	}
 	output += "\n"
 

@@ -115,8 +115,18 @@ func TestSemanticProviderStep_ProviderSelection(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	step.Init(&cfg)
 
-	// Select Anthropic provider with Enter
+	// Enable semantic analysis
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if result != StepContinue {
+		t.Errorf("expected StepContinue after enable selection, got %v", result)
+	}
+
+	if step.phase != phaseProvider {
+		t.Errorf("expected phase phaseProvider after enable selection, got %v", step.phase)
+	}
+
+	// Select Anthropic provider with Enter
+	_, result = step.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if result != StepContinue {
 		t.Errorf("expected StepContinue after provider selection, got %v", result)
 	}
@@ -173,10 +183,17 @@ func TestSemanticProviderStep_EscFromProviderPhase(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	step.Init(&cfg)
 
-	// Press Esc from provider phase - should go to previous wizard step
+	// Move to provider phase
+	step.phase = phaseProvider
+
+	// Press Esc from provider phase - should go back to enable phase
 	_, result := step.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if result != StepPrev {
-		t.Errorf("expected StepPrev from Esc on provider phase, got %v", result)
+	if result != StepContinue {
+		t.Errorf("expected StepContinue from Esc on provider phase, got %v", result)
+	}
+
+	if step.phase != phaseEnable {
+		t.Errorf("expected phase phaseEnable after Esc, got %v", step.phase)
 	}
 }
 

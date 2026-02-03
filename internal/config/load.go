@@ -124,6 +124,7 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("graph.write_queue_size", DefaultGraphWriteQueueSize)
 
 	// Semantic defaults
+	v.SetDefault("semantic.enabled", DefaultSemanticEnabled)
 	v.SetDefault("semantic.provider", DefaultSemanticProvider)
 	v.SetDefault("semantic.model", DefaultSemanticModel)
 	v.SetDefault("semantic.rate_limit", DefaultSemanticRateLimit)

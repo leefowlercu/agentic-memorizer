@@ -17,7 +17,8 @@ import (
 type providerPhase int
 
 const (
-	phaseProvider providerPhase = iota
+	phaseEnable providerPhase = iota
+	phaseProvider
 	phaseModel
 	phaseAPIKey
 )
@@ -46,7 +47,9 @@ type SemanticProviderStep struct {
 	BaseStep
 
 	phase         providerPhase
+	enabled       bool
 	providers     []ProviderInfo
+	enableRadio   components.RadioGroup
 	providerRadio components.RadioGroup
 	modelRadio    components.RadioGroup
 	keyInput      components.TextInput
@@ -109,6 +112,12 @@ func (s *SemanticProviderStep) Init(cfg *config.Config) tea.Cmd {
 		s.providers[i].KeyDetected = os.Getenv(s.providers[i].EnvVar) != ""
 	}
 
+	// Build enable/disable radio
+	s.enableRadio = components.NewRadioGroup([]components.RadioOption{
+		{Label: "Enable semantic analysis", Value: "enable", Description: "Extract summaries, topics, and entities"},
+		{Label: "Disable semantic analysis", Value: "disable", Description: "Skip semantic analysis configuration"},
+	})
+
 	// Build provider radio options
 	var options []components.RadioOption
 	for _, p := range s.providers {
@@ -124,17 +133,23 @@ func (s *SemanticProviderStep) Init(cfg *config.Config) tea.Cmd {
 	}
 
 	s.providerRadio = components.NewRadioGroup(options)
-	s.phase = phaseProvider
+	s.phase = phaseEnable
+	s.enabled = cfg.Semantic.Enabled
 
 	// Pre-fill from existing config
-	if cfg.Semantic.Provider != "" {
-		for i, p := range s.providers {
-			if p.Name == cfg.Semantic.Provider {
-				s.providerRadio.SetCursor(i)
-				s.selectedIdx = i
-				break
+	if cfg.Semantic.Enabled {
+		s.enableRadio.SetCursor(0)
+		if cfg.Semantic.Provider != "" {
+			for i, p := range s.providers {
+				if p.Name == cfg.Semantic.Provider {
+					s.providerRadio.SetCursor(i)
+					s.selectedIdx = i
+					break
+				}
 			}
 		}
+	} else {
+		s.enableRadio.SetCursor(1)
 	}
 
 	return nil
@@ -148,6 +163,8 @@ func (s *SemanticProviderStep) Update(msg tea.Msg) (tea.Cmd, StepResult) {
 	}
 
 	switch s.phase {
+	case phaseEnable:
+		return s.handleEnablePhase(keyMsg)
 	case phaseProvider:
 		return s.handleProviderPhase(keyMsg)
 	case phaseModel:
@@ -168,10 +185,31 @@ func (s *SemanticProviderStep) handleProviderPhase(msg tea.KeyMsg) (tea.Cmd, Ste
 		return nil, StepContinue
 
 	case tea.KeyEsc:
-		return nil, StepPrev
+		s.phase = phaseEnable
+		return nil, StepContinue
 
 	default:
 		s.providerRadio, _ = s.providerRadio.Update(msg)
+		return nil, StepContinue
+	}
+}
+
+func (s *SemanticProviderStep) handleEnablePhase(msg tea.KeyMsg) (tea.Cmd, StepResult) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		if s.enableRadio.Selected() == "disable" {
+			s.enabled = false
+			return nil, StepNext
+		}
+		s.enabled = true
+		s.phase = phaseProvider
+		return nil, StepContinue
+
+	case tea.KeyEsc:
+		return nil, StepPrev
+
+	default:
+		s.enableRadio, _ = s.enableRadio.Update(msg)
 		return nil, StepContinue
 	}
 }
@@ -246,6 +284,8 @@ func (s *SemanticProviderStep) View() string {
 	b.WriteString("\n\n")
 
 	switch s.phase {
+	case phaseEnable:
+		b.WriteString(s.viewEnablePhase())
 	case phaseProvider:
 		b.WriteString(s.viewProviderPhase())
 	case phaseModel:
@@ -263,6 +303,18 @@ func (s *SemanticProviderStep) View() string {
 	} else {
 		b.WriteString(NavigationHelp())
 	}
+
+	return b.String()
+}
+
+func (s *SemanticProviderStep) viewEnablePhase() string {
+	var b strings.Builder
+
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.Muted)
+
+	b.WriteString(mutedStyle.Render("Enable semantic analysis for summaries, topics, and entities?"))
+	b.WriteString("\n\n")
+	b.WriteString(s.enableRadio.View())
 
 	return b.String()
 }
@@ -317,6 +369,10 @@ func (s *SemanticProviderStep) viewAPIKeyPhase() string {
 
 // Validate checks the step configuration.
 func (s *SemanticProviderStep) Validate() error {
+	if !s.enabled {
+		return nil
+	}
+
 	if s.phase == phaseAPIKey {
 		key := strings.TrimSpace(s.keyInput.Value())
 		if key == "" {
@@ -329,6 +385,11 @@ func (s *SemanticProviderStep) Validate() error {
 
 // Apply writes the semantic provider configuration.
 func (s *SemanticProviderStep) Apply(cfg *config.Config) error {
+	cfg.Semantic.Enabled = s.enabled
+	if !s.enabled {
+		return nil
+	}
+
 	provider := s.providers[s.selectedIdx]
 	model := provider.Models[s.modelRadio.Cursor()]
 

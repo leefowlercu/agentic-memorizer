@@ -137,6 +137,11 @@ graph:
 # identify entities, and generate summaries.
 
 semantic:
+  # Enable or disable semantic analysis.
+  # When disabled, only metadata and embeddings (if enabled) are generated.
+  # Env override: MEMORIZER_SEMANTIC_ENABLED
+  enabled: true
+
   # Semantic analysis provider name.
   # Valid values: anthropic, openai, google
   provider: anthropic

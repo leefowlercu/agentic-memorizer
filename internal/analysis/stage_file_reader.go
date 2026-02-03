@@ -12,12 +12,30 @@ import (
 
 // FileReader performs file stat, head read, ingest decision, and hashing.
 type FileReader struct {
-	registry registry.Registry
+	registry        registry.Registry
+	semanticEnabled bool
+}
+
+// FileReaderOption configures a FileReader.
+type FileReaderOption func(*FileReader)
+
+// WithSemanticEnabled sets whether semantic analysis is enabled.
+func WithSemanticEnabled(enabled bool) FileReaderOption {
+	return func(r *FileReader) {
+		r.semanticEnabled = enabled
+	}
 }
 
 // NewFileReader creates a file reader stage.
-func NewFileReader(reg registry.Registry) *FileReader {
-	return &FileReader{registry: reg}
+func NewFileReader(reg registry.Registry, opts ...FileReaderOption) *FileReader {
+	reader := &FileReader{
+		registry:        reg,
+		semanticEnabled: true,
+	}
+	for _, opt := range opts {
+		opt(reader)
+	}
+	return reader
 }
 
 // Read collects file metadata, ingest decisions, and content hash.
@@ -42,6 +60,10 @@ func (r *FileReader) Read(ctx context.Context, item WorkItem, mode DegradationMo
 
 	ingestMode, ingestReason := ingest.Decide(kind, pathConfig, info.Size())
 	degradedMetadata := false
+	if !r.semanticEnabled && ingestMode == ingest.ModeSemanticOnly {
+		ingestMode = ingest.ModeMetadataOnly
+		ingestReason = ingest.ReasonSemanticDisabled
+	}
 	if mode == DegradationMetadata && (ingestMode == ingest.ModeChunk || ingestMode == ingest.ModeSemanticOnly) {
 		ingestMode = ingest.ModeMetadataOnly
 		degradedMetadata = true

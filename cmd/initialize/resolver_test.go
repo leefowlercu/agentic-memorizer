@@ -357,6 +357,47 @@ func TestResolveEmbeddingsEnabled(t *testing.T) {
 	}
 }
 
+func TestResolveSemanticEnabled(t *testing.T) {
+	tests := []struct {
+		name      string
+		flagValue bool
+		flagSet   bool
+		envValue  string
+		want      bool
+	}{
+		{"flag disables", true, true, "", false},
+		{"env false", false, false, "false", false},
+		{"env true", false, false, "true", true},
+		{"default enabled", false, false, "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().BoolVar(&initializeNoSemantic, "no-semantic", false, "")
+
+			if tt.flagSet {
+				initializeNoSemantic = tt.flagValue
+				cmd.Flags().Set("no-semantic", "true")
+			} else {
+				initializeNoSemantic = false
+			}
+
+			if tt.envValue != "" {
+				os.Setenv("MEMORIZER_SEMANTIC_ENABLED", tt.envValue)
+				defer os.Unsetenv("MEMORIZER_SEMANTIC_ENABLED")
+			} else {
+				os.Unsetenv("MEMORIZER_SEMANTIC_ENABLED")
+			}
+
+			got := resolveSemanticEnabled(cmd)
+			if got != tt.want {
+				t.Errorf("resolveSemanticEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveHTTPPort(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -23,6 +23,7 @@ var (
 	initializeSemanticProvider   string
 	initializeSemanticModel      string
 	initializeSemanticAPIKey     string
+	initializeNoSemantic         bool
 	initializeNoEmbeddings       bool
 	initializeEmbeddingsProvider string
 	initializeEmbeddingsModel    string
@@ -58,6 +59,9 @@ var InitializeCmd = &cobra.Command{
 
   # Unattended mode with embeddings disabled
   memorizer initialize --unattended --no-embeddings
+
+  # Unattended mode with semantic analysis disabled
+  memorizer initialize --unattended --no-semantic
 
   # Full unattended configuration with JSON output
   memorizer initialize --unattended --force \
@@ -95,6 +99,8 @@ func init() {
 		"FalkorDB server port (default: 6379)")
 
 	// Semantic provider configuration flags (unattended mode)
+	InitializeCmd.Flags().BoolVar(&initializeNoSemantic, "no-semantic", false,
+		"Disable semantic analysis")
 	InitializeCmd.Flags().StringVar(&initializeSemanticProvider, "semantic-provider", "",
 		"LLM provider: anthropic, openai, google (default: anthropic)")
 	InitializeCmd.Flags().StringVar(&initializeSemanticModel, "semantic-model", "",
@@ -247,10 +253,13 @@ func applyResolvedConfig(cfg *config.Config, resolved *UnattendedConfig) {
 	cfg.Graph.Port = resolved.GraphPort
 
 	// Semantic configuration
-	cfg.Semantic.Provider = resolved.SemanticProvider
-	cfg.Semantic.Model = resolved.SemanticModel
-	if resolved.SemanticAPIKey != "" {
-		cfg.Semantic.APIKey = &resolved.SemanticAPIKey
+	cfg.Semantic.Enabled = resolved.SemanticEnabled
+	if resolved.SemanticEnabled {
+		cfg.Semantic.Provider = resolved.SemanticProvider
+		cfg.Semantic.Model = resolved.SemanticModel
+		if resolved.SemanticAPIKey != "" {
+			cfg.Semantic.APIKey = &resolved.SemanticAPIKey
+		}
 	}
 
 	// Embeddings configuration

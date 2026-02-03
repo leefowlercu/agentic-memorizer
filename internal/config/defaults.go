@@ -11,9 +11,9 @@ const (
 	// Daemon configuration defaults.
 	DefaultDaemonHTTPPort                      = 7600
 	DefaultDaemonHTTPBind                      = "127.0.0.1"
-	DefaultDaemonShutdownTimeout = 30 // seconds
-	DefaultDaemonPIDFile         = "~/.config/memorizer/daemon.pid"
-	DefaultDaemonRebuildInterval = 3600 // 1 hour in seconds, 0 = disabled
+	DefaultDaemonShutdownTimeout               = 30 // seconds
+	DefaultDaemonPIDFile                       = "~/.config/memorizer/daemon.pid"
+	DefaultDaemonRebuildInterval               = 3600 // 1 hour in seconds, 0 = disabled
 	DefaultDaemonMetricsInterval               = 15   // seconds
 	DefaultDaemonEventBusBufferSize            = 100
 	DefaultDaemonEventBusCriticalQueueCapacity = 1000
@@ -38,6 +38,7 @@ const (
 	DefaultGraphWriteQueueSize = 1000
 
 	// Semantic provider defaults.
+	DefaultSemanticEnabled   = true
 	DefaultSemanticProvider  = "anthropic"
 	DefaultSemanticModel     = "claude-sonnet-4-5-20250929"
 	DefaultSemanticRateLimit = 10
@@ -143,6 +144,7 @@ func NewDefaultConfig() Config {
 			WriteQueueSize: DefaultGraphWriteQueueSize,
 		},
 		Semantic: SemanticConfig{
+			Enabled:   DefaultSemanticEnabled,
 			Provider:  DefaultSemanticProvider,
 			Model:     DefaultSemanticModel,
 			RateLimit: DefaultSemanticRateLimit,
@@ -209,6 +211,7 @@ func setDefaults() {
 	viper.SetDefault("graph.write_queue_size", DefaultGraphWriteQueueSize)
 
 	// Semantic defaults
+	viper.SetDefault("semantic.enabled", DefaultSemanticEnabled)
 	viper.SetDefault("semantic.provider", DefaultSemanticProvider)
 	viper.SetDefault("semantic.model", DefaultSemanticModel)
 	viper.SetDefault("semantic.rate_limit", DefaultSemanticRateLimit)

@@ -108,8 +108,10 @@ func NewPipeline(cfg PipelineConfig, opts ...PipelineOption) *Pipeline {
 		persistenceOpts = append(persistenceOpts, WithPersistenceQueue(cfg.PersistenceQueue))
 	}
 
+	semanticEnabled := cfg.SemanticProvider != nil && cfg.SemanticProvider.Available()
+
 	p := &Pipeline{
-		fileReader:       NewFileReader(cfg.Registry),
+		fileReader:       NewFileReader(cfg.Registry, WithSemanticEnabled(semanticEnabled)),
 		chunker:          NewChunkerStage(cfg.ChunkerRegistry),
 		semantic:         NewSemanticStage(cfg.SemanticProvider, cfg.SemanticCache, cfg.Registry, cfg.AnalysisVersion, logger),
 		embeddings:       NewEmbeddingsStage(cfg.EmbeddingsProvider, cfg.EmbeddingsCache, cfg.Registry, logger),
@@ -268,6 +270,9 @@ func (p *Pipeline) updateRegistryForMetadataOnly(ctx context.Context, pctx *Pipe
 
 	// Don't update if in degraded metadata mode (file would normally be chunked)
 	if pctx.FileResult != nil && pctx.FileResult.DegradedMetadata {
+		return
+	}
+	if pctx.FileResult != nil && pctx.FileResult.IngestReason == ingest.ReasonSemanticDisabled {
 		return
 	}
 

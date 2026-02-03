@@ -276,7 +276,8 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 		return w.analyzeWithPipeline(ctx, item, mode)
 	}
 
-	fileReader := NewFileReader(w.registry)
+	semanticEnabled := w.semanticProvider != nil && w.semanticProvider.Available()
+	fileReader := NewFileReader(w.registry, WithSemanticEnabled(semanticEnabled))
 	fileResult, err := fileReader.Read(ctx, item, mode)
 	if err != nil {
 		return nil, err
@@ -299,7 +300,7 @@ func (w *Worker) analyze(ctx context.Context, item WorkItem) (*AnalysisResult, e
 	w.syncMetadataState(ctx, result)
 
 	if fileResult.IngestMode == ingest.ModeMetadataOnly || fileResult.IngestMode == ingest.ModeSkip {
-		w.updateRegistryForMetadataOnly(ctx, result, fileResult.DegradedMetadata)
+		w.updateRegistryForMetadataOnly(ctx, result, fileResult.DegradedMetadata, fileResult.IngestReason)
 		// Publish skipped event for observability
 		decision := "metadata_only"
 		if fileResult.IngestMode == ingest.ModeSkip {
@@ -443,8 +444,11 @@ func (w *Worker) syncMetadataState(ctx context.Context, result *AnalysisResult) 
 	}
 }
 
-func (w *Worker) updateRegistryForMetadataOnly(ctx context.Context, result *AnalysisResult, degradedMetadata bool) {
+func (w *Worker) updateRegistryForMetadataOnly(ctx context.Context, result *AnalysisResult, degradedMetadata bool, ingestReason string) {
 	if w.registry == nil || degradedMetadata {
+		return
+	}
+	if ingestReason == ingest.ReasonSemanticDisabled {
 		return
 	}
 

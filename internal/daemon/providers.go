@@ -14,6 +14,10 @@ import (
 // createSemanticProvider creates a semantic provider based on configuration.
 // Returns nil if the provider cannot be created (e.g., missing API key).
 func createSemanticProvider(cfg *config.SemanticConfig) (providers.SemanticProvider, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+
 	// Ensure API key is available in environment
 	apiKey := cfg.ResolveAPIKey()
 	if apiKey == "" {

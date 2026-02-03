@@ -59,6 +59,54 @@ func TestValidateNoEmbeddingsConflict(t *testing.T) {
 	}
 }
 
+func TestValidateNoSemanticConflict(t *testing.T) {
+	tests := []struct {
+		name           string
+		noSemantic     bool
+		conflictFlag   string
+		conflictValue  string
+		wantErr        bool
+		wantErrContain string
+	}{
+		{"no conflict when disabled not set", false, "", "", false, ""},
+		{"no conflict when no other flags", true, "", "", false, ""},
+		{"conflict with semantic-provider", true, "semantic-provider", "openai", true, "cannot combine --no-semantic with --semantic-provider"},
+		{"conflict with semantic-model", true, "semantic-model", "gpt-4o", true, "cannot combine --no-semantic with --semantic-model"},
+		{"conflict with semantic-api-key", true, "semantic-api-key", "test-key", true, "cannot combine --no-semantic with --semantic-api-key"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().BoolVar(&initializeNoSemantic, "no-semantic", false, "")
+			cmd.Flags().StringVar(&initializeSemanticProvider, "semantic-provider", "", "")
+			cmd.Flags().StringVar(&initializeSemanticModel, "semantic-model", "", "")
+			cmd.Flags().StringVar(&initializeSemanticAPIKey, "semantic-api-key", "", "")
+
+			if tt.noSemantic {
+				initializeNoSemantic = true
+				cmd.Flags().Set("no-semantic", "true")
+			}
+
+			if tt.conflictFlag != "" {
+				cmd.Flags().Set(tt.conflictFlag, tt.conflictValue)
+			}
+
+			err := validateNoSemanticConflict(cmd)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("validateNoSemanticConflict() expected error, got nil")
+				} else if !strings.Contains(err.Error(), tt.wantErrContain) {
+					t.Errorf("validateNoSemanticConflict() error = %q, want to contain %q", err.Error(), tt.wantErrContain)
+				}
+			} else if err != nil {
+				t.Errorf("validateNoSemanticConflict() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateProvider(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -170,21 +218,24 @@ func TestValidateOutputFlag(t *testing.T) {
 func TestValidateRequiredAPIKeys(t *testing.T) {
 	tests := []struct {
 		name              string
+		semanticEnabled   bool
 		semanticKey       string
 		embeddingsEnabled bool
 		embeddingsKey     string
 		wantErr           bool
 		wantErrContain    string
 	}{
-		{"all keys present", "semantic-key", true, "embeddings-key", false, ""},
-		{"missing semantic key", "", true, "embeddings-key", true, "semantic API key is required"},
-		{"missing embeddings key when enabled", "semantic-key", true, "", true, "embeddings API key is required"},
-		{"embeddings disabled no key needed", "semantic-key", false, "", false, ""},
+		{"all keys present", true, "semantic-key", true, "embeddings-key", false, ""},
+		{"missing semantic key", true, "", true, "embeddings-key", true, "semantic API key is required"},
+		{"semantic disabled no key needed", false, "", true, "embeddings-key", false, ""},
+		{"missing embeddings key when enabled", true, "semantic-key", true, "", true, "embeddings API key is required"},
+		{"embeddings disabled no key needed", true, "semantic-key", false, "", false, ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolved := &UnattendedConfig{
+				SemanticEnabled:    tt.semanticEnabled,
 				SemanticProvider:   "anthropic",
 				SemanticAPIKey:     tt.semanticKey,
 				EmbeddingsEnabled:  tt.embeddingsEnabled,
@@ -240,6 +291,16 @@ func TestValidateUnattendedFlags(t *testing.T) {
 			wantErrContain: "http-port",
 		},
 		{
+			name: "no-semantic conflict",
+			setup: func(cmd *cobra.Command) {
+				initializeNoSemantic = true
+				cmd.Flags().Set("no-semantic", "true")
+				cmd.Flags().Set("semantic-provider", "openai")
+			},
+			wantErr:        true,
+			wantErrContain: "cannot combine",
+		},
+		{
 			name: "no-embeddings conflict",
 			setup: func(cmd *cobra.Command) {
 				initializeNoEmbeddings = true
@@ -255,8 +316,11 @@ func TestValidateUnattendedFlags(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup command with all flags
 			cmd := &cobra.Command{}
+			cmd.Flags().BoolVar(&initializeNoSemantic, "no-semantic", false, "")
 			cmd.Flags().BoolVar(&initializeNoEmbeddings, "no-embeddings", false, "")
 			cmd.Flags().StringVar(&initializeSemanticProvider, "semantic-provider", "", "")
+			cmd.Flags().StringVar(&initializeSemanticModel, "semantic-model", "", "")
+			cmd.Flags().StringVar(&initializeSemanticAPIKey, "semantic-api-key", "", "")
 			cmd.Flags().StringVar(&initializeEmbeddingsProvider, "embeddings-provider", "", "")
 			cmd.Flags().StringVar(&initializeEmbeddingsModel, "embeddings-model", "", "")
 			cmd.Flags().StringVar(&initializeEmbeddingsAPIKey, "embeddings-api-key", "", "")

@@ -36,13 +36,14 @@ const (
 )
 
 const (
-	ReasonTooLarge       = "too_large"
-	ReasonBinary         = "binary"
-	ReasonArchive        = "archive"
-	ReasonMedia          = "media"
-	ReasonImage          = "image"
-	ReasonVisionDisabled = "vision_disabled"
-	ReasonUnsupported    = "unsupported"
+	ReasonTooLarge         = "too_large"
+	ReasonBinary           = "binary"
+	ReasonArchive          = "archive"
+	ReasonMedia            = "media"
+	ReasonImage            = "image"
+	ReasonVisionDisabled   = "vision_disabled"
+	ReasonSemanticDisabled = "semantic_disabled"
+	ReasonUnsupported      = "unsupported"
 )
 
 // Decision explains how and why a file is handled.

@@ -93,6 +93,7 @@ func TestValidate_InvalidEventBusCriticalQueueCapacity_ReturnsError(t *testing.T
 
 func TestValidate_InvalidSemanticProvider_ReturnsError(t *testing.T) {
 	cfg := NewDefaultConfig()
+	cfg.Semantic.Enabled = true
 	cfg.Semantic.Provider = "invalid"
 
 	err := Validate(&cfg)
@@ -107,6 +108,7 @@ func TestValidate_ValidSemanticProviders(t *testing.T) {
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
 			cfg := NewDefaultConfig()
+			cfg.Semantic.Enabled = true
 			cfg.Semantic.Provider = provider
 
 			err := Validate(&cfg)
@@ -114,6 +116,17 @@ func TestValidate_ValidSemanticProviders(t *testing.T) {
 				t.Errorf("Validate() error = %v for valid provider %q", err, provider)
 			}
 		})
+	}
+}
+
+func TestValidate_InvalidSemanticProvider_WhenDisabled_ReturnsNil(t *testing.T) {
+	cfg := NewDefaultConfig()
+	cfg.Semantic.Enabled = false
+	cfg.Semantic.Provider = "invalid"
+
+	err := Validate(&cfg)
+	if err != nil {
+		t.Errorf("Validate() error = %v, expected nil when semantic disabled", err)
 	}
 }
 

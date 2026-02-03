@@ -75,6 +75,7 @@ type GraphConfig struct {
 
 // SemanticConfig holds semantic analysis provider configuration.
 type SemanticConfig struct {
+	Enabled   bool    `yaml:"enabled" mapstructure:"enabled"`
 	Provider  string  `yaml:"provider" mapstructure:"provider"`
 	Model     string  `yaml:"model" mapstructure:"model"`
 	RateLimit int     `yaml:"rate_limit" mapstructure:"rate_limit"`

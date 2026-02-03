@@ -104,6 +104,31 @@ func TestFileReaderReadDegradedMetadata(t *testing.T) {
 	}
 }
 
+func TestFileReaderReadSemanticDisabledImage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample.png")
+	content := []byte("not-a-real-png")
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("write file failed: %v", err)
+	}
+
+	reader := NewFileReader(nil, WithSemanticEnabled(false))
+	result, err := reader.Read(context.Background(), WorkItem{FilePath: path}, DegradationFull)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	if result.IngestMode != ingest.ModeMetadataOnly {
+		t.Fatalf("IngestMode = %q, want %q", result.IngestMode, ingest.ModeMetadataOnly)
+	}
+	if result.IngestReason != ingest.ReasonSemanticDisabled {
+		t.Fatalf("IngestReason = %q, want %q", result.IngestReason, ingest.ReasonSemanticDisabled)
+	}
+	if len(result.Content) != 0 {
+		t.Fatalf("Content should be empty in metadata-only mode, got %q", result.Content)
+	}
+}
+
 func TestChunkerStageUsesRegistry(t *testing.T) {
 	registry := chunkers.NewRegistry()
 	chunker := &stubChunker{}

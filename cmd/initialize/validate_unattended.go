@@ -23,6 +23,11 @@ var validEmbeddingsProviders = map[string]bool{
 // validateUnattendedFlags validates flag combinations for unattended mode.
 // This should be called in PreRunE to show usage on validation errors.
 func validateUnattendedFlags(cmd *cobra.Command) error {
+	// Check for --no-semantic conflicts
+	if err := validateNoSemanticConflict(cmd); err != nil {
+		return err
+	}
+
 	// FR-007: Check for --no-embeddings conflicts
 	if err := validateNoEmbeddingsConflict(cmd); err != nil {
 		return err
@@ -41,6 +46,27 @@ func validateUnattendedFlags(cmd *cobra.Command) error {
 	// Validate output format
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// validateNoSemanticConflict checks for --no-semantic conflicts.
+func validateNoSemanticConflict(cmd *cobra.Command) error {
+	if !cmd.Flags().Changed("no-semantic") || !initializeNoSemantic {
+		return nil
+	}
+
+	conflictingFlags := []string{
+		"semantic-provider",
+		"semantic-model",
+		"semantic-api-key",
+	}
+
+	for _, flag := range conflictingFlags {
+		if cmd.Flags().Changed(flag) {
+			return fmt.Errorf("cannot combine --no-semantic with --%s", flag)
+		}
 	}
 
 	return nil
@@ -140,7 +166,7 @@ func validateOutputFlag(cmd *cobra.Command) error {
 // This is called after resolution, not in PreRunE.
 func validateRequiredAPIKeys(resolved *UnattendedConfig) error {
 	// FR-006: semantic.api_key is required
-	if resolved.SemanticAPIKey == "" {
+	if resolved.SemanticEnabled && resolved.SemanticAPIKey == "" {
 		return fmt.Errorf("semantic API key is required; provide via --semantic-api-key flag or %s environment variable",
 			semanticProviderEnvVars[resolved.SemanticProvider])
 	}

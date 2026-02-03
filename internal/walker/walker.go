@@ -51,6 +51,13 @@ type WalkerStats struct {
 // WalkerOption configures the Walker.
 type WalkerOption func(*walker)
 
+// WithSemanticEnabled sets whether semantic analysis is enabled.
+func WithSemanticEnabled(enabled bool) WalkerOption {
+	return func(w *walker) {
+		w.semanticEnabled = enabled
+	}
+}
+
 // WithPaceInterval sets the interval between file discoveries to prevent overwhelming downstream.
 func WithPaceInterval(d time.Duration) WalkerOption {
 	return func(w *walker) {
@@ -73,6 +80,8 @@ type walker struct {
 	paceInterval time.Duration
 	batchSize    int
 
+	semanticEnabled bool
+
 	mu              sync.RWMutex
 	stats           WalkerStats
 	discoveredPaths map[string]struct{}
@@ -81,10 +90,11 @@ type walker struct {
 // New creates a new Walker with the given dependencies.
 func New(reg registry.Registry, bus events.Bus, opts ...WalkerOption) Walker {
 	w := &walker{
-		registry:     reg,
-		bus:          bus,
-		paceInterval: 0,
-		batchSize:    100,
+		registry:        reg,
+		bus:             bus,
+		paceInterval:    0,
+		batchSize:       100,
+		semanticEnabled: true,
 	}
 
 	for _, opt := range opts {
@@ -404,6 +414,9 @@ func (w *walker) hasFileChanged(ctx context.Context, path string, info fs.FileIn
 
 	// Check mod time and size first (quick check)
 	if state.ModTime.Equal(info.ModTime()) && state.Size == info.Size() {
+		if w.semanticEnabled && state.SemanticAnalyzedAt == nil {
+			return true, nil
+		}
 		return false, nil
 	}
 

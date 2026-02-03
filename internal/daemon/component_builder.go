@@ -288,6 +288,10 @@ func (b *ComponentBuilder) registerDefinitions() {
 		RestartPolicy: RestartNever,
 		Dependencies:  nil,
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
+			if !cfg.Semantic.Enabled {
+				slog.Debug("semantic analysis disabled; semantic cache disabled")
+				return nil, nil
+			}
 			cacheBaseDir := cache.GetCacheBaseDir()
 			semanticCache, err := cache.NewSemanticCache(cache.SemanticCacheConfig{
 				BaseDir: cacheBaseDir,
@@ -464,7 +468,7 @@ func (b *ComponentBuilder) registerDefinitions() {
 		RestartPolicy: RestartNever,
 		Dependencies:  []string{"registry", "bus"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
-			w := walker.New(deps.Registry, deps.Bus)
+			w := walker.New(deps.Registry, deps.Bus, walker.WithSemanticEnabled(cfg.Semantic.Enabled))
 			slog.Info("walker initialized")
 			return w, nil
 		},

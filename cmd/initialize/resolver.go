@@ -14,6 +14,7 @@ type UnattendedConfig struct {
 	GraphPort int
 
 	// Semantic provider configuration
+	SemanticEnabled      bool
 	SemanticProvider     string
 	SemanticModel        string
 	SemanticAPIKey       string
@@ -78,9 +79,12 @@ func resolveUnattendedConfig(cmd *cobra.Command) *UnattendedConfig {
 	cfg.GraphPort = resolveGraphPort(cmd)
 
 	// Resolve semantic configuration
-	cfg.SemanticProvider = resolveSemanticProvider(cmd)
-	cfg.SemanticModel = resolveSemanticModel(cmd, cfg.SemanticProvider)
-	cfg.SemanticAPIKey, cfg.SemanticAPIKeySource = resolveSemanticAPIKey(cmd, cfg.SemanticProvider)
+	cfg.SemanticEnabled = resolveSemanticEnabled(cmd)
+	if cfg.SemanticEnabled {
+		cfg.SemanticProvider = resolveSemanticProvider(cmd)
+		cfg.SemanticModel = resolveSemanticModel(cmd, cfg.SemanticProvider)
+		cfg.SemanticAPIKey, cfg.SemanticAPIKeySource = resolveSemanticAPIKey(cmd, cfg.SemanticProvider)
+	}
 
 	// Resolve embeddings configuration
 	cfg.EmbeddingsEnabled = resolveEmbeddingsEnabled(cmd)
@@ -143,6 +147,22 @@ func resolveSemanticProvider(cmd *cobra.Command) string {
 
 	// Priority 3: Default
 	return "anthropic"
+}
+
+// resolveSemanticEnabled resolves whether semantic analysis is enabled.
+func resolveSemanticEnabled(cmd *cobra.Command) bool {
+	// If --no-semantic flag is set, semantic analysis is disabled
+	if cmd.Flags().Changed("no-semantic") && initializeNoSemantic {
+		return false
+	}
+
+	// Check MEMORIZER_SEMANTIC_ENABLED env var
+	if v := os.Getenv("MEMORIZER_SEMANTIC_ENABLED"); v != "" {
+		return getEnvBool("MEMORIZER_SEMANTIC_ENABLED")
+	}
+
+	// Default: enabled
+	return true
 }
 
 // resolveSemanticModel resolves the semantic model based on provider.

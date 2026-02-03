@@ -184,6 +184,7 @@ graph:
   write_queue_size: 1000
 
 semantic:
+  enabled: true
   provider: anthropic
   model: claude-sonnet-4-5-20250929
   rate_limit: 10
@@ -212,6 +213,9 @@ Environment variable examples:
 - `MEMORIZER_DAEMON_HTTP_PORT=9000`
 - `MEMORIZER_GRAPH_HOST=redis.local`
 - `MEMORIZER_SEMANTIC_PROVIDER=google`
+- `MEMORIZER_SEMANTIC_ENABLED=false`
+
+Note: if you toggle semantic analysis on an existing dataset, run `memorizer daemon rebuild` (or restart the daemon to trigger the initial full walk) so previously discovered files are queued for semantic analysis.
 
 ## Integrations
 

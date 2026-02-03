@@ -14,6 +14,7 @@ import (
 
 	"github.com/leefowlercu/agentic-memorizer/internal/config"
 	"github.com/leefowlercu/agentic-memorizer/internal/container"
+	"github.com/leefowlercu/agentic-memorizer/internal/servicemanager"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/initialize/components"
 	"github.com/leefowlercu/agentic-memorizer/internal/tui/styles"
 )
@@ -53,6 +54,8 @@ type FalkorDBStep struct {
 	spinner       spinner.Model
 	statusMessage string
 	progressChan  chan container.StartProgress
+	dataDir       string
+	dataDirErr    error
 }
 
 // NewFalkorDBStep creates a new FalkorDB configuration step.
@@ -106,6 +109,15 @@ func (s *FalkorDBStep) Init(cfg *config.Config) tea.Cmd {
 	if cfg.Graph.Port != 0 {
 		s.portInput.SetValue(strconv.Itoa(cfg.Graph.Port))
 		slog.Debug("pre-filled port from config", "port", cfg.Graph.Port)
+	}
+
+	dataDir, err := servicemanager.GetDataDir()
+	if err != nil {
+		s.dataDirErr = err
+		slog.Warn("failed to resolve FalkorDB data directory", "error", err)
+	} else {
+		s.dataDir = dataDir
+		slog.Debug("resolved FalkorDB data directory", "path", dataDir)
 	}
 
 	return nil
@@ -314,6 +326,14 @@ func (s *FalkorDBStep) viewRuntimeSelect() string {
 		b.WriteString(FormatWarning("No container runtime detected (Docker or Podman)"))
 	}
 
+	if s.dataDir != "" {
+		b.WriteString("\n")
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("Container data directory: %s", s.dataDir)))
+	} else if s.dataDirErr != nil {
+		b.WriteString("\n")
+		b.WriteString(FormatWarning(fmt.Sprintf("Unable to resolve data directory; %s", s.dataDirErr.Error())))
+	}
+
 	return b.String()
 }
 
@@ -329,6 +349,12 @@ func (s *FalkorDBStep) viewStarting() string {
 		b.WriteString("Starting FalkorDB...")
 	}
 	b.WriteString("\n")
+
+	if s.dataDir != "" {
+		mutedStyle := lipgloss.NewStyle().Foreground(styles.Muted)
+		b.WriteString(mutedStyle.Render(fmt.Sprintf("Persisting data in %s", s.dataDir)))
+		b.WriteString("\n")
+	}
 
 	return b.String()
 }

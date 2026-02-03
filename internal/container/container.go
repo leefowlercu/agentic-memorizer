@@ -5,9 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/leefowlercu/agentic-memorizer/internal/servicemanager"
 )
 
 // ContainerName is the name used for the FalkorDB container.
@@ -49,10 +52,27 @@ func (r Runtime) DisplayName() string {
 type StartOptions struct {
 	// Port is the host port to map to the container's Redis port (6379).
 	Port int
-	// DataDir is the host directory for persistent data. If empty, no volume is mounted.
+	// DataDir is the host directory for persistent data.
+	// If empty, it defaults to the application config directory (e.g. ~/.config/memorizer/falkordb).
 	DataDir string
 	// Detach runs the container in the background.
 	Detach bool
+}
+
+func ensureDataDir(opts StartOptions) (StartOptions, error) {
+	if opts.DataDir == "" {
+		dataDir, err := servicemanager.GetDataDir()
+		if err != nil {
+			return opts, fmt.Errorf("failed to resolve FalkorDB data dir; %w", err)
+		}
+		opts.DataDir = dataDir
+	}
+
+	if err := os.MkdirAll(opts.DataDir, 0o755); err != nil {
+		return opts, fmt.Errorf("failed to create FalkorDB data dir; %w", err)
+	}
+
+	return opts, nil
 }
 
 // StartPhase represents the current phase of container startup.
@@ -239,6 +259,14 @@ func StartFalkorDB(runtime Runtime, opts StartOptions) error {
 		return fmt.Errorf("no container runtime available")
 	}
 
+	var err error
+	opts, err = ensureDataDir(opts)
+	if err != nil {
+		slog.Error("failed to prepare FalkorDB data directory", "error", err)
+		return err
+	}
+	slog.Debug("using FalkorDB data directory", "path", opts.DataDir)
+
 	// Check if container already exists
 	if containerExists(runtime) {
 		slog.Debug("container exists", "name", ContainerName)
@@ -351,6 +379,15 @@ func StartFalkorDBWithProgress(runtime Runtime, opts StartOptions, progress chan
 		progress <- StartProgress{Phase: PhaseFailed, Err: fmt.Errorf("no container runtime available")}
 		return
 	}
+
+	var err error
+	opts, err = ensureDataDir(opts)
+	if err != nil {
+		slog.Error("failed to prepare FalkorDB data directory", "error", err)
+		progress <- StartProgress{Phase: PhaseFailed, Err: err}
+		return
+	}
+	slog.Debug("using FalkorDB data directory", "path", opts.DataDir)
 
 	// Check if container already exists
 	slog.Debug("checking for existing container", "name", ContainerName)

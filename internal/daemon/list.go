@@ -13,6 +13,7 @@ type ListEntry struct {
 	Status         string               `json:"status"`
 	DiscoveredCount *int                `json:"discovered_count,omitempty"`
 	AnalyzedCount   *int                `json:"analyzed_count,omitempty"`
+	EmbeddingsCount *int                `json:"embeddings_count,omitempty"`
 	LastWalkAt     *time.Time           `json:"last_walk_at,omitempty"`
 	CreatedAt      time.Time            `json:"created_at"`
 	UpdatedAt      time.Time            `json:"updated_at"`
@@ -82,6 +83,10 @@ func (s *ListService) List(ctx context.Context) (*ListResponse, error) {
 			analyzedCount, err := s.registry.CountAnalyzedFiles(ctx, p.Path)
 			if err == nil {
 				entry.AnalyzedCount = &analyzedCount
+			}
+			embeddingsCount, err := s.registry.CountEmbeddingsFiles(ctx, p.Path)
+			if err == nil {
+				entry.EmbeddingsCount = &embeddingsCount
 			}
 		}
 

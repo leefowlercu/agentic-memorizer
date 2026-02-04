@@ -243,6 +243,18 @@ func (m *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string
 	return count, nil
 }
 
+func (m *mockRegistry) CountEmbeddingsFiles(ctx context.Context, parentPath string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, state := range m.fileStates {
+		if state.EmbeddingsAnalyzedAt != nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // mockGraph implements graph.Graph for testing.
 type mockGraph struct {
 	mu                     sync.Mutex

@@ -216,6 +216,10 @@ func (r *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string
 	return 0, nil
 }
 
+func (r *mockRegistry) CountEmbeddingsFiles(ctx context.Context, parentPath string) (int, error) {
+	return 0, nil
+}
+
 func TestWatcher_Watch(t *testing.T) {
 	tmpDir := t.TempDir()
 

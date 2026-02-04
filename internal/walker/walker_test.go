@@ -276,6 +276,18 @@ func (r *mockRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string
 	return count, nil
 }
 
+func (r *mockRegistry) CountEmbeddingsFiles(ctx context.Context, parentPath string) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for path, fs := range r.fileStates {
+		if strings.HasPrefix(path, parentPath) && fs.EmbeddingsAnalyzedAt != nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // mockBus implements events.Bus for testing.
 type mockBus struct {
 	events []events.Event
@@ -516,10 +528,12 @@ func TestWalker_WalkIncremental(t *testing.T) {
 
 	// Set file state for main.go (simulate already processed)
 	mainInfo, _ := os.Stat(filepath.Join(tmpDir, "main.go"))
+	semanticAt := time.Now()
 	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
-		Path:    filepath.Join(tmpDir, "main.go"),
-		Size:    mainInfo.Size(),
-		ModTime: mainInfo.ModTime(),
+		Path:              filepath.Join(tmpDir, "main.go"),
+		Size:              mainInfo.Size(),
+		ModTime:            mainInfo.ModTime(),
+		SemanticAnalyzedAt: &semanticAt,
 	})
 
 	w := New(reg, bus)
@@ -588,17 +602,20 @@ func TestWalker_WalkAllIncremental(t *testing.T) {
 
 	// Set file state for a.go and c.go (simulate already processed)
 	aInfo, _ := os.Stat(filepath.Join(tmpDir1, "a.go"))
+	semanticAt := time.Now()
 	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
-		Path:    filepath.Join(tmpDir1, "a.go"),
-		Size:    aInfo.Size(),
-		ModTime: aInfo.ModTime(),
+		Path:              filepath.Join(tmpDir1, "a.go"),
+		Size:              aInfo.Size(),
+		ModTime:            aInfo.ModTime(),
+		SemanticAnalyzedAt: &semanticAt,
 	})
 
 	cInfo, _ := os.Stat(filepath.Join(tmpDir2, "c.go"))
 	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
-		Path:    filepath.Join(tmpDir2, "c.go"),
-		Size:    cInfo.Size(),
-		ModTime: cInfo.ModTime(),
+		Path:              filepath.Join(tmpDir2, "c.go"),
+		Size:              cInfo.Size(),
+		ModTime:            cInfo.ModTime(),
+		SemanticAnalyzedAt: &semanticAt,
 	})
 
 	w := New(reg, bus)
@@ -850,10 +867,12 @@ func TestWalker_DiscoveredPaths_IncrementalTracksUnchanged(t *testing.T) {
 	// Set file state for unchanged.go (simulate already processed)
 	unchangedPath := filepath.Join(tmpDir, "unchanged.go")
 	unchangedInfo, _ := os.Stat(unchangedPath)
+	semanticAt := time.Now()
 	_ = reg.UpdateFileState(context.Background(), &registry.FileState{
-		Path:    unchangedPath,
-		Size:    unchangedInfo.Size(),
-		ModTime: unchangedInfo.ModTime(),
+		Path:              unchangedPath,
+		Size:              unchangedInfo.Size(),
+		ModTime:            unchangedInfo.ModTime(),
+		SemanticAnalyzedAt: &semanticAt,
 	})
 
 	w := New(reg, bus)

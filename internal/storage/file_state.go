@@ -176,6 +176,25 @@ func (s *Storage) CountAnalyzedFiles(ctx context.Context, parentPath string) (in
 	return count, nil
 }
 
+// CountEmbeddingsFiles returns the count of files with completed embeddings generation under a parent path.
+func (s *Storage) CountEmbeddingsFiles(ctx context.Context, parentPath string) (int, error) {
+	parentPath = filepath.Clean(parentPath)
+	prefix := parentPath + string(filepath.Separator)
+
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM file_state
+		 WHERE (path LIKE ? OR path = ?)
+		   AND embeddings_analyzed_at IS NOT NULL`,
+		prefix+"%", parentPath,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count embeddings files; %w", err)
+	}
+
+	return count, nil
+}
+
 // UpdateMetadataState updates the metadata tracking fields for a file.
 // This is called after computing content hash and file metadata.
 func (s *Storage) UpdateMetadataState(ctx context.Context, path string, contentHash string, metadataHash string, size int64, modTime time.Time) error {

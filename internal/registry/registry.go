@@ -35,6 +35,7 @@ type Registry interface {
 	DeleteFileStatesForPath(ctx context.Context, parentPath string) error
 	CountFileStates(ctx context.Context, parentPath string) (int, error)
 	CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error)
+	CountEmbeddingsFiles(ctx context.Context, parentPath string) (int, error)
 
 	// Discovery state management
 	UpdateDiscoveryState(ctx context.Context, path string, contentHash string, size int64, modTime time.Time) error
@@ -172,6 +173,11 @@ func (r *SQLiteRegistry) CountDiscoveredFiles(ctx context.Context, parentPath st
 // CountAnalyzedFiles returns the count of files with completed semantic analysis under a parent path.
 func (r *SQLiteRegistry) CountAnalyzedFiles(ctx context.Context, parentPath string) (int, error) {
 	return r.storage.CountAnalyzedFiles(ctx, parentPath)
+}
+
+// CountEmbeddingsFiles returns the count of files with completed embeddings generation under a parent path.
+func (r *SQLiteRegistry) CountEmbeddingsFiles(ctx context.Context, parentPath string) (int, error) {
+	return r.storage.CountEmbeddingsFiles(ctx, parentPath)
 }
 
 // UpdateMetadataState updates the metadata tracking fields for a file.

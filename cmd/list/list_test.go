@@ -101,8 +101,11 @@ func TestListCmd_TableHeader(t *testing.T) {
 	if !strings.Contains(output, "DISCOVERED") {
 		t.Error("expected DISCOVERED column header")
 	}
-	if !strings.Contains(output, "ANALYZED") {
-		t.Error("expected ANALYZED column header")
+	if !strings.Contains(output, "SEMANTIC") {
+		t.Error("expected SEMANTIC column header")
+	}
+	if !strings.Contains(output, "EMBEDDINGS") {
+		t.Error("expected EMBEDDINGS column header")
 	}
 	if !strings.Contains(output, "LAST WALK") {
 		t.Error("expected LAST WALK column header")
@@ -226,11 +229,11 @@ func TestListCmd_InaccessiblePathShowsDash(t *testing.T) {
 		t.Fatal("expected to find path line in output")
 	}
 
-	// For inaccessible paths, FILES should show "-"
-	// The output format is: PATH (40) STATUS (10) FILES (8) LAST WALK
+	// For inaccessible paths, counts should show "-"
+	// The output format is: PATH (40) STATUS (10) DISCOVERED (10) SEMANTIC (10) EMBEDDINGS (10) LAST WALK
 	// Split by whitespace to verify the dash is present
 	if !strings.Contains(pathLine, "-") {
-		t.Error("expected '-' for FILES/LAST WALK of inaccessible path")
+		t.Error("expected '-' for counts/LAST WALK of inaccessible path")
 	}
 }
 
@@ -275,8 +278,11 @@ func TestListCmd_Verbose(t *testing.T) {
 	if !strings.Contains(output, "Files Discovered:") {
 		t.Error("expected Files Discovered: in verbose output")
 	}
-	if !strings.Contains(output, "Files Analyzed:") {
-		t.Error("expected Files Analyzed: in verbose output")
+	if !strings.Contains(output, "Files Semantic Analyzed:") {
+		t.Error("expected Files Semantic Analyzed: in verbose output")
+	}
+	if !strings.Contains(output, "Files Embeddings Generated:") {
+		t.Error("expected Files Embeddings Generated: in verbose output")
 	}
 	if !strings.Contains(output, "Configuration:") {
 		t.Error("expected Configuration: in verbose output")

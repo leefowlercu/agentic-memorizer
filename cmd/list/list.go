@@ -79,8 +79,15 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		// Print table header
-		fmt.Fprintf(out, "%-40s %-10s %-10s %-8s %s\n", "PATH", "STATUS", "DISCOVERED", "ANALYZED", "LAST WALK")
-		fmt.Fprintf(out, "%-40s %-10s %-10s %-8s %s\n", strings.Repeat("-", 40), strings.Repeat("-", 10), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 19))
+		fmt.Fprintf(out, "%-40s %-10s %-10s %-10s %-10s %s\n", "PATH", "STATUS", "DISCOVERED", "SEMANTIC", "EMBEDDINGS", "LAST WALK")
+		fmt.Fprintf(out, "%-40s %-10s %-10s %-10s %-10s %s\n",
+			strings.Repeat("-", 40),
+			strings.Repeat("-", 10),
+			strings.Repeat("-", 10),
+			strings.Repeat("-", 10),
+			strings.Repeat("-", 10),
+			strings.Repeat("-", 19),
+		)
 
 		for _, p := range paths {
 			printTableRow(out, &p)
@@ -104,9 +111,15 @@ func printTableRow(out io.Writer, p *daemon.ListEntry) {
 	}
 
 	// Get analyzed count (show "-" if path is inaccessible)
-	analyzedStr := "-"
+	semanticStr := "-"
 	if p.AnalyzedCount != nil {
-		analyzedStr = fmt.Sprintf("%d", *p.AnalyzedCount)
+		semanticStr = fmt.Sprintf("%d", *p.AnalyzedCount)
+	}
+
+	// Get embeddings count (show "-" if path is inaccessible)
+	embeddingsStr := "-"
+	if p.EmbeddingsCount != nil {
+		embeddingsStr = fmt.Sprintf("%d", *p.EmbeddingsCount)
 	}
 
 	// Format last walk time (show "-" if never walked or inaccessible)
@@ -115,7 +128,7 @@ func printTableRow(out io.Writer, p *daemon.ListEntry) {
 		lastWalkStr = p.LastWalkAt.Format("2006-01-02 15:04:05")
 	}
 
-	fmt.Fprintf(out, "%-40s %-10s %-10s %-8s %s\n", path, p.Status, discoveredStr, analyzedStr, lastWalkStr)
+	fmt.Fprintf(out, "%-40s %-10s %-10s %-10s %-10s %s\n", path, p.Status, discoveredStr, semanticStr, embeddingsStr, lastWalkStr)
 }
 
 func printVerbosePath(out io.Writer, p *daemon.ListEntry) {
@@ -137,9 +150,14 @@ func printVerbosePath(out io.Writer, p *daemon.ListEntry) {
 		fmt.Fprintf(out, "    Files Discovered: -\n")
 	}
 	if p.AnalyzedCount != nil {
-		fmt.Fprintf(out, "    Files Analyzed: %d\n", *p.AnalyzedCount)
+		fmt.Fprintf(out, "    Files Semantic Analyzed: %d\n", *p.AnalyzedCount)
 	} else {
-		fmt.Fprintf(out, "    Files Analyzed: -\n")
+		fmt.Fprintf(out, "    Files Semantic Analyzed: -\n")
+	}
+	if p.EmbeddingsCount != nil {
+		fmt.Fprintf(out, "    Files Embeddings Generated: %d\n", *p.EmbeddingsCount)
+	} else {
+		fmt.Fprintf(out, "    Files Embeddings Generated: -\n")
 	}
 
 	// Print configuration if present

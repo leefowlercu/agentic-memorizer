@@ -15,6 +15,7 @@ import (
 	"github.com/leefowlercu/agentic-memorizer/internal/events"
 	"github.com/leefowlercu/agentic-memorizer/internal/export"
 	"github.com/leefowlercu/agentic-memorizer/internal/graph"
+	"github.com/leefowlercu/agentic-memorizer/internal/providers"
 	"github.com/leefowlercu/agentic-memorizer/internal/version"
 )
 
@@ -23,6 +24,7 @@ type Server struct {
 	mcpServer  *server.MCPServer
 	httpServer *server.StreamableHTTPServer
 	graph      graph.Graph
+	embeddings providers.EmbeddingsProvider
 	registry   RegistryChecker
 	bus        *events.EventBus
 	exporter   *export.Exporter
@@ -58,14 +60,15 @@ func DefaultConfig() Config {
 }
 
 // NewServer creates a new MCP server.
-func NewServer(g graph.Graph, reg RegistryChecker, bus *events.EventBus, cfg Config) *Server {
+func NewServer(g graph.Graph, embeddings providers.EmbeddingsProvider, reg RegistryChecker, bus *events.EventBus, cfg Config) *Server {
 	s := &Server{
-		graph:    g,
-		registry: reg,
-		bus:      bus,
-		exporter: export.NewExporter(g),
-		subs:     NewSubscriptionManager(),
-		errChan:  make(chan error, 1),
+		graph:      g,
+		embeddings: embeddings,
+		registry:   reg,
+		bus:        bus,
+		exporter:   export.NewExporter(g),
+		subs:       NewSubscriptionManager(),
+		errChan:    make(chan error, 1),
 	}
 
 	// Create MCP server with resource capabilities
@@ -73,10 +76,12 @@ func NewServer(g graph.Graph, reg RegistryChecker, bus *events.EventBus, cfg Con
 		cfg.Name,
 		cfg.Version,
 		server.WithResourceCapabilities(true, true), // subscribe and listChanged
+		server.WithToolCapabilities(true),
 	)
 
 	// Register resources
 	s.registerResources()
+	s.registerTools()
 
 	// Create StreamableHTTP server for HTTP transport (MCP 2025-11-25 compliant)
 	s.httpServer = server.NewStreamableHTTPServer(

@@ -12,7 +12,7 @@ func TestStartStopEventListener(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -41,7 +41,7 @@ func TestStartEventListenerWithoutBus(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	// Create server without event bus
-	s := NewServer(g, reg, nil, DefaultConfig())
+	s := NewServer(g, nil, reg, nil, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -64,7 +64,7 @@ func TestHandleAnalysisCompleteEvent(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -105,7 +105,7 @@ func TestNotifyRebuildComplete(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// Subscribe to index resources
 	subscriber := &Subscriber{
@@ -131,7 +131,7 @@ func TestHandleRebuildCompleteEvent(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -167,7 +167,7 @@ func TestHandleInvalidRebuildEventPayload(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// Create event with invalid payload type
 	event := events.Event{
@@ -184,7 +184,7 @@ func TestNotifyFileChanged(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// Subscribe to a file resource
 	subscriber := &Subscriber{
@@ -210,7 +210,7 @@ func TestGetSubscribedURIsForPath(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// No subscriptions initially
 	uris := s.GetSubscribedURIsForPath("/test/file.go")
@@ -312,7 +312,7 @@ func TestNotifyIndexSubscribersNoSubscribers(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// No subscribers - should not panic
 	s.notifyIndexSubscribers()
@@ -322,7 +322,7 @@ func TestHandleInvalidEventPayload(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// Create event with invalid payload type
 	event := events.Event{
@@ -339,7 +339,7 @@ func TestHandleEmptyPathEvent(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// Create event with empty path
 	event := events.NewAnalysisComplete("", "abc123", events.AnalysisFull, 0)

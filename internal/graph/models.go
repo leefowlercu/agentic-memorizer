@@ -144,6 +144,14 @@ type ChunkNode struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// ChunkSearchHit represents a semantic search result with similarity score.
+type ChunkSearchHit struct {
+	Chunk    ChunkNode `json:"chunk"`
+	Score    float64   `json:"score"`
+	Provider string    `json:"provider,omitempty"`
+	Model    string    `json:"model,omitempty"`
+}
+
 // CodeMetaNode stores code-specific metadata for a chunk.
 type CodeMetaNode struct {
 	Language     string   `json:"language,omitempty"`

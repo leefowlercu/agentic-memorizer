@@ -91,7 +91,7 @@ type Graph interface {
 	GetFileWithRelations(ctx context.Context, path string) (*FileWithRelations, error)
 
 	// SearchSimilarChunks finds chunks similar to the given embedding using k-NN search.
-	SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]ChunkNode, error)
+	SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]ChunkSearchHit, error)
 
 	// IsConnected returns true if connected to the database.
 	IsConnected() bool
@@ -1411,7 +1411,7 @@ func (g *FalkorDBGraph) GetFileWithRelations(ctx context.Context, path string) (
 }
 
 // SearchSimilarChunks finds chunks similar to the given embedding using k-NN search.
-func (g *FalkorDBGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]ChunkNode, error) {
+func (g *FalkorDBGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]ChunkSearchHit, error) {
 	if !g.IsConnected() {
 		return nil, fmt.Errorf("not connected to graph database")
 	}
@@ -1427,14 +1427,15 @@ func (g *FalkorDBGraph) SearchSimilarChunks(ctx context.Context, embedding []flo
 	// Format embedding as array for query
 	embeddingStr := formatEmbeddingArray(embedding)
 
-	// Use FalkorDB's vector similarity search
-	// Note: Syntax may vary by version
+	// Use FalkorDB's vector similarity search against ChunkEmbedding nodes, then
+	// resolve back to parent Chunk nodes.
 	query := fmt.Sprintf(`
-		CALL db.idx.vector.queryNodes('Chunk', 'embedding', %d, %s)
+		CALL db.idx.vector.queryNodes('ChunkEmbedding', 'embedding', %d, %s)
 		YIELD node, score
-		RETURN node.id, node.file_path, node.index, node.content_hash,
-		       node.start_offset, node.end_offset, node.chunk_type,
-		       node.summary, score
+		MATCH (c:Chunk)-[:HAS_EMBEDDING]->(node)
+		RETURN c.id, c.file_path, c.index, c.content_hash,
+		       c.start_offset, c.end_offset, c.chunk_type,
+		       c.summary, score, node.provider, node.model
 		ORDER BY score DESC
 		LIMIT %d
 	`, k, embeddingStr, k)
@@ -1444,18 +1445,23 @@ func (g *FalkorDBGraph) SearchSimilarChunks(ctx context.Context, embedding []flo
 		return nil, fmt.Errorf("vector search failed; %w", err)
 	}
 
-	var chunks []ChunkNode
+	var chunks []ChunkSearchHit
 	for result.Next() {
 		record := result.Record()
-		chunk := ChunkNode{
-			ID:          getStringFromRecord(record, 0),
-			FilePath:    getStringFromRecord(record, 1),
-			Index:       getIntFromRecord(record, 2),
-			ContentHash: getStringFromRecord(record, 3),
-			StartOffset: getIntFromRecord(record, 4),
-			EndOffset:   getIntFromRecord(record, 5),
-			ChunkType:   getStringFromRecord(record, 6),
-			Summary:     getStringFromRecord(record, 7),
+		chunk := ChunkSearchHit{
+			Chunk: ChunkNode{
+				ID:          getStringFromRecord(record, 0),
+				FilePath:    getStringFromRecord(record, 1),
+				Index:       getIntFromRecord(record, 2),
+				ContentHash: getStringFromRecord(record, 3),
+				StartOffset: getIntFromRecord(record, 4),
+				EndOffset:   getIntFromRecord(record, 5),
+				ChunkType:   getStringFromRecord(record, 6),
+				Summary:     getStringFromRecord(record, 7),
+			},
+			Score:    getFloatFromRecord(record, 8),
+			Provider: getStringFromRecord(record, 9),
+			Model:    getStringFromRecord(record, 10),
 		}
 		chunks = append(chunks, chunk)
 	}

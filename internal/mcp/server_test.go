@@ -37,7 +37,11 @@ func (m *mockRegistry) IsPathRemembered(ctx context.Context, filePath string) bo
 
 // mockGraph is a test implementation of graph.Graph.
 type mockGraph struct {
-	snapshot *graph.GraphSnapshot
+	snapshot            *graph.GraphSnapshot
+	searchHits          []graph.ChunkSearchHit
+	searchErr           error
+	lastSearchEmbedding []float32
+	lastSearchK         int
 }
 
 func newMockGraph() *mockGraph {
@@ -143,8 +147,13 @@ func (m *mockGraph) GetFileWithRelations(ctx context.Context, path string) (*gra
 	}
 	return nil, nil
 }
-func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkNode, error) {
-	return nil, nil
+func (m *mockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkSearchHit, error) {
+	m.lastSearchEmbedding = embedding
+	m.lastSearchK = k
+	if m.searchErr != nil {
+		return nil, m.searchErr
+	}
+	return m.searchHits, nil
 }
 
 func TestNewServer(t *testing.T) {
@@ -153,7 +162,7 @@ func TestNewServer(t *testing.T) {
 	bus := events.NewBus()
 	cfg := DefaultConfig()
 
-	s := NewServer(g, reg, bus, cfg)
+	s := NewServer(g, nil, reg, bus, cfg)
 
 	if s == nil {
 		t.Fatal("NewServer returned nil")
@@ -197,7 +206,7 @@ func TestServerStartStop(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -226,7 +235,7 @@ func TestServerHandler(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	handler := s.Handler()
 	if handler == nil {
@@ -266,7 +275,7 @@ func TestServer_GracefulDegradation(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	// nil event bus should not cause panic
-	s := NewServer(g, reg, nil, DefaultConfig())
+	s := NewServer(g, nil, reg, nil, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -292,7 +301,7 @@ func TestServer_GracefulDegradationNilRegistry(t *testing.T) {
 	g := newMockGraph()
 	bus := events.NewBus()
 	// nil registry should not cause panic during creation
-	s := NewServer(g, nil, bus, DefaultConfig())
+	s := NewServer(g, nil, nil, bus, DefaultConfig())
 
 	if s == nil {
 		t.Fatal("NewServer returned nil with nil registry")
@@ -309,7 +318,7 @@ func TestResource_ReadIndex(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -365,7 +374,7 @@ func TestResource_ReadFile(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -413,7 +422,7 @@ func TestResource_ReadFile_NotRemembered(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -440,7 +449,7 @@ func TestResource_ReadFile_NotFound(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -468,7 +477,7 @@ func TestResource_InvalidURI(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -502,7 +511,7 @@ func TestResource_FileEmptyPath(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -528,7 +537,7 @@ func TestSubscription_Subscribe(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// Test subscribing to resources
 	subscriber := &Subscriber{
@@ -571,7 +580,7 @@ func TestServer_isPathRemembered(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 
@@ -601,7 +610,7 @@ func TestNotifyResourceChanged(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	// This should not panic even if no clients are connected
 	s.NotifyResourceChanged(ResourceURIIndex)
@@ -612,7 +621,7 @@ func TestServer_MultipleStartStop(t *testing.T) {
 	g := newMockGraph()
 	reg := newMockRegistry()
 	bus := events.NewBus()
-	s := NewServer(g, reg, bus, DefaultConfig())
+	s := NewServer(g, nil, reg, bus, DefaultConfig())
 
 	ctx := context.Background()
 

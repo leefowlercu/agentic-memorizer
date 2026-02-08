@@ -225,7 +225,7 @@ func (g *drainMockGraph) ExportSnapshot(ctx context.Context) (*graph.GraphSnapsh
 func (g *drainMockGraph) GetFileWithRelations(ctx context.Context, path string) (*graph.FileWithRelations, error) {
 	return nil, nil
 }
-func (g *drainMockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkNode, error) {
+func (g *drainMockGraph) SearchSimilarChunks(ctx context.Context, embedding []float32, k int) ([]graph.ChunkSearchHit, error) {
 	return nil, nil
 }
 

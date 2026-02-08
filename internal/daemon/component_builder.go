@@ -557,11 +557,11 @@ func (b *ComponentBuilder) registerDefinitions() {
 		Kind:          ComponentKindPersistent,
 		Criticality:   CriticalityDegradable,
 		RestartPolicy: RestartOnFailure,
-		Dependencies:  []string{"graph", "registry", "bus"},
+		Dependencies:  []string{"graph", "registry", "bus", "embeddings_provider"},
 		Build: func(ctx context.Context, deps ComponentContext) (any, error) {
 			mcpCfg := mcp.DefaultConfig()
 			regAdapter := newRegistryAdapter(deps.Registry)
-			server := mcp.NewServer(deps.Graph, regAdapter, deps.Bus, mcpCfg)
+			server := mcp.NewServer(deps.Graph, deps.Providers.Embed, regAdapter, deps.Bus, mcpCfg)
 			slog.Info("MCP server initialized", "name", mcpCfg.Name, "base_path", mcpCfg.BasePath)
 			return server, nil
 		},

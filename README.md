@@ -233,6 +233,12 @@ Setup an integration:
 memorizer integrations setup claude-code-mcp
 ```
 
+### MCP Tools
+
+The MCP server exposes a semantic search tool for harnesses:
+
+- `search_memory` - vector similarity search over stored chunk embeddings with optional filters (`top_k`, `min_score`, `path_prefix`, extension include/exclude) and optional snippet extraction.
+
 ## Prerequisites
 
 - Go 1.25.5 or later
